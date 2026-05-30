@@ -20,6 +20,7 @@ const UI = {
     this._bindMiniPlayer();
     this._bindNowPlaying();
     this._bindSeekBar();
+    this._bindTopProgress();
     this._bindVolumeBar();
     this._bindQueuePanel();
     this._bindModals();
@@ -63,6 +64,8 @@ const UI = {
       createPlaylistBtn: document.getElementById('create-playlist-btn'),
       contextMenu: document.getElementById('context-menu'),
       contextMenuItems: document.getElementById('context-menu-items'),
+      topProgressFill: document.getElementById('np-top-progress-fill'),
+      queueColList: document.getElementById('np-queue-col-list'),
     };
   },
 
@@ -88,9 +91,9 @@ const UI = {
     this.els.miniPlayer.addEventListener('click', (e) => {
       if (e.target.closest('.mini-play-btn')) {
         Player.togglePlay();
-      } else if (e.target.closest('[data-action="prev"]')) {
+      } else if (e.target.closest('.mini-prev-btn')) {
         Player.prev();
-      } else if (e.target.closest('[data-action="next"]')) {
+      } else if (e.target.closest('.mini-next-btn')) {
         Player.next();
       } else if (!e.target.closest('.mini-btn')) {
         this.showNowPlaying();
@@ -173,17 +176,66 @@ const UI = {
       this.seeking = true;
       const f = getFraction(e);
       this.els.seekFill.style.width = (f * 100) + '%';
+      if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
     };
 
     const onMove = (e) => {
       if (!this.seeking) return;
       const f = getFraction(e);
       this.els.seekFill.style.width = (f * 100) + '%';
+      if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
     };
 
     const onEnd = (e) => {
       if (!this.seeking) return;
       this.seeking = false;
+      const rect = bar.getBoundingClientRect();
+      let clientX;
+      if (e.changedTouches) {
+        clientX = e.changedTouches[0].clientX;
+      } else {
+        clientX = e.clientX;
+      }
+      const f = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      Player.seek(f);
+    };
+
+    bar.addEventListener('mousedown', onStart);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    bar.addEventListener('touchstart', onStart, { passive: true });
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend', onEnd);
+  },
+
+  _bindTopProgress() {
+    const bar = document.querySelector('.np-top-progress');
+    if (!bar) return;
+    this.topSeeking = false;
+
+    const getFraction = (e) => {
+      const rect = bar.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    };
+
+    const onStart = (e) => {
+      this.topSeeking = true;
+      const f = getFraction(e);
+      if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
+      if (this.els.seekFill) this.els.seekFill.style.width = (f * 100) + '%';
+    };
+
+    const onMove = (e) => {
+      if (!this.topSeeking) return;
+      const f = getFraction(e);
+      if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
+      if (this.els.seekFill) this.els.seekFill.style.width = (f * 100) + '%';
+    };
+
+    const onEnd = (e) => {
+      if (!this.topSeeking) return;
+      this.topSeeking = false;
       const rect = bar.getBoundingClientRect();
       let clientX;
       if (e.changedTouches) {
@@ -395,6 +447,23 @@ const tmore = e.target.closest('.track-more');
         return;
       }
 
+      const qpCard = e.target.closest('.quick-play-card, .quick-play-card-inline');
+      if (qpCard) {
+        if (qpCard.dataset.navigate) {
+          this.navigateTo(qpCard.dataset.navigate);
+          return;
+        }
+        if (qpCard.dataset.action) {
+          this._handleAction(qpCard.dataset.action);
+          return;
+        }
+        if (qpCard.dataset.albumId) {
+          this.navigateTo('album', { albumId: qpCard.dataset.albumId });
+          return;
+        }
+        return;
+      }
+
       const catCard = e.target.closest('.category-card');
       if (catCard) {
         this.searchGenre = catCard.dataset.genre;
@@ -515,32 +584,52 @@ const tmore = e.target.closest('.track-more');
     let html = '<div class="greeting">' + greeting + '</div>';
 
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
-    const recentAlbums = this._uniqueAlbums(recentTracks.slice(0, 6));
     const currentTrack = Player.getCurrentTrack();
+
+    const recentCards = [];
+    const seenAlbums = new Set();
+    recentTracks.forEach(t => {
+      if (t.album && t.album !== '') {
+        if (!seenAlbums.has(t.albumID)) {
+          seenAlbums.add(t.albumID);
+          recentCards.push({ type: 'album', name: t.album, id: t.albumID });
+        }
+      } else {
+        recentCards.push({ type: 'track', name: t.title, id: t.id, albumID: t.albumID });
+      }
+    });
 
     html += '<div class="section-header"><h2>Recently Played</h2></div>';
 
-    if (recentAlbums.length > 0 || currentTrack) {
+    if (recentCards.length > 0 || currentTrack) {
       html += '<div class="quick-play-grid">';
 
       html += '<div class="quick-play-card" data-navigate="all-music">'
         + '<div class="quick-play-art" style="background:var(--l3);display:flex;align-items:center;justify-content:center;color:var(--text2)"><span style="font-size:18px;font-weight:700">All</span></div>'
-        + '<div class="quick-play-title">See all</div>'
+        + '<div class="quick-play-title">All Music</div>'
         + '</div>';
 
       if (currentTrack) {
+        const hasCover = Store.albumHasCover(currentTrack.albumID);
+        const artInner = hasCover
+          ? '<img src="' + Api.coverUrl(currentTrack.albumID) + '" alt="">'
+          : '';
         html += '<div class="quick-play-card quick-play-card-now" data-album-id="' + currentTrack.albumID + '">'
-          + '<div class="quick-play-art"><img src="' + Api.coverUrl(currentTrack.albumID) + '" alt="">'
+          + '<div class="quick-play-art">' + artInner
           + '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div></div>'
           + '<div class="quick-play-title">' + this._esc(currentTrack.title) + '</div>'
           + '</div>';
       }
 
-      recentAlbums.slice(0, 5).forEach(a => {
-        if (currentTrack && a.id === currentTrack.albumID) return;
-        html += '<div class="quick-play-card" data-album-id="' + a.id + '">'
-          + '<div class="quick-play-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
-          + '<div class="quick-play-title">' + this._esc(a.name) + '</div>'
+      recentCards.slice(0, 5).forEach(c => {
+        if (currentTrack && c.id === currentTrack.albumID) return;
+        const hasCover = Store.albumHasCover(c.albumID || c.id);
+        const artInner = hasCover
+          ? '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">'
+          : '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--text3)">' + Icons.music() + '</div>';
+        html += '<div class="quick-play-card" data-album-id="' + (c.albumID || c.id) + '">'
+          + '<div class="quick-play-art">' + artInner + '</div>'
+          + '<div class="quick-play-title">' + this._esc(c.name) + '</div>'
           + '</div>';
       });
 
@@ -561,23 +650,25 @@ const tmore = e.target.closest('.track-more');
       html += this.renderTrackList(newTracks, { showArt: true });
     }
 
-    const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '');
+    const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, 6);
+    html += '<div class="section-header"><h2>Artists</h2></div>';
     if (newArtists.length > 0) {
-      html += '<div class="section-header"><h2>Artists</h2></div>';
       html += '<div class="scroll-row" style="flex-wrap:nowrap">';
       newArtists.forEach(a => {
-        html += '<div class="quick-play-card" data-type="artist" data-id="' + this._esc(a.name) + '" style="max-width:none;min-width:0;flex:none;padding-right:14px;border-radius:999px;height:36px">'
-          + '<div class="quick-play-art" style="width:36px;height:36px;min-width:36px;border-radius:50%;background:var(--l3)"></div>'
-          + '<div class="quick-play-title" style="font-size:13px">' + this._esc(a.name) + '</div>'
+        html += '<div class="quick-play-card-inline" data-type="artist" data-id="' + this._esc(a.name) + '">'
+          + '<div class="quick-play-art"></div>'
+          + '<div class="quick-play-title">' + this._esc(a.name) + '</div>'
           + '</div>';
       });
       html += '</div>';
+    } else {
+      html += '<div class="empty-state" style="padding:16px 22px">' + Icons.music() + '<div class="empty-state-title">No artists yet</div><div class="empty-state-text">Add tagged music files to see artists</div></div>';
     }
 
-    const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '');
+    const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
+    html += '<div class="section-header"><h2>Albums</h2></div>';
     if (namedAlbums.length > 0) {
-      html += '<div class="section-header"><h2>Albums</h2></div>';
       html += '<div class="scroll-row">';
       namedAlbums.forEach(a => {
         html += '<div class="card" data-album-id="' + a.id + '">'
@@ -587,6 +678,8 @@ const tmore = e.target.closest('.track-more');
           + '</div>';
       });
       html += '</div>';
+    } else {
+      html += '<div class="empty-state" style="padding:16px 22px">' + Icons.library() + '<div class="empty-state-title">No albums yet</div><div class="empty-state-text">Add tagged music files to see albums</div></div>';
     }
 
     if (Store.playlists.length > 0) {
@@ -992,7 +1085,8 @@ const tmore = e.target.closest('.track-more');
 
     return '<div class="track-list">' + tracks.map((track) => {
       const isCurrent = currentTrack && currentTrack.id === track.id;
-      const artHtml = showArt
+      const hasCover = Store.albumHasCover(track.albumID);
+      const artHtml = (showArt && hasCover)
         ? '<div class="track-art" style="background-image:url(' + Api.coverUrl(track.albumID) + ')"></div>'
         : '';
       const rightHtml = isCurrent
@@ -1031,7 +1125,7 @@ const tmore = e.target.closest('.track-more');
     this.els.miniPlayBtn.innerHTML = Player.playing ? Icons.pause() : Icons.play();
 
     const progress = Player.getProgress();
-    this.els.miniProgress.style.width = (progress.fraction * 100) + '%';
+    this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
   },
 
   updateNowPlaying() {
@@ -1056,12 +1150,13 @@ const tmore = e.target.closest('.track-more');
 
   updateSeekBar() {
     const progress = Player.getProgress();
-    if (this.seeking) return;
+    if (this.seeking || this.topSeeking) return;
     const pct = (progress.fraction * 100) + '%';
     this.els.seekFill.style.width = pct;
+    if (this.els.topProgressFill) this.els.topProgressFill.style.width = pct;
     this.els.npTimeCurrent.textContent = this._formatTime(progress.current);
     this.els.npTimeTotal.textContent = this._formatTime(progress.duration);
-    this.els.miniProgress.style.width = pct;
+    this.els.miniProgress.style.setProperty('--progress', pct);
   },
 
   showNowPlaying() {
@@ -1087,19 +1182,24 @@ const tmore = e.target.closest('.track-more');
   },
 
   _renderQueue() {
-    if (Player.queue.length === 0) {
-      this.els.queueList.innerHTML = '<div class="empty-state"><div class="empty-state-title">Queue is empty</div><div class="empty-state-text">Add tracks to your queue</div></div>';
-      return;
-    }
-    this.els.queueList.innerHTML = Player.queue.map((track, i) => {
-      const isCurrent = i === Player.currentIndex;
-      return '<div class="queue-item' + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
-        + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
-        + '<div class="queue-item-info">'
-        + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
-        + '<div class="queue-item-artist">' + this._esc(track.artist) + '</div>'
-        + '</div></div>';
-    }).join('');
+    const renderItems = (container) => {
+      if (!container) return;
+      if (Player.queue.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-title">Queue is empty</div><div class="empty-state-text">Add tracks to your queue</div></div>';
+        return;
+      }
+      container.innerHTML = Player.queue.map((track, i) => {
+        const isCurrent = i === Player.currentIndex;
+        return '<div class="queue-item' + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
+          + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
+          + '<div class="queue-item-info">'
+          + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
+          + '<div class="queue-item-artist">' + this._esc(track.artist) + '</div>'
+          + '</div></div>';
+      }).join('');
+    };
+    renderItems(this.els.queueList);
+    renderItems(this.els.queueColList);
   },
 
   showContextMenu(options, triggerEl) {

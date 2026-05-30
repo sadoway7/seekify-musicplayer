@@ -104,59 +104,109 @@
     left: 72px;
     bottom: 0;
     right: 0;
+    width: auto;
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .np-desktop-layout {
     flex-direction: row;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .np-player-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding-top: 0;
-    gap: 48px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 32px;
+    max-width: 560px;
+  }
+
+  .np-queue-col {
+    display: flex;
+    flex-direction: column;
+    width: 320px;
+    min-width: 280px;
+    max-width: 380px;
+    background: rgba(255,255,255,0.03);
+    border-left: 1px solid rgba(255,255,255,0.05);
+    min-height: 0;
+    overflow: hidden;
   }
 
   .np-header {
-    display: none;
+    padding: 10px 0 4px;
+    width: 100%;
+    max-width: 500px;
   }
 
   .np-artwork {
-    flex: none;
-    padding: 0;
-    width: 40vw;
-    max-width: 440px;
+    flex: 0 0 auto;
+    padding: 8px 0 20px;
+    width: 100%;
+    max-width: 500px;
   }
 
   .np-art-wrapper {
-    width: 100%;
-    max-height: none;
+    width: min(50vh, 340px);
+    max-height: min(50vh, 340px);
   }
 
   .np-info,
   .np-progress,
   .np-controls,
   .np-bottom {
-    max-width: none;
-    width: 320px;
+    width: 100%;
+    max-width: 420px;
+    padding-left: 0;
+    padding-right: 0;
   }
 
-  .np-info {
-    padding: 0;
+  .np-title {
+    font-size: 26px;
   }
 
-  .np-progress {
-    padding: 20px 0 0;
+  .np-artist {
+    font-size: 15px;
   }
 
-  .np-controls {
-    padding: 16px 0 10px;
+  .np-seek-bar {
+    height: 4px;
+    border-radius: 2px;
   }
 
-  .np-bottom {
-    padding: 8px 0 0;
+  .np-seek-fill {
+    border-radius: 2px;
+  }
+
+  .np-play-main {
+    width: 64px;
+    height: 64px;
+  }
+
+  .np-play-main svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  #np-prev svg,
+  #np-next svg {
+    width: 36px;
+    height: 36px;
   }
 
   .np-bg-glow {
-    left: 5%;
-    right: auto;
-    top: -20%;
-    width: 50%;
-    height: 80%;
+    left: 10%;
+    right: 10%;
+    top: -30%;
+    height: 70%;
     filter: blur(120px);
   }
 
@@ -178,28 +228,23 @@
     grid-template-columns: repeat(5, 1fr);
   }
 
-  .now-playing {
-    gap: 64px;
-  }
-
-  .np-artwork {
-    width: 38vw;
-    max-width: 480px;
-  }
-
-  .np-info,
-  .np-progress,
-  .np-controls,
-  .np-bottom {
+  .np-queue-col {
     width: 360px;
+    min-width: 320px;
+  }
+
+  .np-art-wrapper {
+    width: min(48vh, 400px);
+    max-height: min(48vh, 400px);
   }
 
   .np-title {
-    font-size: 28px;
+    font-size: 30px;
   }
 
-  .np-artist {
-    font-size: 16px;
+  .np-play-main {
+    width: 72px;
+    height: 72px;
   }
 
   .scroll-row {
@@ -212,19 +257,17 @@
     grid-template-columns: repeat(5, 1fr);
   }
 
-  .now-playing {
-    gap: 80px;
-  }
-
-  .np-artwork {
-    width: 36vw;
-    max-width: 540px;
-  }
-
-  .np-info,
-  .np-progress,
-  .np-controls,
-  .np-bottom {
+  .np-queue-col {
     width: 400px;
+    min-width: 360px;
+  }
+
+  .np-art-wrapper {
+    width: min(45vh, 440px);
+    max-height: min(45vh, 440px);
+  }
+
+  .np-player-col {
+    max-width: 640px;
   }
 }

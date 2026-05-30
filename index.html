@@ -22,8 +22,14 @@
           <div class="mini-title"></div>
           <div class="mini-artist"></div>
         </div>
+        <button class="mini-btn mini-prev-btn" aria-label="Previous">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20" fill="currentColor" stroke="none"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+        </button>
         <button class="mini-btn mini-play-btn" aria-label="Play">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <button class="mini-btn mini-next-btn" aria-label="Next">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor" stroke="none"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
         </button>
       </div>
     </div>
@@ -48,69 +54,84 @@
 
   <div id="now-playing" class="now-playing hidden">
     <div class="np-bg-glow" id="np-bg-glow"></div>
-    <div class="np-header">
-      <button class="np-btn np-chevron-down" aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-      <div class="np-header-text">Now Playing</div>
-      <button class="np-btn np-more" aria-label="More">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/></svg>
-      </button>
-    </div>
-    <div class="np-artwork">
-      <div class="np-art-wrapper">
-        <img id="np-art" src="" alt="">
+    <div class="np-top-progress">
+      <div class="np-top-progress-bar">
+        <div class="np-top-progress-fill" id="np-top-progress-fill"></div>
       </div>
     </div>
-    <div class="np-info">
-      <div class="np-title-row">
-        <div>
-          <div id="np-title" class="np-title"></div>
-          <div id="np-artist" class="np-artist"></div>
+    <div class="np-desktop-layout">
+      <div class="np-player-col">
+        <div class="np-header">
+          <button class="np-btn np-chevron-down" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="np-header-text">Now Playing</div>
+          <button class="np-btn np-more" aria-label="More">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/></svg>
+          </button>
         </div>
-        <button id="np-like-btn" class="np-btn np-like-btn" aria-label="Like">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="np-progress">
-      <div class="np-seek-bar">
-        <div class="np-seek-fill"></div>
-        <div class="np-seek-thumb"></div>
-      </div>
-      <div class="np-time">
-        <span id="np-time-current">0:00</span>
-        <span id="np-time-total">0:00</span>
-      </div>
-    </div>
-    <div class="np-controls">
-      <button id="np-shuffle" class="np-btn np-ctrl" aria-label="Shuffle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-      </button>
-      <button id="np-prev" class="np-btn np-ctrl" aria-label="Previous">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20" fill="currentColor" stroke="none"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
-      </button>
-      <button id="np-play" class="np-btn np-play-main" aria-label="Play">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></svg>
-      </button>
-      <button id="np-next" class="np-btn np-ctrl" aria-label="Next">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor" stroke="none"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
-      </button>
-      <button id="np-repeat" class="np-btn np-ctrl" aria-label="Repeat">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      </button>
-    </div>
-    <div class="np-bottom">
-      <button class="np-btn np-queue-btn" aria-label="Queue">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      </button>
-      <div class="np-volume">
-        <button class="np-btn" aria-label="Volume">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-        </button>
-        <div class="np-volume-bar">
-          <div class="np-volume-fill"></div>
+        <div class="np-artwork">
+          <div class="np-art-wrapper">
+            <img id="np-art" src="" alt="">
+          </div>
         </div>
+        <div class="np-info">
+          <div class="np-title-row">
+            <div>
+              <div id="np-title" class="np-title"></div>
+              <div id="np-artist" class="np-artist"></div>
+            </div>
+            <button id="np-like-btn" class="np-btn np-like-btn" aria-label="Like">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="np-progress">
+          <div class="np-seek-bar">
+            <div class="np-seek-fill"></div>
+            <div class="np-seek-thumb"></div>
+          </div>
+          <div class="np-time">
+            <span id="np-time-current">0:00</span>
+            <span id="np-time-total">0:00</span>
+          </div>
+        </div>
+        <div class="np-controls">
+          <button id="np-shuffle" class="np-btn np-ctrl" aria-label="Shuffle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+          </button>
+          <button id="np-prev" class="np-btn np-ctrl" aria-label="Previous">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20" fill="currentColor" stroke="none"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+          </button>
+          <button id="np-play" class="np-btn np-play-main" aria-label="Play">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <button id="np-next" class="np-btn np-ctrl" aria-label="Next">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor" stroke="none"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+          </button>
+          <button id="np-repeat" class="np-btn np-ctrl" aria-label="Repeat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </button>
+        </div>
+        <div class="np-bottom">
+          <button class="np-btn np-queue-btn" aria-label="Queue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+          <div class="np-volume">
+            <button class="np-btn" aria-label="Volume">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            </button>
+            <div class="np-volume-bar">
+              <div class="np-volume-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="np-queue-col" id="np-queue-col">
+        <div class="np-queue-col-header">
+          <h2>Queue</h2>
+        </div>
+        <div class="np-queue-col-list" id="np-queue-col-list"></div>
       </div>
     </div>
   </div>

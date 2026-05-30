@@ -14,6 +14,44 @@
   overflow: hidden;
 }
 
+.np-top-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  z-index: 5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+}
+
+.np-top-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--l3);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.np-top-progress-fill {
+  height: 100%;
+  background: var(--text1);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.np-top-progress:active .np-top-progress-bar {
+  height: 6px;
+}
+
+.np-top-progress:active .np-top-progress-fill {
+  background: var(--accent);
+}
+
 .np-bg-glow {
   position: absolute;
   top: -40%;
@@ -374,6 +412,101 @@
 .np-queue-btn svg {
   width: 22px;
   height: 22px;
+}
+
+.np-desktop-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.np-player-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.np-queue-col {
+  display: none;
+}
+
+.np-queue-col-header {
+  padding: 16px 20px 8px;
+  flex-shrink: 0;
+}
+
+.np-queue-col-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text1);
+}
+
+.np-queue-col-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 20px;
+  scrollbar-width: none;
+}
+
+.np-queue-col-list::-webkit-scrollbar {
+  display: none;
+}
+
+.np-queue-col-list .queue-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px 0;
+  gap: 12px;
+}
+
+.np-queue-col-list .queue-item.active .queue-item-title {
+  color: var(--accent);
+}
+
+.np-queue-col-list .queue-item-art {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--l3);
+}
+
+.np-queue-col-list .queue-item-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.np-queue-col-list .queue-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.np-queue-col-list .queue-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-queue-col-list .queue-item-artist {
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .np-extra-actions {
