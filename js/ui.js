@@ -54,6 +54,7 @@ const UI = {
       npTimeTotal: document.getElementById('np-time-total'),
       seekBar: document.querySelector('.np-seek-bar'),
       seekFill: document.querySelector('.np-seek-fill'),
+      seekThumb: document.querySelector('.np-seek-thumb'),
       volumeBar: document.querySelector('.np-volume-bar'),
       volumeFill: document.querySelector('.np-volume-fill'),
       volumeBtn: document.querySelector('.np-volume button'),
@@ -64,7 +65,6 @@ const UI = {
       createPlaylistBtn: document.getElementById('create-playlist-btn'),
       contextMenu: document.getElementById('context-menu'),
       contextMenuItems: document.getElementById('context-menu-items'),
-      topProgressFill: document.getElementById('np-top-progress-fill'),
       queueColList: document.getElementById('np-queue-col-list'),
     };
   },
@@ -963,16 +963,17 @@ const tmore = e.target.closest('.track-more');
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">Album</span></div>'
-      + '<div class="hero-section">'
-      + '<div class="hero-art"><img src="' + Api.coverUrl(albumId) + '" alt=""></div>'
-      + '<div class="hero-title">' + this._esc(album.name) + '</div>'
-      + '<div class="hero-subtitle">' + this._esc(album.artist) + '</div>'
-      + '<div class="hero-meta">' + (album.year ? album.year + ' - ' : '') + tracks.length + ' tracks</div></div>'
-      + '<div class="action-row">'
-      + '<button class="play-all-btn">' + Icons.play() + '</button>'
-      + '<div class="action-btns">'
-      + '<button class="action-btn" data-action="shuffle">' + Icons.shuffle() + '</button>'
+      + '<div class="detail-hero">'
+      + '<div class="detail-hero-art"><img src="' + Api.coverUrl(albumId) + '" alt=""></div>'
+      + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-title">' + this._esc(album.name) + '</div>'
+      + '<div class="detail-hero-subtitle">' + this._esc(album.artist) + '</div>'
+      + '<div class="detail-hero-meta">' + (album.year ? album.year + ' · ' : '') + tracks.length + ' tracks</div>'
       + '</div></div>'
+      + '<div class="detail-actions">'
+      + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+      + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '</div>'
       + this.renderTrackList(tracks, { showArt: false });
 
     this.els.content.innerHTML = html;
@@ -1029,18 +1030,18 @@ const tmore = e.target.closest('.track-more');
 
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<span class="page-header-title">' + this._esc(playlist.name) + '</span></div>'
-      + '<div class="hero-section">'
-      + '<div class="hero-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)">'
-      + Icons.music() + '</div>'
-      + '<div class="hero-title">' + this._esc(playlist.name) + '</div>'
-      + '<div class="hero-subtitle">' + tracks.length + ' tracks</div></div>'
-      + '<div class="action-row">'
-      + '<button class="play-all-btn">' + Icons.play() + '</button>'
-      + '<div class="action-btns">'
-      + '<button class="action-btn" data-action="shuffle">' + Icons.shuffle() + '</button>'
-      + '<button class="action-btn" data-action="delete-playlist">' + Icons.trash() + '</button>'
-      + '</div></div>';
+      + '<span class="page-header-title">Playlist</span></div>'
+      + '<div class="detail-hero">'
+      + '<div class="detail-hero-art"><div class="detail-hero-art-icon">' + Icons.music() + '</div></div>'
+      + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-title">' + this._esc(playlist.name) + '</div>'
+      + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
+      + '</div></div>'
+      + '<div class="detail-actions">'
+      + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+      + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-playlist">' + Icons.trash() + '</button>'
+      + '</div>';
 
     if (tracks.length === 0) {
       html += this._emptyState('No tracks yet', 'Add tracks to this playlist', Icons.music());
@@ -1058,16 +1059,16 @@ const tmore = e.target.closest('.track-more');
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">Favorites</span></div>'
-      + '<div class="hero-section">'
-      + '<div class="hero-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
-      + Icons.heartFilled() + '</div>'
-      + '<div class="hero-title">Favorites</div>'
-      + '<div class="hero-subtitle">' + tracks.length + ' tracks</div></div>'
-      + '<div class="action-row">'
-      + '<button class="play-all-btn">' + Icons.play() + '</button>'
-      + '<div class="action-btns">'
-      + '<button class="action-btn" data-action="shuffle">' + Icons.shuffle() + '</button>'
-      + '</div></div>';
+      + '<div class="detail-hero">'
+      + '<div class="detail-hero-art detail-hero-art-accent"><div class="detail-hero-art-icon">' + Icons.heartFilled() + '</div></div>'
+      + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-title">Favorites</div>'
+      + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
+      + '</div></div>'
+      + '<div class="detail-actions">'
+      + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+      + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '</div>';
 
     if (tracks.length === 0) {
       html += this._emptyState('No favorites yet', 'Songs you like will appear here', Icons.heart());
@@ -1153,7 +1154,7 @@ const tmore = e.target.closest('.track-more');
     if (this.seeking || this.topSeeking) return;
     const pct = (progress.fraction * 100) + '%';
     this.els.seekFill.style.width = pct;
-    if (this.els.topProgressFill) this.els.topProgressFill.style.width = pct;
+    if (this.els.seekThumb) this.els.seekThumb.style.left = pct;
     this.els.npTimeCurrent.textContent = this._formatTime(progress.current);
     this.els.npTimeTotal.textContent = this._formatTime(progress.duration);
     this.els.miniProgress.style.setProperty('--progress', pct);
@@ -1162,6 +1163,7 @@ const tmore = e.target.closest('.track-more');
   showNowPlaying() {
     this.updateNowPlaying();
     this.updateSeekBar();
+    this._renderQueue();
     this.els.nowPlaying.classList.remove('hidden');
     this._applyNowPlayingBg();
   },
