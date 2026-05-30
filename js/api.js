@@ -122,49 +122,71 @@ const Api = {
 
   async metadataScan() {
     const res = await fetch('/api/metadata/scan', { method: 'POST' });
-    if (!res.ok) throw new Error('Metadata scan failed');
+    if (!res.ok) throw new Error('Scan request failed');
     return res.json();
+  },
+
+  async metadataScanProgress() {
+    try {
+      const res = await fetch('/api/metadata/scan-progress');
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
   },
 
   async metadataPending() {
-    const res = await fetch('/api/metadata/pending');
-    if (!res.ok) throw new Error('Failed to get pending matches');
-    return res.json();
+    try {
+      const res = await fetch('/api/metadata/pending');
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
   },
 
   async metadataAll() {
-    const res = await fetch('/api/metadata/all');
-    if (!res.ok) throw new Error('Failed to get matches');
-    return res.json();
+    try {
+      const res = await fetch('/api/metadata/all');
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
   },
 
   async metadataApprove(id) {
-    const res = await fetch('/api/metadata/approve/' + id, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to approve match');
-    return res.json();
+    try {
+      const res = await fetch('/api/metadata/approve/' + id, { method: 'POST' });
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
   },
 
   async metadataReject(id) {
-    const res = await fetch('/api/metadata/reject/' + id, { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to reject match');
-    return res.json();
+    try {
+      const res = await fetch('/api/metadata/reject/' + id, { method: 'POST' });
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
   },
 
   async metadataApproveAll() {
-    const res = await fetch('/api/metadata/approve-all', { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to approve all');
-    return res.json();
+    try {
+      const res = await fetch('/api/metadata/approve-all', { method: 'POST' });
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
   },
 
   async metadataClear() {
-    const res = await fetch('/api/metadata/clear', { method: 'POST' });
-    if (!res.ok) throw new Error('Failed to clear matches');
-    return res.json();
+    try {
+      const res = await fetch('/api/metadata/clear', { method: 'POST' });
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
   },
 
   async metadataCounts() {
-    const res = await fetch('/api/metadata/counts');
-    if (!res.ok) throw new Error('Failed to get match counts');
-    return res.json();
+    try {
+      const res = await fetch('/api/metadata/counts');
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
   }
 };

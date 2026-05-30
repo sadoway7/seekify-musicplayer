@@ -51,6 +51,12 @@ func main() {
 	stats := scanMusicDir(musicDir)
 	log.Printf("Scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
 
+	applied := applyApprovedMatches()
+	if applied > 0 {
+		log.Printf("Applied %d metadata overrides from database", applied)
+	}
+
+	extractEmbeddedCovers()
 	go fetchMissingCovers()
 
 	mux := http.NewServeMux()
@@ -72,6 +78,7 @@ func main() {
 	mux.HandleFunc("/api/folders", createFolderHandler)
 
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
+	mux.HandleFunc("/api/metadata/scan-progress", metadataScanProgressHandler)
 	mux.HandleFunc("/api/metadata/pending", metadataPendingHandler)
 	mux.HandleFunc("/api/metadata/all", metadataAllHandler)
 	mux.HandleFunc("/api/metadata/approve/", metadataApproveHandler)
@@ -79,6 +86,9 @@ func main() {
 	mux.HandleFunc("/api/metadata/approve-all", metadataApproveAllHandler)
 	mux.HandleFunc("/api/metadata/clear", metadataClearHandler)
 	mux.HandleFunc("/api/metadata/counts", metadataCountsHandler)
+
+	var handler http.Handler = mux
+	handler = loggingMiddleware(recoveryMiddleware(handler))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -104,7 +114,32 @@ func main() {
 		openBrowser(url)
 	}()
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+func recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("[PANIC] %s %s — %v", r.Method, r.URL.Path, err)
+				http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			log.Printf("[http] %s %s", r.Method, r.URL.Path)
+		}
+		next.ServeHTTP(w, r)
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			log.Printf("[http] %s %s — %s", r.Method, r.URL.Path, time.Since(start))
+		}
+	})
 }

@@ -557,7 +557,7 @@ const tmore = e.target.closest('.track-more');
                 { label: 'Play', icon: Icons.play(), action: () => {
                   this.hideContextMenu();
                   const tracks = playlist.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
-                  if (tracks.length > 0) Player.play(tracks[0], tracks);
+                  if (tracks.length > 0) Player.play(tracks[0], tracks, { type: 'playlist', name: playlist.name, id: id });
                 }},
                 { label: 'Delete', icon: Icons.trash(), action: async () => {
                   this.hideContextMenu();
@@ -1230,19 +1230,62 @@ const tmore = e.target.closest('.track-more');
 
   async _startMetadataScan() {
     const btn = document.getElementById('btn-meta-scan');
+    const statusEl = document.getElementById('metadata-status');
+    if (!btn) return;
+
+    const check = await Api.metadataScanProgress();
+    if (check && check.running) {
+      this._pollScanProgress(btn, statusEl);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Starting...</span>';
+
+    try {
+      await Api.metadataScan();
+      this._pollScanProgress(btn, statusEl);
+    } catch (err) {
+      this.showToast('Failed to start metadata scan');
+      btn.disabled = false;
+      btn.innerHTML = Icons.refresh() + '<span>Scan Metadata</span>';
+    }
+  },
+
+  _pollScanProgress(btn, statusEl) {
     if (!btn) return;
     btn.disabled = true;
-    btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Scanning...</span>';
-    try {
-      const result = await Api.metadataScan();
-      this.showToast('Found ' + result.pending + ' matches (' + result.failed + ' failed)');
-      await this._loadMetadataStatus();
-      await Store.refreshLibrary();
-    } catch (err) {
-      this.showToast('Metadata scan failed');
-    }
-    btn.disabled = false;
-    btn.innerHTML = Icons.refresh() + '<span>Scan Metadata</span>';
+
+    const poll = async () => {
+      const p = await Api.metadataScanProgress();
+      if (!p) {
+        btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Scanning...</span>';
+        setTimeout(poll, 2000);
+        return;
+      }
+
+      if (p.running) {
+        const pct = p.total > 0 ? Math.round((p.scanned / p.total) * 100) : 0;
+        btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Scanning ' + p.scanned + '/' + p.total + ' (' + pct + '%)</span>';
+        if (statusEl) {
+          statusEl.innerHTML = '<div class="settings-stat">Scanning: <strong>' + this._esc(p.current) + '</strong><br>' + p.scanned + ' of ' + p.total + ' tracks (' + p.matched + ' matches, ' + p.failed + ' failed)</div>';
+        }
+        setTimeout(poll, 1500);
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = Icons.refresh() + '<span>Scan Metadata</span>';
+
+        if (p.result) {
+          this.showToast('Found ' + p.result.pending + ' matches (' + p.result.failed + ' failed)');
+        } else {
+          this.showToast('Scan complete');
+        }
+        this._loadMetadataStatus();
+        Store.refreshLibrary();
+      }
+    };
+
+    setTimeout(poll, 500);
   },
 
   async _clearMetadata() {
@@ -1577,7 +1620,8 @@ const tmore = e.target.closest('.track-more');
 
   showNowPlaying() {
     this.updateNowPlaying();
-    this._generateWaveform(Player.currentTrack ? Player.currentTrack.id : null);
+    const track = Player.getCurrentTrack();
+    this._generateWaveform(track ? track.id : null);
     this.updateSeekBar();
     this._renderQueue();
     this.els.nowPlaying.classList.remove('hidden');
@@ -1587,7 +1631,7 @@ const tmore = e.target.closest('.track-more');
 
   hideNowPlaying() {
     this.els.nowPlaying.classList.add('hidden');
-    if (Player.currentTrack) {
+    if (Player.getCurrentTrack()) {
       this.els.miniPlayer.classList.remove('hidden');
     }
     this.els.nowPlaying.style.background = '';
@@ -1603,11 +1647,32 @@ const tmore = e.target.closest('.track-more');
     this.els.queuePanel.classList.add('hidden');
   },
 
+  updateQueueIfVisible() {
+    if (this.els.queuePanel && !this.els.queuePanel.classList.contains('hidden')) {
+      this._renderQueue();
+    }
+  },
+
   _renderQueue() {
     if (Player.queue.length === 0) {
-      this.els.queueList.innerHTML = '<div class="empty-state"><div class="empty-state-title">Queue is empty</div><div class="empty-state-text">Add tracks to your queue</div></div>';
+      this.els.queueList.innerHTML = '<div class="empty-state"><div class="empty-state-title">Queue is empty</div><div class="empty-state-text">Play something to see it here</div></div>';
       return;
     }
+
+    const sourceName = Player.getSourceName();
+    const sourceEl = this.els.queuePanel.querySelector('.queue-source');
+    if (sourceEl) sourceEl.remove();
+
+    if (sourceName) {
+      const label = document.createElement('div');
+      label.className = 'queue-source';
+      label.textContent = sourceName;
+      this.els.queueList.parentElement.insertBefore(label, this.els.queueList);
+    } else {
+      const existing = this.els.queuePanel.querySelector('.queue-source');
+      if (existing) existing.remove();
+    }
+
     this.els.queueList.innerHTML = Player.queue.map((track, i) => {
       const isCurrent = i === Player.currentIndex;
       return '<div class="queue-item' + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
@@ -1749,7 +1814,10 @@ const tmore = e.target.closest('.track-more');
       if (list.length > 0) {
         const shuffled = list.sort(() => Math.random() - 0.5);
         Player.shuffle = true;
-        Player.play(shuffled[0], shuffled);
+        const source = (action === 'shuffle-all')
+          ? { type: 'all', name: 'All Music' }
+          : this._getViewSource();
+        Player.play(shuffled[0], shuffled, source);
         this.showNowPlaying();
       }
       return;
@@ -1813,6 +1881,47 @@ const tmore = e.target.closest('.track-more');
       }
     }
     return result;
+  },
+
+  _smartPlay(track) {
+    const existingIdx = Player.queue.findIndex(t => t.id === track.id);
+    if (existingIdx !== -1) {
+      Player.playInQueue(existingIdx);
+      return;
+    }
+    const viewList = this._viewTrackList;
+    if (viewList.length > 1) {
+      const source = this._getViewSource();
+      Player.play(track, viewList, source);
+    } else {
+      Player.play(track, null, null);
+    }
+  },
+
+  _getViewSource() {
+    const view = Store.currentView;
+    const data = Store.viewData || {};
+    if (view === 'album' && data.albumId) {
+      const album = Store.getAlbum(data.albumId);
+      return { type: 'album', name: album ? album.name : 'Album', id: data.albumId };
+    }
+    if (view === 'artist' && data.artistName) {
+      return { type: 'artist', name: data.artistName };
+    }
+    if (view === 'playlist' && data.playlistId) {
+      const pl = Store.getPlaylist(data.playlistId);
+      return { type: 'playlist', name: pl ? pl.name : 'Playlist', id: data.playlistId };
+    }
+    if (view === 'favorites') {
+      return { type: 'favorites', name: 'Liked Songs' };
+    }
+    if (view === 'all-music') {
+      return { type: 'all', name: 'All Music' };
+    }
+    if (view === 'search') {
+      return { type: 'search', name: 'Search Results' };
+    }
+    return null;
   },
 
   _esc(str) {

@@ -192,7 +192,9 @@ func coverHandler(w http.ResponseWriter, r *http.Request) {
 
 func scanHandler(w http.ResponseWriter, r *http.Request) {
 	stats := scanMusicDir(musicDir)
+	applyApprovedMatches()
 	autoSortMusic()
+	extractEmbeddedCovers()
 	log.Printf("Scan complete: %d scanned, %d added, %d removed", stats.Scanned, stats.Added, stats.Removed)
 
 	go fetchMissingCovers()
@@ -317,6 +319,9 @@ func openBrowser(url string) {
 }
 
 func adminHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	http.ServeFile(w, r, "admin.html")
 }
 
@@ -522,9 +527,31 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func metadataScanHandler(w http.ResponseWriter, r *http.Request) {
-	result := scanMetadataForTracks()
+	metaScanLock.Lock()
+	if metaScan.Running {
+		metaScanLock.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "already_running",
+			"progress": metaScan.Scanned,
+			"total":    metaScan.Total,
+		})
+		return
+	}
+	metaScanLock.Unlock()
+
+	go scanMetadataForTracks()
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "started",
+	})
+}
+
+func metadataScanProgressHandler(w http.ResponseWriter, r *http.Request) {
+	p := getScanProgress()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(p)
 }
 
 func metadataPendingHandler(w http.ResponseWriter, r *http.Request) {

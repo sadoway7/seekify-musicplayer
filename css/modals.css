@@ -72,6 +72,18 @@
   transition: opacity 0.15s ease;
 }
 
+.queue-source {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .queue-item:active {
   opacity: 0.7;
 }

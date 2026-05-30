@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -373,8 +374,43 @@ func scoreMatch(localArtist, localTitle, mbArtist, mbTitle string) float64 {
 	return score
 }
 
+type scanProgress struct {
+	Running    bool   `json:"running"`
+	Total      int    `json:"total"`
+	Scanned    int    `json:"scanned"`
+	Matched    int    `json:"matched"`
+	Failed     int    `json:"failed"`
+	Current    string `json:"current"`
+	Done       bool   `json:"done"`
+	Result     *MetadataScanResult `json:"result,omitempty"`
+}
+
+var (
+	metaScan     scanProgress
+	metaScanLock sync.Mutex
+)
+
+func getScanProgress() scanProgress {
+	metaScanLock.Lock()
+	defer metaScanLock.Unlock()
+	return metaScan
+}
+
 func scanMetadataForTracks() MetadataScanResult {
-	var result MetadataScanResult
+	metaScanLock.Lock()
+	if metaScan.Running {
+		metaScanLock.Unlock()
+		return MetadataScanResult{}
+	}
+	metaScan = scanProgress{Running: true}
+	metaScanLock.Unlock()
+
+	defer func() {
+		metaScanLock.Lock()
+		metaScan.Running = false
+		metaScan.Done = true
+		metaScanLock.Unlock()
+	}()
 
 	mu.RLock()
 	type trackInfo struct {
@@ -383,41 +419,94 @@ func scanMetadataForTracks() MetadataScanResult {
 		artist   string
 		filePath string
 	}
+
+	existingMatches := map[string]bool{}
+	rows, _ := db.Query(`SELECT DISTINCT track_id FROM metadata_matches`)
+	if rows != nil {
+		for rows.Next() {
+			var tid string
+			rows.Scan(&tid)
+			existingMatches[tid] = true
+		}
+		rows.Close()
+	}
+
 	var unmatched []trackInfo
 	for _, t := range tracks {
-		if t.Artist == "" && t.Title == "" {
+		if existingMatches[t.ID] {
 			continue
 		}
-		if !t.HasMetadata {
-			unmatched = append(unmatched, trackInfo{
-				id:       t.ID,
-				title:    t.Title,
-				artist:   t.Artist,
-				filePath: t.FilePath,
-			})
+
+		searchTitle := t.Title
+		searchArtist := t.Artist
+
+		if searchTitle == "" || searchArtist == "" {
+			filename := titleFromFilename(t.FilePath)
+			if searchTitle == "" && searchArtist == "" {
+				if sepIdx := strings.Index(filename, " - "); sepIdx != -1 {
+					searchArtist = strings.TrimSpace(filename[:sepIdx])
+					searchTitle = strings.TrimSpace(filename[sepIdx+3:])
+				} else {
+					searchTitle = filename
+				}
+			} else if searchTitle == "" {
+				searchTitle = filename
+			}
 		}
+
+		if searchTitle == "" {
+			continue
+		}
+
+		unmatched = append(unmatched, trackInfo{
+			id:       t.ID,
+			title:    searchTitle,
+			artist:   searchArtist,
+			filePath: t.FilePath,
+		})
 	}
 	mu.RUnlock()
 
-	log.Printf("Scanning metadata for %d unmatched tracks via MusicBrainz...", len(unmatched))
+	var result MetadataScanResult
 
-	for _, info := range unmatched {
+	metaScanLock.Lock()
+	metaScan.Total = len(unmatched)
+	metaScanLock.Unlock()
+
+	log.Printf("[metadata] Starting scan of %d tracks via MusicBrainz...", len(unmatched))
+
+	for i, info := range unmatched {
+		metaScanLock.Lock()
+		metaScan.Scanned = i + 1
+		metaScan.Current = info.artist + " - " + info.title
+		metaScanLock.Unlock()
+
 		candidates, err := mbSearchRecordings(info.artist, info.title, 3)
 		if err != nil {
-			log.Printf("MusicBrainz: no results for %s - %s: %v", info.artist, info.title, err)
+			log.Printf("[metadata] No results for %q - %q: %v", info.artist, info.title, err)
 			result.Failed++
+			metaScanLock.Lock()
+			metaScan.Failed = result.Failed
+			metaScanLock.Unlock()
 			time.Sleep(600 * time.Millisecond)
 			continue
 		}
 
 		if len(candidates) == 0 {
 			result.Failed++
+			metaScanLock.Lock()
+			metaScan.Failed = result.Failed
+			metaScanLock.Unlock()
 			time.Sleep(600 * time.Millisecond)
 			continue
 		}
 
 		for _, cand := range candidates {
 			score := scoreMatch(info.artist, info.title, cand.Artist, cand.Title)
+
+			if score < 0.5 {
+				continue
+			}
 
 			mu.RLock()
 			hasCover := false
@@ -445,17 +534,6 @@ func scanMetadataForTracks() MetadataScanResult {
 				FilePath:    info.filePath,
 			}
 
-			if score >= 0.8 {
-				match.Status = "pending"
-				if score >= 0.9 && len(candidates) == 1 {
-					match.Status = "pending"
-				}
-			} else if score >= 0.5 {
-				match.Status = "pending"
-			} else {
-				continue
-			}
-
 			dbInsertMetadataMatch(match)
 
 			if score >= 0.8 {
@@ -466,10 +544,20 @@ func scanMetadataForTracks() MetadataScanResult {
 			result.Pending++
 		}
 
+		metaScanLock.Lock()
+		metaScan.Matched = result.Pending
+		metaScanLock.Unlock()
+
 		time.Sleep(600 * time.Millisecond)
 	}
 
-	log.Printf("Metadata scan complete: %d matched, %d conflicts, %d failed", result.Matched, result.Conflicts, result.Failed)
+	result.Failed = metaScan.Failed
+
+	metaScanLock.Lock()
+	metaScan.Result = &result
+	metaScanLock.Unlock()
+
+	log.Printf("[metadata] Scan complete: %d matched, %d conflicts, %d failed", result.Matched, result.Conflicts, result.Failed)
 	return result
 }
 
@@ -519,6 +607,19 @@ func applyApprovedMatches() int {
 
 		if m.MBAlbumID != "" {
 			fetchAndCacheCover(m.MBAlbumID, m.MBArtist, m.MBAlbum)
+			if changed && track.AlbumID != "" && track.AlbumID != m.MBAlbumID {
+				coverMu.RLock()
+				data, ok := coverCache[m.MBAlbumID]
+				coverMu.RUnlock()
+				if ok {
+					coverDir := filepath.Join(musicDir, "images")
+					coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
+					os.WriteFile(coverPath, data, 0644)
+					coverMu.Lock()
+					coverCache[track.AlbumID] = data
+					coverMu.Unlock()
+				}
+			}
 		}
 	}
 

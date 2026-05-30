@@ -102,6 +102,7 @@ func scanMusicDir(dir string) ScanStats {
 			ModTime:  modTime,
 		}
 
+		hasRealTags := false
 		if err == nil && tagReader != nil {
 			track.Title = tagReader.Title()
 			track.Artist = tagReader.Artist()
@@ -116,11 +117,14 @@ func scanMusicDir(dir string) ScanStats {
 			if picture != nil {
 				track.HasCover = true
 			}
+
+			if tagReader.Title() != "" && tagReader.Title() != "Unknown" {
+				hasRealTags = true
+			}
 		} else {
 			log.Printf("Could not read tags from %s: %v", fpath, err)
 		}
 
-		// Treat "Unknown" as empty (common tag library fallback)
 		if track.Title == "Unknown" || track.Title == "" {
 			track.Title = titleFromFilename(fpath)
 		}
@@ -142,6 +146,10 @@ func scanMusicDir(dir string) ScanStats {
 		}
 		if track.AlbumArtist == "" {
 			track.AlbumArtist = track.Artist
+		}
+
+		if hasRealTags {
+			track.HasMetadata = true
 		}
 
 		var albumID string
@@ -220,4 +228,85 @@ func generatePlaceholderSVG(name string) string {
   <rect width="300" height="300" fill="#1E1E1E"/>
   <text x="150" y="160" font-family="sans-serif" font-size="120" font-weight="bold" fill="#313131" text-anchor="middle" dominant-baseline="middle">%s</text>
 </svg>`, initial)
+}
+
+func extractEmbeddedCovers() {
+	coverDir := filepath.Join(musicDir, "images")
+	os.MkdirAll(coverDir, 0755)
+
+	mu.RLock()
+	type job struct {
+		filePath string
+		albumID  string
+	}
+	var jobs []job
+	for _, t := range tracks {
+		if !t.HasCover || t.AlbumID == "" {
+			continue
+		}
+		coverMu.RLock()
+		_, cached := coverCache[t.AlbumID]
+		coverMu.RUnlock()
+		if cached {
+			continue
+		}
+		coverPath := filepath.Join(coverDir, t.AlbumID+".jpg")
+		if _, err := os.Stat(coverPath); err == nil {
+			data, err := os.ReadFile(coverPath)
+			if err == nil {
+				coverMu.Lock()
+				coverCache[t.AlbumID] = data
+				coverMu.Unlock()
+				cached = true
+				continue
+			}
+		}
+		jobs = append(jobs, job{filePath: t.FilePath, albumID: t.AlbumID})
+	}
+	mu.RUnlock()
+
+	if len(jobs) == 0 {
+		return
+	}
+
+	log.Printf("Extracting embedded cover art from %d files...", len(jobs))
+
+	saved := 0
+	for _, j := range jobs {
+		fullPath := filepath.Join(musicDir, j.filePath)
+		f, err := os.Open(fullPath)
+		if err != nil {
+			continue
+		}
+
+		tagReader, err := tag.ReadFrom(f)
+		f.Close()
+		if err != nil || tagReader == nil {
+			continue
+		}
+
+		pic := tagReader.Picture()
+		if pic == nil || len(pic.Data) == 0 {
+			continue
+		}
+
+		coverPath := filepath.Join(coverDir, j.albumID+".jpg")
+		if err := os.WriteFile(coverPath, pic.Data, 0644); err != nil {
+			continue
+		}
+
+		coverMu.Lock()
+		coverCache[j.albumID] = pic.Data
+		coverMu.Unlock()
+
+		mu.Lock()
+		if a, ok := albums[j.albumID]; ok {
+			a.HasCover = true
+		}
+		mu.Unlock()
+
+		saved++
+	}
+
+	log.Printf("Extracted %d covers from file tags", saved)
 }
