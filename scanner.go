@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"log"
 	"os"
@@ -170,6 +169,13 @@ func scanMusicDir(dir string) ScanStats {
 					if pic != nil {
 						newCovers[albumID] = pic.Data
 						newAlbums[albumID].HasCover = true
+
+						coverDir := filepath.Join(dir, "images")
+						os.MkdirAll(coverDir, 0755)
+						coverPath := filepath.Join(coverDir, albumID+".jpg")
+						if _, err := os.Stat(coverPath); os.IsNotExist(err) {
+							os.WriteFile(coverPath, pic.Data, 0644)
+						}
 					}
 				}
 			}
@@ -198,18 +204,13 @@ func scanMusicDir(dir string) ScanStats {
 }
 
 func generatePlaceholderSVG(name string) string {
-	h := sha256.Sum256([]byte(name))
-	r := int(h[0]) % 128 + 80
-	g := int(h[1]) % 128 + 80
-	b := int(h[2]) % 128 + 80
-
 	initial := "?"
 	if len(name) > 0 {
 		initial = strings.ToUpper(string(name[0]))
 	}
 
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
-  <rect width="300" height="300" fill="rgb(%d,%d,%d)"/>
-  <text x="150" y="160" font-family="sans-serif" font-size="120" font-weight="bold" fill="rgba(255,255,255,0.7)" text-anchor="middle" dominant-baseline="middle">%s</text>
-</svg>`, r, g, b, initial)
+  <rect width="300" height="300" fill="#1E1E1E"/>
+  <text x="150" y="160" font-family="sans-serif" font-size="120" font-weight="bold" fill="#313131" text-anchor="middle" dominant-baseline="middle">%s</text>
+</svg>`, initial)
 }

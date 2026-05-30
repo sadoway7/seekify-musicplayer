@@ -100,7 +100,7 @@ func fetchAndCacheCover(albumID, artist, album string) bool {
 		return false
 	}
 
-	coverDir := filepath.Join("data", "covers")
+	coverDir := filepath.Join(musicDir, "images")
 	os.MkdirAll(coverDir, 0755)
 
 	coverPath := filepath.Join(coverDir, albumID+".jpg")
@@ -271,7 +271,7 @@ func fetchMetadataForTrack(artist, title string) (string, string, string, error)
 }
 
 func loadCachedCovers() {
-	coverDir := filepath.Join("data", "covers")
+	coverDir := filepath.Join(musicDir, "images")
 	entries, err := os.ReadDir(coverDir)
 	if err != nil {
 		return
