@@ -494,6 +494,16 @@ const tmore = e.target.closest('.track-more');
           this._handleAction(qpCard.dataset.action);
           return;
         }
+        if (qpCard.dataset.trackId) {
+          const track = Store.getTrack(qpCard.dataset.trackId);
+          if (track) {
+            const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
+            const list = recentTracks.length > 0 ? recentTracks : [track];
+            Player.play(track, list);
+            this.showNowPlaying();
+          }
+          return;
+        }
         if (qpCard.dataset.albumId) {
           this.navigateTo('album', { albumId: qpCard.dataset.albumId });
           return;
@@ -664,7 +674,7 @@ const tmore = e.target.closest('.track-more');
         const artInner = hasCover
           ? '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">'
           : '<div class="quick-play-card-fallback">' + Icons.music() + '</div>';
-        html += '<div class="quick-play-card" data-album-id="' + (c.albumID || c.id) + '">'
+        html += '<div class="quick-play-card quick-play-card-recent" data-track-id="' + c.id + '" data-album-id="' + (c.albumID || c.id) + '">'
           + '<div class="quick-play-art">' + artInner + '</div>'
           + '<div class="quick-play-title">' + this._esc(c.name) + '</div>'
           + '</div>';
@@ -672,9 +682,14 @@ const tmore = e.target.closest('.track-more');
 
       html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
         + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--accent), #a8c830);display:flex;align-items:center;justify-content:center">'
-        + '<div class="quick-play-card-shuffle-icon">'
-        + '<svg viewBox="0 0 48 48" width="48" height="48"><circle cx="14" cy="14" r="5" fill="#0A0A0A" opacity="0.7"/><circle cx="34" cy="14" r="5" fill="#0A0A0A" opacity="0.7"/><circle cx="14" cy="34" r="5" fill="#0A0A0A" opacity="0.7"/><circle cx="34" cy="34" r="5" fill="#0A0A0A" opacity="0.7"/></svg>'
-        + '</div></div>'
+        + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
+        + '<circle cx="28" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="72" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="50" cy="50" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="28" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="72" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '</svg>'
+        + '</div>'
         + '<div class="quick-play-title">Shuffle</div>'
         + '</div>';
 
@@ -1647,7 +1662,11 @@ const tmore = e.target.closest('.track-more');
   },
 
   _updateVolumeBar() {
-    this.els.volumeFill.style.width = (Player.volume * 100) + '%';
-    this.els.volumeBtn.innerHTML = Player.volume === 0 ? Icons.volumeMute() : Icons.volume();
+    const pct = (Player.volume * 100) + '%';
+    const icon = Player.volume === 0 ? Icons.volumeMute() : Icons.volume();
+    this.els.volumeFill.style.width = pct;
+    this.els.volumeBtn.innerHTML = icon;
+    if (this.els.queueVolumeFill) this.els.queueVolumeFill.style.width = pct;
+    if (this.els.queueVolumeBtn) this.els.queueVolumeBtn.innerHTML = icon;
   }
 };
