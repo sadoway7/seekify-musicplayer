@@ -469,8 +469,7 @@ const tmore = e.target.closest('.track-more');
         const trackId = trow.dataset.trackId;
         const track = Store.getTrack(trackId);
         if (track) {
-          const list = this._viewTrackList.length > 0 ? this._viewTrackList : [track];
-          Player.play(track, list);
+          this._smartPlay(track);
           this.showNowPlaying();
         }
         return;
