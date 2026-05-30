@@ -37,10 +37,10 @@
   width: 44px;
   height: 44px;
   min-width: 44px;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--l3);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow-raised);
 }
 
 .track-art img {

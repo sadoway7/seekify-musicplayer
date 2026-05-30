@@ -1,7 +1,8 @@
 @media (min-width: 768px) {
   .mega-title span {
-    font-size: 48px;
+    font-size: 40px;
     text-transform: none;
+    opacity: 0.06;
   }
 
   .mega-title {
@@ -54,12 +55,19 @@
     flex: none;
     width: 56px;
     height: 56px;
-    border-radius: 12px;
+    border-radius: 14px;
     gap: 2px;
+    transition: box-shadow 0.2s ease, background 0.2s ease;
   }
 
   .tab-item.active {
-    background: rgba(212, 240, 64, 0.08);
+    background: var(--accent-soft);
+    box-shadow: var(--shadow-raised), var(--highlight-top);
+  }
+
+  .tab-item:not(.active):active {
+    background: var(--l2);
+    box-shadow: var(--shadow-inset);
   }
 
   .tab-item span {
@@ -80,17 +88,29 @@
     border-radius: 0;
     transform: none;
     margin: 0;
-    height: 72px;
-    box-shadow: 0 -1px 0 rgba(255,255,255,0.04);
+    height: 80px;
+    background: rgba(18, 18, 18, 0.85);
+    backdrop-filter: blur(24px) saturate(1.4);
+    -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    box-shadow:
+      0 -8px 32px rgba(0,0,0,0.45),
+      0 -2px 8px rgba(0,0,0,0.25),
+      inset 0 1px 0 rgba(255,255,255,0.06);
   }
 
   .mini-progress {
-    top: 0;
-    bottom: 0;
+    top: -2px;
+    bottom: auto;
     left: 0;
     right: 0;
-    height: auto;
+    height: 3px;
     border-radius: 0;
+  }
+
+  .mini-progress::after {
+    height: 3px;
+    opacity: 0.35;
   }
 
   .mini-player-inner {
@@ -99,7 +119,7 @@
     align-items: center;
     justify-content: space-between;
     height: 100%;
-    padding: 0 20px;
+    padding: 0 28px 0 20px;
     gap: 0;
   }
 
@@ -108,7 +128,7 @@
     flex-direction: row;
     align-items: center;
     gap: 14px;
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     cursor: pointer;
   }
@@ -117,24 +137,27 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     flex-shrink: 0;
-    padding: 0 32px;
+    padding: 0;
+    justify-content: center;
   }
 
   .mini-right {
     flex: 1;
     min-width: 0;
+    max-width: 320px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
   }
 
   .mini-art {
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    border-radius: 6px;
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.06);
   }
 
   .mini-title {
@@ -146,8 +169,9 @@
   }
 
   .mini-play-btn {
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
   }
 
   .mini-play-btn svg {

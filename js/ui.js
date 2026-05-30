@@ -333,6 +333,15 @@ const UI = {
       this.hideQueue();
     });
 
+    document.addEventListener('click', (e) => {
+      if (window.innerWidth >= 768) return;
+      const panel = this.els.queuePanel;
+      if (panel.classList.contains('hidden')) return;
+      if (panel.contains(e.target)) return;
+      if (e.target.closest('.np-queue-btn')) return;
+      this.hideQueue();
+    });
+
     this.els.queueList.addEventListener('click', (e) => {
       const item = e.target.closest('.queue-item');
       if (!item) return;
