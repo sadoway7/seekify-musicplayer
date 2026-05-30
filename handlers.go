@@ -192,7 +192,10 @@ func coverHandler(w http.ResponseWriter, r *http.Request) {
 
 func scanHandler(w http.ResponseWriter, r *http.Request) {
 	stats := scanMusicDir(musicDir)
+	autoSortMusic()
 	log.Printf("Scan complete: %d scanned, %d added, %d removed", stats.Scanned, stats.Added, stats.Removed)
+
+	go fetchMissingCovers()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)

@@ -45,10 +45,13 @@ func main() {
 	coverCache = make(map[string][]byte)
 
 	initDB(filepath.Join("data", "music.db"))
+	loadCachedCovers()
 
 	log.Printf("Scanning music directory: %s", musicDir)
 	stats := scanMusicDir(musicDir)
 	log.Printf("Scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
+
+	go fetchMissingCovers()
 
 	mux := http.NewServeMux()
 

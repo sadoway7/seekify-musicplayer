@@ -573,10 +573,11 @@ const tmore = e.target.closest('.track-more');
 
   renderSearch() {
     this._viewTrackList = [];
-    let html = '<div class="greeting">Search</div>'
-      + '<div class="search-container" style="background:var(--l2);border-radius:12px">'
+    let html = '<div class="page-header">'
+      + '<span class="page-header-title" style="font-size:24px;font-weight:700;letter-spacing:-0.04em">Search</span></div>'
+      + '<div class="search-container" style="background:var(--l2);border-radius:12px;margin:0 16px 16px">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input" type="text" placeholder="Songs, artists, or albums">'
+      + '<input class="search-input" type="text" placeholder="Songs, artists, or albums" value="' + this._esc(this.searchQuery) + '">'
       + '</div>'
       + '<div id="search-results"></div>';
 
@@ -588,7 +589,8 @@ const tmore = e.target.closest('.track-more');
 
     const input = this.els.content.querySelector('.search-input');
     if (input) {
-      if (this.searchQuery) input.value = this.searchQuery;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
       input.addEventListener('input', (e) => {
         this.searchQuery = e.target.value.trim();
         this.searchGenre = '';
@@ -739,18 +741,19 @@ const tmore = e.target.closest('.track-more');
   },
 
   _renderLibAlbums() {
-    if (Store.library.albums.length === 0) {
+    const albumsWithName = Store.library.albums.filter(a => a.name && a.name !== '');
+    if (albumsWithName.length === 0) {
       return this._emptyState('No albums yet', 'Scan your music library to see albums', Icons.library());
     }
     if (this.viewMode === 'grid') {
-      return '<div class="scroll-row" style="flex-wrap:wrap">' + Store.library.albums.map(a =>
+      return '<div class="scroll-row" style="flex-wrap:wrap">' + albumsWithName.map(a =>
         '<div class="card" data-album-id="' + a.id + '">'
         + '<div class="card-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
         + '<div class="card-title">' + this._esc(a.name) + '</div>'
         + '<div class="card-subtitle">' + this._esc(a.artist) + '</div></div>'
       ).join('') + '</div>';
     }
-    return Store.library.albums.map(a =>
+    return albumsWithName.map(a =>
       '<div class="list-item" data-type="album" data-id="' + a.id + '">'
       + '<div class="list-item-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
       + '<div class="list-item-info">'
@@ -761,10 +764,11 @@ const tmore = e.target.closest('.track-more');
   },
 
   _renderLibArtists() {
-    if (Store.library.artists.length === 0) {
+    const artistsWithName = Store.library.artists.filter(a => a.name && a.name !== '');
+    if (artistsWithName.length === 0) {
       return this._emptyState('No artists yet', 'Scan your music library to see artists', Icons.music());
     }
-    return '<div class="prow" style="flex-wrap:wrap">' + Store.library.artists.map(a =>
+    return '<div class="prow" style="flex-wrap:wrap">' + artistsWithName.map(a =>
       '<div class="apill" data-type="artist" data-id="' + this._esc(a.name) + '">'
       + '<div class="apill-dot"></div>'
       + '<div class="apill-name">' + this._esc(a.name) + '</div>'
