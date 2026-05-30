@@ -53,6 +53,27 @@
   position: relative;
 }
 
+.mini-left {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mini-center {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.mini-right {
+  display: none;
+}
+
 .mini-art {
   width: 40px;
   height: 40px;

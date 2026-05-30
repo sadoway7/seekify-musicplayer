@@ -65,7 +65,6 @@ const UI = {
       createPlaylistBtn: document.getElementById('create-playlist-btn'),
       contextMenu: document.getElementById('context-menu'),
       contextMenuItems: document.getElementById('context-menu-items'),
-      queueColList: document.getElementById('np-queue-col-list'),
     };
   },
 
@@ -604,8 +603,9 @@ const tmore = e.target.closest('.track-more');
     if (recentCards.length > 0 || currentTrack) {
       html += '<div class="quick-play-grid">';
 
-      html += '<div class="quick-play-card" data-navigate="all-music">'
-        + '<div class="quick-play-art" style="background:var(--l3);display:flex;align-items:center;justify-content:center;color:var(--text2)"><span style="font-size:18px;font-weight:700">All</span></div>'
+      html += '<div class="quick-play-card quick-play-card-all" data-navigate="all-music">'
+        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--l3), var(--l2))">'
+        + '<div class="quick-play-card-icon-text">ALL</div></div>'
         + '<div class="quick-play-title">All Music</div>'
         + '</div>';
 
@@ -613,7 +613,7 @@ const tmore = e.target.closest('.track-more');
         const hasCover = Store.albumHasCover(currentTrack.albumID);
         const artInner = hasCover
           ? '<img src="' + Api.coverUrl(currentTrack.albumID) + '" alt="">'
-          : '';
+          : '<div class="quick-play-card-fallback">' + Icons.music() + '</div>';
         html += '<div class="quick-play-card quick-play-card-now" data-album-id="' + currentTrack.albumID + '">'
           + '<div class="quick-play-art">' + artInner
           + '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div></div>'
@@ -626,15 +626,16 @@ const tmore = e.target.closest('.track-more');
         const hasCover = Store.albumHasCover(c.albumID || c.id);
         const artInner = hasCover
           ? '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">'
-          : '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--text3)">' + Icons.music() + '</div>';
+          : '<div class="quick-play-card-fallback">' + Icons.music() + '</div>';
         html += '<div class="quick-play-card" data-album-id="' + (c.albumID || c.id) + '">'
           + '<div class="quick-play-art">' + artInner + '</div>'
           + '<div class="quick-play-title">' + this._esc(c.name) + '</div>'
           + '</div>';
       });
 
-      html += '<div class="quick-play-card" data-action="shuffle-all">'
-        + '<div class="quick-play-art" style="background:var(--accent);display:flex;align-items:center;justify-content:center;color:#0A0A0A">' + Icons.shuffle() + '</div>'
+      html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
+        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--accent), #a8c830);display:flex;align-items:center;justify-content:center">'
+        + '<div class="quick-play-card-shuffle-icon">' + Icons.shuffle() + '</div></div>'
         + '<div class="quick-play-title">Shuffle</div>'
         + '</div>';
 
@@ -779,23 +780,27 @@ const tmore = e.target.closest('.track-more');
   },
 
   _renderBrowseGrid() {
-    const genres = [
-      { name: 'Pop', color: '#8b5cf6' },
-      { name: 'Rock', color: '#ef4444' },
-      { name: 'Hip-Hop', color: '#f59e0b' },
-      { name: 'Electronic', color: '#06b6d4' },
-      { name: 'Jazz', color: '#22c55e' },
-      { name: 'Classical', color: '#a855f7' },
-      { name: 'R&B', color: '#ec4899' },
-      { name: 'Country', color: '#f97316' },
-      { name: 'Metal', color: '#64748b' },
-      { name: 'Indie', color: '#14b8a6' },
-      { name: 'Folk', color: '#84cc16' },
-      { name: 'Latin', color: '#eab308' }
-    ];
-    return '<div class="browse-grid">' + genres.map(g =>
-      '<div class="category-card" data-genre="' + g.name + '" style="background:' + g.color + '">' + g.name + '</div>'
-    ).join('') + '</div>';
+    const colorMap = {
+      'pop': '#8b5cf6', 'rock': '#ef4444', 'hip-hop': '#f59e0b', 'hip hop': '#f59e0b',
+      'electronic': '#06b6d4', 'jazz': '#22c55e', 'classical': '#a855f7',
+      'r&b': '#ec4899', 'rhythm': '#ec4899', 'country': '#f97316',
+      'metal': '#64748b', 'indie': '#14b8a6', 'folk': '#84cc16',
+      'latin': '#eab308', 'blues': '#3b82f6', 'soul': '#d946ef',
+      'punk': '#f43f5e', 'reggae': '#10b981', 'alternative': '#6366f1',
+    };
+    const found = {};
+    Store.library.tracks.forEach(t => {
+      if (t.genre && t.genre.trim()) {
+        const key = t.genre.trim().toLowerCase();
+        if (!found[key]) found[key] = t.genre.trim();
+      }
+    });
+    const genres = Object.values(found).sort((a, b) => a.localeCompare(b));
+    if (genres.length === 0) return '';
+    return '<div class="browse-grid">' + genres.map(g => {
+      const color = colorMap[g.toLowerCase()] || '#' + (Math.floor(Math.random()*4 + 4).toString(16)) + (Math.floor(Math.random()*8 + 4).toString(16)) + (Math.floor(Math.random()*8 + 4).toString(16));
+      return '<div class="category-card" data-genre="' + this._esc(g) + '" style="background:' + color + '">' + this._esc(g) + '</div>';
+    }).join('') + '</div>';
   },
 
   renderLibrary() {
@@ -931,16 +936,16 @@ const tmore = e.target.closest('.track-more');
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">All Music</span></div>'
-      + '<div class="hero-section">'
-      + '<div class="hero-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
-      + Icons.music() + '</div>'
-      + '<div class="hero-title">All Music</div>'
-      + '<div class="hero-subtitle">' + tracks.length + ' tracks</div></div>'
-      + '<div class="action-row">'
-      + '<button class="play-all-btn">' + Icons.play() + '</button>'
-      + '<div class="action-btns">'
-      + '<button class="action-btn" data-action="shuffle">' + Icons.shuffle() + '</button>'
-      + '</div></div>';
+      + '<div class="detail-hero">'
+      + '<div class="detail-hero-art detail-hero-art-accent"><div class="detail-hero-art-icon">' + Icons.music() + '</div></div>'
+      + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-title">All Music</div>'
+      + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
+      + '</div></div>'
+      + '<div class="detail-actions">'
+      + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+      + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '</div>';
 
     if (tracks.length === 0) {
       html += this._emptyState('No music yet', 'Add music to your library to get started', Icons.music());
@@ -991,16 +996,16 @@ const tmore = e.target.closest('.track-more');
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">Artist</span></div>'
-      + '<div class="hero-section">'
-      + '<div class="hero-art round" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)">'
-      + Icons.music() + '</div>'
-      + '<div class="hero-title">' + this._esc(name) + '</div>'
-      + '<div class="hero-subtitle">' + albums.length + ' albums, ' + tracks.length + ' tracks</div></div>'
-      + '<div class="action-row">'
-      + '<button class="play-all-btn">' + Icons.play() + '</button>'
-      + '<div class="action-btns">'
-      + '<button class="action-btn" data-action="shuffle">' + Icons.shuffle() + '</button>'
-      + '</div></div>';
+      + '<div class="detail-hero">'
+      + '<div class="detail-hero-art detail-hero-art-round"><div class="detail-hero-art-icon">' + Icons.music() + '</div></div>'
+      + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-title">' + this._esc(name) + '</div>'
+      + '<div class="detail-hero-meta">' + albums.length + ' albums · ' + tracks.length + ' tracks</div>'
+      + '</div></div>'
+      + '<div class="detail-actions">'
+      + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+      + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '</div>';
 
     if (albums.length > 0) {
       html += '<div class="sh"><div class="sh-t">Albums</div></div><div class="scroll-row">';
@@ -1165,11 +1170,19 @@ const tmore = e.target.closest('.track-more');
     this.updateSeekBar();
     this._renderQueue();
     this.els.nowPlaying.classList.remove('hidden');
+    this.els.miniPlayer.classList.add('hidden');
+    if (window.innerWidth >= 768) {
+      this.els.queuePanel.classList.remove('hidden');
+    }
     this._applyNowPlayingBg();
   },
 
   hideNowPlaying() {
     this.els.nowPlaying.classList.add('hidden');
+    this.els.queuePanel.classList.add('hidden');
+    if (Player.currentTrack) {
+      this.els.miniPlayer.classList.remove('hidden');
+    }
     this.els.nowPlaying.style.background = '';
     this._lastColorAlbumId = null;
   },
@@ -1184,24 +1197,19 @@ const tmore = e.target.closest('.track-more');
   },
 
   _renderQueue() {
-    const renderItems = (container) => {
-      if (!container) return;
-      if (Player.queue.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-state-title">Queue is empty</div><div class="empty-state-text">Add tracks to your queue</div></div>';
-        return;
-      }
-      container.innerHTML = Player.queue.map((track, i) => {
-        const isCurrent = i === Player.currentIndex;
-        return '<div class="queue-item' + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
-          + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
-          + '<div class="queue-item-info">'
-          + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
-          + '<div class="queue-item-artist">' + this._esc(track.artist) + '</div>'
-          + '</div></div>';
-      }).join('');
-    };
-    renderItems(this.els.queueList);
-    renderItems(this.els.queueColList);
+    if (Player.queue.length === 0) {
+      this.els.queueList.innerHTML = '<div class="empty-state"><div class="empty-state-title">Queue is empty</div><div class="empty-state-text">Add tracks to your queue</div></div>';
+      return;
+    }
+    this.els.queueList.innerHTML = Player.queue.map((track, i) => {
+      const isCurrent = i === Player.currentIndex;
+      return '<div class="queue-item' + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
+        + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
+        + '<div class="queue-item-info">'
+        + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
+        + '<div class="queue-item-artist">' + this._esc(track.artist) + '</div>'
+        + '</div></div>';
+    }).join('');
   },
 
   showContextMenu(options, triggerEl) {
