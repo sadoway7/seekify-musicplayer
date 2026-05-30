@@ -458,7 +458,7 @@ const tmore = e.target.closest('.track-more');
         return;
       }
 
-      const trow = e.target.closest('.track-row');
+      const trow = e.target.closest('.track-row') || e.target.closest('.new-song-card');
       if (trow) {
         const trackId = trow.dataset.trackId;
         const track = Store.getTrack(trackId);
@@ -623,15 +623,11 @@ const tmore = e.target.closest('.track-more');
     const currentTrack = Player.getCurrentTrack();
 
     const recentCards = [];
-    const seenAlbums = new Set();
+    const seenTracks = new Set();
     recentTracks.forEach(t => {
-      if (t.album && t.album !== '') {
-        if (!seenAlbums.has(t.albumID)) {
-          seenAlbums.add(t.albumID);
-          recentCards.push({ type: 'album', name: t.album, id: t.albumID });
-        }
-      } else {
-        recentCards.push({ type: 'track', name: t.title, id: t.id, albumID: t.albumID });
+      if (!seenTracks.has(t.id)) {
+        seenTracks.add(t.id);
+        recentCards.push({ type: 'track', name: this._trackTitle(t), id: t.id, albumID: t.albumID });
       }
     });
 
@@ -659,7 +655,11 @@ const tmore = e.target.closest('.track-more');
       }
 
       recentCards.slice(0, 5).forEach(c => {
-        if (currentTrack && c.id === currentTrack.albumID) return;
+        // Skip if this card is the same album/track as the current playing track
+        if (currentTrack) {
+          if (c.albumID && c.albumID === currentTrack.albumID) return;
+          if (c.id === currentTrack.id) return;
+        }
         const hasCover = Store.albumHasCover(c.albumID || c.id);
         const artInner = hasCover
           ? '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">'
@@ -672,7 +672,9 @@ const tmore = e.target.closest('.track-more');
 
       html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
         + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--accent), #a8c830);display:flex;align-items:center;justify-content:center">'
-        + '<div class="quick-play-card-shuffle-icon">' + Icons.shuffle() + '</div></div>'
+        + '<div class="quick-play-card-shuffle-icon">'
+        + '<svg viewBox="0 0 48 48" width="48" height="48"><circle cx="14" cy="14" r="5" fill="#0A0A0A" opacity="0.7"/><circle cx="34" cy="14" r="5" fill="#0A0A0A" opacity="0.7"/><circle cx="14" cy="34" r="5" fill="#0A0A0A" opacity="0.7"/><circle cx="34" cy="34" r="5" fill="#0A0A0A" opacity="0.7"/></svg>'
+        + '</div></div>'
         + '<div class="quick-play-title">Shuffle</div>'
         + '</div>';
 
@@ -688,15 +690,14 @@ const tmore = e.target.closest('.track-more');
       html += '<div class="new-songs-grid">';
       newTracks.forEach(t => {
         const hasCover = Store.albumHasCover(t.albumID);
-        const artStyle = hasCover
-          ? 'background-image:url(' + Api.coverUrl(t.albumID) + ')'
-          : 'background:var(--l2)';
-        const icon = hasCover ? '' : '<div class="new-song-fallback">' + Icons.music() + '</div>';
-        html += '<div class="new-song-card" data-track-id="' + t.id + '">'
-          + '<div class="new-song-art" style="' + artStyle + '">' + icon + '</div>'
+        const artHtml = hasCover
+          ? '<div class="new-song-art" style="background-image:url(' + Api.coverUrl(t.albumID) + ')"></div>'
+          : '';
+        html += '<div class="new-song-card' + (!hasCover ? ' new-song-card-noart' : '') + '" data-track-id="' + t.id + '">'
+          + artHtml
           + '<div class="new-song-info">'
-          + '<div class="new-song-title">' + this._esc(t.title) + '</div>'
-          + '<div class="new-song-artist">' + this._esc(t.artist) + '</div>'
+          + '<div class="new-song-title">' + this._esc(this._trackTitle(t)) + '</div>'
+          + '<div class="new-song-artist">' + this._esc(this._trackArtist(t)) + '</div>'
           + '</div></div>';
       });
       html += '</div>';
@@ -1562,6 +1563,23 @@ const tmore = e.target.closest('.track-more');
     const div = document.createElement('div');
     div.textContent = String(str);
     return div.innerHTML;
+  },
+
+  _trackTitle(track) {
+    if (!track) return '';
+    if (track.title && track.title !== 'Unknown') return track.title;
+    if (track.filePath) {
+      const parts = track.filePath.split('/');
+      const name = parts[parts.length - 1];
+      return name.replace(/\.[^.]+$/, '');
+    }
+    return track.title || '';
+  },
+
+  _trackArtist(track) {
+    if (!track) return '';
+    if (track.artist && track.artist !== 'Unknown') return track.artist;
+    return '';
   },
 
   _getGreeting() {

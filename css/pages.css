@@ -106,7 +106,7 @@
   flex-direction: column;
   justify-content: flex-end;
   background: var(--l2);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
   scroll-snap-align: start;
@@ -150,13 +150,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  background: linear-gradient(135deg, var(--l3), var(--l2));
 }
 
 .quick-play-card-fallback svg {
-  width: 50%;
-  height: 50%;
-  color: var(--text3);
-  opacity: 0.25;
+  width: 36px;
+  height: 36px;
+  color: var(--text1);
+  opacity: 0.15;
 }
 
 .quick-play-card-shuffle-icon {
@@ -283,6 +284,76 @@
   border-radius: 999px;
   padding: 0;
   height: 44px;
+}
+
+.new-songs-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px;
+  margin-bottom: 20px;
+}
+
+.new-song-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.new-song-card:active {
+  background: rgba(255,255,255,0.08);
+}
+
+.new-song-art {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.new-song-fallback {
+  color: var(--text3);
+  opacity: 0.5;
+}
+
+.new-song-fallback svg {
+  width: 20px;
+  height: 20px;
+}
+
+.new-song-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.new-song-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-song-artist {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
 }
 
 .search-icon {
