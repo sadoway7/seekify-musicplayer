@@ -86,10 +86,10 @@
 
   .mini-progress {
     top: 0;
-    bottom: auto;
+    bottom: 0;
     left: 0;
     right: 0;
-    height: 2px;
+    height: auto;
     border-radius: 0;
   }
 
@@ -161,15 +161,15 @@
     height: 20px;
   }
 
-  /* Desktop now-playing: vertical stack with queue sidebar */
+  /* Desktop now-playing: fill screen minus sidebar */
   .now-playing {
-    left: 72px;
-    top: 0;
-    bottom: 0;
-    right: 0;
+    left: 72px !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    right: 0 !important;
     width: auto;
-    align-items: stretch;
-    padding: 0;
+    align-items: stretch !important;
+    padding: 0 !important;
     animation: none;
   }
 
@@ -185,30 +185,31 @@
   .np-desktop-layout {
     display: flex !important;
     flex-direction: row !important;
+    flex: 1;
     width: 100%;
-    height: 100%;
+    height: 100vh;
+    min-height: 0;
     overflow: hidden;
   }
 
-  /* Player column: vertical flex stack, centered */
+  /* Player column */
   .np-player-col {
     flex: 1;
     display: flex !important;
     flex-direction: column !important;
     align-items: stretch !important;
-    justify-content: center !important;
-    min-height: 0;
-    overflow: hidden;
+    height: 100%;
     max-width: none;
     padding: 0 !important;
     gap: 0;
+    box-sizing: border-box;
   }
 
   .np-header {
     flex-shrink: 0;
+    height: auto !important;
+    min-height: 0 !important;
     padding: 12px 48px 8px !important;
-    width: 100%;
-    max-width: none;
   }
 
   .np-header-text {
@@ -218,24 +219,26 @@
     color: var(--accent);
   }
 
-  /* Vinyl disc - fills available space dynamically */
+  /* Vinyl disc area - absorbs remaining vertical space */
   .np-artwork {
-    flex: 1 1 0;
-    min-height: 80px;
-    padding: 0 !important;
-    width: 100%;
-    max-width: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    padding: 0 48px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden;
   }
 
   .np-art-wrapper {
-    width: min(100%, 100%);
-    max-width: 360px;
-    max-height: 100%;
+    --disc-size: min(480px, 50vh, 80vw);
+    width: var(--disc-size) !important;
+    height: var(--disc-size) !important;
+    max-height: none !important;
+    max-width: none !important;
     border-radius: 50% !important;
-    aspect-ratio: 1 / 1;
+    flex-shrink: 0;
+    overflow: hidden;
   }
 
   .np-art-wrapper::after {
@@ -247,8 +250,9 @@
   }
 
   #np-art {
+    width: 100% !important;
+    height: 100% !important;
     border-radius: 50% !important;
-    aspect-ratio: 1 / 1;
     object-fit: cover;
   }
 
@@ -256,23 +260,26 @@
     animation: coverSpin 20s linear infinite !important;
   }
 
-  /* Info */
+  /* Info - overlaps disc with gradient, full width */
   .np-info {
     flex-shrink: 0;
     text-align: center;
-    padding: 0 48px !important;
+    padding: 0 !important;
+    width: auto;
+    margin-left: -48px;
+    margin-right: -48px;
     background: linear-gradient(to bottom, transparent 0%, rgba(10,10,10,0.15) 10%, rgba(10,10,10,0.35) 22%, rgba(10,10,10,0.6) 38%, rgba(10,10,10,0.85) 55%, #0A0A0A 70%);
     margin-top: -48px;
     position: relative;
     z-index: 2;
-    padding-top: 48px !important;
+    padding: 48px 48px 0 !important;
   }
 
   .np-title {
-    font-size: clamp(28px, 4vw, 48px) !important;
+    font-size: clamp(24px, 3.5vw, 44px) !important;
     font-weight: 800;
     letter-spacing: -0.04em;
-    line-height: 1.05;
+    line-height: 1.1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -280,8 +287,8 @@
   }
 
   .np-artist {
-    font-size: clamp(16px, 1.8vw, 24px);
-    margin-top: 6px;
+    font-size: clamp(14px, 1.6vw, 22px);
+    margin-top: 0.5vh;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -305,33 +312,28 @@
 
   /* Progress */
   .np-progress {
-    width: 100%;
-    max-width: none !important;
     padding: 16px 48px 0 !important;
     flex-shrink: 0;
   }
 
   .np-waveform-container {
-    height: 56px;
+    height: 6vh;
+    min-height: 40px;
+    max-height: 72px;
   }
 
   .np-time {
     font-size: 13px;
-    margin-top: 8px;
+    margin-top: 0.5vh;
   }
 
   /* Controls */
   .np-controls {
-    width: 100%;
-    max-width: none !important;
-    padding: 12px 48px 20px !important;
+    padding: 1.5vh 48px 2vh !important;
     flex-shrink: 0;
   }
 
   .np-bottom {
-    width: 100%;
-    max-width: none !important;
-    padding: 8px 0 0 !important;
     flex-shrink: 0;
   }
 
@@ -369,7 +371,7 @@
     right: auto;
     max-height: none;
     border-radius: 0;
-    z-index: 1;
+    z-index: 3;
     animation: none;
     padding: 36px 28px 24px;
     width: 420px;
@@ -427,6 +429,9 @@
     border-radius: 2px;
     position: relative;
     cursor: pointer;
+    padding: 12px 0;
+    margin: -12px 0;
+    background-clip: content-box;
   }
 
   .queue-volume-fill {
@@ -458,7 +463,8 @@
   }
 
   .np-art-wrapper {
-    max-width: 420px;
+    max-width: none;
+    max-height: none;
   }
 
   .np-play-main {
@@ -481,7 +487,8 @@
   }
 
   .np-art-wrapper {
-    max-width: 480px;
+    max-width: none;
+    max-height: none;
   }
 
   .np-header {
@@ -489,7 +496,9 @@
   }
 
   .np-info {
-    padding: 0 64px !important;
+    margin-left: -64px;
+    margin-right: -64px;
+    padding: 48px 64px 0 !important;
   }
 
   .np-progress {
