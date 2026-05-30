@@ -14,6 +14,8 @@ type Track struct {
 	FilePath    string `json:"filePath"`
 	HasCover    bool   `json:"hasCover"`
 	ModTime     int64  `json:"modTime"`
+	MBID        string `json:"mbid,omitempty"`
+	HasMetadata bool   `json:"hasMetadata"`
 }
 
 type Album struct {
@@ -54,4 +56,26 @@ type ScanStats struct {
 	Scanned int `json:"scanned"`
 	Added   int `json:"added"`
 	Removed int `json:"removed"`
+}
+
+type MetadataMatch struct {
+	ID           string  `json:"id"`
+	TrackID      string  `json:"trackId"`
+	TrackTitle   string  `json:"trackTitle"`
+	TrackArtist  string  `json:"trackArtist"`
+	MBTitle      string  `json:"mbTitle"`
+	MBArtist     string  `json:"mbArtist"`
+	MBAlbum      string  `json:"mbAlbum"`
+	MBAlbumID    string  `json:"mbAlbumId"`
+	MBScore      float64 `json:"mbScore"`
+	Status       string  `json:"status"`
+	HasCover     bool    `json:"hasCover"`
+	FilePath     string  `json:"filePath"`
+}
+
+type MetadataScanResult struct {
+	Matched   int `json:"matched"`
+	Pending   int `json:"pending"`
+	Conflicts int `json:"conflicts"`
+	Failed    int `json:"failed"`
 }

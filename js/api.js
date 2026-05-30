@@ -118,5 +118,53 @@ const Api = {
     });
     if (!res.ok) throw new Error('Failed to create folder');
     return res.json();
+  },
+
+  async metadataScan() {
+    const res = await fetch('/api/metadata/scan', { method: 'POST' });
+    if (!res.ok) throw new Error('Metadata scan failed');
+    return res.json();
+  },
+
+  async metadataPending() {
+    const res = await fetch('/api/metadata/pending');
+    if (!res.ok) throw new Error('Failed to get pending matches');
+    return res.json();
+  },
+
+  async metadataAll() {
+    const res = await fetch('/api/metadata/all');
+    if (!res.ok) throw new Error('Failed to get matches');
+    return res.json();
+  },
+
+  async metadataApprove(id) {
+    const res = await fetch('/api/metadata/approve/' + id, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to approve match');
+    return res.json();
+  },
+
+  async metadataReject(id) {
+    const res = await fetch('/api/metadata/reject/' + id, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to reject match');
+    return res.json();
+  },
+
+  async metadataApproveAll() {
+    const res = await fetch('/api/metadata/approve-all', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to approve all');
+    return res.json();
+  },
+
+  async metadataClear() {
+    const res = await fetch('/api/metadata/clear', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to clear matches');
+    return res.json();
+  },
+
+  async metadataCounts() {
+    const res = await fetch('/api/metadata/counts');
+    if (!res.ok) throw new Error('Failed to get match counts');
+    return res.json();
   }
 };

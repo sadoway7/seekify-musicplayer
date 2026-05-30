@@ -6,7 +6,7 @@ const Player = {
   repeat: 'off',
   playing: false,
   volume: 1,
-  sourceName: '',
+  source: null,
   onStateChange: null,
   onTimeUpdate: null,
   onTrackChange: null,
@@ -32,8 +32,8 @@ const Player = {
     });
   },
 
-  play(track, trackList) {
-    if (this.currentTrack && this.currentTrack.id === track.id) {
+  play(track, trackList, source) {
+    if (this.getCurrentTrack() && this.getCurrentTrack().id === track.id) {
       if (!this.playing) {
         this.audio.play().catch(() => {});
         this.playing = true;
@@ -54,6 +54,18 @@ const Player = {
         this.currentIndex = 0;
       }
     }
+    this.source = source || null;
+    this._loadAndPlay(track);
+  },
+
+  playInQueue(index) {
+    if (index < 0 || index >= this.queue.length) return;
+    this.currentIndex = index;
+    const track = this.queue[this.currentIndex];
+    this._loadAndPlay(track);
+  },
+
+  _loadAndPlay(track) {
     this.audio.src = Api.streamUrl(track.id);
     this.audio.play().catch(() => {});
     this.playing = true;
@@ -173,6 +185,15 @@ const Player = {
       this.currentIndex = -1;
     }
     if (this.onQueueChange) this.onQueueChange();
+  },
+
+  isSingleMode() {
+    return this.queue.length <= 1;
+  },
+
+  getSourceName() {
+    if (!this.source) return '';
+    return this.source.name || '';
   },
 
   _onEnded() {

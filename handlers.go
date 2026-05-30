@@ -521,6 +521,114 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func metadataScanHandler(w http.ResponseWriter, r *http.Request) {
+	result := scanMetadataForTracks()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func metadataPendingHandler(w http.ResponseWriter, r *http.Request) {
+	matches := dbGetPendingMatches()
+
+	enriched := make([]MetadataMatch, 0, len(matches))
+	for _, m := range matches {
+		mu.RLock()
+		if t, ok := tracks[m.TrackID]; ok {
+			m.FilePath = t.FilePath
+			if _, hasCover := func() ([]byte, bool) {
+				coverMu.RLock()
+				defer coverMu.RUnlock()
+				d, e := coverCache[t.AlbumID]
+				return d, e
+			}(); hasCover {
+				m.HasCover = true
+			}
+		}
+		mu.RUnlock()
+
+		if m.MBAlbumID != "" {
+			coverDir := filepath.Join(musicDir, "images")
+			coverPath := filepath.Join(coverDir, m.MBAlbumID+".jpg")
+			if _, err := os.Stat(coverPath); err == nil {
+				m.HasCover = true
+			}
+		}
+
+		enriched = append(enriched, m)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(enriched)
+}
+
+func metadataAllHandler(w http.ResponseWriter, r *http.Request) {
+	matches := dbGetAllMatches()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(matches)
+}
+
+func metadataApproveHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/metadata/approve/")
+	if id == "" {
+		http.Error(w, "Match ID required", http.StatusBadRequest)
+		return
+	}
+
+	if !dbApproveMatch(id) {
+		http.Error(w, "Match not found or not pending", http.StatusNotFound)
+		return
+	}
+
+	applied := applyApprovedMatches()
+	autoSortMusic()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"approved": true,
+		"applied":  applied,
+	})
+}
+
+func metadataRejectHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/metadata/reject/")
+	if id == "" {
+		http.Error(w, "Match ID required", http.StatusBadRequest)
+		return
+	}
+
+	if !dbRejectMatch(id) {
+		http.Error(w, "Match not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"rejected": true})
+}
+
+func metadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
+	count := dbApproveAllMatches()
+	applied := applyApprovedMatches()
+	autoSortMusic()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"approved": count,
+		"applied":  applied,
+	})
+}
+
+func metadataClearHandler(w http.ResponseWriter, r *http.Request) {
+	dbClearMatches()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"cleared": true})
+}
+
+func metadataCountsHandler(w http.ResponseWriter, r *http.Request) {
+	counts := dbGetMatchCount()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(counts)
+}
+
 func spaHandler(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Clean(r.URL.Path)
 	if path == "/" {

@@ -15,6 +15,7 @@ const App = {
     Player.onTrackChange = async (track) => {
       UI.updateMiniPlayer();
       UI.updateNowPlaying();
+      UI.updateQueueIfVisible();
       if (track) {
         try {
           await Api.addRecent(track.id);
@@ -27,9 +28,7 @@ const App = {
     };
 
     Player.onQueueChange = () => {
-      if (!UI.els.queuePanel.classList.contains('hidden')) {
-        UI._renderQueue();
-      }
+      UI.updateQueueIfVisible();
     };
 
     UI.init();

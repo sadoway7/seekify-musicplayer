@@ -22,15 +22,15 @@
   }
 
   #app-content {
-    margin-left: 72px;
+    margin-left: 76px;
   }
 
   body.mini-player-visible #app-content {
-    margin-left: 72px;
+    margin-left: 76px;
   }
 
   #app-header {
-    margin-left: 72px;
+    margin-left: 76px;
   }
 
   .tab-bar,
@@ -40,21 +40,21 @@
     left: 0;
     bottom: 0;
     right: auto;
-    width: 72px;
+    width: 76px;
     height: auto;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding-top: 16px;
-    gap: 4px;
-    background: var(--bg);
-    border-right: 1px solid rgba(255,255,255,0.04);
+    padding-top: 24px;
+    gap: 8px;
+    background: var(--bg-base);
+    border-right: 1px solid var(--border);
   }
 
   .tab-item {
     flex: none;
-    width: 56px;
-    height: 56px;
+    width: 48px;
+    height: 48px;
     border-radius: 14px;
     gap: 2px;
     transition: box-shadow 0.2s ease, background 0.2s ease;
@@ -75,12 +75,12 @@
   }
 
   .tab-item svg {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
   }
 
   .mini-player {
-    left: 72px;
+    left: 76px;
     right: 0;
     bottom: 0;
     width: auto;
@@ -187,7 +187,7 @@
 
   /* Desktop now-playing: fill screen minus sidebar */
   .now-playing {
-    left: 72px !important;
+    left: 76px !important;
     top: 0 !important;
     bottom: 0 !important;
     right: 0 !important;
@@ -308,6 +308,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+    min-width: 0;
   }
 
   .np-artist {
@@ -317,6 +318,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+    min-width: 0;
   }
 
   .np-title-row {
@@ -325,7 +327,8 @@
     justify-content: center;
   }
 
-  .np-title-row > div {
+  .np-title-row > div:first-child {
+    flex: 1;
     min-width: 0;
     overflow: hidden;
   }
@@ -469,7 +472,7 @@
   }
 
   .modal-overlay {
-    padding-left: 72px;
+    padding-left: 76px;
   }
 }
 

@@ -71,6 +71,15 @@ func main() {
 	mux.HandleFunc("/api/delete", deleteFileHandler)
 	mux.HandleFunc("/api/folders", createFolderHandler)
 
+	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
+	mux.HandleFunc("/api/metadata/pending", metadataPendingHandler)
+	mux.HandleFunc("/api/metadata/all", metadataAllHandler)
+	mux.HandleFunc("/api/metadata/approve/", metadataApproveHandler)
+	mux.HandleFunc("/api/metadata/reject/", metadataRejectHandler)
+	mux.HandleFunc("/api/metadata/approve-all", metadataApproveAllHandler)
+	mux.HandleFunc("/api/metadata/clear", metadataClearHandler)
+	mux.HandleFunc("/api/metadata/counts", metadataCountsHandler)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)

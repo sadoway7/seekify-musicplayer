@@ -51,6 +51,20 @@ func initDB(path string) {
 		PRIMARY KEY (playlist_id, track_id)
 	)`)
 
+	db.Exec(`CREATE TABLE IF NOT EXISTS metadata_matches (
+		id TEXT PRIMARY KEY,
+		track_id TEXT NOT NULL,
+		track_title TEXT NOT NULL,
+		track_artist TEXT NOT NULL,
+		mb_title TEXT NOT NULL,
+		mb_artist TEXT NOT NULL,
+		mb_album TEXT NOT NULL,
+		mb_album_id TEXT NOT NULL,
+		mb_score REAL NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending',
+		UNIQUE(track_id, mb_album_id)
+	)`)
+
 	migrateFromJSON()
 }
 
@@ -220,4 +234,122 @@ func dbDeletePlaylist(id string) bool {
 	affected, _ := res.RowsAffected()
 	db.Exec("DELETE FROM playlist_tracks WHERE playlist_id = ?", id)
 	return affected > 0
+}
+
+func dbInsertMetadataMatch(m *MetadataMatch) {
+	db.Exec(`INSERT OR IGNORE INTO metadata_matches
+		(id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID, m.TrackID, m.TrackTitle, m.TrackArtist, m.MBTitle, m.MBArtist, m.MBAlbum, m.MBAlbumID, m.MBScore, m.Status)
+}
+
+func dbGetPendingMatches() []MetadataMatch {
+	rows, err := db.Query(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score
+		FROM metadata_matches WHERE status = 'pending' ORDER BY mb_score DESC`)
+	if err != nil {
+		return []MetadataMatch{}
+	}
+	defer rows.Close()
+
+	var matches []MetadataMatch
+	for rows.Next() {
+		var m MetadataMatch
+		rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore)
+		matches = append(matches, m)
+	}
+	if matches == nil {
+		matches = []MetadataMatch{}
+	}
+	return matches
+}
+
+func dbGetAllMatches() []MetadataMatch {
+	rows, err := db.Query(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score, status
+		FROM metadata_matches ORDER BY status, mb_score DESC`)
+	if err != nil {
+		return []MetadataMatch{}
+	}
+	defer rows.Close()
+
+	var matches []MetadataMatch
+	for rows.Next() {
+		var m MetadataMatch
+		rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore, &m.Status)
+		matches = append(matches, m)
+	}
+	if matches == nil {
+		matches = []MetadataMatch{}
+	}
+	return matches
+}
+
+func dbApproveMatch(id string) bool {
+	var trackID, mbTitle, mbArtist, mbAlbum, mbAlbumID string
+	var mbScore float64
+	err := db.QueryRow(`SELECT track_id, mb_title, mb_artist, mb_album, mb_album_id, mb_score
+		FROM metadata_matches WHERE id = ? AND status = 'pending'`, id).Scan(&trackID, &mbTitle, &mbArtist, &mbAlbum, &mbAlbumID, &mbScore)
+	if err != nil {
+		return false
+	}
+
+	res, err := db.Exec(`UPDATE metadata_matches SET status = 'approved' WHERE id = ?`, id)
+	if err != nil {
+		return false
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return false
+	}
+
+	db.Exec(`DELETE FROM metadata_matches WHERE track_id = ? AND id != ? AND status = 'pending'`, trackID, id)
+
+	return true
+}
+
+func dbRejectMatch(id string) bool {
+	res, err := db.Exec(`UPDATE metadata_matches SET status = 'rejected' WHERE id = ?`, id)
+	if err != nil {
+		return false
+	}
+	affected, _ := res.RowsAffected()
+	return affected > 0
+}
+
+func dbApproveAllMatches() int {
+	res, _ := db.Exec(`UPDATE metadata_matches SET status = 'approved' WHERE status = 'pending' AND mb_score >= 0.8`)
+	affected, _ := res.RowsAffected()
+
+	rows, _ := db.Query(`SELECT track_id FROM metadata_matches WHERE status = 'approved'`)
+	defer rows.Close()
+	seen := map[string]bool{}
+	for rows.Next() {
+		var tid string
+		rows.Scan(&tid)
+		if seen[tid] {
+			db.Exec(`DELETE FROM metadata_matches WHERE track_id = ? AND status = 'pending'`, tid)
+		}
+		seen[tid] = true
+	}
+
+	return int(affected)
+}
+
+func dbClearMatches() {
+	db.Exec(`DELETE FROM metadata_matches`)
+}
+
+func dbGetMatchCount() map[string]int {
+	counts := map[string]int{"pending": 0, "approved": 0, "rejected": 0}
+	rows, err := db.Query(`SELECT status, COUNT(*) FROM metadata_matches GROUP BY status`)
+	if err != nil {
+		return counts
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var count int
+		rows.Scan(&status, &count)
+		counts[status] = count
+	}
+	return counts
 }

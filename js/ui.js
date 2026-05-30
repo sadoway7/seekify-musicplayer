@@ -347,10 +347,7 @@ const UI = {
       if (!item) return;
       const index = parseInt(item.dataset.queueIndex);
       if (isNaN(index)) return;
-      const track = Player.queue[index];
-      if (track) {
-        Player.play(track, Player.queue);
-      }
+      Player.playInQueue(index);
     });
   },
 
@@ -630,6 +627,8 @@ const tmore = e.target.closest('.track-more');
       case 'playlist': this.renderPlaylist(Store.viewData.playlistId); break;
       case 'favorites': this.renderFavorites(); break;
       case 'all-music': this.renderAllMusic(); break;
+      case 'settings': this.renderSettings(); break;
+      case 'metadata-review': this.renderMetadataReview(); break;
       default: this.renderHome();
     }
   },
@@ -1158,6 +1157,242 @@ const tmore = e.target.closest('.track-more');
     }
 
     this.els.content.innerHTML = html;
+  },
+
+  renderSettings() {
+    this._viewTrackList = [];
+    let html = '<div class="page-header">'
+      + '<span class="page-header-title" style="font-size:24px;font-weight:700;letter-spacing:-0.04em">Settings</span></div>';
+
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.database() + ' MusicBrainz Metadata</div>'
+      + '<div class="settings-section-desc">Match your tracks against MusicBrainz to fetch titles, artists, albums, and cover art.</div>'
+      + '<div id="metadata-status" class="settings-status"></div>'
+      + '<div class="settings-actions">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
+      + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Matches</span></button>'
+      + '<button class="settings-btn settings-btn-danger" id="btn-meta-clear">' + Icons.trash() + '<span>Clear Matches</span></button>'
+      + '</div></div>';
+
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.music() + ' Library</div>'
+      + '<div class="settings-section-desc">Rescan your music directory for new files.</div>'
+      + '<div class="settings-actions">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
+      + '</div></div>';
+
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.settings() + ' About</div>'
+      + '<div class="settings-about">'
+      + '<div>MusicApp</div>'
+      + '<div style="color:var(--text3);font-size:13px">Personal music library with MusicBrainz integration</div>'
+      + '</div></div>';
+
+    this.els.content.innerHTML = html;
+
+    this._loadMetadataStatus();
+
+    document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());
+    document.getElementById('btn-meta-clear').addEventListener('click', () => this._clearMetadata());
+    document.getElementById('btn-rescan').addEventListener('click', () => this._rescanLibrary());
+
+    const reviewBtn = document.getElementById('btn-meta-review');
+    if (reviewBtn) {
+      reviewBtn.addEventListener('click', () => {
+        this.navigateTo('metadata-review');
+      });
+    }
+  },
+
+  async _loadMetadataStatus() {
+    const statusEl = document.getElementById('metadata-status');
+    if (!statusEl) return;
+    try {
+      const counts = await Api.metadataCounts();
+      const total = counts.pending + counts.approved + counts.rejected;
+      if (total === 0) {
+        statusEl.innerHTML = '<div class="settings-stat">No metadata matches yet. Click "Scan Metadata" to start.</div>';
+      } else {
+        let s = '<div class="settings-stats-row">';
+        if (counts.pending > 0) s += '<div class="settings-stat"><span class="settings-stat-num">' + counts.pending + '</span> pending review</div>';
+        if (counts.approved > 0) s += '<div class="settings-stat"><span class="settings-stat-num">' + counts.approved + '</span> approved</div>';
+        if (counts.rejected > 0) s += '<div class="settings-stat"><span class="settings-stat-num">' + counts.rejected + '</span> rejected</div>';
+        s += '</div>';
+        statusEl.innerHTML = s;
+
+        const reviewBtn = document.getElementById('btn-meta-review');
+        if (reviewBtn && counts.pending > 0) {
+          reviewBtn.style.display = '';
+        }
+      }
+    } catch (err) {
+      statusEl.innerHTML = '<div class="settings-stat">Could not load status</div>';
+    }
+  },
+
+  async _startMetadataScan() {
+    const btn = document.getElementById('btn-meta-scan');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Scanning...</span>';
+    try {
+      const result = await Api.metadataScan();
+      this.showToast('Found ' + result.pending + ' matches (' + result.failed + ' failed)');
+      await this._loadMetadataStatus();
+      await Store.refreshLibrary();
+    } catch (err) {
+      this.showToast('Metadata scan failed');
+    }
+    btn.disabled = false;
+    btn.innerHTML = Icons.refresh() + '<span>Scan Metadata</span>';
+  },
+
+  async _clearMetadata() {
+    try {
+      await Api.metadataClear();
+      this.showToast('Matches cleared');
+      await this._loadMetadataStatus();
+    } catch (err) {
+      this.showToast('Failed to clear');
+    }
+  },
+
+  async _rescanLibrary() {
+    const btn = document.getElementById('btn-rescan');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Scanning...</span>';
+    try {
+      await Api.scan();
+      await Store.refreshLibrary();
+      this.showToast('Library rescanned');
+    } catch (err) {
+      this.showToast('Rescan failed');
+    }
+    btn.disabled = false;
+    btn.innerHTML = Icons.refresh() + '<span>Rescan Library</span>';
+  },
+
+  renderMetadataReview() {
+    this._viewTrackList = [];
+    let html = '<div class="page-header">'
+      + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<span class="page-header-title">Review Matches</span></div>';
+
+    html += '<div class="review-actions">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-approve-all">' + Icons.check() + '<span>Approve All High-Confidence</span></button>'
+      + '</div>';
+
+    html += '<div id="review-list" class="review-list"><div class="loading-spinner"></div></div>';
+
+    this.els.content.innerHTML = html;
+
+    document.getElementById('btn-approve-all').addEventListener('click', () => this._approveAllMatches());
+
+    this._loadReviewMatches();
+  },
+
+  async _loadReviewMatches() {
+    const listEl = document.getElementById('review-list');
+    if (!listEl) return;
+
+    try {
+      const matches = await Api.metadataPending();
+      if (matches.length === 0) {
+        listEl.innerHTML = this._emptyState('No pending matches', 'All tracks have been reviewed', Icons.checkCircle());
+        return;
+      }
+
+      const grouped = {};
+      matches.forEach(m => {
+        if (!grouped[m.trackId]) grouped[m.trackId] = [];
+        grouped[m.trackId].push(m);
+      });
+
+      let html = '';
+      Object.keys(grouped).forEach(trackId => {
+        const group = grouped[trackId];
+        const m = group[0];
+        const scorePct = Math.round(m.mbScore * 100);
+        const scoreClass = scorePct >= 80 ? 'score-high' : scorePct >= 50 ? 'score-mid' : 'score-low';
+
+        html += '<div class="review-card">'
+          + '<div class="review-card-header">'
+          + '<div class="review-card-local">'
+          + '<div class="review-card-label">Your Track</div>'
+          + '<div class="review-card-title">' + this._esc(m.trackTitle) + '</div>'
+          + '<div class="review-card-artist">' + this._esc(m.trackArtist) + '</div>'
+          + '</div>'
+          + '<div class="review-card-arrow">' + Icons.chevronRight() + '</div>'
+          + '</div>'
+          + '<div class="review-card-candidates">';
+
+        group.forEach(cand => {
+          const candScorePct = Math.round(cand.mbScore * 100);
+          const candScoreClass = candScorePct >= 80 ? 'score-high' : candScorePct >= 50 ? 'score-mid' : 'score-low';
+          html += '<div class="review-candidate">'
+            + '<div class="review-candidate-info">'
+            + '<div class="review-candidate-title">' + this._esc(cand.mbTitle) + '</div>'
+            + '<div class="review-candidate-artist">' + this._esc(cand.mbArtist) + '</div>'
+            + '<div class="review-candidate-album">' + this._esc(cand.mbAlbum) + '</div>'
+            + '<span class="review-score ' + candScoreClass + '">' + candScorePct + '%</span>'
+            + '</div>'
+            + '<div class="review-candidate-actions">'
+            + '<button class="review-btn review-btn-approve" data-match-id="' + cand.id + '">' + Icons.check() + '</button>'
+            + '<button class="review-btn review-btn-reject" data-match-id="' + cand.id + '">' + Icons.close() + '</button>'
+            + '</div></div>';
+        });
+
+        html += '</div></div>';
+      });
+
+      listEl.innerHTML = html;
+
+      listEl.querySelectorAll('.review-btn-approve').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.matchId;
+          try {
+            await Api.metadataApprove(id);
+            this.showToast('Match approved');
+            await Store.refreshLibrary();
+            this._loadReviewMatches();
+          } catch (err) {
+            this.showToast('Failed to approve');
+          }
+        });
+      });
+
+      listEl.querySelectorAll('.review-btn-reject').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.matchId;
+          try {
+            await Api.metadataReject(id);
+            this.showToast('Match rejected');
+            this._loadReviewMatches();
+          } catch (err) {
+            this.showToast('Failed to reject');
+          }
+        });
+      });
+
+    } catch (err) {
+      listEl.innerHTML = this._emptyState('Failed to load matches', 'Try again later', Icons.xCircle());
+    }
+  },
+
+  async _approveAllMatches() {
+    const btn = document.getElementById('btn-approve-all');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const result = await Api.metadataApproveAll();
+      this.showToast('Approved ' + result.approved + ' matches');
+      await Store.refreshLibrary();
+      this._loadReviewMatches();
+    } catch (err) {
+      this.showToast('Failed to approve all');
+    }
+    btn.disabled = false;
   },
 
   renderTrackList(tracks, options) {
