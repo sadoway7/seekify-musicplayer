@@ -114,10 +114,3 @@
   height: 20px;
   color: var(--text2);
 }
-
-@media (min-width: 768px) {
-  .mini-player {
-    left: calc(50% + 36px);
-    bottom: 12px;
-  }
-}

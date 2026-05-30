@@ -13,6 +13,7 @@ type Track struct {
 	Duration    int    `json:"duration"`
 	FilePath    string `json:"filePath"`
 	HasCover    bool   `json:"hasCover"`
+	ModTime     int64  `json:"modTime"`
 }
 
 type Album struct {

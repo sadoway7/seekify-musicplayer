@@ -131,41 +131,4 @@ body.mini-player-visible #app-content {
   z-index: 100;
 }
 
-@media (min-width: 768px) {
-  #app {
-    flex-direction: row;
-  }
 
-  .tab-bar,
-  #tab-bar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    right: auto;
-    width: 72px;
-    height: auto;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: center;
-    padding: 0;
-    padding-bottom: 0;
-    gap: 8px;
-    background: var(--bg);
-    border-right: 1px solid rgba(255,255,255,0.04);
-  }
-
-  .tab-item {
-    flex: none;
-    height: 56px;
-    gap: 2px;
-  }
-
-  #app-content {
-    padding-bottom: 32px;
-  }
-
-  body.mini-player-visible #app-content {
-    padding-bottom: 100px;
-  }
-}

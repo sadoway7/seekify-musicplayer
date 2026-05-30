@@ -516,33 +516,57 @@ const tmore = e.target.closest('.track-more');
 
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
     const recentAlbums = this._uniqueAlbums(recentTracks.slice(0, 6));
+    const currentTrack = Player.getCurrentTrack();
 
-    if (recentAlbums.length > 0) {
+    html += '<div class="section-header"><h2>Recently Played</h2></div>';
+
+    if (recentAlbums.length > 0 || currentTrack) {
       html += '<div class="quick-play-grid">';
-      recentAlbums.forEach(a => {
+
+      html += '<div class="quick-play-card" data-navigate="all-music">'
+        + '<div class="quick-play-art" style="background:var(--l3);display:flex;align-items:center;justify-content:center;color:var(--text2)"><span style="font-size:18px;font-weight:700">All</span></div>'
+        + '<div class="quick-play-title">See all</div>'
+        + '</div>';
+
+      if (currentTrack) {
+        html += '<div class="quick-play-card quick-play-card-now" data-album-id="' + currentTrack.albumID + '">'
+          + '<div class="quick-play-art"><img src="' + Api.coverUrl(currentTrack.albumID) + '" alt="">'
+          + '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div></div>'
+          + '<div class="quick-play-title">' + this._esc(currentTrack.title) + '</div>'
+          + '</div>';
+      }
+
+      recentAlbums.slice(0, 5).forEach(a => {
+        if (currentTrack && a.id === currentTrack.albumID) return;
         html += '<div class="quick-play-card" data-album-id="' + a.id + '">'
           + '<div class="quick-play-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
           + '<div class="quick-play-title">' + this._esc(a.name) + '</div>'
           + '</div>';
       });
+
+      html += '<div class="quick-play-card" data-action="shuffle-all">'
+        + '<div class="quick-play-art" style="background:var(--accent);display:flex;align-items:center;justify-content:center;color:#0A0A0A">' + Icons.shuffle() + '</div>'
+        + '<div class="quick-play-title">Shuffle</div>'
+        + '</div>';
+
       html += '</div>';
+    } else {
+      html += '<div class="empty-state" style="padding:16px"><div class="empty-state-text" style="color:var(--text3)">Play some music to see your history</div></div>';
     }
 
-    if (recentTracks.length > 0) {
-      html += '<div class="section-header"><h2>Recently Played</h2></div>';
-      html += this.renderTrackList(recentTracks.slice(0, 10), { showArt: true });
+    const allTracks = Store.library.tracks.slice();
+    const newTracks = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0)).slice(0, 6);
+    if (newTracks.length > 0) {
+      html += '<div class="section-header"><h2>New Songs</h2></div>';
+      html += this.renderTrackList(newTracks, { showArt: true });
     }
 
-    const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
-    if (favTracks.length > 0) {
-      html += '<div class="section-header"><h2>Liked Songs</h2><a class="section-header-link" data-navigate="favorites">See all</a></div>';
-      html += this.renderTrackList(favTracks.slice(0, 5), { showArt: true });
-    }
-
-    if (Store.library.artists.length > 0) {
+    const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '');
+    const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, 6);
+    if (newArtists.length > 0) {
       html += '<div class="section-header"><h2>Artists</h2></div>';
       html += '<div class="scroll-row" style="flex-wrap:nowrap">';
-      Store.library.artists.slice(0, 10).forEach(a => {
+      newArtists.forEach(a => {
         html += '<div class="quick-play-card" data-type="artist" data-id="' + this._esc(a.name) + '" style="max-width:none;min-width:0;flex:none;padding-right:14px;border-radius:999px;height:36px">'
           + '<div class="quick-play-art" style="width:36px;height:36px;min-width:36px;border-radius:50%;background:var(--l3)"></div>'
           + '<div class="quick-play-title" style="font-size:13px">' + this._esc(a.name) + '</div>'
@@ -551,10 +575,11 @@ const tmore = e.target.closest('.track-more');
       html += '</div>';
     }
 
-    if (Store.library.albums.length > 0) {
+    const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '');
+    if (namedAlbums.length > 0) {
       html += '<div class="section-header"><h2>Albums</h2></div>';
       html += '<div class="scroll-row">';
-      Store.library.albums.forEach(a => {
+      namedAlbums.forEach(a => {
         html += '<div class="card" data-album-id="' + a.id + '">'
           + '<div class="card-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
           + '<div class="card-title">' + this._esc(a.name) + '</div>'
@@ -564,8 +589,28 @@ const tmore = e.target.closest('.track-more');
       html += '</div>';
     }
 
+    if (Store.playlists.length > 0) {
+      html += '<div class="section-header"><h2>Playlists</h2></div>';
+      Store.playlists.slice(0, 4).forEach(p => {
+        const pTracks = p.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
+        html += '<div class="list-item" data-type="playlist" data-id="' + p.id + '">'
+          + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)">'
+          + Icons.music() + '</div>'
+          + '<div class="list-item-info">'
+          + '<div class="list-item-title">' + this._esc(p.name) + '</div>'
+          + '<div class="list-item-subtitle">' + pTracks.length + ' tracks</div>'
+          + '</div></div>';
+      });
+    }
+
+    const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
+    if (favTracks.length > 0) {
+      html += '<div class="section-header"><h2>Liked Songs</h2></div>';
+      html += this.renderTrackList(favTracks.slice(0, 5), { showArt: true });
+    }
+
     if (Store.library.tracks.length === 0) {
-      html += this._emptyState('No music yet', 'Scan your music library to get started', Icons.music());
+      html += this._emptyState('No music yet', 'Add music files and rescan to get started', Icons.music());
     }
 
     this.els.content.innerHTML = html;
@@ -575,7 +620,7 @@ const tmore = e.target.closest('.track-more');
     this._viewTrackList = [];
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:24px;font-weight:700;letter-spacing:-0.04em">Search</span></div>'
-      + '<div class="search-container" style="background:var(--l2);border-radius:12px;margin:0 16px 16px">'
+      + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input" type="text" placeholder="Songs, artists, or albums" value="' + this._esc(this.searchQuery) + '">'
       + '</div>'
@@ -667,7 +712,7 @@ const tmore = e.target.closest('.track-more');
       + '<div class="library-header-actions">'
       + '<button class="lib-view-toggle">' + (this.viewMode === 'list' ? Icons.grid() : Icons.sort()) + '</button>'
       + '</div></div>'
-      + '<div class="search-container" style="background:var(--l2);border-radius:12px;margin:0 16px 12px">'
+      + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input lib-search-input" type="text" placeholder="Search your library...">'
       + '</div>'
@@ -1182,11 +1227,13 @@ const tmore = e.target.closest('.track-more');
 
   _handleAction(action) {
     if (!action) return;
-    if (action === 'shuffle') {
-      if (this._viewTrackList.length > 0) {
-        const shuffled = this._viewTrackList.slice().sort(() => Math.random() - 0.5);
+    if (action === 'shuffle' || action === 'shuffle-all') {
+      const list = Store.library.tracks.slice();
+      if (list.length > 0) {
+        const shuffled = list.sort(() => Math.random() - 0.5);
         Player.shuffle = true;
         Player.play(shuffled[0], shuffled);
+        this.showNowPlaying();
       }
       return;
     }

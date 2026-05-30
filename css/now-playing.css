@@ -402,20 +402,3 @@
   font-weight: 500;
 }
 
-@media (min-width: 768px) {
-  .now-playing {
-    right: 0;
-    bottom: 0;
-    width: auto;
-    left: 72px;
-  }
-
-  .np-header,
-  .np-artwork,
-  .np-info,
-  .np-progress,
-  .np-controls,
-  .np-bottom {
-    max-width: 420px;
-  }
-}

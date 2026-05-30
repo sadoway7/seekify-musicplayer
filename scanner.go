@@ -88,6 +88,11 @@ func scanMusicDir(dir string) ScanStats {
 			continue
 		}
 
+		var modTime int64
+		if fi, err := file.Stat(); err == nil {
+			modTime = fi.ModTime().Unix()
+		}
+
 		tagReader, err := tag.ReadFrom(file)
 		file.Close()
 
@@ -95,6 +100,7 @@ func scanMusicDir(dir string) ScanStats {
 			ID:       trackID,
 			FilePath: relPath,
 			Duration: 0,
+			ModTime:  modTime,
 		}
 
 		if err == nil && tagReader != nil {
