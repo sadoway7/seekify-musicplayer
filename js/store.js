@@ -67,6 +67,11 @@ const Store = {
     return this.library.albums.find(a => a.id === id) || null;
   },
 
+  albumHasCover(albumId) {
+    const album = this.getAlbum(albumId);
+    return album && album.hasCover;
+  },
+
   getArtistTracks(name) {
     return this.library.tracks.filter(t =>
       t.artist === name || t.albumArtist === name

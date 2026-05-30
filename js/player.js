@@ -32,6 +32,14 @@ const Player = {
   },
 
   play(track, trackList) {
+    if (this.currentTrack && this.currentTrack.id === track.id) {
+      if (!this.playing) {
+        this.audio.play().catch(() => {});
+        this.playing = true;
+        if (this.onStateChange) this.onStateChange();
+      }
+      return;
+    }
     if (trackList) {
       this.queue = trackList.slice();
       this.currentIndex = this.queue.findIndex(t => t.id === track.id);

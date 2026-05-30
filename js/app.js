@@ -19,6 +19,9 @@ const App = {
         try {
           await Api.addRecent(track.id);
           await Store.refreshRecent();
+          if (Store.currentView === 'home') {
+            UI.renderPage();
+          }
         } catch (err) {}
       }
     };
