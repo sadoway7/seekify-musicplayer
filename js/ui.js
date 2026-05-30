@@ -502,9 +502,7 @@ const tmore = e.target.closest('.track-more');
         if (qpCard.dataset.trackId) {
           const track = Store.getTrack(qpCard.dataset.trackId);
           if (track) {
-            const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
-            const list = recentTracks.length > 0 ? recentTracks : [track];
-            Player.play(track, list);
+            this._smartPlay(track);
             this.showNowPlaying();
           }
           return;
@@ -527,7 +525,8 @@ const tmore = e.target.closest('.track-more');
       const playAllBtn = e.target.closest('.play-all-btn');
       if (playAllBtn) {
         if (this._viewTrackList.length > 0) {
-          Player.play(this._viewTrackList[0], this._viewTrackList);
+          const source = this._getViewSource();
+          Player.play(this._viewTrackList[0], this._viewTrackList, source);
         }
         return;
       }
