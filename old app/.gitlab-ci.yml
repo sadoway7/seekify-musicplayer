@@ -1,0 +1,19 @@
+stages:
+  - deploy
+
+deploy:
+  stage: deploy
+  image: docker:cli
+  variables:
+    DOCKER_HOST: unix:///var/run/docker.sock
+    CONTAINER_NAME: stacklog
+    IMAGE_NAME: stacklog
+    DB_PATH: /mnt/user/appdata/stacklog/db
+  script:
+    - docker build --no-cache -t $IMAGE_NAME .
+    - docker stop $CONTAINER_NAME || true
+    - docker rm $CONTAINER_NAME || true
+    - docker run -d --name $CONTAINER_NAME --restart unless-stopped -p 8297:8081 -v $DB_PATH:/app/db $IMAGE_NAME
+    - docker image prune -f
+  only:
+    - main

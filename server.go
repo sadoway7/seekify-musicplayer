@@ -1,0 +1,98 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+func main() {
+	dirFlag := flag.String("dir", "", "Path to music directory")
+	flag.Parse()
+
+	musicDir = *dirFlag
+	if musicDir == "" {
+		musicDir = os.Getenv("MUSIC_DIR")
+	}
+	if musicDir == "" {
+		exe, err := os.Executable()
+		if err == nil {
+			musicDir = filepath.Join(filepath.Dir(exe), "music")
+		} else {
+			musicDir = "music"
+		}
+	}
+	os.MkdirAll(musicDir, 0755)
+
+	absDir, err := filepath.Abs(musicDir)
+	if err != nil {
+		log.Fatalf("Could not resolve music directory path: %v", err)
+	}
+	musicDir = absDir
+
+	info, err := os.Stat(musicDir)
+	if err != nil || !info.IsDir() {
+		log.Fatalf("Music directory does not exist: %s", musicDir)
+	}
+
+	tracks = make(map[string]*Track)
+	albums = make(map[string]*Album)
+	coverCache = make(map[string][]byte)
+
+	initDB(filepath.Join("data", "music.db"))
+
+	log.Printf("Scanning music directory: %s", musicDir)
+	stats := scanMusicDir(musicDir)
+	log.Printf("Scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/library", libraryHandler)
+	mux.HandleFunc("/api/stream/", streamHandler)
+	mux.HandleFunc("/api/cover/", coverHandler)
+	mux.HandleFunc("/api/scan", scanHandler)
+	mux.HandleFunc("/api/playlists", playlistsHandler)
+	mux.HandleFunc("/api/playlists/", playlistHandler)
+	mux.HandleFunc("/api/favorites", favoritesHandler)
+	mux.HandleFunc("/api/favorites/", favoriteToggleHandler)
+	mux.HandleFunc("/api/recent", recentHandler)
+	mux.HandleFunc("/api/recent/", recentAddHandler)
+	mux.HandleFunc("/admin", adminHandler)
+	mux.HandleFunc("/api/files", fileListHandler)
+	mux.HandleFunc("/api/upload", uploadHandler)
+	mux.HandleFunc("/api/delete", deleteFileHandler)
+	mux.HandleFunc("/api/folders", createFolderHandler)
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+		spaHandler(w, r)
+	})
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8081"
+	}
+
+	addr := ":" + port
+	url := fmt.Sprintf("http://localhost%s", addr)
+
+	log.Printf("Starting server on %s", addr)
+	log.Printf("Open %s in your browser", url)
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		openBrowser(url)
+	}()
+
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatalf("Server error: %v", err)
+	}
+}

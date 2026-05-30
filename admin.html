@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin - Music Library</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#0E0E0E;color:#F0EFE9;min-height:100vh}
+a{color:#D4F040;text-decoration:none}
+a:hover{text-decoration:underline}
+.header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid #2a2a2a}
+.header h1{font-size:18px;font-weight:600}
+.back-link{font-size:14px}
+.container{max-width:900px;margin:0 auto;padding:24px}
+.upload-zone{border:2px dashed #444;border-radius:12px;padding:40px 24px;text-align:center;margin-bottom:24px;cursor:pointer;transition:border-color .2s,background .2s}
+.upload-zone.dragover{border-color:#D4F040;background:rgba(212,240,64,.05)}
+.upload-zone p{color:#888;margin-bottom:12px;font-size:14px}
+.upload-zone .browse-btn{display:inline-block;padding:10px 24px;background:#D4F040;color:#0E0E0E;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.upload-zone .browse-btn:hover{opacity:.85}
+.upload-progress{margin-top:16px;font-size:13px;color:#aaa}
+.upload-progress .file-item{display:flex;justify-content:space-between;padding:4px 0}
+.upload-progress .file-item .ok{color:#4ade80}
+.upload-progress .file-item .err{color:#f87171}
+.toolbar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.toolbar button{padding:8px 18px;border:1px solid #444;background:#1E1E1E;color:#F0EFE9;border-radius:8px;font-size:13px;cursor:pointer;transition:background .2s,border-color .2s}
+.toolbar button:hover{background:#2a2a2a;border-color:#666}
+.toolbar .rescan-btn{border-color:#D4F040;color:#D4F040}
+.toolbar .rescan-btn:hover{background:rgba(212,240,64,.1)}
+.breadcrumb{display:flex;align-items:center;gap:6px;padding:12px 16px;background:#1E1E1E;border-radius:8px;margin-bottom:16px;font-size:14px;flex-wrap:wrap}
+.breadcrumb span{color:#888}
+.breadcrumb a{color:#F0EFE9}
+.breadcrumb a:hover{color:#D4F040}
+.breadcrumb .current{color:#D4F040}
+.file-list{background:#1E1E1E;border-radius:12px;overflow:hidden}
+.file-row{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #2a2a2a;transition:background .15s;cursor:default}
+.file-row:last-child{border-bottom:none}
+.file-row:hover{background:#262626}
+.file-row.folder{cursor:pointer}
+.file-row .icon{width:32px;height:32px;display:flex;align-items:center;justify-content:center;margin-right:12px;flex-shrink:0}
+.file-row .icon svg{width:20px;height:20px}
+.file-row .name{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-row .size{color:#888;font-size:13px;margin-left:12px;flex-shrink:0}
+.file-row .delete-btn{margin-left:12px;padding:4px 12px;background:transparent;border:1px solid #666;color:#F0EFE9;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0;transition:border-color .2s,color .2s}
+.file-row .delete-btn:hover{border-color:#f87171;color:#f87171}
+.empty-state{text-align:center;padding:48px 24px;color:#888;font-size:14px}
+.status-msg{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;display:none}
+.status-msg.success{display:block;background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.2)}
+.status-msg.error{display:block;background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.2)}
+@media(max-width:600px){
+  .container{padding:16px}
+  .header{padding:12px 16px}
+  .upload-zone{padding:24px 16px}
+  .file-row .size{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Music Library Admin</h1>
+  <a href="/" class="back-link">Back to Player</a>
+</div>
+
+<div class="container">
+  <div class="upload-zone" id="uploadZone">
+    <p>Drag and drop audio files here</p>
+    <button class="browse-btn" id="browseBtn">Choose Files</button>
+    <input type="file" id="fileInput" multiple accept=".mp3,.flac,.m4a,.aac,.ogg,.wav,.opus,.wma" style="display:none">
+    <div class="upload-progress" id="uploadProgress"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="rescan-btn" id="rescanBtn">Rescan Library</button>
+    <button id="newFolderBtn">New Folder</button>
+  </div>
+
+  <div id="statusMsg" class="status-msg"></div>
+
+  <div class="breadcrumb" id="breadcrumb"></div>
+
+  <div class="file-list" id="fileList">
+    <div class="empty-state">Loading...</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var currentPath = "";
+  var uploadZone = document.getElementById("uploadZone");
+  var browseBtn = document.getElementById("browseBtn");
+  var fileInput = document.getElementById("fileInput");
+  var uploadProgress = document.getElementById("uploadProgress");
+  var rescanBtn = document.getElementById("rescanBtn");
+  var newFolderBtn = document.getElementById("newFolderBtn");
+  var statusMsg = document.getElementById("statusMsg");
+  var breadcrumb = document.getElementById("breadcrumb");
+  var fileList = document.getElementById("fileList");
+
+  function showStatus(text, type) {
+    statusMsg.textContent = text;
+    statusMsg.className = "status-msg " + type;
+    if (type === "success") {
+      setTimeout(function() { statusMsg.className = "status-msg"; }, 4000);
+    }
+  }
+
+  function clearStatus() {
+    statusMsg.className = "status-msg";
+  }
+
+  function formatSize(bytes) {
+    if (bytes === 0) return "0 B";
+    var units = ["B", "KB", "MB", "GB"];
+    var i = Math.floor(Math.log(bytes) / Math.log(1024));
+    if (i >= units.length) i = units.length - 1;
+    return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + " " + units[i];
+  }
+
+  function buildBreadcrumb() {
+    var html = '<a href="#" data-path="">Music</a>';
+    if (currentPath) {
+      var parts = currentPath.split("/");
+      var accumulated = "";
+      for (var i = 0; i < parts.length; i++) {
+        html += '<span>/</span>';
+        accumulated += (i > 0 ? "/" : "") + parts[i];
+        if (i === parts.length - 1) {
+          html += '<span class="current">' + escapeHtml(parts[i]) + '</span>';
+        } else {
+          html += '<a href="#" data-path="' + escapeHtml(accumulated) + '">' + escapeHtml(parts[i]) + '</a>';
+        }
+      }
+    }
+    breadcrumb.innerHTML = html;
+    breadcrumb.querySelectorAll("a").forEach(function(a) {
+      a.addEventListener("click", function(e) {
+        e.preventDefault();
+        navigateTo(this.getAttribute("data-path") || "");
+      });
+    });
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function renderFileList(items) {
+    if (items.length === 0) {
+      fileList.innerHTML = '<div class="empty-state">This folder is empty</div>';
+      return;
+    }
+
+    var html = "";
+    if (currentPath) {
+      var parentPath = currentPath.split("/").slice(0, -1).join("/");
+      html += '<div class="file-row folder" data-path="' + escapeHtml(parentPath) + '">'
+        + '<div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></div>'
+        + '<div class="name">..</div>'
+        + '</div>';
+    }
+
+    items.forEach(function(item) {
+      if (item.isDir) {
+        html += '<div class="file-row folder" data-path="' + escapeHtml(item.path) + '">'
+          + '<div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#D4F040" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>'
+          + '<div class="name">' + escapeHtml(item.name) + '</div>'
+          + '</div>';
+      } else {
+        html += '<div class="file-row">'
+          + '<div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>'
+          + '<div class="name">' + escapeHtml(item.name) + '</div>'
+          + '<div class="size">' + formatSize(item.size) + '</div>'
+          + '<button class="delete-btn" data-path="' + escapeHtml(item.path) + '">Delete</button>'
+          + '</div>';
+      }
+    });
+
+    fileList.innerHTML = html;
+
+    fileList.querySelectorAll(".file-row.folder").forEach(function(row) {
+      row.addEventListener("click", function() {
+        navigateTo(this.getAttribute("data-path"));
+      });
+    });
+
+    fileList.querySelectorAll(".delete-btn").forEach(function(btn) {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        deleteFile(this.getAttribute("data-path"));
+      });
+    });
+  }
+
+  function loadFiles() {
+    var url = "/api/files";
+    if (currentPath) url += "?path=" + encodeURIComponent(currentPath);
+    fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+      buildBreadcrumb();
+      renderFileList(data);
+    }).catch(function() {
+      fileList.innerHTML = '<div class="empty-state">Failed to load files</div>';
+    });
+  }
+
+  function navigateTo(path) {
+    currentPath = path;
+    loadFiles();
+  }
+
+  function uploadFiles(files) {
+    var form = new FormData();
+    var validFiles = [];
+    var audioExts = [".mp3",".flac",".m4a",".aac",".ogg",".wav",".opus",".wma"];
+
+    for (var i = 0; i < files.length; i++) {
+      var name = files[i].name.toLowerCase();
+      var ext = name.substring(name.lastIndexOf("."));
+      if (audioExts.indexOf(ext) !== -1) {
+        validFiles.push(files[i]);
+        form.append("files", files[i]);
+      }
+    }
+
+    if (validFiles.length === 0) {
+      showStatus("No valid audio files selected", "error");
+      return;
+    }
+
+    if (currentPath) form.append("path", currentPath);
+
+    uploadProgress.innerHTML = validFiles.map(function(f) {
+      return '<div class="file-item"><span>' + escapeHtml(f.name) + '</span><span>Uploading...</span></div>';
+    }).join("");
+
+    fetch("/api/upload", { method: "POST", body: form }).then(function(r) { return r.json(); }).then(function(data) {
+      var html = "";
+      if (data.uploaded) {
+        data.uploaded.forEach(function(name) {
+          html += '<div class="file-item"><span>' + escapeHtml(name) + '</span><span class="ok">Uploaded</span></div>';
+        });
+      }
+      if (data.errors) {
+        data.errors.forEach(function(err) {
+          html += '<div class="file-item"><span>' + escapeHtml(err) + '</span><span class="err">Failed</span></div>';
+        });
+      }
+      uploadProgress.innerHTML = html;
+
+      if (data.uploaded && data.uploaded.length > 0) {
+        showStatus(data.uploaded.length + " file(s) uploaded", "success");
+        loadFiles();
+      }
+    }).catch(function() {
+      showStatus("Upload failed", "error");
+      uploadProgress.innerHTML = "";
+    });
+  }
+
+  function deleteFile(path) {
+    if (!confirm("Delete this file?")) return;
+    fetch("/api/delete?path=" + encodeURIComponent(path), { method: "DELETE" }).then(function(r) { return r.json(); }).then(function() {
+      showStatus("File deleted", "success");
+      loadFiles();
+    }).catch(function() {
+      showStatus("Failed to delete file", "error");
+    });
+  }
+
+  uploadZone.addEventListener("dragover", function(e) {
+    e.preventDefault();
+    uploadZone.classList.add("dragover");
+  });
+  uploadZone.addEventListener("dragleave", function() {
+    uploadZone.classList.remove("dragover");
+  });
+  uploadZone.addEventListener("drop", function(e) {
+    e.preventDefault();
+    uploadZone.classList.remove("dragover");
+    uploadFiles(e.dataTransfer.files);
+  });
+
+  browseBtn.addEventListener("click", function(e) {
+    e.stopPropagation();
+    fileInput.click();
+  });
+  uploadZone.addEventListener("click", function() {
+    fileInput.click();
+  });
+  fileInput.addEventListener("change", function() {
+    if (this.files.length > 0) uploadFiles(this.files);
+    this.value = "";
+  });
+
+  rescanBtn.addEventListener("click", function() {
+    rescanBtn.disabled = true;
+    rescanBtn.textContent = "Scanning...";
+    fetch("/api/scan", { method: "POST" }).then(function(r) { return r.json(); }).then(function(stats) {
+      showStatus("Scan complete: " + stats.scanned + " scanned, " + stats.added + " added, " + stats.removed + " removed", "success");
+    }).catch(function() {
+      showStatus("Scan failed", "error");
+    }).finally(function() {
+      rescanBtn.disabled = false;
+      rescanBtn.textContent = "Rescan Library";
+    });
+  });
+
+  newFolderBtn.addEventListener("click", function() {
+    var name = prompt("Folder name:");
+    if (!name || !name.trim()) return;
+    fetch("/api/folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: currentPath, name: name.trim() })
+    }).then(function(r) { return r.json(); }).then(function() {
+      showStatus("Folder created", "success");
+      loadFiles();
+    }).catch(function() {
+      showStatus("Failed to create folder", "error");
+    });
+  });
+
+  loadFiles();
+})();
+</script>
+</body>
+</html>

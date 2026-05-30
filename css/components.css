@@ -1,0 +1,123 @@
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  text-align: center;
+}
+
+.empty-state svg {
+  width: 64px;
+  height: 64px;
+  color: var(--text3);
+  margin-bottom: 16px;
+}
+
+.empty-state-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text1);
+  margin-bottom: 8px;
+}
+
+.empty-state-text {
+  font-size: 14px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.create-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 32px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 24px;
+  border: none;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+.create-btn:active {
+  transform: scale(0.95);
+  background: var(--accent-hover);
+}
+
+.create-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.loading-spinner::after {
+  content: '';
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--l3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--l2) 25%, var(--l3) 50%, var(--l2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+  border-radius: 8px;
+}
+
+.skeleton-card {
+  width: 112px;
+  min-width: 112px;
+}
+
+.skeleton-card-art {
+  width: 112px;
+  height: 112px;
+  border-radius: 12px;
+}
+
+.skeleton-card-text {
+  height: 14px;
+  margin-top: 8px;
+  width: 80%;
+}
+
+.skeleton-card-text-short {
+  height: 11px;
+  margin-top: 6px;
+  width: 60%;
+}
+
+.toast {
+  position: fixed;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--l2);
+  color: var(--text1);
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  animation: toastIn 0.3s ease forwards;
+  white-space: nowrap;
+}
+
+.toast.removing {
+  animation: toastOut 0.3s ease forwards;
+}

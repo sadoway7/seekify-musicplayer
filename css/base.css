@@ -1,0 +1,84 @@
+:root {
+  --bg: #0E0E0E;
+  --l1: #161616;
+  --l2: #1E1E1E;
+  --l3: #272727;
+  --l4: #313131;
+  --text1: #F0EFE9;
+  --text2: #7A7A7A;
+  --text3: #3E3E3E;
+  --accent: #D4F040;
+  --ff: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --bg-base: #0A0A0A;
+  --bg-surface: var(--l1);
+  --bg-elevated: var(--l2);
+  --bg-highlight: var(--l3);
+  --bg-card-hover: var(--l4);
+  --accent-hover: #c5e030;
+  --accent-soft: rgba(212, 240, 64, 0.1);
+  --accent-glow: rgba(212, 240, 64, 0.15);
+  --text-primary: var(--text1);
+  --text-secondary: var(--text2);
+  --text-muted: var(--text3);
+  --border: rgba(255, 255, 255, 0.04);
+  --danger: #C94040;
+  --success: #22c55e;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: #0A0A0A;
+  color: var(--text1);
+  font-family: var(--ff);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.hidden {
+  display: none !important;
+}

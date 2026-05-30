@@ -1,0 +1,300 @@
+.queue-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 70vh;
+  background: var(--l1);
+  border-radius: 16px 16px 0 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  animation: panelSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.queue-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  flex-shrink: 0;
+}
+
+.queue-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text1);
+}
+
+.queue-close {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  border-radius: 50%;
+}
+
+.queue-close:active {
+  transform: scale(0.9);
+}
+
+.queue-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.queue-list {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  scrollbar-width: none;
+  padding: 0 22px;
+}
+
+.queue-list::-webkit-scrollbar {
+  display: none;
+}
+
+.queue-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 0;
+  gap: 12px;
+  transition: opacity 0.15s ease;
+}
+
+.queue-item:active {
+  opacity: 0.7;
+}
+
+.queue-item.active {
+  color: var(--accent);
+}
+
+.queue-item.active .queue-item-title {
+  color: var(--accent);
+}
+
+.queue-item-art {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--l3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.queue-item-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-artist {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-remove {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.queue-item-remove:active {
+  color: var(--danger);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 120;
+  display: flex;
+  align-items: flex-end;
+  animation: modalFadeIn 0.2s ease forwards;
+}
+
+.modal-sheet {
+  width: 100%;
+  max-height: 70vh;
+  background: var(--l1);
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: sheetSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.modal-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--text3);
+  border-radius: 2px;
+  margin: 8px auto 0;
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text1);
+  padding: 16px 22px;
+  flex-shrink: 0;
+}
+
+.modal-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text1);
+  transition: background 0.15s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.modal-option:active {
+  background: var(--l3);
+}
+
+.modal-option svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--text2);
+  min-width: 20px;
+}
+
+.modal-option.danger {
+  color: var(--danger);
+}
+
+.modal-option.danger svg {
+  color: var(--danger);
+}
+
+.modal-list {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  scrollbar-width: none;
+}
+
+.modal-list::-webkit-scrollbar {
+  display: none;
+}
+
+.modal-list-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  font-size: 14px;
+  color: var(--text1);
+  transition: background 0.15s ease;
+  cursor: pointer;
+}
+
+.modal-list-item:active {
+  background: var(--l3);
+}
+
+.modal-list-item svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--text2);
+}
+
+.modal-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 4px 0;
+}
+
+.modal-create-form input {
+  flex: 1;
+  background: var(--l3);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text1);
+  font-size: 14px;
+}
+
+.modal-create-form button {
+  background: var(--accent);
+  color: #0A0A0A;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#context-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  animation: modalFadeIn 0.15s ease forwards;
+}
+
+#context-menu .modal-sheet {
+  position: absolute;
+  width: 240px;
+  max-height: none;
+  background: var(--l2);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  padding: 6px 0;
+  overflow: hidden;
+  left: auto;
+  bottom: auto;
+  top: auto;
+  right: auto;
+}
+
+#context-menu .modal-handle {
+  display: none;
+}
+
+#context-menu .modal-option {
+  border-radius: 8px;
+  margin: 2px 6px;
+  padding: 12px 14px;
+}
+
+#context-menu .modal-option:active {
+  background: var(--l3);
+}

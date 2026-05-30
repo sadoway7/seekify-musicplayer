@@ -1,0 +1,6 @@
+server
+server.exe
+musicapp
+data/
+.DS_Store
+*.db

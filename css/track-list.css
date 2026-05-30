@@ -1,0 +1,134 @@
+.track-list {
+  padding: 0 22px 16px;
+}
+
+.track-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px 0;
+  gap: 12px;
+  transition: opacity 0.15s ease;
+}
+
+.track-row:active {
+  opacity: 0.7;
+}
+
+.track-row.active {
+  color: var(--accent);
+}
+
+.track-row.active .track-title {
+  color: var(--accent);
+}
+
+.track-num {
+  width: 24px;
+  min-width: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+
+.track-art {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--l3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.track-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.track-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.track-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-title.on {
+  color: var(--accent);
+}
+
+.track-artist {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.track-duration {
+  font-size: 12px;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.track-more {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  padding-left: 6px;
+  cursor: pointer;
+}
+
+.track-more:active {
+  color: var(--text1);
+}
+
+.track-more svg {
+  width: 22px;
+  height: 22px;
+}
+
+.eq {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 12px;
+}
+
+.eq span {
+  display: block;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: eq 0.8s ease-in-out infinite alternate;
+}
+
+.eq span:nth-child(1) {
+  animation-delay: 0s;
+  height: 60%;
+}
+
+.eq span:nth-child(2) {
+  animation-delay: 0.2s;
+  height: 100%;
+}
+
+.eq span:nth-child(3) {
+  animation-delay: 0.4s;
+  height: 40%;
+}

@@ -1,0 +1,421 @@
+.now-playing {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 60px;
+  z-index: 90;
+  background: #0A0A0A;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: env(safe-area-inset-top, 0px);
+  animation: nowPlayingSlideUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  overflow: hidden;
+}
+
+.np-bg-glow {
+  position: absolute;
+  top: -40%;
+  left: -20%;
+  right: -20%;
+  height: 80%;
+  background: transparent;
+  z-index: 0;
+  filter: blur(80px);
+  opacity: 0;
+  transition: background 2s ease, opacity 2s ease;
+  pointer-events: none;
+}
+
+.np-bg-glow.active {
+  opacity: 1;
+  animation: glowDrift 12s ease-in-out infinite alternate;
+}
+
+@keyframes glowDrift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(5%, 8%) scale(1.1); }
+}
+
+.np-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 22px 4px;
+  height: 56px;
+  min-height: 56px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.np-header-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.np-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  border-radius: 50%;
+  transition: color 0.15s ease, transform 0.1s ease;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.np-btn:active {
+  transform: scale(0.9);
+}
+
+.np-btn:hover {
+  color: var(--text1);
+}
+
+.np-btn svg {
+  pointer-events: none;
+  width: 22px;
+  height: 22px;
+}
+
+.np-artwork {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 8px 22px 24px;
+  min-height: 0;
+  width: 100%;
+  max-width: 500px;
+}
+
+.np-art-wrapper {
+  position: relative;
+  width: min(85vw, 340px);
+  max-height: min(85vw, 340px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.np-art-wrapper::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  background: #0A0A0A;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.08);
+}
+
+.np-art-wrapper::before {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  left: 10%;
+  right: 10%;
+  height: 40px;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.5) 0%, transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+  filter: blur(12px);
+}
+
+#np-art {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 8px 32px rgba(0,0,0,0.6),
+    0 2px 8px rgba(0,0,0,0.4);
+}
+
+.now-playing.playing .np-art-wrapper {
+  animation: coverSpin 20s linear infinite;
+}
+
+@keyframes coverSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.np-info {
+  position: relative;
+  z-index: 1;
+  padding: 0 22px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.np-title-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.np-title {
+  font-size: 23px;
+  font-weight: 700;
+  color: var(--text1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.04em;
+}
+
+.np-artist {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.np-like-btn {
+  flex-shrink: 0;
+}
+
+.np-like-btn.active {
+  color: var(--accent);
+}
+
+.np-like-btn.active svg {
+  fill: currentColor;
+}
+
+.np-like-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.np-progress {
+  position: relative;
+  z-index: 1;
+  padding: 16px 22px 0;
+  width: 100%;
+  max-width: 500px;
+}
+
+.np-seek-bar {
+  position: relative;
+  width: 100%;
+  height: 3px;
+  background: var(--l3);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.np-seek-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--text1);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.np-seek-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 11px;
+  height: 11px;
+  background: var(--text1);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.15s ease, left 0.1s linear;
+  opacity: 0;
+}
+
+.np-seek-bar:hover .np-seek-thumb,
+.np-seek-bar:active .np-seek-thumb {
+  opacity: 1;
+}
+
+.np-time {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+
+.np-controls {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 14px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.np-ctrl {
+  color: var(--text2);
+}
+
+.np-ctrl.active {
+  color: var(--accent);
+}
+
+.np-ctrl svg {
+  width: 22px;
+  height: 22px;
+}
+
+.np-play-main {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--text1);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease;
+}
+
+.np-play-main:active {
+  transform: scale(0.93);
+}
+
+.np-play-main svg {
+  width: 26px;
+  height: 26px;
+  fill: var(--bg);
+  color: var(--bg);
+}
+
+#np-prev svg,
+#np-next svg {
+  width: 32px;
+  height: 32px;
+}
+
+#np-prev,
+#np-next {
+  color: var(--text1);
+}
+
+.np-bottom {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 22px 18px;
+  color: var(--text2);
+  width: 100%;
+  max-width: 500px;
+}
+
+.np-volume {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.np-volume button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.np-volume-bar {
+  width: 100px;
+  height: 3px;
+  background: var(--l3);
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+}
+
+.np-volume-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--text2);
+  border-radius: 2px;
+  width: 70%;
+}
+
+.np-queue-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.np-extra-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 22px 24px;
+}
+
+.np-extra-actions .np-extra-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text2);
+}
+
+.np-extra-actions .np-extra-item svg {
+  width: 20px;
+  height: 20px;
+}
+
+.np-extra-actions .np-extra-item span {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+@media (min-width: 768px) {
+  .now-playing {
+    right: 0;
+    bottom: 0;
+    width: auto;
+    left: 72px;
+  }
+
+  .np-header,
+  .np-artwork,
+  .np-info,
+  .np-progress,
+  .np-controls,
+  .np-bottom {
+    max-width: 420px;
+  }
+}
