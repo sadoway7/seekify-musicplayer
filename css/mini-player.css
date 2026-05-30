@@ -27,10 +27,11 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
-  border-radius: 999px 999px 0 0;
+  bottom: 0;
+  border-radius: 999px;
   overflow: hidden;
-  z-index: 1;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .mini-progress::after {
@@ -40,17 +41,18 @@
   left: 0;
   height: 100%;
   background: var(--accent);
+  opacity: 0.1;
   width: var(--progress, 0%);
-  border-radius: 999px;
 }
 
 .mini-player-inner {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 10px;
-  padding: 5px 6px 5px 5px;
+  gap: 12px;
+  padding: 8px 10px 8px 8px;
   position: relative;
+  z-index: 1;
 }
 
 .mini-left {
@@ -75,9 +77,9 @@
 }
 
 .mini-art {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
   border-radius: 50%;
   background: var(--l3);
   overflow: hidden;
@@ -116,8 +118,8 @@
 }
 
 .mini-btn {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -136,15 +138,15 @@
 }
 
 .mini-play-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   fill: var(--bg);
 }
 
 .mini-prev-btn svg,
 .mini-next-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   fill: var(--text2);
   color: var(--text2);
 }

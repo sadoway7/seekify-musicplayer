@@ -6,6 +6,7 @@ const Player = {
   repeat: 'off',
   playing: false,
   volume: 1,
+  sourceName: '',
   onStateChange: null,
   onTimeUpdate: null,
   onTrackChange: null,

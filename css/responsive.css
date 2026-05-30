@@ -1,4 +1,13 @@
 @media (min-width: 768px) {
+  .mega-title span {
+    font-size: 48px;
+    text-transform: none;
+  }
+
+  .mega-title {
+    padding-top: 12px;
+  }
+
   .browse-grid {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -152,6 +161,7 @@
     height: 20px;
   }
 
+  /* Desktop now-playing: vertical stack with queue sidebar */
   .now-playing {
     left: 72px;
     top: 0;
@@ -165,129 +175,161 @@
 
   .np-bg-glow {
     left: 0;
-    right: 50%;
-    top: 0;
-    height: 100%;
-    filter: blur(160px);
+    right: 60%;
+    top: -20%;
+    height: 90%;
+    filter: blur(120px);
   }
 
+  /* Two columns: player | queue */
   .np-desktop-layout {
-    flex-direction: row;
-    align-items: stretch;
+    display: flex !important;
+    flex-direction: row !important;
     width: 100%;
     height: 100%;
     overflow: hidden;
   }
 
-  /* Player area: two-column grid - art on left, controls on right */
+  /* Player column: vertical flex stack, centered */
   .np-player-col {
     flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto 1fr auto auto auto;
-    align-items: start;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
     min-height: 0;
-    overflow: hidden;
+    overflow-y: auto;
     max-width: none;
-    padding: 0;
+    padding: 24px 48px 32px !important;
+    gap: 0;
   }
 
   .np-header {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    padding: 16px 40px;
-    width: auto;
+    flex-shrink: 0;
+    padding: 12px 0 16px !important;
+    width: 100%;
     max-width: none;
-    height: auto;
-    min-height: 0;
   }
 
-  /* Art fills the left column, vertically centered */
+  .np-header-text {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+
+  /* Vinyl disc - bigger on desktop */
   .np-artwork {
-    grid-column: 1;
-    grid-row: 2 / 6;
-    padding: 0 20px 32px 40px;
-    width: auto;
+    flex: 1;
+    min-height: 200px;
+    padding: 12px 0 28px !important;
+    width: 100%;
     max-width: none;
-    flex: none;
-    align-self: center;
-    align-items: center;
   }
 
   .np-art-wrapper {
-    width: 100%;
-    max-width: none;
-    max-height: none;
+    width: min(65vh, 560px);
+    max-height: min(65vh, 560px);
+    border-radius: 50% !important;
     aspect-ratio: 1 / 1;
-    border-radius: 12px;
   }
 
   .np-art-wrapper::after {
-    display: none;
+    display: block !important;
   }
 
   .np-art-wrapper::before {
-    display: none;
+    display: block !important;
   }
 
   #np-art {
-    border-radius: 12px;
-    box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+    border-radius: 50% !important;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
   }
 
   .now-playing.playing .np-art-wrapper {
-    animation: none;
+    animation: coverSpin 20s linear infinite !important;
   }
 
-  /* Info, progress, controls, bottom stack in right column */
+  /* Info */
   .np-info {
-    grid-column: 2;
-    grid-row: 2;
-    width: auto;
-    max-width: none;
-    padding: 0 40px 8px 16px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-self: end;
-  }
-
-  .np-progress {
-    grid-column: 2;
-    grid-row: 3;
-    width: auto;
-    max-width: none;
-    padding: 16px 40px 0 16px;
-  }
-
-  .np-controls {
-    grid-column: 2;
-    grid-row: 4;
-    width: auto;
-    max-width: none;
-    padding: 8px 40px 8px 16px;
-  }
-
-  .np-bottom {
-    grid-column: 2;
-    grid-row: 5;
-    width: auto;
-    max-width: none;
-    padding: 4px 40px 32px 16px;
+    width: 100%;
+    max-width: none !important;
+    padding: 0 !important;
+    flex-shrink: 0;
   }
 
   .np-title {
-    font-size: 32px;
+    font-size: clamp(36px, 5vw, 56px) !important;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
 
   .np-artist {
-    font-size: 17px;
-    margin-top: 4px;
+    font-size: clamp(20px, 2.2vw, 28px);
+    margin-top: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .np-title-row {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .np-title-row > div {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .np-like-btn {
+    display: flex;
+  }
+
+  /* Progress */
+  .np-progress {
+    width: 100%;
+    max-width: none !important;
+    padding: 20px 0 0 !important;
+    flex-shrink: 0;
+  }
+
+  .np-waveform-container {
+    height: 72px;
+  }
+
+  .np-time {
+    font-size: 13px;
+    margin-top: 10px;
+  }
+
+  /* Controls */
+  .np-controls {
+    width: 100%;
+    max-width: none !important;
+    padding: 16px 0 !important;
+    flex-shrink: 0;
+  }
+
+  .np-bottom {
+    width: 100%;
+    max-width: none !important;
+    padding: 8px 0 0 !important;
+    flex-shrink: 0;
   }
 
   .np-play-main {
     width: 72px;
     height: 72px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.35);
   }
 
   .np-play-main svg {
@@ -301,11 +343,16 @@
     height: 38px;
   }
 
+  /* Hide mobile volume row on desktop */
+  .np-bottom {
+    display: none !important;
+  }
+
   .np-queue-btn {
     display: none;
   }
 
-  /* Queue panel: right sidebar */
+  /* Queue panel: full-height right sidebar */
   .queue-panel {
     position: relative;
     bottom: auto;
@@ -315,21 +362,72 @@
     border-radius: 0;
     z-index: 1;
     animation: none;
-    padding-bottom: 0;
-    width: 340px;
-    min-width: 280px;
+    padding: 36px 28px 24px;
+    width: 420px;
+    min-width: 320px;
     flex-shrink: 0;
     background: rgba(255,255,255,0.03);
     border-left: 1px solid rgba(255,255,255,0.05);
     height: 100%;
+    overflow-y: auto;
+    align-self: stretch;
   }
 
-  .queue-panel.hidden {
-    display: none;
+  /* Auto-show queue on desktop when now-playing is open */
+  .now-playing:not(.hidden) .queue-panel {
+    display: flex !important;
   }
 
   .queue-close {
     display: none;
+  }
+
+  .queue-header h2 {
+    font-size: 24px;
+    letter-spacing: -0.03em;
+  }
+
+  /* Volume at bottom of queue sidebar */
+  .queue-volume {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 0 0;
+    margin-top: auto;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 16px;
+  }
+
+  .queue-volume-btn {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    color: var(--text2);
+  }
+
+  .queue-volume-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .queue-volume-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--l3);
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .queue-volume-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--text1);
+    border-radius: 2px;
+    width: 70%;
   }
 
   .modal-overlay {
@@ -347,21 +445,17 @@
   }
 
   .queue-panel {
-    width: 360px;
+    width: 440px;
   }
 
-  .np-title {
-    font-size: 36px;
+  .np-art-wrapper {
+    width: min(62vh, 520px);
+    max-height: min(62vh, 520px);
   }
 
   .np-play-main {
-    width: 80px;
-    height: 80px;
-  }
-
-  .np-play-main svg {
-    width: 36px;
-    height: 36px;
+    width: 76px;
+    height: 76px;
   }
 
   .scroll-row {
@@ -375,10 +469,15 @@
   }
 
   .queue-panel {
-    width: 400px;
+    width: 460px;
+  }
+
+  .np-art-wrapper {
+    width: min(60vh, 580px);
+    max-height: min(60vh, 580px);
   }
 
   .np-player-col {
-    grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
+    padding: 40px 64px !important;
   }
 }

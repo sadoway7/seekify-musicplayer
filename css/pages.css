@@ -49,6 +49,7 @@
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  margin-bottom: 20px;
 }
 
 .scroll-row::-webkit-scrollbar {
@@ -242,11 +243,29 @@
 }
 
 .greeting {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text1);
-  padding: 8px 22px 16px;
+  display: none;
+}
+
+.mega-title {
+  position: relative;
+  height: 36px;
+  overflow: hidden;
+  padding: 16px 22px 0;
+  z-index: 0;
+}
+
+.mega-title span {
+  font-size: 52px;
+  font-weight: 900;
   letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text1);
+  opacity: 0.10;
+  position: absolute;
+  bottom: -10px;
+  left: 22px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .quick-play-grid {
@@ -254,6 +273,7 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   padding: 0 16px;
+  margin-bottom: 20px;
 }
 
 .search-container {

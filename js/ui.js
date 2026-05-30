@@ -52,12 +52,13 @@ const UI = {
       npRepeat: document.getElementById('np-repeat'),
       npTimeCurrent: document.getElementById('np-time-current'),
       npTimeTotal: document.getElementById('np-time-total'),
-      seekBar: document.querySelector('.np-seek-bar'),
-      seekFill: document.querySelector('.np-seek-fill'),
-      seekThumb: document.querySelector('.np-seek-thumb'),
+      waveformCanvas: document.getElementById('np-waveform'),
       volumeBar: document.querySelector('.np-volume-bar'),
       volumeFill: document.querySelector('.np-volume-fill'),
       volumeBtn: document.querySelector('.np-volume button'),
+      queueVolumeBar: document.querySelector('.queue-volume-bar'),
+      queueVolumeFill: document.querySelector('.queue-volume-fill'),
+      queueVolumeBtn: document.querySelector('.queue-volume-btn'),
       queuePanel: document.getElementById('queue-panel'),
       queueList: document.getElementById('queue-list'),
       playlistModal: document.getElementById('playlist-modal'),
@@ -159,14 +160,29 @@ const UI = {
       }
       this._updateVolumeBar();
     });
+
+    if (this.els.queueVolumeBtn) {
+      this.els.queueVolumeBtn.addEventListener('click', () => {
+        if (Player.volume > 0) {
+          prevVolume = Player.volume;
+          Player.setVolume(0);
+        } else {
+          Player.setVolume(prevVolume || 1);
+        }
+        this._updateVolumeBar();
+      });
+    }
   },
 
   _bindSeekBar() {
-    const bar = this.els.seekBar;
-    if (!bar) return;
+    const canvas = this.els.waveformCanvas;
+    if (!canvas) return;
+
+    this._waveformData = [];
+    this._waveformHoverX = -1;
 
     const getFraction = (e) => {
-      const rect = bar.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     };
@@ -174,21 +190,21 @@ const UI = {
     const onStart = (e) => {
       this.seeking = true;
       const f = getFraction(e);
-      this.els.seekFill.style.width = (f * 100) + '%';
-      if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
+      this._waveformProgress = f;
+      this._paintWaveform(f);
     };
 
     const onMove = (e) => {
       if (!this.seeking) return;
       const f = getFraction(e);
-      this.els.seekFill.style.width = (f * 100) + '%';
-      if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
+      this._waveformProgress = f;
+      this._paintWaveform(f);
     };
 
     const onEnd = (e) => {
       if (!this.seeking) return;
       this.seeking = false;
-      const rect = bar.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
       let clientX;
       if (e.changedTouches) {
         clientX = e.changedTouches[0].clientX;
@@ -196,15 +212,35 @@ const UI = {
         clientX = e.clientX;
       }
       const f = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      this._waveformProgress = f;
+      this._paintWaveform(f);
       Player.seek(f);
     };
 
-    bar.addEventListener('mousedown', onStart);
+    canvas.addEventListener('mousedown', onStart);
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onEnd);
-    bar.addEventListener('touchstart', onStart, { passive: true });
+    canvas.addEventListener('touchstart', onStart, { passive: true });
     document.addEventListener('touchmove', onMove, { passive: true });
     document.addEventListener('touchend', onEnd);
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (this.seeking) return;
+      const rect = canvas.getBoundingClientRect();
+      this._waveformHoverX = e.clientX - rect.left;
+      this._paintWaveform(this._waveformProgress || 0);
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      this._waveformHoverX = -1;
+      this._paintWaveform(this._waveformProgress || 0);
+    });
+
+    const resizeObserver = new ResizeObserver(() => {
+      this._generateWaveform();
+      this._paintWaveform(this._waveformProgress || 0);
+    });
+    resizeObserver.observe(canvas.parentElement);
   },
 
   _bindTopProgress() {
@@ -222,14 +258,12 @@ const UI = {
       this.topSeeking = true;
       const f = getFraction(e);
       if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
-      if (this.els.seekFill) this.els.seekFill.style.width = (f * 100) + '%';
     };
 
     const onMove = (e) => {
       if (!this.topSeeking) return;
       const f = getFraction(e);
       if (this.els.topProgressFill) this.els.topProgressFill.style.width = (f * 100) + '%';
-      if (this.els.seekFill) this.els.seekFill.style.width = (f * 100) + '%';
     };
 
     const onEnd = (e) => {
@@ -255,39 +289,43 @@ const UI = {
   },
 
   _bindVolumeBar() {
-    const bar = this.els.volumeBar;
-    if (!bar) return;
+    const bindBar = (bar, fillEl) => {
+      if (!bar) return;
 
-    const getFraction = (e) => {
-      const rect = bar.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const getFraction = (e) => {
+        const rect = bar.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      };
+
+      const onStart = (e) => {
+        this.volumeDragging = true;
+        const f = getFraction(e);
+        Player.setVolume(f);
+        this._updateVolumeBar();
+      };
+
+      const onMove = (e) => {
+        if (!this.volumeDragging) return;
+        const f = getFraction(e);
+        Player.setVolume(f);
+        this._updateVolumeBar();
+      };
+
+      const onEnd = () => {
+        this.volumeDragging = false;
+      };
+
+      bar.addEventListener('mousedown', onStart);
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onEnd);
+      bar.addEventListener('touchstart', onStart, { passive: true });
+      document.addEventListener('touchmove', onMove, { passive: true });
+      document.addEventListener('touchend', onEnd);
     };
 
-    const onStart = (e) => {
-      this.volumeDragging = true;
-      const f = getFraction(e);
-      Player.setVolume(f);
-      this._updateVolumeBar();
-    };
-
-    const onMove = (e) => {
-      if (!this.volumeDragging) return;
-      const f = getFraction(e);
-      Player.setVolume(f);
-      this._updateVolumeBar();
-    };
-
-    const onEnd = () => {
-      this.volumeDragging = false;
-    };
-
-    bar.addEventListener('mousedown', onStart);
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onEnd);
-    bar.addEventListener('touchstart', onStart, { passive: true });
-    document.addEventListener('touchmove', onMove, { passive: true });
-    document.addEventListener('touchend', onEnd);
+    bindBar(this.els.volumeBar, this.els.volumeFill);
+    bindBar(this.els.queueVolumeBar, this.els.queueVolumeFill);
   },
 
   _bindQueuePanel() {
@@ -579,8 +617,7 @@ const tmore = e.target.closest('.track-more');
 
   renderHome() {
     this._viewTrackList = [];
-    const greeting = this._getGreeting();
-    let html = '<div class="greeting">' + greeting + '</div>';
+    let html = '';
 
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
     const currentTrack = Player.getCurrentTrack();
@@ -598,7 +635,7 @@ const tmore = e.target.closest('.track-more');
       }
     });
 
-    html += '<div class="section-header"><h2>Recently Played</h2></div>';
+    html += '<div class="mega-title"><span>Recently Played</span></div>';
 
     if (recentCards.length > 0 || currentTrack) {
       html += '<div class="quick-play-grid">';
@@ -647,13 +684,27 @@ const tmore = e.target.closest('.track-more');
     const allTracks = Store.library.tracks.slice();
     const newTracks = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0)).slice(0, 6);
     if (newTracks.length > 0) {
-      html += '<div class="section-header"><h2>New Songs</h2></div>';
-      html += this.renderTrackList(newTracks, { showArt: true });
+      html += '<div class="mega-title"><span>New Songs</span></div>';
+      html += '<div class="new-songs-grid">';
+      newTracks.forEach(t => {
+        const hasCover = Store.albumHasCover(t.albumID);
+        const artStyle = hasCover
+          ? 'background-image:url(' + Api.coverUrl(t.albumID) + ')'
+          : 'background:var(--l2)';
+        const icon = hasCover ? '' : '<div class="new-song-fallback">' + Icons.music() + '</div>';
+        html += '<div class="new-song-card" data-track-id="' + t.id + '">'
+          + '<div class="new-song-art" style="' + artStyle + '">' + icon + '</div>'
+          + '<div class="new-song-info">'
+          + '<div class="new-song-title">' + this._esc(t.title) + '</div>'
+          + '<div class="new-song-artist">' + this._esc(t.artist) + '</div>'
+          + '</div></div>';
+      });
+      html += '</div>';
     }
 
     const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, 6);
-    html += '<div class="section-header"><h2>Artists</h2></div>';
+    html += '<div class="mega-title"><span>Artists</span></div>';
     if (newArtists.length > 0) {
       html += '<div class="scroll-row" style="flex-wrap:nowrap">';
       newArtists.forEach(a => {
@@ -668,7 +719,7 @@ const tmore = e.target.closest('.track-more');
     }
 
     const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
-    html += '<div class="section-header"><h2>Albums</h2></div>';
+    html += '<div class="mega-title"><span>Albums</span></div>';
     if (namedAlbums.length > 0) {
       html += '<div class="scroll-row">';
       namedAlbums.forEach(a => {
@@ -684,7 +735,7 @@ const tmore = e.target.closest('.track-more');
     }
 
     if (Store.playlists.length > 0) {
-      html += '<div class="section-header"><h2>Playlists</h2></div>';
+      html += '<div class="mega-title"><span>Playlists</span></div>';
       Store.playlists.slice(0, 4).forEach(p => {
         const pTracks = p.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
         html += '<div class="list-item" data-type="playlist" data-id="' + p.id + '">'
@@ -699,7 +750,7 @@ const tmore = e.target.closest('.track-more');
 
     const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
     if (favTracks.length > 0) {
-      html += '<div class="section-header"><h2>Liked Songs</h2></div>';
+      html += '<div class="mega-title"><span>Liked Songs</span></div>';
       html += this.renderTrackList(favTracks.slice(0, 5), { showArt: true });
     }
 
@@ -1157,29 +1208,127 @@ const tmore = e.target.closest('.track-more');
   updateSeekBar() {
     const progress = Player.getProgress();
     if (this.seeking || this.topSeeking) return;
-    const pct = (progress.fraction * 100) + '%';
-    this.els.seekFill.style.width = pct;
-    if (this.els.seekThumb) this.els.seekThumb.style.left = pct;
+    const fraction = progress.fraction;
+    this._waveformProgress = fraction;
+    this._paintWaveform(fraction);
     this.els.npTimeCurrent.textContent = this._formatTime(progress.current);
     this.els.npTimeTotal.textContent = this._formatTime(progress.duration);
+    const pct = (fraction * 100) + '%';
     this.els.miniProgress.style.setProperty('--progress', pct);
+  },
+
+  _generateWaveform(trackId) {
+    const canvas = this.els.waveformCanvas;
+    if (!canvas) return;
+
+    const container = canvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+
+    const pointWidth = 3;
+    const pointGap = 2;
+    const numPoints = Math.floor(w / (pointWidth + pointGap));
+
+    // Seeded pseudo-random from track ID for consistent waveform per track
+    const seed = trackId || 'default';
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+      hash |= 0;
+    }
+    const rand = () => {
+      hash = (hash * 16807 + 0) % 2147483647;
+      return (hash & 0x7fffffff) / 0x7fffffff;
+    };
+
+    const data = [];
+    for (let i = 0; i < numPoints; i++) {
+      const t = i / numPoints;
+      // Envelope: ramp up, sustain with variation, ramp down
+      let env = 1;
+      if (t < 0.05) env = t / 0.05;
+      else if (t > 0.95) env = (1 - t) / 0.05;
+
+      // Main amplitude with some structure
+      const base = rand() * 0.5 + 0.15;
+      const mid = Math.sin(t * Math.PI * (2 + rand() * 3)) * 0.15 + 0.5;
+      const amp = (base + mid) * env;
+
+      // Normalize to 8-100 range (min height so it's always visible)
+      data.push(Math.max(8, Math.min(100, Math.round(amp * 100))));
+    }
+
+    this._waveformData = data;
+    this._waveformPointWidth = pointWidth;
+    this._waveformPointGap = pointGap;
+  },
+
+  _paintWaveform(progressFraction) {
+    const canvas = this.els.waveformCanvas;
+    if (!canvas || !this._waveformData.length) return;
+
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width;
+    const h = canvas.height;
+    const data = this._waveformData;
+    const pw = this._waveformPointWidth * dpr;
+    const pg = this._waveformPointGap * dpr;
+    const totalWidth = data.length * (pw + pg);
+
+    ctx.clearRect(0, 0, w, h);
+
+    const playingPoint = progressFraction * data.length;
+    const hoverX = this._waveformHoverX >= 0 ? this._waveformHoverX * dpr : -1;
+
+    for (let i = 0; i < data.length; i++) {
+      const barH = (data[i] / 100) * h * 0.85;
+      const x = (w - totalWidth) / 2 + i * (pw + pg);
+      const y = (h - barH) / 2;
+
+      const isPlayed = i < playingPoint;
+      const isHovered = hoverX >= 0 && x <= hoverX && hoverX <= x + pw;
+
+      if (isHovered) {
+        ctx.fillStyle = isPlayed ? 'rgba(212, 240, 64, 0.8)' : 'rgba(255,255,255,0.45)';
+      } else if (isPlayed) {
+        ctx.fillStyle = '#D4F040';
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      }
+
+      // Rounded bars
+      const radius = Math.min(pw / 2, barH / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + pw - radius, y);
+      ctx.arcTo(x + pw, y, x + pw, y + radius, radius);
+      ctx.lineTo(x + pw, y + barH - radius);
+      ctx.arcTo(x + pw, y + barH, x + pw - radius, y + barH, radius);
+      ctx.lineTo(x + radius, y + barH);
+      ctx.arcTo(x, y + barH, x, y + barH - radius, radius);
+      ctx.lineTo(x, y + radius);
+      ctx.arcTo(x, y, x + radius, y, radius);
+      ctx.closePath();
+      ctx.fill();
+    }
   },
 
   showNowPlaying() {
     this.updateNowPlaying();
+    this._generateWaveform(Player.currentTrack ? Player.currentTrack.id : null);
     this.updateSeekBar();
     this._renderQueue();
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
-    if (window.innerWidth >= 768) {
-      this.els.queuePanel.classList.remove('hidden');
-    }
     this._applyNowPlayingBg();
   },
 
   hideNowPlaying() {
     this.els.nowPlaying.classList.add('hidden');
-    this.els.queuePanel.classList.add('hidden');
     if (Player.currentTrack) {
       this.els.miniPlayer.classList.remove('hidden');
     }

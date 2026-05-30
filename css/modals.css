@@ -55,6 +55,10 @@
   padding: 0 22px;
 }
 
+.queue-volume {
+  display: none;
+}
+
 .queue-list::-webkit-scrollbar {
   display: none;
 }

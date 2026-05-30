@@ -120,8 +120,15 @@ func scanMusicDir(dir string) ScanStats {
 			log.Printf("Could not read tags from %s: %v", fpath, err)
 		}
 
-		if track.Title == "" {
+		// Treat "Unknown" as empty (common tag library fallback)
+		if track.Title == "Unknown" || track.Title == "" {
 			track.Title = titleFromFilename(fpath)
+		}
+		if track.Artist == "Unknown" {
+			track.Artist = ""
+		}
+		if track.Album == "Unknown" {
+			track.Album = ""
 		}
 		if track.Artist == "" {
 			if folderArtist != "" {
