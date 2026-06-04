@@ -98,7 +98,7 @@
   top: -40px;
   left: 0;
   right: 0;
-  bottom: 35%;
+  bottom: 40%;
   z-index: 0;
   display: flex;
   align-items: center;
@@ -108,7 +108,7 @@
 
 .np-art-wrapper {
   position: relative;
-  width: min(110vw, 420px);
+  width: min(72vw, 48vh, 340px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   box-shadow: 0 24px 48px -12px rgba(0,0,0,0.7);
@@ -444,7 +444,7 @@
   min-height: 0;
   position: relative;
   justify-content: flex-end;
-  padding-bottom: 12vh;
+  padding-bottom: 8vh;
 }
 
 .np-info {
