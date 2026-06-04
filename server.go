@@ -56,6 +56,7 @@ func main() {
 	}
 
 	loadCachedCovers()
+	loadCachedArtistArt()
 
 	log.Printf("Scanning music directory: %s", musicDir)
 	stats := scanMusicDir(musicDir)
@@ -68,12 +69,14 @@ func main() {
 
 	extractEmbeddedCovers()
 	go fetchMissingCovers()
+	go fetchMissingArtistArt()
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/library", libraryHandler)
 	mux.HandleFunc("/api/stream/", streamHandler)
 	mux.HandleFunc("/api/cover/", coverHandler)
+	mux.HandleFunc("/api/artist-art/", artistArtHandler)
 	mux.HandleFunc("/api/scan", scanHandler)
 	mux.HandleFunc("/api/playlists", playlistsHandler)
 	mux.HandleFunc("/api/playlists/", playlistHandler)

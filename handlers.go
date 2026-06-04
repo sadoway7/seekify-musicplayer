@@ -201,6 +201,48 @@ func coverHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(svg))
 }
 
+func artistArtHandler(w http.ResponseWriter, r *http.Request) {
+	artistName := strings.TrimPrefix(r.URL.Path, "/api/artist-art/")
+	if artistName == "" {
+		http.Error(w, "Artist name required", http.StatusBadRequest)
+		return
+	}
+
+	key := strings.ToLower(strings.TrimSpace(artistName))
+
+	artistArtMu.RLock()
+	data, exists := artistArtCache[key]
+	artistArtMu.RUnlock()
+
+	if exists {
+		contentType := http.DetectContentType(data)
+		if strings.HasPrefix(contentType, "application/") || strings.HasPrefix(contentType, "text/") {
+			contentType = "image/jpeg"
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(data)
+		return
+	}
+
+	artDir := filepath.Join(musicDir, "images", "artists")
+	artFile := filepath.Join(artDir, key+".jpg")
+	if diskData, err := os.ReadFile(artFile); err == nil {
+		artistArtMu.Lock()
+		artistArtCache[key] = diskData
+		artistArtMu.Unlock()
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(diskData)
+		return
+	}
+
+	svg := generatePlaceholderSVG(artistName)
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write([]byte(svg))
+}
+
 func scanHandler(w http.ResponseWriter, r *http.Request) {
 	stats := scanMusicDir(musicDir)
 	applyApprovedMatches()
@@ -209,6 +251,7 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Scan complete: %d scanned, %d added, %d removed", stats.Scanned, stats.Added, stats.Removed)
 
 	go fetchMissingCovers()
+	go fetchMissingArtistArt()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)

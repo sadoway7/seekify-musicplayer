@@ -13,6 +13,10 @@ const Api = {
     return '/api/cover/' + albumId;
   },
 
+  artistArtUrl(artistName) {
+    return '/api/artist-art/' + encodeURIComponent(artistName);
+  },
+
   async scan() {
     const res = await fetch('/api/scan', { method: 'POST' });
     if (!res.ok) throw new Error('Scan failed');

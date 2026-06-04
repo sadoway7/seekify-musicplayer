@@ -807,3 +807,166 @@ func loadCachedCovers() {
 
 	log.Printf("Loaded %d cached covers", len(coverCache))
 }
+
+// ── Artist art ──
+
+var (
+	artistArtCache map[string][]byte
+	artistArtMu    sync.RWMutex
+)
+
+func init() {
+	artistArtCache = make(map[string][]byte)
+}
+
+func artistArtKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func artistArtPath(name string) string {
+	return filepath.Join(musicDir, "images", "artists", artistArtKey(name)+".jpg")
+}
+
+func fetchArtistImage(artistName string) bool {
+	if artistName == "" {
+		return false
+	}
+
+	key := artistArtKey(artistName)
+
+	artistArtMu.RLock()
+	_, cached := artistArtCache[key]
+	artistArtMu.RUnlock()
+	if cached {
+		return true
+	}
+
+	artDir := filepath.Join(musicDir, "images", "artists")
+	os.MkdirAll(artDir, 0755)
+
+	artFile := filepath.Join(artDir, key+".jpg")
+	if data, err := os.ReadFile(artFile); err == nil && len(data) > 0 {
+		artistArtMu.Lock()
+		artistArtCache[key] = data
+		artistArtMu.Unlock()
+		return true
+	}
+
+	// Search Deezer for artist image (free, no API key)
+	searchURL := fmt.Sprintf("https://api.deezer.com/search/artist?q=%s&limit=1", url.QueryEscape(artistName))
+
+	req, err := http.NewRequest("GET", searchURL, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
+
+	resp, err := mbClient.Do(req)
+	if err != nil {
+		log.Printf("[artist-art] Deezer search failed for %q: %v", artistName, err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false
+	}
+
+	var deezerResp struct {
+		Data []struct {
+			PictureBig string `json:"picture_big"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &deezerResp); err != nil {
+		return false
+	}
+
+	if len(deezerResp.Data) == 0 || deezerResp.Data[0].PictureBig == "" {
+		log.Printf("[artist-art] No Deezer result for %q", artistName)
+		return false
+	}
+
+	imgURL := deezerResp.Data[0].PictureBig
+	imgReq, err := http.NewRequest("GET", imgURL, nil)
+	if err != nil {
+		return false
+	}
+	imgReq.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
+
+	imgResp, err := mbClient.Do(imgReq)
+	if err != nil {
+		return false
+	}
+	defer imgResp.Body.Close()
+
+	if imgResp.StatusCode != 200 {
+		return false
+	}
+
+	imgData, err := io.ReadAll(imgResp.Body)
+	if err != nil || len(imgData) == 0 {
+		return false
+	}
+
+	os.WriteFile(artFile, imgData, 0644)
+
+	artistArtMu.Lock()
+	artistArtCache[key] = imgData
+	artistArtMu.Unlock()
+
+	log.Printf("[artist-art] Fetched image for %q", artistName)
+	return true
+}
+
+func fetchMissingArtistArt() {
+	mu.RLock()
+	type artistInfo struct {
+		name string
+	}
+	var artists []artistInfo
+	seen := map[string]bool{}
+	for _, t := range tracks {
+		n := t.Artist
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		artists = append(artists, artistInfo{name: n})
+	}
+	mu.RUnlock()
+
+	log.Printf("[artist-art] Fetching images for %d artists...", len(artists))
+
+	for _, a := range artists {
+		fetchArtistImage(a.name)
+		time.Sleep(400 * time.Millisecond)
+	}
+}
+
+func loadCachedArtistArt() {
+	artDir := filepath.Join(musicDir, "images", "artists")
+	entries, err := os.ReadDir(artDir)
+	if err != nil {
+		return
+	}
+
+	artistArtMu.Lock()
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(strings.ToLower(name), ".jpg") {
+			continue
+		}
+		key := strings.TrimSuffix(name, ".jpg")
+		data, err := os.ReadFile(filepath.Join(artDir, name))
+		if err == nil {
+			artistArtCache[key] = data
+		}
+	}
+	artistArtMu.Unlock()
+
+	log.Printf("Loaded %d cached artist images", len(artistArtCache))
+}

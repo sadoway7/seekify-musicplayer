@@ -1145,14 +1145,12 @@ const tmore = e.target.closest('.track-more');
     const albums = Store.getArtistAlbums(name);
     this._viewTrackList = tracks;
 
-    // Use first album cover as artist banner background
-    const firstAlbum = albums.length > 0 ? albums[0] : null;
-    const bgHtml = firstAlbum
-      ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstAlbum.id) + ')"></div>'
-      : '';
+    // Use artist art as banner background
+    const bgHtml = '<div class="detail-hero-bg" style="background-image:url(' + Api.artistArtUrl(name) + ')"></div>';
 
     let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<button class="hero-action-btn" data-hero-action="more-artist" data-artist="' + this._esc(name) + '">' + Icons.more() + '</button>'
       + bgHtml
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
@@ -1200,6 +1198,7 @@ const tmore = e.target.closest('.track-more');
 
     let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<button class="hero-action-btn" data-hero-action="more-playlist" data-playlist-id="' + id + '">' + Icons.more() + '</button>'
       + bgHtml
       + '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
@@ -1236,6 +1235,7 @@ const tmore = e.target.closest('.track-more');
 
     let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<button class="hero-action-btn" data-hero-action="more">' + Icons.more() + '</button>'
       + bgHtml
       + '<div class="detail-hero-fallback-icon">' + Icons.heartFilled() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
@@ -2024,14 +2024,16 @@ const tmore = e.target.closest('.track-more');
           const newArtist = el.dataset.artist;
           const newAlbum = el.dataset.album;
 
-          // Apply directly to the track
-          const t = Store.getTrack(trackId);
-          if (t) {
-            t.title = newTitle;
-            t.artist = newArtist;
-            if (newAlbum) t.album = newAlbum;
-            if (newArtist) t.albumArtist = newArtist;
-            if (t.album) t.albumID = (t.albumArtist || t.artist) + ':' + t.album;
+          const result = await Api.metadataUpdateTrack(trackId, {
+            title: newTitle,
+            artist: newArtist,
+            album: newAlbum,
+            albumArtist: newArtist
+          });
+
+          if (!result) {
+            this.showToast('Failed to update metadata');
+            return;
           }
 
           await Store.refreshLibrary();
