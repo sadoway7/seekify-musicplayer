@@ -15,14 +15,12 @@ const App = {
     Player.onTrackChange = async (track) => {
       UI.updateMiniPlayer();
       UI.updateNowPlaying();
-      UI.updateQueueIfVisible();
+      UI._renderQueue();
+      UI.updateTrackHighlights();
       if (track) {
         try {
           await Api.addRecent(track.id);
           await Store.refreshRecent();
-          if (Store.currentView === 'home') {
-            UI.renderPage();
-          }
         } catch (err) {}
       }
     };

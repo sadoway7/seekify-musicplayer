@@ -299,6 +299,16 @@
     padding: 48px 48px 0 !important;
   }
 
+  .np-title-actions {
+    justify-content: center;
+    margin-bottom: 6px;
+  }
+
+  .np-title-row {
+    align-items: center;
+    max-width: 100%;
+  }
+
   .np-title {
     font-size: clamp(24px, 3.5vw, 44px) !important;
     font-weight: 800;
@@ -319,18 +329,6 @@
     text-overflow: ellipsis;
     max-width: 100%;
     min-width: 0;
-  }
-
-  .np-title-row {
-    max-width: 100%;
-    overflow: hidden;
-    justify-content: center;
-  }
-
-  .np-title-row > div:first-child {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
   }
 
   .np-like-btn {

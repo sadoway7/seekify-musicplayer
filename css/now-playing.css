@@ -166,16 +166,10 @@
 
 .np-title-row {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.np-title-row > div:first-child {
-  flex: 1;
+  gap: 0;
   min-width: 0;
-  overflow: hidden;
 }
 
 .np-title-actions {
@@ -183,8 +177,7 @@
   flex-direction: row;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
-  padding-top: 4px;
+  margin-bottom: 4px;
 }
 
 .np-title {
@@ -196,6 +189,7 @@
   text-overflow: ellipsis;
   letter-spacing: -0.03em;
   min-width: 0;
+  max-width: 100%;
 }
 
 .np-title.scrolling {

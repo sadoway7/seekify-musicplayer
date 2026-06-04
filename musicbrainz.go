@@ -14,7 +14,15 @@ import (
 	"time"
 )
 
-var mbClient = &http.Client{Timeout: 10 * time.Second}
+var mbClient = &http.Client{
+	Timeout: 15 * time.Second,
+	Transport: &http.Transport{
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
+	},
+}
 
 const mbBaseURL = "https://musicbrainz.org/ws/2"
 const coverArtBaseURL = "https://coverartarchive.org"
@@ -35,30 +43,69 @@ type mbArtistCredit struct {
 	Name string `json:"name"`
 }
 
-func mbSearchRelease(artist, album string) (string, error) {
-	query := fmt.Sprintf("artist:%s AND release:%s", url.QueryEscape(artist), url.QueryEscape(album))
-	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=1", mbBaseURL, query)
-
+func mbDoRequest(reqURL string) ([]byte, error) {
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
 
 	resp, err := mbClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == 503 {
+		return nil, fmt.Errorf("rate limited by MusicBrainz (503)")
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("MusicBrainz returned HTTP %d", resp.StatusCode)
+	}
+
+	return body, nil
+}
+
+func escapeLucene(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `+`, `\+`)
+	s = strings.ReplaceAll(s, `-`, `\-`)
+	s = strings.ReplaceAll(s, `&&`, `\&&`)
+	s = strings.ReplaceAll(s, `||`, `\||`)
+	s = strings.ReplaceAll(s, `!`, `\!`)
+	s = strings.ReplaceAll(s, `(`, `\(`)
+	s = strings.ReplaceAll(s, `)`, `\)`)
+	s = strings.ReplaceAll(s, `{`, `\{`)
+	s = strings.ReplaceAll(s, `}`, `\}`)
+	s = strings.ReplaceAll(s, `[`, `\[`)
+	s = strings.ReplaceAll(s, `]`, `\]`)
+	s = strings.ReplaceAll(s, `^`, `\^`)
+	s = strings.ReplaceAll(s, `~`, `\~`)
+	s = strings.ReplaceAll(s, `*`, `\*`)
+	s = strings.ReplaceAll(s, `?`, `\?`)
+	s = strings.ReplaceAll(s, `:`, `\:`)
+	s = strings.ReplaceAll(s, `/`, `\/`)
+	return s
+}
+
+func mbSearchRelease(artist, album string) (string, error) {
+	query := fmt.Sprintf(`artist:"%s" AND release:"%s"`, escapeLucene(artist), escapeLucene(album))
+	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=1", mbBaseURL, url.QueryEscape(query))
+
+	body, err := mbDoRequest(reqURL)
 	if err != nil {
 		return "", err
 	}
 
 	var searchResp mbSearchResponse
 	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return "", err
+		return "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
 	if len(searchResp.Releases) == 0 {
@@ -175,26 +222,14 @@ type mbLookupResponse struct {
 func mbLookupRelease(mbid string) (string, string, string, error) {
 	reqURL := fmt.Sprintf("%s/release/%s?fmt=json&inc=artist-credits", mbBaseURL, mbid)
 
-	req, err := http.NewRequest("GET", reqURL, nil)
-	if err != nil {
-		return "", "", "", err
-	}
-	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-
-	resp, err := mbClient.Do(req)
-	if err != nil {
-		return "", "", "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := mbDoRequest(reqURL)
 	if err != nil {
 		return "", "", "", err
 	}
 
 	var lookup mbLookupResponse
 	if err := json.Unmarshal(body, &lookup); err != nil {
-		return "", "", "", err
+		return "", "", "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
 	artistName := ""
@@ -218,19 +253,7 @@ func fetchMetadataForTrack(artist, title string) (string, string, string, error)
 	query := fmt.Sprintf("artist:%s AND recording:%s", url.QueryEscape(artist), url.QueryEscape(title))
 	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=1", mbBaseURL, query)
 
-	req, err := http.NewRequest("GET", reqURL, nil)
-	if err != nil {
-		return "", "", "", err
-	}
-	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-
-	resp, err := mbClient.Do(req)
-	if err != nil {
-		return "", "", "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := mbDoRequest(reqURL)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -247,7 +270,7 @@ func fetchMetadataForTrack(artist, title string) (string, string, string, error)
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", "", "", err
+		return "", "", "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
 	if len(result.Recordings) == 0 {
@@ -276,28 +299,16 @@ func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, e
 
 	var query string
 	if artist != "" && title != "" {
-		query = fmt.Sprintf("artist:%s AND recording:%s", url.QueryEscape(artist), url.QueryEscape(title))
+		query = fmt.Sprintf(`artist:"%s" AND recording:"%s"`, escapeLucene(artist), escapeLucene(title))
 	} else if title != "" {
-		query = fmt.Sprintf("recording:%s", url.QueryEscape(title))
+		query = fmt.Sprintf(`recording:"%s"`, escapeLucene(title))
 	} else {
 		return results, fmt.Errorf("no search terms")
 	}
 
-	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d", mbBaseURL, query, limit)
+	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d", mbBaseURL, url.QueryEscape(query), limit)
 
-	req, err := http.NewRequest("GET", reqURL, nil)
-	if err != nil {
-		return results, err
-	}
-	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-
-	resp, err := mbClient.Do(req)
-	if err != nil {
-		return results, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := mbDoRequest(reqURL)
 	if err != nil {
 		return results, err
 	}
@@ -315,7 +326,7 @@ func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, e
 	}
 
 	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return results, err
+		return results, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
 	for _, rec := range searchResp.Recordings {
@@ -483,13 +494,28 @@ func scanMetadataForTracks() MetadataScanResult {
 
 		candidates, err := mbSearchRecordings(info.artist, info.title, 3)
 		if err != nil {
-			log.Printf("[metadata] No results for %q - %q: %v", info.artist, info.title, err)
-			result.Failed++
-			metaScanLock.Lock()
-			metaScan.Failed = result.Failed
-			metaScanLock.Unlock()
-			time.Sleep(600 * time.Millisecond)
-			continue
+			if strings.Contains(err.Error(), "503") {
+				log.Printf("[metadata] Rate limited, waiting 5s before retry...")
+				time.Sleep(5 * time.Second)
+				candidates, err = mbSearchRecordings(info.artist, info.title, 3)
+				if err != nil {
+					log.Printf("[metadata] Retry failed for %q - %q: %v", info.artist, info.title, err)
+					result.Failed++
+					metaScanLock.Lock()
+					metaScan.Failed = result.Failed
+					metaScanLock.Unlock()
+					time.Sleep(1200 * time.Millisecond)
+					continue
+				}
+			} else {
+				log.Printf("[metadata] No results for %q - %q: %v", info.artist, info.title, err)
+				result.Failed++
+				metaScanLock.Lock()
+				metaScan.Failed = result.Failed
+				metaScanLock.Unlock()
+				time.Sleep(1200 * time.Millisecond)
+				continue
+			}
 		}
 
 		if len(candidates) == 0 {
@@ -565,14 +591,28 @@ func applyApprovedMatches() int {
 	matches := dbGetAllMatches()
 	applied := 0
 
-	mu.Lock()
-	defer mu.Unlock()
+	type coverJob struct {
+		trackAlbumID string
+		mbAlbumID    string
+		artist       string
+		album        string
+	}
+	var coverJobs []coverJob
 
-	for _, m := range matches {
+	bestPerTrack := map[string]*MetadataMatch{}
+	for i := range matches {
+		m := &matches[i]
 		if m.Status != "approved" {
 			continue
 		}
+		existing, ok := bestPerTrack[m.TrackID]
+		if !ok || m.MBScore > existing.MBScore || (m.MBScore == existing.MBScore && m.MBAlbumID != "") {
+			bestPerTrack[m.TrackID] = m
+		}
+	}
 
+	mu.Lock()
+	for _, m := range bestPerTrack {
 		track, exists := tracks[m.TrackID]
 		if !exists {
 			continue
@@ -580,15 +620,15 @@ func applyApprovedMatches() int {
 
 		changed := false
 
-		if m.MBArtist != "" && (track.Artist == "" || strings.ToLower(track.Artist) == strings.ToLower(titleFromFilename(track.FilePath))) {
+		if m.MBArtist != "" && track.Artist != m.MBArtist {
 			track.Artist = m.MBArtist
 			changed = true
 		}
-		if m.MBTitle != "" && (track.Title == "" || strings.ToLower(track.Title) == strings.ToLower(titleFromFilename(track.FilePath))) {
+		if m.MBTitle != "" && track.Title != m.MBTitle {
 			track.Title = m.MBTitle
 			changed = true
 		}
-		if m.MBAlbum != "" && track.Album == "" {
+		if m.MBAlbum != "" && track.Album != m.MBAlbum {
 			track.Album = m.MBAlbum
 			changed = true
 		}
@@ -605,27 +645,83 @@ func applyApprovedMatches() int {
 			applied++
 		}
 
-		if m.MBAlbumID != "" {
-			fetchAndCacheCover(m.MBAlbumID, m.MBArtist, m.MBAlbum)
-			if changed && track.AlbumID != "" && track.AlbumID != m.MBAlbumID {
-				coverMu.RLock()
-				data, ok := coverCache[m.MBAlbumID]
-				coverMu.RUnlock()
-				if ok {
-					coverDir := filepath.Join(musicDir, "images")
-					coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
-					os.WriteFile(coverPath, data, 0644)
-					coverMu.Lock()
-					coverCache[track.AlbumID] = data
-					coverMu.Unlock()
-				}
-			}
+		if m.MBAlbumID != "" && track.AlbumID != "" {
+			coverJobs = append(coverJobs, coverJob{
+				trackAlbumID: track.AlbumID,
+				mbAlbumID:    m.MBAlbumID,
+				artist:       m.MBArtist,
+				album:        m.MBAlbum,
+			})
 		}
 	}
 
 	if applied > 0 {
 		rebuildAlbumsFromTracks()
 	}
+	mu.Unlock()
+
+	loadCachedCovers()
+
+	go func() {
+		for _, job := range coverJobs {
+			coverMu.RLock()
+			_, exists := coverCache[job.trackAlbumID]
+			coverMu.RUnlock()
+			if exists {
+				continue
+			}
+
+			coverDir := filepath.Join(musicDir, "images")
+			os.MkdirAll(coverDir, 0755)
+			coverPath := filepath.Join(coverDir, job.trackAlbumID+".jpg")
+
+			if diskData, err := os.ReadFile(coverPath); err == nil && len(diskData) > 0 {
+				coverMu.Lock()
+				coverCache[job.trackAlbumID] = diskData
+				coverMu.Unlock()
+				mu.Lock()
+				if a, ok := albums[job.trackAlbumID]; ok {
+					a.HasCover = true
+				}
+				mu.Unlock()
+				continue
+			}
+
+			mbid := job.mbAlbumID
+			if mbid != "" {
+				coverURL := fmt.Sprintf("%s/release/%s/front-500", coverArtBaseURL, mbid)
+				req, err := http.NewRequest("GET", coverURL, nil)
+				if err == nil {
+					req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
+					resp, err := mbClient.Do(req)
+					if err == nil && resp.StatusCode == 200 {
+						data, _ := io.ReadAll(resp.Body)
+						resp.Body.Close()
+						if len(data) > 0 {
+							os.WriteFile(coverPath, data, 0644)
+							coverMu.Lock()
+							coverCache[job.trackAlbumID] = data
+							coverMu.Unlock()
+							mu.Lock()
+							if a, ok := albums[job.trackAlbumID]; ok {
+								a.HasCover = true
+							}
+							mu.Unlock()
+							log.Printf("[cover] Fetched cover for %s - %s", job.artist, job.album)
+							time.Sleep(800 * time.Millisecond)
+							continue
+						}
+					}
+					if resp != nil {
+						resp.Body.Close()
+					}
+				}
+			}
+
+			fetchAndCacheCover(job.trackAlbumID, job.artist, job.album)
+			time.Sleep(800 * time.Millisecond)
+		}
+	}()
 
 	return applied
 }

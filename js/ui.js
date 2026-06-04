@@ -1766,6 +1766,39 @@ const tmore = e.target.closest('.track-more');
     }, 2500);
   },
 
+  updateTrackHighlights() {
+    const current = Player.getCurrentTrack();
+    if (!current) return;
+    document.querySelectorAll('.track-row').forEach(row => {
+      const isCurrent = row.dataset.trackId === current.id;
+      const titleEl = row.querySelector('.track-title');
+      const eqEl = row.querySelector('.eq');
+      const durationEl = row.querySelector('.track-duration');
+      if (titleEl) {
+        titleEl.classList.toggle('on', isCurrent);
+      }
+      if (isCurrent && !eqEl && durationEl) {
+        durationEl.remove();
+        const eq = document.createElement('div');
+        eq.className = 'eq';
+        eq.innerHTML = '<div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div>';
+        row.appendChild(eq);
+      } else if (!isCurrent && eqEl) {
+        eqEl.remove();
+        if (!durationEl) {
+          const dur = document.createElement('div');
+          dur.className = 'track-duration';
+          dur.textContent = this._formatTime(Store.getTrack(current.id) ? 0 : 0);
+          row.appendChild(dur);
+        }
+      }
+    });
+    document.querySelectorAll('.queue-item').forEach(item => {
+      const idx = parseInt(item.dataset.queueIndex);
+      item.classList.toggle('active', idx === Player.currentIndex);
+    });
+  },
+
   _showTrackContextMenu(trackId, triggerEl) {
     const track = Store.getTrack(trackId);
     if (!track) return;

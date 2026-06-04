@@ -57,21 +57,6 @@ a:hover{text-decoration:underline}
 </head>
 <body>
 
-<!-- Passcode Lock Screen -->
-<div id="lockScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px">
-  <div style="text-align:center;max-width:320px;width:100%">
-    <div style="width:56px;height:56px;margin:0 auto 20px;border-radius:16px;background:#1E1E1E;display:flex;align-items:center;justify-content:center">
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D4F040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    </div>
-    <h2 style="font-size:20px;font-weight:700;margin-bottom:6px">Settings Locked</h2>
-    <p style="font-size:13px;color:#888;margin-bottom:24px">Enter the access code to continue</p>
-    <div id="codeInputs" style="display:flex;gap:8px;justify-content:center;margin-bottom:16px"></div>
-    <div id="lockError" style="font-size:13px;color:#f87171;min-height:20px;margin-top:8px"></div>
-  </div>
-</div>
-
-<!-- Admin Content (hidden until unlocked) -->
-<div id="adminContent" style="display:none">
 <div class="header">
   <h1>Music Library Admin</h1>
   <a href="/" class="back-link">Back to Player</a>
@@ -98,58 +83,9 @@ a:hover{text-decoration:underline}
     <div class="empty-state">Loading...</div>
   </div>
 </div>
-</div>
 
 <script>
 (function() {
-  var PASSCODE = "countstuff2026";
-
-  showLock();
-
-  function showLock() {
-    var lockScreen = document.getElementById("lockScreen");
-    var codeInputs = document.getElementById("codeInputs");
-    var lockError = document.getElementById("lockError");
-    lockScreen.style.display = "flex";
-
-    var input = document.createElement("input");
-    input.type = "password";
-    input.autocomplete = "off";
-    input.autofocus = true;
-    input.style.cssText = "width:100%;padding:14px 16px;background:#1E1E1E;border:2px solid #2a2a2a;border-radius:12px;color:#F0EFE9;font-size:18px;text-align:center;letter-spacing:0.15em;outline:none;transition:border-color 0.2s";
-    input.placeholder = "Access code";
-    codeInputs.appendChild(input);
-    input.focus();
-
-    input.addEventListener("input", function() {
-      lockError.textContent = "";
-      input.style.borderColor = "#2a2a2a";
-    });
-
-    input.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (input.value === PASSCODE) {
-          showAdmin();
-        } else {
-          lockError.textContent = "Incorrect code. Try again.";
-          input.style.borderColor = "#f87171";
-          input.value = "";
-          input.focus();
-        }
-      }
-    });
-  }
-
-  function showAdmin() {
-    var lockScreen = document.getElementById("lockScreen");
-    if (lockScreen) lockScreen.style.display = "none";
-    var adminContent = document.getElementById("adminContent");
-    adminContent.style.display = "block";
-    initAdmin();
-  }
-
-  function initAdmin() {
   var currentPath = "";
   var uploadZone = document.getElementById("uploadZone");
   var browseBtn = document.getElementById("browseBtn");
@@ -387,8 +323,6 @@ a:hover{text-decoration:underline}
   });
 
   loadFiles();
-  }
-
 })();
 </script>
 </body>
