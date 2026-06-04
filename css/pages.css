@@ -137,11 +137,12 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -60%);
-  font-size: 72px;
-  font-weight: 900;
+  font-family: 'SF Pro Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 60px;
+  font-weight: 800;
   color: var(--text-primary);
-  letter-spacing: 0.08em;
-  opacity: 0.2;
+  letter-spacing: 0.06em;
+  opacity: 0.18;
   line-height: 1;
 }
 

@@ -92,7 +92,7 @@
 
 .np-artwork {
   position: absolute;
-  top: 0;
+  top: -40px;
   left: 0;
   right: 0;
   bottom: 35%;
@@ -105,7 +105,7 @@
 
 .np-art-wrapper {
   position: relative;
-  width: min(90vw, 380px);
+  width: min(110vw, 420px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
 }
