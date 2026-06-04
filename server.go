@@ -80,6 +80,7 @@ func main() {
 
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
 	mux.HandleFunc("/api/metadata/rescan/", metadataRescanHandler)
+	mux.HandleFunc("/api/metadata/rescan-sync/", metadataRescanSyncHandler)
 	mux.HandleFunc("/api/metadata/scan-progress", metadataScanProgressHandler)
 	mux.HandleFunc("/api/metadata/pending", metadataPendingHandler)
 	mux.HandleFunc("/api/metadata/all", metadataAllHandler)

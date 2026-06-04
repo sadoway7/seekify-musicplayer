@@ -718,6 +718,71 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/metadata/rescan-sync/")
+	if trackID == "" {
+		http.Error(w, "Track ID required", http.StatusBadRequest)
+		return
+	}
+
+	mu.RLock()
+	track, exists := tracks[trackID]
+	mu.RUnlock()
+	if !exists {
+		http.Error(w, "Track not found", http.StatusNotFound)
+		return
+	}
+
+	searchTitle := track.Title
+	searchArtist := track.Artist
+	if searchTitle == "" || strings.ToLower(searchTitle) == strings.ToLower(titleFromFilename(track.FilePath)) {
+		searchTitle = titleFromFilename(track.FilePath)
+	}
+
+	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 20)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	type rescanCandidate struct {
+		Title    string  `json:"title"`
+		Artist   string  `json:"artist"`
+		Album    string  `json:"album"`
+		AlbumID  string  `json:"albumId"`
+		Score    float64 `json:"score"`
+		HasCover bool    `json:"hasCover"`
+	}
+
+	var results []rescanCandidate
+	for _, cand := range candidates {
+		score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title)
+
+		mu.RLock()
+		hasCover := false
+		if cand.AlbumID != "" {
+			coverPath := filepath.Join(musicDir, "images", cand.AlbumID+".jpg")
+			if _, err := os.Stat(coverPath); err == nil {
+				hasCover = true
+			}
+		}
+		mu.RUnlock()
+
+		results = append(results, rescanCandidate{
+			Title:    cand.Title,
+			Artist:   cand.Artist,
+			Album:    cand.Album,
+			AlbumID:  cand.AlbumID,
+			Score:    score,
+			HasCover: hasCover,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
 func metadataScanProgressHandler(w http.ResponseWriter, r *http.Request) {
 	p := getScanProgress()
 	w.Header().Set("Content-Type", "application/json")

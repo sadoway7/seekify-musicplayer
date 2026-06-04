@@ -26,6 +26,10 @@
   font-size: 18px;
   font-weight: 700;
   color: var(--text1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .queue-close {

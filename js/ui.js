@@ -362,8 +362,14 @@ const UI = {
       this.hideQueue();
     });
 
+    this._queueClickActive = false;
+
     document.addEventListener('click', (e) => {
       if (window.innerWidth >= 768) return;
+      if (this._queueClickActive) {
+        this._queueClickActive = false;
+        return;
+      }
       const panel = this.els.queuePanel;
       if (panel.classList.contains('hidden')) return;
       if (panel.contains(e.target)) return;
@@ -376,6 +382,7 @@ const UI = {
       if (!item) return;
       const index = parseInt(item.dataset.queueIndex);
       if (isNaN(index)) return;
+      this._queueClickActive = true;
       Player.playInQueue(index);
     });
   },
@@ -597,6 +604,25 @@ const tmore = e.target.closest('.track-more');
                   this.hideContextMenu();
                   const tracks = playlist.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
                   if (tracks.length > 0) Player.play(tracks[0], tracks, { type: 'playlist', name: playlist.name, id: id });
+                }},
+                { label: 'Share', icon: Icons.share(), action: async () => {
+                  this.hideContextMenu();
+                  const firstTrack = playlist.trackIds.map(tid => Store.getTrack(tid)).find(Boolean);
+                  const shareUrl = window.location.origin + '/?play=' + (firstTrack ? firstTrack.id : '');
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({ url: shareUrl });
+                    } catch (err) {
+                      if (err.name !== 'AbortError') this.showToast('Share failed');
+                    }
+                  } else {
+                    try {
+                      await navigator.clipboard.writeText(shareUrl);
+                      this.showToast('Link copied');
+                    } catch (err) {
+                      this.showToast('Share not supported');
+                    }
+                  }
                 }},
                 { label: 'Delete', icon: Icons.trash(), action: async () => {
                   this.hideContextMenu();
@@ -1901,13 +1927,7 @@ const tmore = e.target.closest('.track-more');
       }},
       { label: 'Rescan Metadata', icon: Icons.search(), action: async () => {
         this.hideContextMenu();
-        this.showToast('Scanning metadata...');
-        try {
-          await Api.metadataRescanTrack(trackId);
-          this.showToast('Metadata scan started for this track');
-        } catch (err) {
-          this.showToast('Failed to scan metadata');
-        }
+        this._showRescanModal(trackId);
       }},
       { type: 'divider' },
       { label: 'Go to Album', icon: Icons.library(), action: () => {

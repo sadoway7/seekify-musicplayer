@@ -190,6 +190,14 @@ const Api = {
     } catch { return null; }
   },
 
+  async metadataRescanSync(trackId) {
+    try {
+      const res = await fetch('/api/metadata/rescan-sync/' + trackId, { method: 'POST' });
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
+  },
+
   async metadataCounts() {
     try {
       const res = await fetch('/api/metadata/counts');

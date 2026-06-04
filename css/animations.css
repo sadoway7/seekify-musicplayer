@@ -18,6 +18,17 @@
   }
 }
 
+@keyframes nowPlayingSlideDown {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
 @keyframes coverArtPulse {
   0%, 100% {
     transform: scale(1);
