@@ -73,12 +73,8 @@ func scanMusicDir(dir string) ScanStats {
 
 		parts := strings.Split(relPath, string(filepath.Separator))
 		folderArtist := ""
-		folderAlbum := ""
 		if len(parts) >= 3 {
 			folderArtist = parts[0]
-			folderAlbum = parts[1]
-		} else if len(parts) == 2 {
-			folderAlbum = parts[0]
 		}
 
 		file, err := os.Open(fpath)
@@ -137,11 +133,6 @@ func scanMusicDir(dir string) ScanStats {
 		if track.Artist == "" {
 			if folderArtist != "" {
 				track.Artist = folderArtist
-			}
-		}
-		if track.Album == "" {
-			if folderAlbum != "" {
-				track.Album = folderAlbum
 			}
 		}
 		if track.AlbumArtist == "" {

@@ -2,11 +2,11 @@
   .mega-title span {
     font-size: 40px;
     text-transform: none;
-    opacity: 0.06;
+    opacity: 0.07;
   }
 
   .mega-title {
-    padding-top: 12px;
+    padding-top: var(--sp-3);
   }
 
   .browse-grid {
@@ -33,7 +33,6 @@
     margin-left: 76px;
   }
 
-  .tab-bar,
   #tab-bar {
     position: fixed;
     top: 0;
@@ -45,8 +44,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding-top: 24px;
-    gap: 8px;
+    padding-top: var(--sp-6);
+    gap: var(--sp-2);
     background: var(--bg-base);
     border-right: 1px solid var(--border);
   }
@@ -75,8 +74,8 @@
   }
 
   .tab-item svg {
-    width: 24px;
-    height: 24px;
+    width: var(--sp-6);
+    height: var(--sp-6);
   }
 
   .mini-player {
@@ -137,7 +136,7 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 16px;
+    gap: var(--sp-4);
     flex-shrink: 0;
     padding: 0;
     justify-content: center;
@@ -156,16 +155,16 @@
     width: 52px;
     height: 52px;
     min-width: 52px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.06);
   }
 
   .mini-title {
-    font-size: 14px;
+    font-size: var(--fs-body);
   }
 
   .mini-artist {
-    font-size: 12px;
+    font-size: var(--fs-caption);
   }
 
   .mini-play-btn {
@@ -234,13 +233,13 @@
     flex-shrink: 0;
     height: auto !important;
     min-height: 0 !important;
-    padding: 12px 48px 8px !important;
+    padding: var(--sp-3) 48px var(--sp-2) !important;
   }
 
   .np-header-text {
     font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: var(--ls-label);
     color: var(--accent);
   }
 
@@ -295,7 +294,7 @@
     max-width: calc(100% + 96px);
     margin-left: -48px;
     margin-right: -48px;
-    background: linear-gradient(to bottom, transparent 0%, rgba(10,10,10,0.15) 10%, rgba(10,10,10,0.35) 22%, rgba(10,10,10,0.6) 38%, rgba(10,10,10,0.85) 55%, #0A0A0A 70%);
+    background: linear-gradient(to bottom, transparent 0%, rgba(10,10,13,0.15) 10%, rgba(10,10,13,0.35) 22%, rgba(10,10,13,0.6) 38%, rgba(10,10,13,0.85) 55%, var(--bg-base) 70%);
     margin-top: -48px;
     position: relative;
     z-index: 2;
@@ -315,7 +314,7 @@
   .np-title {
     font-size: clamp(24px, 3.5vw, 44px) !important;
     font-weight: 800;
-    letter-spacing: -0.04em;
+    letter-spacing: var(--ls-tight);
     line-height: 1.1;
     white-space: nowrap;
     overflow: hidden;
@@ -339,7 +338,7 @@
 
   /* Progress */
   .np-progress {
-    padding: 16px 48px 0 !important;
+    padding: var(--sp-4) 48px 0 !important;
     flex-shrink: 0;
   }
 
@@ -400,7 +399,7 @@
     border-radius: 0;
     z-index: 3;
     animation: none;
-    padding: 36px 28px 24px;
+    padding: 36px 28px var(--sp-6);
     width: 420px;
     min-width: 320px;
     flex-shrink: 0;
@@ -421,7 +420,7 @@
   }
 
   .queue-header h2 {
-    font-size: 24px;
+    font-size: var(--fs-screen);
     letter-spacing: -0.03em;
   }
 
@@ -430,18 +429,18 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 12px;
+    gap: var(--sp-3);
     padding: 20px 0 0;
     margin-top: auto;
     border-top: 1px solid rgba(255,255,255,0.05);
-    padding-top: 16px;
+    padding-top: var(--sp-4);
   }
 
   .queue-volume-btn {
     flex-shrink: 0;
     width: 36px;
     height: 36px;
-    color: var(--text2);
+    color: var(--text-secondary);
   }
 
   .queue-volume-btn svg {
@@ -456,8 +455,8 @@
     border-radius: 2px;
     position: relative;
     cursor: pointer;
-    padding: 12px 0;
-    margin: -12px 0;
+    padding: var(--sp-3) 0;
+    margin: calc(-1 * var(--sp-3)) 0;
     background-clip: content-box;
   }
 
@@ -466,9 +465,26 @@
     top: 0;
     left: 0;
     height: 100%;
-    background: var(--text1);
+    background: var(--text-primary);
     border-radius: 2px;
     width: 70%;
+  }
+
+  /* Detail hero: desktop banner */
+  .detail-hero {
+    min-height: 280px;
+  }
+
+  .detail-hero-info {
+    padding: 0 48px var(--sp-6);
+  }
+
+  .detail-hero-title {
+    font-size: 32px;
+  }
+
+  .detail-actions {
+    padding: var(--sp-3) 48px var(--sp-6);
   }
 
   .modal-overlay {
@@ -502,6 +518,10 @@
   .scroll-row {
     flex-wrap: nowrap;
   }
+
+  .detail-hero {
+    min-height: 320px;
+  }
 }
 
 @media (min-width: 1280px) {
@@ -519,7 +539,7 @@
   }
 
   .np-header {
-    padding: 16px 64px 8px !important;
+    padding: var(--sp-4) 64px var(--sp-2) !important;
   }
 
   .np-info {
@@ -529,10 +549,22 @@
   }
 
   .np-progress {
-    padding: 16px 64px 0 !important;
+    padding: var(--sp-4) 64px 0 !important;
   }
 
   .np-controls {
-    padding: 12px 64px 24px !important;
+    padding: var(--sp-3) 64px var(--sp-6) !important;
+  }
+
+  .detail-hero {
+    min-height: 360px;
+  }
+
+  .detail-hero-info {
+    padding: 0 64px var(--sp-6);
+  }
+
+  .detail-actions {
+    padding: var(--sp-3) 64px var(--sp-6);
   }
 }

@@ -707,10 +707,7 @@ const tmore = e.target.closest('.track-more');
         if (addedRecent >= 7) return;
         addedRecent++;
         const isNowPlaying = currentTrack && c.id === currentTrack.id;
-        const hasCover = Store.albumHasCover(c.albumID || c.id);
-        const artInner = hasCover
-          ? '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">'
-          : '<div class="quick-play-card-fallback">' + Icons.music() + '</div>';
+        const artInner = '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">';
         const nowPlayingBadge = isNowPlaying
           ? '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div>'
           : '';
@@ -746,12 +743,8 @@ const tmore = e.target.closest('.track-more');
       html += '<div class="mega-title"><span>New Songs</span></div>';
       html += '<div class="new-songs-grid">';
       newTracks.forEach(t => {
-        const hasCover = Store.albumHasCover(t.albumID);
-        const artHtml = hasCover
-          ? '<div class="new-song-art" style="background-image:url(' + Api.coverUrl(t.albumID) + ')"></div>'
-          : '';
-        html += '<div class="new-song-card' + (!hasCover ? ' new-song-card-noart' : '') + '" data-track-id="' + t.id + '">'
-          + artHtml
+        html += '<div class="new-song-card" data-track-id="' + t.id + '">'
+          + '<div class="new-song-art" style="background-image:url(' + Api.coverUrl(t.albumID) + ')"></div>'
           + '<div class="new-song-info">'
           + '<div class="new-song-title">' + this._esc(this._trackTitle(t)) + '</div>'
           + '<div class="new-song-artist">' + this._esc(this._trackArtist(t)) + '</div>'
@@ -822,7 +815,7 @@ const tmore = e.target.closest('.track-more');
   renderSearch() {
     this._viewTrackList = [];
     let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:24px;font-weight:700;letter-spacing:-0.04em">Search</span></div>'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Search</span></div>'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input" type="text" placeholder="Songs, artists, or albums" value="' + this._esc(this.searchQuery) + '">'
@@ -1057,7 +1050,8 @@ const tmore = e.target.closest('.track-more');
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">All Music</span></div>'
       + '<div class="detail-hero">'
-      + '<div class="detail-hero-art detail-hero-art-accent"><div class="detail-hero-art-icon">' + Icons.music() + '</div></div>'
+      + '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>'
+      + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-title">All Music</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
@@ -1089,7 +1083,8 @@ const tmore = e.target.closest('.track-more');
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">Album</span></div>'
       + '<div class="detail-hero">'
-      + '<div class="detail-hero-art"><img src="' + Api.coverUrl(albumId) + '" alt=""></div>'
+      + '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(albumId) + ')"></div>'
+      + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-title">' + this._esc(album.name) + '</div>'
       + '<div class="detail-hero-subtitle">' + this._esc(album.artist) + '</div>'
@@ -1113,11 +1108,18 @@ const tmore = e.target.closest('.track-more');
     const albums = Store.getArtistAlbums(name);
     this._viewTrackList = tracks;
 
+    // Use first album cover as artist banner background
+    const firstAlbum = albums.length > 0 ? albums[0] : null;
+    const bgHtml = firstAlbum
+      ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstAlbum.id) + ')"></div>'
+      : '';
+
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">Artist</span></div>'
       + '<div class="detail-hero">'
-      + '<div class="detail-hero-art detail-hero-art-round"><div class="detail-hero-art-icon">' + Icons.music() + '</div></div>'
+      + bgHtml
+      + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-title">' + this._esc(name) + '</div>'
       + '<div class="detail-hero-meta">' + albums.length + ' albums · ' + tracks.length + ' tracks</div>'
@@ -1128,7 +1130,7 @@ const tmore = e.target.closest('.track-more');
       + '</div>';
 
     if (albums.length > 0) {
-      html += '<div class="sh"><div class="sh-t">Albums</div></div><div class="scroll-row">';
+      html += '<div class="section-header"><h2>Albums</h2></div><div class="scroll-row">';
       albums.forEach(a => {
         html += '<div class="card" data-album-id="' + a.id + '">'
           + '<div class="card-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
@@ -1153,11 +1155,19 @@ const tmore = e.target.closest('.track-more');
     const tracks = playlist.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
     this._viewTrackList = tracks;
 
+    // Use first track's album cover as banner if available
+    const firstTrack = tracks.length > 0 ? tracks[0] : null;
+    const bgHtml = firstTrack && firstTrack.albumID
+      ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstTrack.albumID) + ')"></div>'
+      : '';
+
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">Playlist</span></div>'
       + '<div class="detail-hero">'
-      + '<div class="detail-hero-art"><div class="detail-hero-art-icon">' + Icons.music() + '</div></div>'
+      + bgHtml
+      + '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>'
+      + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-title">' + this._esc(playlist.name) + '</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
@@ -1181,11 +1191,19 @@ const tmore = e.target.closest('.track-more');
     const tracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
     this._viewTrackList = tracks;
 
+    // Use first track's album cover as banner if available
+    const firstTrack = tracks.length > 0 ? tracks[0] : null;
+    const bgHtml = firstTrack && firstTrack.albumID
+      ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstTrack.albumID) + ')"></div>'
+      : '';
+
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">Favorites</span></div>'
       + '<div class="detail-hero">'
-      + '<div class="detail-hero-art detail-hero-art-accent"><div class="detail-hero-art-icon">' + Icons.heartFilled() + '</div></div>'
+      + bgHtml
+      + '<div class="detail-hero-fallback-icon">' + Icons.heartFilled() + '</div>'
+      + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-title">Favorites</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
@@ -1207,7 +1225,7 @@ const tmore = e.target.closest('.track-more');
   renderSettings() {
     this._viewTrackList = [];
     let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:24px;font-weight:700;letter-spacing:-0.04em">Settings</span></div>';
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
 
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.database() + ' MusicBrainz Metadata</div>'
@@ -1490,9 +1508,8 @@ const tmore = e.target.closest('.track-more');
 
     return '<div class="track-list">' + tracks.map((track) => {
       const isCurrent = currentTrack && currentTrack.id === track.id;
-      const hasCover = Store.albumHasCover(track.albumID);
-      const artHtml = (showArt && hasCover)
-        ? '<div class="track-art" style="background-image:url(' + Api.coverUrl(track.albumID) + ')"></div>'
+      const artHtml = showArt
+        ? '<div class="track-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
         : '';
       const rightHtml = isCurrent
         ? '<div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div>'
@@ -1644,6 +1661,13 @@ const tmore = e.target.closest('.track-more');
     const pg = this._waveformPointGap * dpr;
     const totalWidth = data.length * (pw + pg);
 
+    // Read colors from CSS tokens
+    const style = getComputedStyle(document.documentElement);
+    const playedColor = style.getPropertyValue('--waveform-played').trim() || '#D4F040';
+    const unplayedColor = style.getPropertyValue('--waveform-unplayed').trim() || 'rgba(255, 255, 255, 0.22)';
+    const hoverPlayed = style.getPropertyValue('--waveform-hover').trim() || 'rgba(212, 240, 64, 0.8)';
+    const hoverUnplayed = 'rgba(255,255,255,0.45)';
+
     ctx.clearRect(0, 0, w, h);
 
     const playingPoint = progressFraction * data.length;
@@ -1658,11 +1682,11 @@ const tmore = e.target.closest('.track-more');
       const isHovered = hoverX >= 0 && x <= hoverX && hoverX <= x + pw;
 
       if (isHovered) {
-        ctx.fillStyle = isPlayed ? 'rgba(212, 240, 64, 0.8)' : 'rgba(255,255,255,0.45)';
+        ctx.fillStyle = isPlayed ? hoverPlayed : hoverUnplayed;
       } else if (isPlayed) {
-        ctx.fillStyle = '#D4F040';
+        ctx.fillStyle = playedColor;
       } else {
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fillStyle = unplayedColor;
       }
 
       // Rounded bars

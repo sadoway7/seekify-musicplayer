@@ -1,34 +1,86 @@
 :root {
-  --bg: #0C0C0E;
+  /* ── Base palette ── */
+  --bg: #0C0C0F;
   --l1: #14141A;
   --l2: #1C1C24;
   --l3: #26262E;
   --l4: #32323C;
   --text1: #EEEEE8;
-  --text2: #78787E;
-  --text3: #44444C;
+  --text2: #8A8A92;
+  --text3: #55555E;
   --accent: #D4F040;
   --ff: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --bg-base: #0A0A0C;
+
+  /* ── Semantic backgrounds ── */
+  --bg-base: #0A0A0D;
   --bg-surface: var(--l1);
   --bg-elevated: var(--l2);
   --bg-highlight: var(--l3);
   --bg-card-hover: var(--l4);
+
+  /* ── Accent tones ── */
   --accent-hover: #c5e030;
   --accent-soft: rgba(212, 240, 64, 0.08);
   --accent-glow: rgba(212, 240, 64, 0.12);
+  --accent-dim: rgba(212, 240, 64, 0.5);
+
+  /* ── Semantic text ── */
   --text-primary: var(--text1);
   --text-secondary: var(--text2);
   --text-muted: var(--text3);
+
+  /* ── Borders ── */
   --border: rgba(255, 255, 255, 0.06);
   --border-subtle: rgba(255, 255, 255, 0.03);
+
+  /* ── Status ── */
   --danger: #C94040;
   --success: #22c55e;
+
+  /* ── Shadows ── */
   --shadow-raised: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
   --shadow-inset: inset 0 1px 3px rgba(0,0,0,0.6), inset 0 -1px 1px rgba(255,255,255,0.02);
   --shadow-card: 0 4px 20px rgba(0,0,0,0.55), 0 0 0 1px var(--border);
   --shadow-deep: 0 8px 32px rgba(0,0,0,0.65), 0 0 0 1px var(--border);
   --highlight-top: inset 0 1px 0 rgba(255,255,255,0.05);
+
+  /* ── Spacing scale (4px base) ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 48px;
+
+  /* ── Radii ── */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+
+  /* ── Page margin ── */
+  --page-margin: 20px;
+
+  /* ── Typography ── */
+  --fs-display: 44px;
+  --fs-screen: 24px;
+  --fs-hero: 22px;
+  --fs-section: 14px;
+  --fs-body: 14px;
+  --fs-caption: 12px;
+  --fs-timestamp: 11px;
+  --fs-micro: 10px;
+  --ls-tight: -0.04em;
+  --ls-label: 0.1em;
+
+  /* ── Waveform ── */
+  --waveform-played: #D4F040;
+  --waveform-unplayed: rgba(255, 255, 255, 0.22);
+  --waveform-hover: rgba(212, 240, 64, 0.8);
 }
 
 *,

@@ -1,14 +1,14 @@
 .track-list {
-  padding: 0 22px 16px;
-  margin-bottom: 20px;
+  padding: 0 var(--page-margin) var(--sp-4);
+  margin-bottom: var(--sp-5);
 }
 
 .track-row {
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding: 8px 0;
-  gap: 12px;
+  padding: var(--sp-2) 0;
+  gap: var(--sp-3);
   transition: opacity 0.15s ease;
 }
 
@@ -25,11 +25,11 @@
 }
 
 .track-num {
-  width: 24px;
-  min-width: 24px;
+  width: var(--sp-6);
+  min-width: var(--sp-6);
   text-align: center;
-  font-size: 14px;
-  color: var(--text3);
+  font-size: var(--fs-body);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -55,9 +55,9 @@
 }
 
 .track-title {
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-weight: 500;
-  color: var(--text1);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -73,8 +73,8 @@
 }
 
 .track-artist {
-  font-size: 12px;
-  color: var(--text2);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -82,8 +82,8 @@
 }
 
 .track-duration {
-  font-size: 12px;
-  color: var(--text3);
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
@@ -95,13 +95,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text2);
+  color: var(--text-secondary);
   padding-left: 6px;
   cursor: pointer;
 }
 
 .track-more:active {
-  color: var(--text1);
+  color: var(--text-primary);
 }
 
 .track-more svg {
@@ -116,7 +116,7 @@
   height: 12px;
 }
 
-.eq span {
+.eq .eqb {
   display: block;
   width: 3px;
   background: var(--accent);
@@ -124,17 +124,17 @@
   animation: eq 0.8s ease-in-out infinite alternate;
 }
 
-.eq span:nth-child(1) {
+.eq .eqb:nth-child(1) {
   animation-delay: 0s;
   height: 60%;
 }
 
-.eq span:nth-child(2) {
+.eq .eqb:nth-child(2) {
   animation-delay: 0.2s;
   height: 100%;
 }
 
-.eq span:nth-child(3) {
+.eq .eqb:nth-child(3) {
   animation-delay: 0.4s;
   height: 40%;
 }

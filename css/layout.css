@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding: 0 22px;
+  padding: 0 var(--page-margin);
   padding-top: env(safe-area-inset-top, 0px);
   z-index: 10;
   flex-shrink: 0;
@@ -27,7 +27,7 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-  padding-top: 12px;
+  padding-top: var(--sp-3);
   padding-bottom: 100px;
   overscroll-behavior: contain;
 }
@@ -45,11 +45,11 @@ body.mini-player-visible #app-content {
 }
 
 #app-header .header-title {
-  font-size: 24px;
+  font-size: var(--fs-screen);
   font-weight: 700;
-  color: var(--text1);
+  color: var(--text-primary);
   flex: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: var(--ls-tight);
 }
 
 #app-header .header-btn {
@@ -58,7 +58,7 @@ body.mini-player-visible #app-content {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text2);
+  color: var(--text-secondary);
   border-radius: 50%;
   transition: color 0.15s ease;
 }
@@ -68,10 +68,10 @@ body.mini-player-visible #app-content {
 }
 
 #app-header .header-btn:hover {
-  color: var(--text1);
+  color: var(--text-primary);
 }
 
-.tab-bar {
+#tab-bar {
   position: fixed;
   bottom: 0;
   left: 0;
@@ -80,7 +80,7 @@ body.mini-player-visible #app-content {
   flex-direction: row;
   align-items: stretch;
   height: 76px;
-  padding: 0 4px;
+  padding: 0 var(--sp-1);
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
   background: var(--bg);
   border-top: 1px solid var(--border);
@@ -94,11 +94,11 @@ body.mini-player-visible #app-content {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  color: var(--text3);
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
   font-weight: 500;
-  padding: 14px 12px 12px;
-  margin: 4px 3px;
+  padding: 14px var(--sp-3) var(--sp-3);
+  margin: var(--sp-1) 3px;
   transition: color 0.2s ease;
   position: relative;
 }
@@ -120,21 +120,3 @@ body.mini-player-visible #app-content {
 .tab-item:active {
   transform: scale(0.92);
 }
-
-#tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  height: 76px;
-  padding: 0 4px;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
-  background: var(--bg);
-  border-top: 1px solid var(--border);
-  z-index: 100;
-}
-
-

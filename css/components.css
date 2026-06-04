@@ -10,20 +10,20 @@
 .empty-state svg {
   width: 64px;
   height: 64px;
-  color: var(--text3);
-  margin-bottom: 16px;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-4);
 }
 
 .empty-state-title {
   font-size: 18px;
   font-weight: 700;
-  color: var(--text1);
-  margin-bottom: 8px;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
 }
 
 .empty-state-text {
-  font-size: 14px;
-  color: var(--text2);
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
@@ -32,16 +32,16 @@
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 32px;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 32px;
   background: var(--accent);
   color: var(--bg);
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-weight: 600;
-  border-radius: 24px;
+  border-radius: var(--radius-full);
   border: none;
   cursor: pointer;
-  margin-top: 20px;
+  margin-top: var(--sp-5);
 }
 
 .create-btn:active {
@@ -75,7 +75,7 @@
   background: linear-gradient(90deg, var(--l2) 25%, var(--l3) 50%, var(--l2) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease infinite;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .skeleton-card {
@@ -86,12 +86,12 @@
 .skeleton-card-art {
   width: 112px;
   height: 112px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
 .skeleton-card-text {
   height: 14px;
-  margin-top: 8px;
+  margin-top: var(--sp-2);
   width: 80%;
 }
 
@@ -106,11 +106,11 @@
   bottom: 140px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--l2);
-  color: var(--text1);
-  padding: 12px 24px;
-  border-radius: 12px;
-  font-size: 14px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: var(--sp-3) var(--sp-6);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-body);
   font-weight: 500;
   z-index: 200;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
