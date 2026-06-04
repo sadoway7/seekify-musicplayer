@@ -41,13 +41,14 @@
     right: auto;
     width: 76px;
     height: auto;
+    padding-bottom: 0;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
     padding-top: var(--sp-6);
     gap: var(--sp-2);
     background: var(--bg-base);
-  box-shadow: 1px 0 0 var(--border-subtle);
+    box-shadow: 1px 0 0 var(--border-subtle);
   }
 
   .tab-item {
@@ -79,6 +80,7 @@
   }
 
   .mini-player {
+    position: fixed;
     left: 76px;
     right: 0;
     bottom: 0;

@@ -65,8 +65,6 @@
   /* ── Layout anchors ── */
   --tab-bar-height: calc(76px + env(safe-area-inset-bottom, 0px));
   --mini-player-height: 66px;
-  --content-bottom: calc(var(--tab-bar-height) + 8px);
-  --content-bottom-with-mini: calc(var(--tab-bar-height) + var(--mini-player-height) + 16px);
 
   /* ── Page margin ── */
   --page-margin: 20px;

@@ -28,9 +28,10 @@
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   padding-top: var(--sp-3);
-  padding-bottom: var(--content-bottom);
+  padding-bottom: calc(var(--tab-bar-height) + 8px);
   overscroll-behavior: contain;
   animation: pageFadeIn 0.22s var(--ease-out) both;
+  min-height: 0;
 }
 
 #app-content::-webkit-scrollbar {
@@ -42,7 +43,7 @@
 }
 
 body.mini-player-visible #app-content {
-  padding-bottom: var(--content-bottom-with-mini);
+  padding-bottom: calc(var(--tab-bar-height) + var(--mini-player-height) + 16px);
 }
 
 #app-header .header-title {
@@ -86,6 +87,7 @@ body.mini-player-visible #app-content {
   background: var(--bg);
   box-shadow: 0 -1px 0 var(--border-subtle);
   z-index: 100;
+  flex-shrink: 0;
 }
 
 .tab-item {
