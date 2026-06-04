@@ -28,7 +28,7 @@
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   padding-top: var(--sp-3);
-  padding-bottom: 100px;
+  padding-bottom: var(--content-bottom);
   overscroll-behavior: contain;
   animation: pageFadeIn 0.22s var(--ease-out) both;
 }
@@ -42,7 +42,7 @@
 }
 
 body.mini-player-visible #app-content {
-  padding-bottom: 164px;
+  padding-bottom: var(--content-bottom-with-mini);
 }
 
 #app-header .header-title {

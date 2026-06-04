@@ -97,12 +97,10 @@
 }
 
 .np-artwork {
-  position: absolute;
-  top: -40px;
-  left: 0;
-  right: 0;
-  bottom: 40%;
+  position: relative;
   z-index: 0;
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -111,8 +109,8 @@
 
 .np-art-wrapper {
   position: relative;
-  width: min(72vw, 48vh, 340px);
-  aspect-ratio: 1 / 1;
+  width: 280px;
+  height: 280px;
   border-radius: 50%;
   box-shadow: 0 24px 48px -12px rgba(0,0,0,0.7);
   will-change: transform;
@@ -179,7 +177,6 @@
   z-index: 1;
   padding: var(--sp-2) var(--page-margin) 0;
   width: 100%;
-  margin-top: auto;
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -441,7 +438,7 @@
   min-height: 0;
   position: relative;
   justify-content: flex-end;
-  padding-bottom: 8vh;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2vh);
 }
 
 .np-info {
