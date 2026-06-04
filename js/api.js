@@ -192,7 +192,10 @@ const Api = {
 
   async metadataRescanSync(trackId) {
     try {
-      const res = await fetch('/api/metadata/rescan-sync/' + trackId, { method: 'POST' });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch('/api/metadata/rescan-sync/' + trackId, { method: 'POST', signal: controller.signal });
+      clearTimeout(timeout);
       if (!res.ok) return [];
       return res.json();
     } catch { return []; }

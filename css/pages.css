@@ -3,7 +3,7 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-2) var(--page-margin) 10px;
+  padding: 8px var(--page-margin) 10px;
 }
 
 .section-header h2 {
@@ -44,13 +44,13 @@
 .scroll-row {
   display: flex;
   flex-direction: row;
-  gap: var(--sp-3);
+  gap: 12px;
   overflow-x: auto;
-  padding: 0 var(--page-margin) var(--sp-1);
+  padding: 0 var(--page-margin) 4px;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  margin-bottom: var(--sp-5);
+  margin-bottom: 20px;
 }
 
 .scroll-row::-webkit-scrollbar {
@@ -275,8 +275,8 @@
   font-weight: 900;
   letter-spacing: var(--ls-tight);
   line-height: 1;
-  color: var(--text-primary);
-  opacity: 0.07;
+  color: var(--text1);
+  opacity: 0.1;
   position: absolute;
   bottom: -10px;
   left: var(--page-margin);
@@ -417,8 +417,8 @@
 .browse-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--sp-2);
-  padding: 0 var(--page-margin) var(--sp-4);
+  gap: 8px;
+  padding: 0 var(--page-margin) 16px;
 }
 
 .category-card {
@@ -441,9 +441,9 @@
 .filter-chips {
   display: flex;
   flex-direction: row;
-  gap: var(--sp-1);
-  margin: var(--sp-1) var(--page-margin) 14px;
-  background: var(--bg-elevated);
+  gap: 4px;
+  margin: 4px var(--page-margin) 14px;
+  background: var(--l2);
   border-radius: 10px;
   padding: 3px;
   box-shadow: var(--shadow-inset);
@@ -479,7 +479,7 @@
   flex-direction: row;
   align-items: center;
   padding: 9px var(--page-margin);
-  gap: var(--sp-3);
+  gap: 12px;
   transition: transform 0.15s ease;
 }
 
@@ -556,7 +556,7 @@
   align-items: center;
   padding: 0 var(--page-margin);
   height: 56px;
-  gap: var(--sp-3);
+  gap: 12px;
 }
 
 .page-header .back-btn {
@@ -587,14 +587,12 @@
 /* ── Detail hero: full-width banner ── */
 
 .detail-hero {
-  position: relative;
-  width: 100%;
-  min-height: 240px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  overflow: hidden;
-  background: var(--bg-elevated);
+  align-items: center;
+  text-align: center;
+  padding: 16px var(--page-margin) 8px;
+  gap: 12px;
 }
 
 .detail-hero-bg {
@@ -667,7 +665,7 @@
   flex-direction: row;
   align-items: center;
   gap: 10px;
-  padding: var(--sp-3) var(--page-margin) var(--sp-5);
+  padding: 12px var(--page-margin) 20px;
 }
 
 .detail-play-btn {
@@ -899,7 +897,7 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-2) var(--page-margin) var(--sp-3);
+  padding: 8px var(--page-margin) 12px;
 }
 
 .library-header h1 {

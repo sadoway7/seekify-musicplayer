@@ -82,9 +82,16 @@ const Player = {
 
   togglePlay() {
     if (this.playing) {
-      this.pause();
+      this.playing = false;
+      this.audio.pause();
+      if (this.onStateChange) this.onStateChange();
     } else {
-      this.audio.play().catch(() => {});
+      this.playing = true;
+      this.audio.play().catch(() => {
+        this.playing = false;
+        if (this.onStateChange) this.onStateChange();
+      });
+      if (this.onStateChange) this.onStateChange();
     }
   },
 

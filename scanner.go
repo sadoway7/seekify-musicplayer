@@ -216,8 +216,8 @@ func generatePlaceholderSVG(name string) string {
 	}
 
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
-  <rect width="300" height="300" fill="#1E1E1E"/>
-  <text x="150" y="160" font-family="sans-serif" font-size="120" font-weight="bold" fill="#313131" text-anchor="middle" dominant-baseline="middle">%s</text>
+  <rect width="300" height="300" fill="#1a1c1a"/>
+  <text x="150" y="158" font-family="sans-serif" font-size="80" font-weight="800" fill="#2e302e" text-anchor="middle" dominant-baseline="middle" letter-spacing="-2">%s</text>
 </svg>`, initial)
 }
 

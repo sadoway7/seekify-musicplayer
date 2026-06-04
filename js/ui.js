@@ -403,6 +403,12 @@ const UI = {
       }
     });
 
+    document.getElementById('rescan-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'rescan-modal') {
+        e.target.classList.add('hidden');
+      }
+    });
+
     this.els.playlistModal.addEventListener('click', (e) => {
       if (e.target === this.els.playlistModal) {
         this.hidePlaylistModal();
@@ -1735,18 +1741,24 @@ const tmore = e.target.closest('.track-more');
     this._generateWaveform(track ? track.id : null);
     this.updateSeekBar();
     this._renderQueue();
+    this.els.nowPlaying.style.animation = '';
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
     this._applyNowPlayingBg();
   },
 
   hideNowPlaying() {
-    this.els.nowPlaying.classList.add('hidden');
+    const np = this.els.nowPlaying;
+    np.style.animation = 'nowPlayingSlideDown 0.35s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards';
+    np.addEventListener('animationend', () => {
+      np.classList.add('hidden');
+      np.style.animation = '';
+      np.style.background = '';
+      this._lastColorAlbumId = null;
+    }, { once: true });
     if (Player.getCurrentTrack()) {
       this.els.miniPlayer.classList.remove('hidden');
     }
-    this.els.nowPlaying.style.background = '';
-    this._lastColorAlbumId = null;
   },
 
   showQueue() {
@@ -1953,6 +1965,78 @@ const tmore = e.target.closest('.track-more');
         }
       }}
     ], triggerEl);
+  },
+
+  async _showRescanModal(trackId) {
+    const track = Store.getTrack(trackId);
+    if (!track) return;
+
+    const modal = document.getElementById('rescan-modal');
+    const list = document.getElementById('rescan-modal-list');
+    const title = document.getElementById('rescan-modal-title');
+
+    title.textContent = 'Scanning...';
+    list.innerHTML = '<div class="loading-spinner" style="margin:24px auto"></div>';
+    modal.classList.remove('hidden');
+
+    try {
+      const candidates = await Api.metadataRescanSync(trackId);
+      if (!candidates || candidates.length === 0) {
+        title.textContent = this._esc(track.title);
+        list.innerHTML = this._emptyState('No matches found', 'Could not find this track on MusicBrainz', Icons.search());
+        return;
+      }
+
+      title.textContent = this._esc(track.title);
+
+      let html = '<div class="rescan-your-track">'
+        + '<div class="rescan-label">Your Track</div>'
+        + '<div class="rescan-your-title">' + this._esc(track.title) + '</div>'
+        + '<div class="rescan-your-artist">' + this._esc(track.artist) + '</div>'
+        + '</div>';
+
+      candidates.forEach(c => {
+        const pct = Math.round(c.score * 100);
+        const cls = pct >= 80 ? 'score-high' : pct >= 50 ? 'score-mid' : 'score-low';
+        html += '<div class="rescan-candidate" data-title="' + this._esc(c.title) + '" data-artist="' + this._esc(c.artist) + '" data-album="' + this._esc(c.album) + '">'
+          + '<div class="rescan-candidate-info">'
+          + '<div class="rescan-candidate-title">' + this._esc(c.title) + '</div>'
+          + '<div class="rescan-candidate-artist">' + this._esc(c.artist) + '</div>'
+          + '<div class="rescan-candidate-album">' + this._esc(c.album || '—') + '</div>'
+          + '</div>'
+          + '<span class="review-score ' + cls + '">' + pct + '%</span>'
+          + '</div>';
+      });
+
+      list.innerHTML = html;
+
+      list.querySelectorAll('.rescan-candidate').forEach(el => {
+        el.addEventListener('click', async () => {
+          const newTitle = el.dataset.title;
+          const newArtist = el.dataset.artist;
+          const newAlbum = el.dataset.album;
+
+          // Apply directly to the track
+          const t = Store.getTrack(trackId);
+          if (t) {
+            t.title = newTitle;
+            t.artist = newArtist;
+            if (newAlbum) t.album = newAlbum;
+            if (newArtist) t.albumArtist = newArtist;
+            if (t.album) t.albumID = (t.albumArtist || t.artist) + ':' + t.album;
+          }
+
+          await Store.refreshLibrary();
+          modal.classList.add('hidden');
+          this.showToast('Metadata updated');
+          this.renderPage();
+        });
+      });
+
+    } catch (err) {
+      title.textContent = this._esc(track.title);
+      list.innerHTML = this._emptyState('Scan failed', 'Could not reach MusicBrainz', Icons.xCircle());
+    }
   },
 
   _handleAction(action) {
