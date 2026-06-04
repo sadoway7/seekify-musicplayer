@@ -45,6 +45,16 @@ func main() {
 	coverCache = make(map[string][]byte)
 
 	initDB(filepath.Join("data", "music.db"))
+
+	// Try loading from DB first
+	dbTracks := dbLoadTracks()
+	dbAlbums := dbLoadAlbums()
+	if len(dbTracks) > 0 {
+		tracks = dbTracks
+		albums = dbAlbums
+		log.Printf("Loaded %d tracks and %d albums from database", len(tracks), len(albums))
+	}
+
 	loadCachedCovers()
 
 	log.Printf("Scanning music directory: %s", musicDir)
@@ -79,8 +89,9 @@ func main() {
 	mux.HandleFunc("/api/folders", requireAdmin(createFolderHandler))
 
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
-	mux.HandleFunc("/api/metadata/rescan/", metadataRescanHandler)
+	mux.HandleFunc("/api/metadata/resync/", metadataRescanHandler)
 	mux.HandleFunc("/api/metadata/rescan-sync/", metadataRescanSyncHandler)
+	mux.HandleFunc("/api/metadata/update-track/", metadataUpdateTrackHandler)
 	mux.HandleFunc("/api/metadata/scan-progress", metadataScanProgressHandler)
 	mux.HandleFunc("/api/metadata/pending", metadataPendingHandler)
 	mux.HandleFunc("/api/metadata/all", metadataAllHandler)

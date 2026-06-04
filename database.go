@@ -65,6 +65,32 @@ func initDB(path string) {
 		UNIQUE(track_id, mb_album_id)
 	)`)
 
+	db.Exec(`CREATE TABLE IF NOT EXISTS tracks (
+		id TEXT PRIMARY KEY,
+		title TEXT NOT NULL DEFAULT '',
+		artist TEXT NOT NULL DEFAULT '',
+		album TEXT NOT NULL DEFAULT '',
+		album_artist TEXT NOT NULL DEFAULT '',
+		album_id TEXT NOT NULL DEFAULT '',
+		track_number INTEGER NOT NULL DEFAULT 0,
+		year INTEGER NOT NULL DEFAULT 0,
+		genre TEXT NOT NULL DEFAULT '',
+		duration INTEGER NOT NULL DEFAULT 0,
+		file_path TEXT NOT NULL,
+		has_cover INTEGER NOT NULL DEFAULT 0,
+		mod_time INTEGER NOT NULL DEFAULT 0,
+		has_metadata INTEGER NOT NULL DEFAULT 0
+	)`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS albums (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL DEFAULT '',
+		artist TEXT NOT NULL DEFAULT '',
+		track_count INTEGER NOT NULL DEFAULT 0,
+		year INTEGER NOT NULL DEFAULT 0,
+		has_cover INTEGER NOT NULL DEFAULT 0
+	)`)
+
 	migrateFromJSON()
 }
 
@@ -352,4 +378,92 @@ func dbGetMatchCount() map[string]int {
 		counts[status] = count
 	}
 	return counts
+}
+
+// --- Track / Album persistence ---
+
+func dbUpsertTrack(t *Track) {
+	db.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			title=excluded.title, artist=excluded.artist, album=excluded.album,
+			album_artist=excluded.album_artist, album_id=excluded.album_id,
+			track_number=excluded.track_number, year=excluded.year, genre=excluded.genre,
+			duration=excluded.duration, has_cover=excluded.has_cover,
+			mod_time=excluded.mod_time, has_metadata=excluded.has_metadata`,
+		t.ID, t.Title, t.Artist, t.Album, t.AlbumArtist, t.AlbumID,
+		t.TrackNumber, t.Year, t.Genre, t.Duration, t.FilePath,
+		boolToInt(t.HasCover), t.ModTime, boolToInt(t.HasMetadata))
+}
+
+func dbUpsertAlbum(a *Album) {
+	db.Exec(`INSERT INTO albums (id, name, artist, track_count, year, has_cover)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name=excluded.name, artist=excluded.artist,
+			track_count=excluded.track_count, year=excluded.year, has_cover=excluded.has_cover`,
+		a.ID, a.Name, a.Artist, a.TrackCount, a.Year, boolToInt(a.HasCover))
+}
+
+func dbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
+	albumID := ""
+	if album != "" {
+		albumID = generateAlbumID(albumArtist, album)
+	}
+	db.Exec(`UPDATE tracks SET title=?, artist=?, album=?, album_artist=?, album_id=?, has_metadata=1 WHERE id=?`,
+		title, artist, album, albumArtist, albumID, trackID)
+}
+
+func dbLoadTracks() map[string]*Track {
+	rows, err := db.Query(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata FROM tracks`)
+	if err != nil {
+		return map[string]*Track{}
+	}
+	defer rows.Close()
+
+	result := make(map[string]*Track)
+	for rows.Next() {
+		t := &Track{}
+		var hasCover, hasMetadata int
+		rows.Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist, &t.AlbumID,
+			&t.TrackNumber, &t.Year, &t.Genre, &t.Duration, &t.FilePath,
+			&hasCover, &t.ModTime, &hasMetadata)
+		t.HasCover = hasCover == 1
+		t.HasMetadata = hasMetadata == 1
+		result[t.ID] = t
+	}
+	return result
+}
+
+func dbLoadAlbums() map[string]*Album {
+	rows, err := db.Query(`SELECT id, name, artist, track_count, year, has_cover FROM albums`)
+	if err != nil {
+		return map[string]*Album{}
+	}
+	defer rows.Close()
+
+	result := make(map[string]*Album)
+	for rows.Next() {
+		a := &Album{}
+		var hasCover int
+		rows.Scan(&a.ID, &a.Name, &a.Artist, &a.TrackCount, &a.Year, &hasCover)
+		a.HasCover = hasCover == 1
+		result[a.ID] = a
+	}
+	return result
+}
+
+func dbDeleteTrack(trackID string) {
+	db.Exec(`DELETE FROM tracks WHERE id=?`, trackID)
+}
+
+func dbDeleteAlbum(albumID string) {
+	db.Exec(`DELETE FROM albums WHERE id=?`, albumID)
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

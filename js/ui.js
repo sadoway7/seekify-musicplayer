@@ -673,6 +673,9 @@ const tmore = e.target.closest('.track-more');
   },
 
   navigateTo(view, data) {
+    if (!this.els.nowPlaying.classList.contains('hidden')) {
+      this.hideNowPlaying();
+    }
     Store.currentView = view;
     Store.viewData = data || {};
     this.renderPage();
@@ -680,6 +683,9 @@ const tmore = e.target.closest('.track-more');
   },
 
   navigateBack() {
+    if (!this.els.nowPlaying.classList.contains('hidden')) {
+      this.hideNowPlaying();
+    }
     Store.currentView = Store.currentTab;
     Store.viewData = {};
     this.renderPage();
@@ -1053,13 +1059,13 @@ const tmore = e.target.closest('.track-more');
     if (artistsWithName.length === 0) {
       return this._emptyState('No artists yet', 'Scan your music library to see artists', Icons.music());
     }
-    return '<div class="prow" style="flex-wrap:wrap">' + artistsWithName.map(a =>
-      '<div class="apill" data-type="artist" data-id="' + this._esc(a.name) + '">'
-      + '<div class="apill-dot"></div>'
-      + '<div class="apill-name">' + this._esc(a.name) + '</div>'
-      + '<div style="font-size:12px;color:var(--text-muted)">' + a.albumCount + ' albums</div>'
-      + '</div>'
-    ).join('') + '</div>';
+    return artistsWithName.map(a =>
+      '<div class="list-item" data-type="artist" data-id="' + this._esc(a.name) + '">'
+      + '<div class="list-item-art round" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
+      + Icons.person() + '</div>'
+      + '<div class="list-item-info"><div class="list-item-title">' + this._esc(a.name) + '</div>'
+      + '<div class="list-item-subtitle">' + a.albumCount + ' album' + (a.albumCount !== 1 ? 's' : '') + '</div></div></div>'
+    ).join('');
   },
 
   _renderLibFavorites() {
@@ -1075,20 +1081,21 @@ const tmore = e.target.closest('.track-more');
     const tracks = Store.library.tracks.slice();
     this._viewTrackList = tracks;
 
-    let html = '<div class="page-header">'
+    let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<span class="page-header-title">All Music</span></div>'
-      + '<div class="detail-hero">'
+      + '<button class="hero-action-btn" data-hero-action="more">' + Icons.more() + '</button>'
       + '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-text">'
       + '<div class="detail-hero-title">All Music</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
-      + '</div></div>'
+      + '</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
-      + '</div>';
+      + '</div>'
+      + '</div></div>';
 
     if (tracks.length === 0) {
       html += this._emptyState('No music yet', 'Add music to your library to get started', Icons.music());
@@ -1108,21 +1115,22 @@ const tmore = e.target.closest('.track-more');
     const tracks = Store.getAlbumTracks(albumId);
     this._viewTrackList = tracks;
 
-    let html = '<div class="page-header">'
+    let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<span class="page-header-title">Album</span></div>'
-      + '<div class="detail-hero">'
+      + '<button class="hero-action-btn" data-hero-action="more-album" data-album-id="' + albumId + '">' + Icons.more() + '</button>'
       + '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(albumId) + ')"></div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-text">'
       + '<div class="detail-hero-title">' + this._esc(album.name) + '</div>'
       + '<div class="detail-hero-subtitle">' + this._esc(album.artist) + '</div>'
       + '<div class="detail-hero-meta">' + (album.year ? album.year + ' · ' : '') + tracks.length + ' tracks</div>'
-      + '</div></div>'
+      + '</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
       + '</div>'
+      + '</div></div>'
       + this.renderTrackList(tracks, { showArt: false });
 
     this.els.content.innerHTML = html;
@@ -1143,20 +1151,20 @@ const tmore = e.target.closest('.track-more');
       ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstAlbum.id) + ')"></div>'
       : '';
 
-    let html = '<div class="page-header">'
+    let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<span class="page-header-title">Artist</span></div>'
-      + '<div class="detail-hero">'
       + bgHtml
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-text">'
       + '<div class="detail-hero-title">' + this._esc(name) + '</div>'
       + '<div class="detail-hero-meta">' + albums.length + ' albums · ' + tracks.length + ' tracks</div>'
-      + '</div></div>'
+      + '</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
-      + '</div>';
+      + '</div>'
+      + '</div></div>';
 
     if (albums.length > 0) {
       html += '<div class="section-header"><h2>Albums</h2></div><div class="scroll-row">';
@@ -1190,22 +1198,22 @@ const tmore = e.target.closest('.track-more');
       ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstTrack.albumID) + ')"></div>'
       : '';
 
-    let html = '<div class="page-header">'
+    let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<span class="page-header-title">Playlist</span></div>'
-      + '<div class="detail-hero">'
       + bgHtml
       + '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-text">'
       + '<div class="detail-hero-title">' + this._esc(playlist.name) + '</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
-      + '</div></div>'
+      + '</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
       + '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-playlist">' + Icons.trash() + '</button>'
-      + '</div>';
+      + '</div>'
+      + '</div></div>';
 
     if (tracks.length === 0) {
       html += this._emptyState('No tracks yet', 'Add tracks to this playlist', Icons.music());
@@ -1226,21 +1234,21 @@ const tmore = e.target.closest('.track-more');
       ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstTrack.albumID) + ')"></div>'
       : '';
 
-    let html = '<div class="page-header">'
+    let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<span class="page-header-title">Favorites</span></div>'
-      + '<div class="detail-hero">'
       + bgHtml
       + '<div class="detail-hero-fallback-icon">' + Icons.heartFilled() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-text">'
       + '<div class="detail-hero-title">Favorites</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
-      + '</div></div>'
+      + '</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
-      + '</div>';
+      + '</div>'
+      + '</div></div>';
 
     if (tracks.length === 0) {
       html += this._emptyState('No favorites yet', 'Songs you like will appear here', Icons.heart());

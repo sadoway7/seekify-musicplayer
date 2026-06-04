@@ -192,13 +192,22 @@ const Api = {
 
   async metadataRescanSync(trackId) {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      const res = await fetch('/api/metadata/rescan-sync/' + trackId, { method: 'POST', signal: controller.signal });
-      clearTimeout(timeout);
+      const res = await fetch('/api/metadata/rescan-sync/' + trackId, { method: 'POST' });
       if (!res.ok) return [];
       return res.json();
     } catch { return []; }
+  },
+
+  async metadataUpdateTrack(trackId, data) {
+    try {
+      const res = await fetch('/api/metadata/update-track/' + trackId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
   },
 
   async metadataCounts() {

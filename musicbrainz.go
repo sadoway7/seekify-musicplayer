@@ -645,6 +645,7 @@ func applyApprovedMatches() int {
 			}
 			track.HasMetadata = true
 			applied++
+			dbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
 
 			if oldAlbumID != track.AlbumID {
 				oldPath := filepath.Join(coverDir, oldAlbumID+".jpg")
@@ -775,6 +776,9 @@ func rebuildAlbumsFromTracks() {
 		}
 	}
 	albums = newAlbums
+	for _, a := range albums {
+		dbUpsertAlbum(a)
+	}
 }
 
 func loadCachedCovers() {

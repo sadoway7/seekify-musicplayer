@@ -316,11 +316,11 @@
   gap: 14px;
   padding: var(--sp-3) var(--sp-4);
   min-height: 64px;
-  background: var(--bg-elevated);
+  background: rgba(26, 28, 26, 0.45);
   border-radius: 14px;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: var(--shadow-raised), var(--highlight-top);
+  box-shadow: none;
 }
 
 .new-song-card:active {
@@ -340,7 +340,6 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: var(--shadow-raised);
 }
 
 .new-song-fallback {
@@ -587,12 +586,57 @@
 /* ── Detail hero: full-width banner ── */
 
 .detail-hero {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
+  min-height: 220px;
+  padding: 0 0 var(--sp-5);
+}
+
+.detail-hero .back-btn {
+  position: absolute;
+  top: var(--sp-4);
+  left: var(--page-margin);
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  display: flex;
   align-items: center;
-  text-align: center;
-  padding: 16px var(--page-margin) 8px;
-  gap: 12px;
+  justify-content: center;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.detail-hero .back-btn svg {
+  width: var(--sp-6);
+  height: var(--sp-6);
+}
+
+.detail-hero .hero-action-btn {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--page-margin);
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.detail-hero .hero-action-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .detail-hero-bg {
@@ -618,8 +662,18 @@
 .detail-hero-info {
   position: relative;
   z-index: 2;
-  padding: 0 var(--page-margin) var(--sp-5);
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  padding: 0 var(--page-margin) var(--sp-4);
   text-align: left;
+}
+
+.detail-hero-text {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .detail-hero-title {
@@ -661,24 +715,26 @@
 }
 
 .detail-actions {
-  display: flex;
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 10px;
-  padding: 12px var(--page-margin) 20px;
+  flex-shrink: 0;
+  gap: 6px;
+  margin-top: var(--sp-2);
 }
 
 .detail-play-btn {
-  display: flex;
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 5px;
   background: var(--text-primary);
   color: var(--bg);
   border-radius: var(--radius-full);
-  padding: 10px var(--sp-6);
-  font-size: var(--fs-body);
+  padding: 7px 16px;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   border: none;
   cursor: pointer;
 }
@@ -688,25 +744,27 @@
 }
 
 .detail-play-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   fill: var(--bg);
   color: var(--bg);
 }
 
 .detail-action-btn {
-  display: flex;
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
   border-radius: var(--radius-full);
-  padding: 10px var(--sp-4);
-  font-size: 13px;
+  padding: 7px 12px;
+  font-size: 12px;
   font-weight: 500;
   border: none;
   cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .detail-action-btn:active {
@@ -715,8 +773,8 @@
 }
 
 .detail-action-btn svg {
-  width: var(--fs-caption);
-  height: var(--fs-caption);
+  width: 14px;
+  height: 14px;
 }
 
 .detail-action-btn-danger:active {
@@ -740,7 +798,6 @@
   border-radius: var(--radius-xs);
   overflow: hidden;
   background: var(--l3);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .hero-art img {
@@ -856,7 +913,6 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--l3);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .search-result-art img {

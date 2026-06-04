@@ -783,6 +783,60 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/metadata/update-track/")
+	if trackID == "" {
+		http.Error(w, "Track ID required", http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		Title       string `json:"title"`
+		Artist      string `json:"artist"`
+		Album       string `json:"album"`
+		AlbumArtist string `json:"albumArtist"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	mu.Lock()
+	track, exists := tracks[trackID]
+	if !exists {
+		mu.Unlock()
+		http.Error(w, "Track not found", http.StatusNotFound)
+		return
+	}
+
+	if body.Title != "" {
+		track.Title = body.Title
+	}
+	if body.Artist != "" {
+		track.Artist = body.Artist
+	}
+	if body.Album != "" {
+		track.Album = body.Album
+	}
+	if body.AlbumArtist != "" {
+		track.AlbumArtist = body.AlbumArtist
+	}
+	if track.AlbumArtist == "" {
+		track.AlbumArtist = track.Artist
+	}
+	if track.Album != "" {
+		track.AlbumID = generateAlbumID(track.AlbumArtist, track.Album)
+	}
+	track.HasMetadata = true
+
+	dbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
+	rebuildAlbumsFromTracks()
+	mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"updated": true})
+}
+
 func metadataScanProgressHandler(w http.ResponseWriter, r *http.Request) {
 	p := getScanProgress()
 	w.Header().Set("Content-Type", "application/json")

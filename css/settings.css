@@ -125,7 +125,10 @@
   align-items: center;
   padding: 14px 16px;
   gap: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
+  margin-bottom: 4px;
+  padding-bottom: 18px;
+  background: linear-gradient(to bottom, transparent calc(100% - 1px), rgba(255,255,255,0.04) calc(100% - 1px), rgba(255,255,255,0.04) 100%);
 }
 
 .review-card-local {

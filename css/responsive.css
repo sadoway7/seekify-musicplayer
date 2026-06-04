@@ -47,7 +47,7 @@
     padding-top: var(--sp-6);
     gap: var(--sp-2);
     background: var(--bg-base);
-    border-right: 1px solid var(--border);
+  box-shadow: 1px 0 0 var(--border-subtle);
   }
 
   .tab-item {
@@ -88,14 +88,13 @@
     transform: none;
     margin: 0;
     height: 80px;
-    background: rgba(18, 18, 18, 0.85);
+    background: rgba(10, 11, 10, 0.85);
     backdrop-filter: blur(24px) saturate(1.4);
     -webkit-backdrop-filter: blur(24px) saturate(1.4);
-    border-top: 1px solid rgba(255,255,255,0.06);
     box-shadow:
       0 -8px 32px rgba(0,0,0,0.45),
       0 -2px 8px rgba(0,0,0,0.25),
-      inset 0 1px 0 rgba(255,255,255,0.06);
+      inset 0 1px 0 rgba(255,255,255,0.04);
   }
 
   .mini-progress {
@@ -156,7 +155,7 @@
     height: 52px;
     min-width: 52px;
     border-radius: var(--radius-sm);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.06);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
   }
 
   .mini-title {
@@ -411,7 +410,7 @@
     min-width: 320px;
     flex-shrink: 0;
     background: rgba(255,255,255,0.03);
-    border-left: 1px solid rgba(255,255,255,0.05);
+    box-shadow: -1px 0 0 rgba(255,255,255,0.03);
     height: 100%;
     overflow-y: auto;
     align-self: stretch;
@@ -439,7 +438,7 @@
     gap: var(--sp-3);
     padding: 20px 0 0;
     margin-top: auto;
-    border-top: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 -1px 0 rgba(255,255,255,0.04);
     padding-top: var(--sp-4);
   }
 
@@ -488,10 +487,6 @@
 
   .detail-hero-title {
     font-size: 32px;
-  }
-
-  .detail-actions {
-    padding: var(--sp-3) 48px var(--sp-6);
   }
 
   .modal-overlay {
@@ -569,9 +564,5 @@
 
   .detail-hero-info {
     padding: 0 64px var(--sp-6);
-  }
-
-  .detail-actions {
-    padding: var(--sp-3) 64px var(--sp-6);
   }
 }

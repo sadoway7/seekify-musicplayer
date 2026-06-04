@@ -190,6 +190,22 @@ func scanMusicDir(dir string) ScanStats {
 
 	mu.Lock()
 	oldTrackCount := len(tracks)
+
+	// Figure out which track IDs were removed (files deleted)
+	for oldID, oldTrack := range tracks {
+		if _, exists := newTracks[oldID]; !exists {
+			dbDeleteTrack(oldTrack.AlbumID)
+		}
+	}
+
+	// Persist all scanned tracks and albums to DB
+	for _, t := range newTracks {
+		dbUpsertTrack(t)
+	}
+	for _, a := range newAlbums {
+		dbUpsertAlbum(a)
+	}
+
 	tracks = newTracks
 	albums = newAlbums
 	mu.Unlock()

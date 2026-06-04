@@ -30,6 +30,7 @@
   padding-top: var(--sp-3);
   padding-bottom: 100px;
   overscroll-behavior: contain;
+  animation: pageFadeIn 0.22s var(--ease-out) both;
 }
 
 #app-content::-webkit-scrollbar {
@@ -83,7 +84,7 @@ body.mini-player-visible #app-content {
   padding: 0 var(--sp-1);
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
   background: var(--bg);
-  border-top: 1px solid var(--border);
+  box-shadow: 0 -1px 0 var(--border-subtle);
   z-index: 100;
 }
 
