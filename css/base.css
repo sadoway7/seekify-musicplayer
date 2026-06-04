@@ -99,10 +99,10 @@ html {
 }
 
 body {
-  background: #0A0A0A;
+  background: var(--bg-base);
   color: var(--text1);
   font-family: var(--ff);
-  font-size: 14px;
+  font-size: var(--fs-body);
   line-height: 1.5;
   overflow: hidden;
   height: 100vh;
