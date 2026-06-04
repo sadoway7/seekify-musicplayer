@@ -192,9 +192,9 @@ func scanMusicDir(dir string) ScanStats {
 	oldTrackCount := len(tracks)
 
 	// Figure out which track IDs were removed (files deleted)
-	for oldID, oldTrack := range tracks {
+	for oldID := range tracks {
 		if _, exists := newTracks[oldID]; !exists {
-			dbDeleteTrack(oldTrack.AlbumID)
+			dbDeleteTrack(oldID)
 		}
 	}
 
@@ -205,6 +205,17 @@ func scanMusicDir(dir string) ScanStats {
 	for _, a := range newAlbums {
 		dbUpsertAlbum(a)
 	}
+
+	// Clean up stale DB entries: tracks whose file_path no longer exists on disk
+	for dbID, dbTrack := range dbLoadTracks() {
+		if _, exists := newTracks[dbID]; !exists {
+			dbDeleteTrack(dbID)
+			_ = dbTrack
+		}
+	}
+
+	// Clean up orphaned favorites (pointing to track IDs that no longer exist)
+	dbCleanupFavorites()
 
 	tracks = newTracks
 	albums = newAlbums

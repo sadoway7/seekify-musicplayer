@@ -46,18 +46,21 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 10px var(--page-margin) 4px;
-  height: 56px;
-  min-height: 56px;
+  padding: 6px var(--page-margin) 0;
+  height: 48px;
+  min-height: 48px;
   width: 100%;
 }
 
 .np-header-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-label);
+  display: none;
+}
+
+.np-header-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-5);
 }
 
 .np-btn {
@@ -234,8 +237,8 @@
 
 .np-like-btn {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -253,13 +256,13 @@
 }
 
 .np-like-btn svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .np-queue-btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -272,8 +275,8 @@
 }
 
 #np-share-btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
