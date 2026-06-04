@@ -236,10 +236,15 @@
   }
 
   .np-header-text {
+    display: block;
     font-size: 13px;
     font-weight: 700;
     letter-spacing: var(--ls-label);
     color: var(--accent);
+  }
+
+  .np-header-actions {
+    display: none;
   }
 
   /* Vinyl disc area - in-flow on desktop */
