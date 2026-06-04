@@ -266,3 +266,74 @@
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
 }
+
+.settings-lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px var(--page-margin) 40px;
+  text-align: center;
+}
+
+.settings-lock-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--l2);
+  border-radius: 50%;
+  margin-bottom: var(--sp-6);
+}
+
+.settings-lock-icon svg {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+}
+
+.settings-lock-title {
+  font-size: var(--fs-screen);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: var(--ls-tight);
+  margin-bottom: var(--sp-1);
+}
+
+.settings-lock-desc {
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-7);
+}
+
+.settings-lock-form {
+  display: flex;
+  gap: var(--sp-2);
+  width: 100%;
+  max-width: 320px;
+}
+
+.settings-lock-input {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--l2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--fs-body);
+}
+
+.settings-lock-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-lock-input::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-lock-error {
+  color: var(--danger);
+  font-size: var(--fs-caption);
+  margin-top: var(--sp-2);
+}

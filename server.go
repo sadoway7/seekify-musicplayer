@@ -77,6 +77,7 @@ func main() {
 	mux.HandleFunc("/api/stream/", streamHandler)
 	mux.HandleFunc("/api/cover/", coverHandler)
 	mux.HandleFunc("/api/artist-art/", artistArtHandler)
+	mux.HandleFunc("/api/artist-art-fetch/", artistArtFetchHandler)
 	mux.HandleFunc("/api/scan", scanHandler)
 	mux.HandleFunc("/api/playlists", playlistsHandler)
 	mux.HandleFunc("/api/playlists/", playlistHandler)

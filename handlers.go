@@ -243,6 +243,24 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(svg))
 }
 
+func artistArtFetchHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	artistName := strings.TrimPrefix(r.URL.Path, "/api/artist-art-fetch/")
+	if artistName == "" {
+		http.Error(w, "Artist name required", http.StatusBadRequest)
+		return
+	}
+
+	fetched := fetchArtistImage(artistName)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"fetched": fetched})
+}
+
 func scanHandler(w http.ResponseWriter, r *http.Request) {
 	stats := scanMusicDir(musicDir)
 	applyApprovedMatches()

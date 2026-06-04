@@ -589,6 +589,22 @@ const tmore = e.target.closest('.track-more');
         return;
       }
 
+      const heroActionBtn = e.target.closest('.hero-action-btn');
+      if (heroActionBtn) {
+        const action = heroActionBtn.dataset.heroAction;
+        if (action === 'more-artist') {
+          const artistName = heroActionBtn.dataset.artist;
+          this._showArtistContextMenu(artistName, heroActionBtn);
+        } else if (action === 'more-album') {
+          const albumId = heroActionBtn.dataset.albumId;
+          this._showAlbumContextMenu(albumId, heroActionBtn);
+        } else if (action === 'more-playlist') {
+          const playlistId = heroActionBtn.dataset.playlistId;
+          this._showPlaylistContextMenu(playlistId, heroActionBtn);
+        }
+        return;
+      }
+
       const headerLink = e.target.closest('.section-header-link');
       if (headerLink) {
         const target = headerLink.dataset.navigate;
@@ -1261,6 +1277,12 @@ const tmore = e.target.closest('.track-more');
 
   renderSettings() {
     this._viewTrackList = [];
+
+    if (!this._settingsUnlocked) {
+      this._renderSettingsLocked();
+      return;
+    }
+
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
 
@@ -1302,6 +1324,41 @@ const tmore = e.target.closest('.track-more');
         this.navigateTo('metadata-review');
       });
     }
+  },
+
+  _renderSettingsLocked() {
+    const html = '<div class="settings-lock">'
+      + '<div class="settings-lock-icon">' + Icons.settings() + '</div>'
+      + '<div class="settings-lock-title">Settings</div>'
+      + '<div class="settings-lock-desc">Enter password to continue</div>'
+      + '<div class="settings-lock-form">'
+      + '<input type="password" id="settings-password" class="settings-lock-input" placeholder="Password" autocomplete="off">'
+      + '<button id="settings-unlock-btn" class="settings-btn settings-btn-primary">Unlock</button>'
+      + '</div>'
+      + '<div id="settings-lock-error" class="settings-lock-error hidden">Incorrect password</div>'
+      + '</div>';
+    this.els.content.innerHTML = html;
+
+    const input = document.getElementById('settings-password');
+    const btn = document.getElementById('settings-unlock-btn');
+    const error = document.getElementById('settings-lock-error');
+
+    const tryUnlock = () => {
+      if (input.value === 'pancake') {
+        this._settingsUnlocked = true;
+        this.renderSettings();
+      } else {
+        error.classList.remove('hidden');
+        input.value = '';
+        input.focus();
+      }
+    };
+
+    btn.addEventListener('click', tryUnlock);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') tryUnlock();
+      error.classList.add('hidden');
+    });
   },
 
   async _loadMetadataStatus() {
@@ -1928,6 +1985,121 @@ const tmore = e.target.closest('.track-more');
       const idx = parseInt(item.dataset.queueIndex);
       item.classList.toggle('active', idx === Player.currentIndex);
     });
+  },
+
+  _showArtistContextMenu(artistName, triggerEl) {
+    this.showContextMenu([
+      { label: 'Play All', icon: Icons.play(), action: () => {
+        this.hideContextMenu();
+        const tracks = Store.getArtistTracks(artistName);
+        if (tracks.length > 0) {
+          Player.play(tracks[0], tracks, { type: 'artist', name: artistName });
+          this.showNowPlaying();
+        }
+      }},
+      { label: 'Shuffle', icon: Icons.shuffle(), action: () => {
+        this.hideContextMenu();
+        const tracks = Store.getArtistTracks(artistName).slice().sort(() => Math.random() - 0.5);
+        if (tracks.length > 0) {
+          Player.play(tracks[0], tracks, { type: 'artist', name: artistName });
+          this.showNowPlaying();
+        }
+      }},
+      { type: 'divider' },
+      { label: 'Fetch Artist Image', icon: Icons.refresh(), action: async () => {
+        this.hideContextMenu();
+        this.showToast('Fetching artist image...');
+        try {
+          const res = await fetch('/api/artist-art-fetch/' + encodeURIComponent(artistName), { method: 'POST' });
+          const data = await res.json();
+          if (data.fetched) {
+            this.showToast('Artist image updated');
+            this.renderArtist(artistName);
+          } else {
+            this.showToast('No image found for this artist');
+          }
+        } catch (err) {
+          this.showToast('Failed to fetch artist image');
+        }
+      }},
+      { label: 'Share', icon: Icons.share(), action: async () => {
+        this.hideContextMenu();
+        const shareUrl = window.location.origin + '/?artist=' + encodeURIComponent(artistName);
+        if (navigator.share) {
+          try { await navigator.share({ title: artistName, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
+        } else {
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+        }
+      }}
+    ], triggerEl);
+  },
+
+  _showAlbumContextMenu(albumId, triggerEl) {
+    const album = Store.getAlbum(albumId);
+    if (!album) return;
+    const tracks = Store.getAlbumTracks(albumId);
+    this.showContextMenu([
+      { label: 'Play', icon: Icons.play(), action: () => {
+        this.hideContextMenu();
+        if (tracks.length > 0) {
+          Player.play(tracks[0], tracks, { type: 'album', name: album.name, id: albumId });
+          this.showNowPlaying();
+        }
+      }},
+      { label: 'Shuffle', icon: Icons.shuffle(), action: () => {
+        this.hideContextMenu();
+        const shuffled = tracks.slice().sort(() => Math.random() - 0.5);
+        if (shuffled.length > 0) {
+          Player.play(shuffled[0], shuffled, { type: 'album', name: album.name, id: albumId });
+          this.showNowPlaying();
+        }
+      }},
+      { type: 'divider' },
+      { label: 'Share', icon: Icons.share(), action: async () => {
+        this.hideContextMenu();
+        const shareUrl = window.location.origin + '/?album=' + encodeURIComponent(albumId);
+        if (navigator.share) {
+          try { await navigator.share({ title: album.name, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
+        } else {
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+        }
+      }}
+    ], triggerEl);
+  },
+
+  _showPlaylistContextMenu(playlistId, triggerEl) {
+    const playlist = Store.getPlaylist(playlistId);
+    if (!playlist) return;
+    const tracks = playlist.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
+    this.showContextMenu([
+      { label: 'Play', icon: Icons.play(), action: () => {
+        this.hideContextMenu();
+        if (tracks.length > 0) {
+          Player.play(tracks[0], tracks, { type: 'playlist', name: playlist.name, id: playlistId });
+          this.showNowPlaying();
+        }
+      }},
+      { label: 'Shuffle', icon: Icons.shuffle(), action: () => {
+        this.hideContextMenu();
+        const shuffled = tracks.slice().sort(() => Math.random() - 0.5);
+        if (shuffled.length > 0) {
+          Player.play(shuffled[0], shuffled, { type: 'playlist', name: playlist.name, id: playlistId });
+          this.showNowPlaying();
+        }
+      }},
+      { type: 'divider' },
+      { label: 'Delete', icon: Icons.trash(), action: async () => {
+        this.hideContextMenu();
+        try {
+          await Api.deletePlaylist(playlistId);
+          await Store.refreshPlaylists();
+          this.renderLibrary();
+          this.showToast('Playlist deleted');
+        } catch (err) {
+          this.showToast('Failed to delete playlist');
+        }
+      }}
+    ], triggerEl);
   },
 
   _showTrackContextMenu(trackId, triggerEl) {
