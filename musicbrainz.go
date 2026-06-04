@@ -612,12 +612,14 @@ func applyApprovedMatches() int {
 	}
 
 	mu.Lock()
+	coverDir := filepath.Join(musicDir, "images")
 	for _, m := range bestPerTrack {
 		track, exists := tracks[m.TrackID]
 		if !exists {
 			continue
 		}
 
+		oldAlbumID := track.AlbumID
 		changed := false
 
 		if m.MBArtist != "" && track.Artist != m.MBArtist {
@@ -643,6 +645,19 @@ func applyApprovedMatches() int {
 			}
 			track.HasMetadata = true
 			applied++
+
+			if oldAlbumID != track.AlbumID {
+				oldPath := filepath.Join(coverDir, oldAlbumID+".jpg")
+				newPath := filepath.Join(coverDir, track.AlbumID+".jpg")
+				if _, err := os.Stat(newPath); os.IsNotExist(err) {
+					if data, ferr := os.ReadFile(oldPath); ferr == nil {
+						os.WriteFile(newPath, data, 0644)
+						coverMu.Lock()
+						coverCache[track.AlbumID] = data
+						coverMu.Unlock()
+					}
+				}
+			}
 		}
 
 		if m.MBAlbumID != "" && track.AlbumID != "" {
@@ -728,6 +743,7 @@ func applyApprovedMatches() int {
 
 func rebuildAlbumsFromTracks() {
 	newAlbums := make(map[string]*Album)
+	coverDir := filepath.Join(musicDir, "images")
 	for _, t := range tracks {
 		if t.Album != "" {
 			if _, exists := newAlbums[t.AlbumID]; !exists {
@@ -745,6 +761,13 @@ func rebuildAlbumsFromTracks() {
 				newAlbums[t.AlbumID].HasCover = true
 			}
 			coverMu.RUnlock()
+
+			if !newAlbums[t.AlbumID].HasCover {
+				coverPath := filepath.Join(coverDir, t.AlbumID+".jpg")
+				if _, err := os.Stat(coverPath); err == nil {
+					newAlbums[t.AlbumID].HasCover = true
+				}
+			}
 
 			if t.HasCover && !newAlbums[t.AlbumID].HasCover {
 				newAlbums[t.AlbumID].HasCover = true

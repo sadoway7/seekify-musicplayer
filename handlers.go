@@ -631,17 +631,86 @@ func metadataScanHandler(w http.ResponseWriter, r *http.Request) {
 	metaScanLock.Lock()
 	if metaScan.Running {
 		metaScanLock.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "already_running",
-			"progress": metaScan.Scanned,
-			"total":    metaScan.Total,
-		})
+		http.Error(w, "Scan already in progress", http.StatusConflict)
 		return
 	}
 	metaScanLock.Unlock()
 
 	go scanMetadataForTracks()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "started",
+	})
+}
+
+func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/metadata/rescan/")
+	if trackID == "" {
+		http.Error(w, "Track ID required", http.StatusBadRequest)
+		return
+	}
+
+	mu.RLock()
+	track, exists := tracks[trackID]
+	mu.RUnlock()
+	if !exists {
+		http.Error(w, "Track not found", http.StatusNotFound)
+		return
+	}
+
+	db.Exec("DELETE FROM metadata_matches WHERE track_id = ?", trackID)
+
+	go func() {
+		searchTitle := track.Title
+		searchArtist := track.Artist
+		if searchTitle == "" || strings.ToLower(searchTitle) == strings.ToLower(titleFromFilename(track.FilePath)) {
+			searchTitle = titleFromFilename(track.FilePath)
+		}
+		log.Printf("[metadata] Rescanning single track: %s - %s", searchArtist, searchTitle)
+
+		candidates, err := mbSearchRecordings(searchArtist, searchTitle, 10)
+		if err != nil {
+			log.Printf("[metadata] Rescan failed for %q - %q: %v", searchArtist, searchTitle, err)
+			return
+		}
+
+		inserted := 0
+		for _, cand := range candidates {
+			score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title)
+			if score < 0.5 {
+				continue
+			}
+
+			mu.RLock()
+			hasCover := false
+			if cand.AlbumID != "" {
+				coverPath := filepath.Join(musicDir, "images", cand.AlbumID+".jpg")
+				if _, err := os.Stat(coverPath); err == nil {
+					hasCover = true
+				}
+			}
+			mu.RUnlock()
+
+			match := &MetadataMatch{
+				ID:          generateUUID(),
+				TrackID:     trackID,
+				TrackTitle:  searchTitle,
+				TrackArtist: searchArtist,
+				MBTitle:     cand.Title,
+				MBArtist:    cand.Artist,
+				MBAlbum:     cand.Album,
+				MBAlbumID:   cand.AlbumID,
+				MBScore:     score,
+				Status:      "pending",
+				HasCover:    hasCover,
+				FilePath:    track.FilePath,
+			}
+			dbInsertMetadataMatch(match)
+			inserted++
+		}
+		log.Printf("[metadata] Rescan complete: %d candidates found for %s - %s", inserted, searchArtist, searchTitle)
+	}()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

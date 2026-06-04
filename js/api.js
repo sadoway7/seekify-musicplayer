@@ -182,6 +182,14 @@ const Api = {
     } catch { return null; }
   },
 
+  async metadataRescanTrack(trackId) {
+    try {
+      const res = await fetch('/api/metadata/rescan/' + trackId, { method: 'POST' });
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
+  },
+
   async metadataCounts() {
     try {
       const res = await fetch('/api/metadata/counts');

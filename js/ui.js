@@ -78,9 +78,16 @@ const UI = {
         }
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        Store.currentTab = tab.dataset.tab;
-        Store.currentView = tab.dataset.tab;
-        Store.viewData = {};
+        const tabName = tab.dataset.tab;
+        Store.currentTab = tabName;
+        // Favorites tab navigates to favorites view
+        if (tabName === 'favorites') {
+          Store.currentView = 'favorites';
+          Store.viewData = {};
+        } else {
+          Store.currentView = tabName;
+          Store.viewData = {};
+        }
         this.searchGenre = '';
         this.renderPage();
       });
@@ -148,6 +155,31 @@ const UI = {
 
     document.querySelector('.np-queue-btn').addEventListener('click', () => {
       this.showQueue();
+    });
+
+    document.getElementById('np-share-btn').addEventListener('click', async () => {
+      const track = Player.getCurrentTrack();
+      if (!track) return;
+      const shareData = {
+        title: track.title,
+        text: track.title + ' by ' + track.artist,
+      };
+      if (navigator.share) {
+        try {
+          await navigator.share(shareData);
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            this.showToast('Share failed');
+          }
+        }
+      } else {
+        try {
+          await navigator.clipboard.writeText(track.title + ' by ' + track.artist);
+          this.showToast('Copied to clipboard');
+        } catch (err) {
+          this.showToast('Share not supported');
+        }
+      }
     });
 
     let prevVolume = 1;
@@ -531,6 +563,16 @@ const tmore = e.target.closest('.track-more');
         return;
       }
 
+      const detailPlayBtn = e.target.closest('.detail-play-btn');
+      if (detailPlayBtn) {
+        if (this._viewTrackList.length > 0) {
+          const source = this._getViewSource();
+          Player.play(this._viewTrackList[0], this._viewTrackList, source);
+          this.showNowPlaying();
+        }
+        return;
+      }
+
       const actionBtn = e.target.closest('.action-btn');
       if (actionBtn) {
         this._handleAction(actionBtn.dataset.action);
@@ -652,40 +694,34 @@ const tmore = e.target.closest('.track-more');
     if (recentCards.length > 0 || currentTrack) {
       html += '<div class="quick-play-grid">';
 
+      // Spot 1: All Music
       html += '<div class="quick-play-card quick-play-card-all" data-navigate="all-music">'
         + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--l3), var(--l2))">'
         + '<div class="quick-play-card-icon-text">ALL</div></div>'
         + '<div class="quick-play-title">All Music</div>'
         + '</div>';
 
-      if (currentTrack) {
-        const hasCover = Store.albumHasCover(currentTrack.albumID);
-        const artInner = hasCover
-          ? '<img src="' + Api.coverUrl(currentTrack.albumID) + '" alt="">'
-          : '<div class="quick-play-card-fallback">' + Icons.music() + '</div>';
-        html += '<div class="quick-play-card quick-play-card-now" data-album-id="' + currentTrack.albumID + '">'
-          + '<div class="quick-play-art">' + artInner
-          + '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div></div>'
-          + '<div class="quick-play-title">' + this._esc(currentTrack.title) + '</div>'
-          + '</div>';
-      }
-
-      recentCards.slice(0, 5).forEach(c => {
-        // Skip if this card is the same album/track as the current playing track
-        if (currentTrack) {
-          if (c.albumID && c.albumID === currentTrack.albumID) return;
-          if (c.id === currentTrack.id) return;
-        }
+      // Spots 2-8: 7 most recently played
+      let addedRecent = 0;
+      recentCards.forEach(c => {
+        if (addedRecent >= 7) return;
+        addedRecent++;
+        const isNowPlaying = currentTrack && c.id === currentTrack.id;
         const hasCover = Store.albumHasCover(c.albumID || c.id);
         const artInner = hasCover
           ? '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">'
           : '<div class="quick-play-card-fallback">' + Icons.music() + '</div>';
-        html += '<div class="quick-play-card quick-play-card-recent" data-track-id="' + c.id + '" data-album-id="' + (c.albumID || c.id) + '">'
-          + '<div class="quick-play-art">' + artInner + '</div>'
+        const nowPlayingBadge = isNowPlaying
+          ? '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div>'
+          : '';
+        const cardClass = isNowPlaying ? ' quick-play-card-now' : '';
+        html += '<div class="quick-play-card quick-play-card-recent' + cardClass + '" data-track-id="' + c.id + '" data-album-id="' + (c.albumID || c.id) + '">'
+          + '<div class="quick-play-art">' + artInner + nowPlayingBadge + '</div>'
           + '<div class="quick-play-title">' + this._esc(c.name) + '</div>'
           + '</div>';
       });
 
+      // Spot 9: Shuffle
       html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
         + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--accent), #a8c830);display:flex;align-items:center;justify-content:center">'
         + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
@@ -822,16 +858,27 @@ const tmore = e.target.closest('.track-more');
 
     if (this.searchQuery) {
       const q = this.searchQuery.toLowerCase();
-      const results = Store.library.tracks.filter(t =>
-        t.title.toLowerCase().includes(q) ||
-        t.artist.toLowerCase().includes(q) ||
-        t.album.toLowerCase().includes(q)
-      );
+      const words = q.split(/\s+/).filter(w => w.length > 0);
+      const results = Store.library.tracks.filter(t => {
+        const haystack = (t.title + ' ' + t.artist + ' ' + t.album + ' ' + (t.genre || '')).toLowerCase();
+        return words.every(w => haystack.includes(w));
+      }).sort((a, b) => {
+        // Prioritize title matches, then artist, then album
+        const aTitle = a.title.toLowerCase().includes(q) ? 3 : a.title.toLowerCase().split(/\s+/).some(w => words.includes(w)) ? 2 : 0;
+        const bTitle = b.title.toLowerCase().includes(q) ? 3 : b.title.toLowerCase().split(/\s+/).some(w => words.includes(w)) ? 2 : 0;
+        return bTitle - aTitle;
+      });
       this._viewTrackList = results;
       if (results.length === 0) {
         container.innerHTML = this._emptyState('No results', 'Try different keywords', Icons.search());
       } else {
-        container.innerHTML = this.renderTrackList(results, { showArt: true });
+        let html = '<div class="detail-actions">'
+          + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+          + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+          + '</div>';
+        html += '<div class="search-results-header">' + results.length + ' result' + (results.length !== 1 ? 's' : '') + '</div>';
+        html += this.renderTrackList(results, { showArt: true });
+        container.innerHTML = html;
       }
     } else if (this.searchGenre) {
       const results = Store.library.tracks.filter(t =>
@@ -1504,6 +1551,23 @@ const tmore = e.target.closest('.track-more');
     this.els.npRepeat.innerHTML = Player.repeat === 'one' ? Icons.repeatOne() : Icons.repeat();
 
     this.els.nowPlaying.classList.toggle('playing', Player.playing);
+
+    this._checkTitleOverflow();
+  },
+
+  _checkTitleOverflow() {
+    const el = this.els.npTitle;
+    if (!el) return;
+    el.classList.remove('scrolling');
+    el.style.removeProperty('--marquee-dur');
+    el.style.removeProperty('--marquee-dist');
+    if (el.scrollWidth > el.clientWidth + 4) {
+      const dur = Math.max(6, el.scrollWidth / 60);
+      const dist = el.scrollWidth - el.clientWidth;
+      el.style.setProperty('--marquee-dur', dur + 's');
+      el.style.setProperty('--marquee-dist', '-' + dist + 'px');
+      el.classList.add('scrolling');
+    }
   },
 
   updateSeekBar() {
@@ -1813,6 +1877,16 @@ const tmore = e.target.closest('.track-more');
       { label: 'Add to Playlist', icon: Icons.plus(), action: () => {
         this.hideContextMenu();
         this.showPlaylistModal(trackId);
+      }},
+      { label: 'Rescan Metadata', icon: Icons.search(), action: async () => {
+        this.hideContextMenu();
+        this.showToast('Scanning metadata...');
+        try {
+          await Api.metadataRescanTrack(trackId);
+          this.showToast('Metadata scan started for this track');
+        } catch (err) {
+          this.showToast('Failed to scan metadata');
+        }
       }},
       { type: 'divider' },
       { label: 'Go to Album', icon: Icons.library(), action: () => {
