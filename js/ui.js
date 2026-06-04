@@ -160,13 +160,10 @@ const UI = {
     document.getElementById('np-share-btn').addEventListener('click', async () => {
       const track = Player.getCurrentTrack();
       if (!track) return;
-      const shareData = {
-        title: track.title,
-        text: track.title + ' by ' + track.artist,
-      };
+      const shareUrl = window.location.origin + '/?play=' + track.id;
       if (navigator.share) {
         try {
-          await navigator.share(shareData);
+          await navigator.share({ url: shareUrl });
         } catch (err) {
           if (err.name !== 'AbortError') {
             this.showToast('Share failed');
@@ -174,8 +171,8 @@ const UI = {
         }
       } else {
         try {
-          await navigator.clipboard.writeText(track.title + ' by ' + track.artist);
-          this.showToast('Copied to clipboard');
+          await navigator.clipboard.writeText(shareUrl);
+          this.showToast('Link copied');
         } catch (err) {
           this.showToast('Share not supported');
         }

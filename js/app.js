@@ -40,6 +40,25 @@ const App = {
     await Store.init();
     UI.renderPage();
     UI.updateMiniPlayer();
+
+    // Deep link: ?play=TRACK_ID
+    const params = new URLSearchParams(window.location.search);
+    const playId = params.get('play');
+    if (playId) {
+      const track = Store.getTrack(playId);
+      if (track) {
+        // Load the track but don't auto-play — user taps play
+        Player.queue = [track];
+        Player.currentIndex = 0;
+        Player.audio.src = Api.streamUrl(track.id);
+        Player.playing = false;
+        if (Player.onTrackChange) Player.onTrackChange(track);
+        if (Player.onStateChange) Player.onStateChange();
+        UI.showNowPlaying();
+      }
+      // Clean the URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }
 };
 

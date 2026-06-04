@@ -67,7 +67,10 @@ const Player = {
 
   _loadAndPlay(track) {
     this.audio.src = Api.streamUrl(track.id);
-    this.audio.play().catch(() => {});
+    this.audio.play().catch(() => {
+      this.playing = false;
+      if (this.onStateChange) this.onStateChange();
+    });
     this.playing = true;
     if (this.onTrackChange) this.onTrackChange(track);
     if (this.onStateChange) this.onStateChange();

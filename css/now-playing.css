@@ -50,6 +50,7 @@
   height: 56px;
   min-height: 56px;
   width: 100%;
+  flex-shrink: 0;
 }
 
 .np-header-text {
@@ -90,24 +91,23 @@
 }
 
 .np-artwork {
-  position: relative;
-  z-index: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 35%;
+  z-index: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  padding: var(--sp-2) var(--page-margin) var(--sp-6);
-  min-height: 0;
-  width: 100%;
+  pointer-events: none;
 }
 
 .np-art-wrapper {
   position: relative;
-  width: min(85vw, 340px);
-  max-height: min(85vw, 340px);
+  width: min(90vw, 380px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .np-art-wrapper::after {
@@ -161,8 +161,9 @@
 .np-info {
   position: relative;
   z-index: 1;
-  padding: 0 var(--page-margin);
+  padding: var(--sp-4) var(--page-margin) 0;
   width: 100%;
+  margin-top: auto;
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -240,6 +241,7 @@
   z-index: 1;
   padding: var(--sp-5) var(--page-margin) 0;
   width: 100%;
+  flex-shrink: 0;
 }
 
 .np-waveform-container {
@@ -276,8 +278,9 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 10px var(--sp-4) 14px;
+  padding: 10px var(--page-margin) var(--sp-5);
   width: 100%;
+  flex-shrink: 0;
 }
 
 .np-ctrl {
@@ -386,6 +389,17 @@
   max-width: 100%;
   flex: 1;
   min-height: 0;
+  position: relative;
+  justify-content: flex-end;
+  padding-bottom: 12vh;
+}
+
+.np-info {
+  position: relative;
+  z-index: 1;
+  padding: var(--sp-3) var(--page-margin) 0;
+  width: 100%;
+  flex-shrink: 0;
   overflow: hidden;
 }
 

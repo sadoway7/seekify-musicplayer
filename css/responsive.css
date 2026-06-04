@@ -243,14 +243,20 @@
     color: var(--accent);
   }
 
-  /* Vinyl disc area - absorbs remaining vertical space */
+  /* Vinyl disc area - in-flow on desktop */
   .np-artwork {
     flex: 1 1 0 !important;
+    position: relative !important;
+    top: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
     min-height: 0 !important;
     padding: 0 48px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    pointer-events: auto !important;
     overflow: hidden;
   }
 
@@ -260,6 +266,7 @@
     height: var(--disc-size) !important;
     max-height: none !important;
     max-width: none !important;
+    opacity: 1 !important;
     border-radius: 50% !important;
     flex-shrink: 0;
     overflow: hidden;
