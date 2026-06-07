@@ -1,6 +1,6 @@
 .queue-panel {
   position: fixed;
-  bottom: 84px;
+  bottom: var(--tab-bar-height);
   left: 0;
   right: 0;
   max-height: 70vh;

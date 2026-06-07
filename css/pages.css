@@ -426,7 +426,7 @@
   border-radius: var(--radius-full);
   padding: 0 var(--sp-4) 0 44px;
   height: 44px;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--text-primary);
   outline: none;
 }
