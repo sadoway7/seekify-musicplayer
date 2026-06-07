@@ -31,6 +31,8 @@ const UI = {
     this._lastColorAlbumId = null;
     this._renderQueue();
     this._setupMiniVolume();
+    this._bindResize();
+    this._bindQueueSwipe();
   },
 
   _cacheDom() {
@@ -108,7 +110,7 @@ const UI = {
         Player.prev();
       } else if (e.target.closest('.mini-next-btn')) {
         Player.next();
-      } else if (!e.target.closest('.mini-btn')) {
+      } else if (!e.target.closest('.mini-btn') && !e.target.closest('.mini-volume-wrap')) {
         this.showNowPlaying();
       }
     });
@@ -455,6 +457,67 @@ const UI = {
       if (isNaN(index)) return;
       this._queueClickActive = true;
       Player.playInQueue(index);
+    });
+  },
+
+  _bindResize() {
+    let prevDesktop = window.innerWidth >= 768;
+    window.addEventListener('resize', () => {
+      const isDesktop = window.innerWidth >= 768;
+      if (isDesktop !== prevDesktop) {
+        prevDesktop = isDesktop;
+        if (isDesktop) {
+          // Switched to desktop: show queue if now-playing is open
+          if (!this.els.nowPlaying.classList.contains('hidden')) {
+            this.els.queuePanel.classList.remove('hidden');
+            document.getElementById('app').classList.add('queue-visible');
+            this._renderQueue();
+          }
+        } else {
+          // Switched to mobile: hide queue
+          this.els.queuePanel.classList.add('hidden');
+          document.getElementById('app').classList.remove('queue-visible');
+        }
+      }
+    });
+  },
+
+  _bindQueueSwipe() {
+    const panel = this.els.queuePanel;
+    let startY = 0;
+    let currentY = 0;
+    let swiping = false;
+
+    panel.addEventListener('touchstart', (e) => {
+      // Only track swipes starting from the header area (top 60px)
+      const rect = panel.getBoundingClientRect();
+      const touchY = e.touches[0].clientY - rect.top;
+      if (touchY > 60) return;
+      startY = e.touches[0].clientY;
+      swiping = true;
+    }, { passive: true });
+
+    panel.addEventListener('touchmove', (e) => {
+      if (!swiping) return;
+      currentY = e.touches[0].clientY;
+      const diff = currentY - startY;
+      if (diff > 0) {
+        // Dragging down
+        panel.style.transform = 'translateY(' + diff + 'px)';
+      }
+    }, { passive: true });
+
+    panel.addEventListener('touchend', () => {
+      if (!swiping) return;
+      swiping = false;
+      const diff = currentY - startY;
+      if (diff > 80) {
+        // Swiped down enough — close
+        this.hideQueue();
+      }
+      panel.style.transform = '';
+      startY = 0;
+      currentY = 0;
     });
   },
 
@@ -839,10 +902,12 @@ const tmore = e.target.closest('.track-more');
         + '<div class="quick-play-title">All Music</div>'
         + '</div>';
 
-      // Spots 2-8: 7 most recently played
+      // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows
+      const cols = window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
+      const maxRecent = (cols * 3) - 1; // -1 for the "All Music" card
       let addedRecent = 0;
       recentCards.forEach(c => {
-        if (addedRecent >= 7) return;
+        if (addedRecent >= maxRecent) return;
         addedRecent++;
         const isNowPlaying = currentTrack && c.id === currentTrack.id;
         const artInner = '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">';
@@ -2182,6 +2247,7 @@ const tmore = e.target.closest('.track-more');
     // Show queue sidebar on desktop
     if (window.innerWidth >= 768) {
       this.els.queuePanel.classList.remove('hidden');
+      document.getElementById('app').classList.add('queue-visible');
     }
   },
 
@@ -2200,16 +2266,21 @@ const tmore = e.target.closest('.track-more');
     // Hide queue sidebar on desktop
     if (window.innerWidth >= 768) {
       this.els.queuePanel.classList.add('hidden');
+      document.getElementById('app').classList.remove('queue-visible');
     }
   },
 
   showQueue() {
     this._renderQueue();
     this.els.queuePanel.classList.remove('hidden');
+    if (window.innerWidth >= 768) {
+      document.getElementById('app').classList.add('queue-visible');
+    }
   },
 
   hideQueue() {
     this.els.queuePanel.classList.add('hidden');
+    document.getElementById('app').classList.remove('queue-visible');
   },
 
   updateQueueIfVisible() {

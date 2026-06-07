@@ -3,8 +3,7 @@
   bottom: 84px;
   left: 0;
   right: 0;
-  height: calc(100vh - 84px);
-  max-height: none;
+  max-height: 70vh;
   background: var(--l1);
   border-radius: 16px 16px 0 0;
   z-index: 110;
