@@ -314,11 +314,6 @@
   }
 
   .np-header-actions {
-    display: flex;
-  }
-
-  .np-header-actions .np-like-btn,
-  .np-header-actions #np-share-btn {
     display: none;
   }
 
