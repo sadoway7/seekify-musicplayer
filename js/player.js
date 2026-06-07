@@ -111,7 +111,9 @@ const Player = {
     if (this.onTrackChange) this.onTrackChange(track);
     if (this.onStateChange) this.onStateChange();
     this._updateMediaSession(track);
-  }, {
+  },
+
+  pause() {
     this.audio.pause();
   },
 
