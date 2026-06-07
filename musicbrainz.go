@@ -294,6 +294,69 @@ func fetchMetadataForTrack(artist, title string) (string, string, string, error)
 	return rec.Title, mbArtist, mbAlbum, nil
 }
 
+// releaseTypePriority ranks release-group types: Album is best, Compilation worst.
+func releaseTypePriority(rgType string) int {
+	switch strings.ToLower(rgType) {
+	case "album":
+		return 5
+	case "ep":
+		return 4
+	case "single":
+		return 3
+	case "soundtrack":
+		return 2
+	case "live":
+		return 2
+	case "remix":
+		return 1
+	case "compilation":
+		return 0
+	default:
+		return 1
+	}
+}
+
+// mbLookupBestRelease looks up a recording by MBID and returns the best release
+// (real album preferred over compilation).
+func mbLookupBestRelease(recordingID string) (string, string) {
+	reqURL := fmt.Sprintf("%s/recording/%s?inc=releases+release-groups&fmt=json", mbBaseURL, recordingID)
+
+	body, err := mbDoRequest(reqURL)
+	if err != nil {
+		return "", ""
+	}
+
+	var lookupResp struct {
+		Releases []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+			ReleaseGroup struct {
+				Type  string `json:"type"`
+				Title string `json:"title"`
+			} `json:"release-group"`
+		} `json:"releases"`
+	}
+
+	if err := json.Unmarshal(body, &lookupResp); err != nil {
+		return "", ""
+	}
+
+	bestTitle := ""
+	bestID := ""
+	bestPriority := -1
+
+	for _, r := range lookupResp.Releases {
+		p := releaseTypePriority(r.ReleaseGroup.Type)
+		if p > bestPriority {
+			bestPriority = p
+			bestTitle = r.Title
+			bestID = r.ID
+		}
+	}
+
+	return bestTitle, bestID
+}
+
 func isCompilationTitle(title string) bool {
 	t := strings.ToLower(title)
 	keywords := []string{
@@ -352,23 +415,17 @@ func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, e
 			artistName = rec.ArtistCredit[0].Name
 		}
 
-		// Pick the best release: prefer non-compilation albums
+		// Use the full release list via lookup to find the real album
 		albumName := ""
 		albumID := ""
-		if len(rec.Releases) > 0 {
-			found := false
-			for _, r := range rec.Releases {
-				if !isCompilationTitle(r.Title) {
-					albumName = r.Title
-					albumID = r.ID
-					found = true
-					break
-				}
-			}
-			if !found {
-				albumName = rec.Releases[0].Title
-				albumID = rec.Releases[0].ID
-			}
+		if rec.ID != "" {
+			albumName, albumID = mbLookupBestRelease(rec.ID)
+		}
+
+		// Fallback to the search results if lookup failed
+		if albumName == "" && len(rec.Releases) > 0 {
+			albumName = rec.Releases[0].Title
+			albumID = rec.Releases[0].ID
 		}
 
 		results = append(results, mbRecordingResult{
@@ -545,7 +602,7 @@ func scanMetadataForTracks() MetadataScanResult {
 	}
 	close(trackCh)
 
-	const numWorkers = 3
+	const numWorkers = 2
 	var wg sync.WaitGroup
 
 	worker := func() {
@@ -559,7 +616,7 @@ func scanMetadataForTracks() MetadataScanResult {
 
 			_ = s
 
-			candidates, err := mbSearchRecordings(info.artist, info.title, 5)
+			candidates, err := mbSearchRecordings(info.artist, info.title, 3)
 			if err != nil {
 				if strings.Contains(err.Error(), "503") {
 					log.Printf("[metadata] Rate limited, waiting 5s before retry...")

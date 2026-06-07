@@ -23,14 +23,17 @@
 
   #app-content {
     margin-left: 76px;
+    margin-right: 360px;
   }
 
   body.mini-player-visible #app-content {
     margin-left: 76px;
+    margin-right: 360px;
   }
 
   #app-header {
     margin-left: 76px;
+    margin-right: 360px;
   }
 
   #tab-bar {
@@ -82,7 +85,7 @@
   .mini-player {
     position: fixed;
     left: 76px;
-    right: 0;
+    right: 360px;
     bottom: 0;
     width: auto;
     max-width: none;
@@ -423,9 +426,35 @@
     align-self: stretch;
   }
 
-  /* Auto-show queue on desktop when now-playing is open */
-  .now-playing:not(.hidden) .queue-panel {
+  /* Queue: persistent sidebar on desktop, always visible */
+  .queue-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 360px;
+    min-width: 300px;
+    height: 100vh;
+    max-height: 100vh;
+    z-index: 5;
+    animation: none;
+    border-radius: 0;
+    background: var(--bg);
+    border-left: 1px solid rgba(255,255,255,0.04);
+    padding: 20px 24px;
     display: flex !important;
+  }
+
+  /* When now-playing is open, queue sits inside the np layout instead */
+  .now-playing:not(.hidden) .queue-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    height: 100%;
+    border-left: none;
+    background: rgba(255,255,255,0.03);
+    box-shadow: -1px 0 0 rgba(255,255,255,0.03);
   }
 
   .queue-close {

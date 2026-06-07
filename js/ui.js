@@ -29,6 +29,7 @@ const UI = {
     this._colorCanvas = document.getElementById('color-sample-canvas');
     this._colorCtx = this._colorCanvas.getContext('2d', { willReadFrequently: true });
     this._lastColorAlbumId = null;
+    this._renderQueue();
   },
 
   _cacheDom() {
@@ -2110,9 +2111,7 @@ const tmore = e.target.closest('.track-more');
   },
 
   updateQueueIfVisible() {
-    if (this.els.queuePanel && !this.els.queuePanel.classList.contains('hidden')) {
-      this._renderQueue();
-    }
+    this._renderQueue();
   },
 
   _renderQueue() {
