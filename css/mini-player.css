@@ -82,7 +82,7 @@
   width: 46px;
   height: 46px;
   min-width: 46px;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: var(--l3);
   background-size: cover;
   background-position: center;

@@ -90,6 +90,9 @@ func main() {
 		log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(tracks))
 	}
 
+	// Cleanup recent/favorites AFTER all scans so media track IDs exist
+	dbCleanupRecent()
+
 	applied := applyApprovedMatches()
 	if applied > 0 {
 		log.Printf("Applied %d metadata overrides from database", applied)

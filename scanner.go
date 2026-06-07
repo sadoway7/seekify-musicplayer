@@ -268,7 +268,7 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 			}
 		}
 		dbCleanupFavorites()
-		dbCleanupRecent()
+		// dbCleanupRecent moved to server.go after all scans complete
 
 		// Primary scan: replace global maps
 		tracks = newTracks

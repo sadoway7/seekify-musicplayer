@@ -256,6 +256,26 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fallback: use first album cover for this artist
+	mu.RLock()
+	for _, a := range albums {
+		if a.Artist == "" || strings.ToLower(strings.TrimSpace(a.Artist)) != key {
+			continue
+		}
+		if !a.HasCover {
+			continue
+		}
+		coverPath := filepath.Join(musicDir, "images", a.ID+".jpg")
+		if coverData, err := os.ReadFile(coverPath); err == nil {
+			mu.RUnlock()
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			w.Write(coverData)
+			return
+		}
+	}
+	mu.RUnlock()
+
 	svg := generatePlaceholderSVG(artistName)
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")

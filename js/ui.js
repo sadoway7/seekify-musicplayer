@@ -898,7 +898,7 @@ const UI = {
 
       // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows
       const cols = window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
-      const maxRecent = (cols * 3) - 1; // -1 for the "All Music" card
+      const maxRecent = window.innerWidth >= 768 ? (cols * 3) - 1 : 7;
       let addedRecent = 0;
       recentCards.forEach(c => {
         if (addedRecent >= maxRecent) return;
@@ -936,7 +936,7 @@ const UI = {
 
     const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     const artistLimit = window.innerWidth >= 768 ? 10 : 6;
-    const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, artistLimit);
+    const newArtists = namedArtists.sort(() => Math.random() - 0.5).slice(0, artistLimit);
     html += '<div class="mega-title"><span>Artists</span></div>';
     if (newArtists.length > 0) {
       html += '<div class="scroll-row artist-row">';
@@ -954,8 +954,9 @@ const UI = {
     const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     html += '<div class="mega-title"><span>Albums</span></div>';
     if (namedAlbums.length > 0) {
+      const shuffledAlbums = namedAlbums.sort(() => Math.random() - 0.5).slice(0, 15);
       html += '<div class="scroll-row">';
-      namedAlbums.forEach(a => {
+      shuffledAlbums.forEach(a => {
         html += '<div class="card" data-album-id="' + a.id + '">'
           + '<div class="card-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
           + '<div class="card-title">' + this._esc(a.name) + '</div>'
@@ -1275,19 +1276,35 @@ const UI = {
     return this.renderTrackList(tracks, { showArt: true, filterable: true });
   },
 
+  _buildMosaic() {
+    const albums = Store.library.albums
+      .filter(a => a.HasCover && a.name && a.name !== 'Unknown')
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 12);
+    if (albums.length === 0) return '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>';
+    let html = '';
+    albums.forEach(a => {
+      html += '<div class="mosaic-cell"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>';
+    });
+    return html;
+  },
+
   renderAllMusic() {
-    const tracks = Store.library.tracks.slice();
-    this._viewTrackList = tracks;
+    const allTracks = Store.library.tracks.slice();
+    this._viewTrackList = allTracks;
+    this._allMusicPage = 0;
+    const pageSize = 50;
+    const firstBatch = allTracks.slice(0, pageSize);
 
     let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<button class="hero-action-btn" data-hero-action="more">' + Icons.more() + '</button>'
-      + '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>'
+      + '<div class="mosaic-banner">' + this._buildMosaic() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-text">'
       + '<div class="detail-hero-title">All Music</div>'
-      + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
+      + '<div class="detail-hero-meta">' + allTracks.length + ' tracks</div>'
       + '</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
@@ -1295,13 +1312,49 @@ const UI = {
       + '</div>'
       + '</div></div>';
 
-    if (tracks.length === 0) {
+    if (allTracks.length === 0) {
       html += this._emptyState('No music yet', 'Add music to your library to get started', Icons.music());
     } else {
-      html += this.renderTrackList(tracks, { showArt: true });
+      html += '<div id="all-music-list">' + this.renderTrackList(firstBatch, { showArt: true }) + '</div>';
+      if (allTracks.length > pageSize) {
+        html += '<div class="load-more-sentinel"></div>';
+      }
     }
 
     this.els.content.innerHTML = html;
+    this._setupAllMusicScroll(allTracks, pageSize);
+  },
+
+  _setupAllMusicScroll(allTracks, pageSize) {
+    const sentinel = this.els.content.querySelector('.load-more-sentinel');
+    if (!sentinel) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries[0].isIntersecting) return;
+      this._allMusicPage = (this._allMusicPage || 0) + 1;
+      const start = this._allMusicPage * pageSize;
+      if (start >= allTracks.length) {
+        observer.disconnect();
+        sentinel.remove();
+        return;
+      }
+      const batch = allTracks.slice(start, start + pageSize);
+      const listEl = this.els.content.querySelector('#all-music-list .track-list');
+      if (listEl) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = this.renderTrackList(batch, { showArt: true });
+        const rows = tmp.querySelector('.track-list');
+        if (rows) {
+          while (rows.firstChild) {
+            listEl.appendChild(rows.firstChild);
+          }
+        }
+      }
+      if (start + pageSize >= allTracks.length) {
+        observer.disconnect();
+        sentinel.remove();
+      }
+    }, { root: this.els.content, threshold: 0.1 });
+    observer.observe(sentinel);
   },
 
   renderAlbum(albumId) {
@@ -2726,7 +2779,7 @@ const UI = {
       if (list.length > 0) {
         const shuffled = list.sort(() => Math.random() - 0.5);
         const capped = shuffled.slice(0, 100);
-        Player.shuffle = true;
+        Player.shuffle = false;
         const source = (action === 'shuffle-all')
           ? { type: 'all', name: 'All Music' }
           : this._getViewSource();
