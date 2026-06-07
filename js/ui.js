@@ -2232,6 +2232,8 @@ const UI = {
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
     this._applyNowPlayingBg();
+    // Deactivate all tab buttons while player is open
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
     // Show queue on desktop only (it's a flex column inside now-playing)
     // On mobile it stays hidden — user opens it via the queue button
     if (window.innerWidth >= 768) {
@@ -2253,6 +2255,10 @@ const UI = {
     }
     // Hide queue
     this.els.queuePanel.classList.add('hidden');
+    // Restore active tab highlight
+    document.querySelectorAll('.tab-item').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === Store.currentTab);
+    });
   },
 
   showQueue() {
