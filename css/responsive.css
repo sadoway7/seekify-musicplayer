@@ -314,6 +314,11 @@
   }
 
   .np-header-actions {
+    display: flex;
+  }
+
+  .np-header-actions .np-like-btn,
+  .np-header-actions #np-share-btn {
     display: none;
   }
 
@@ -467,7 +472,12 @@
   }
 
   .np-queue-btn {
-    display: none;
+    display: flex;
+    color: var(--text-secondary);
+  }
+
+  .np-queue-btn.active {
+    color: var(--accent);
   }
 
   /* Queue panel: full-height right sidebar */

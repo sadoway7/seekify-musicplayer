@@ -10,7 +10,7 @@
   flex-direction: column;
   align-items: center;
   padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tab-bar-height));
   animation: nowPlayingSlideUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   overflow: hidden;
 }

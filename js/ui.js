@@ -163,7 +163,11 @@ const UI = {
     });
 
     document.querySelector('.np-queue-btn').addEventListener('click', () => {
-      this.showQueue();
+      if (this.els.queuePanel.classList.contains('hidden')) {
+        this.showQueue();
+      } else {
+        this.hideQueue();
+      }
     });
 
     document.getElementById('np-share-btn').addEventListener('click', async () => {
@@ -2077,8 +2081,7 @@ const UI = {
     const hasPrev = Player.currentIndex > 0;
     this.els.npNext.style.opacity = hasNext ? '' : '0.3';
     this.els.npNext.style.pointerEvents = hasNext ? '' : 'none';
-    this.els.npPrev.style.opacity = hasPrev ? '' : '0.3';
-    this.els.npPrev.style.pointerEvents = hasPrev ? '' : 'none';
+    // Prev always active — restarts current song if at start
 
     this.els.nowPlaying.classList.toggle('playing', Player.playing);
 
