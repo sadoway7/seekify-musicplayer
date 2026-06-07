@@ -808,6 +808,29 @@
   width: 100%;
 }
 
+.show-more-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 0;
+  margin: 8px 0 20px;
+  background: var(--l2);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.show-more-btn:active {
+  background: var(--l3);
+  color: var(--accent);
+  transform: scale(0.98);
+}
+
 .detail-actions {
   display: inline-flex;
   flex-direction: row;

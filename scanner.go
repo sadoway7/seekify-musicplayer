@@ -303,15 +303,19 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 	return stats
 }
 
-func generatePlaceholderSVG(name string) string {
+func generatePlaceholderSVG(name string, id string) string {
 	initial := "?"
 	if len(name) > 0 {
 		initial = strings.ToUpper(string(name[0]))
 	}
 
-	// Generate a color from the name
+	// Use ID (unique hash) for color so every album/artist gets a distinct color
+	seed := id
+	if seed == "" {
+		seed = name
+	}
 	h := fnv.New32a()
-	h.Write([]byte(name))
+	h.Write([]byte(seed))
 	hash := h.Sum32()
 	hue := hash % 360
 

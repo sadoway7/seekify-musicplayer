@@ -97,6 +97,7 @@ const UI = {
           Store.viewData = {};
         }
         this.searchGenre = '';
+        this._newSongsLimit = 6;
         this.renderPage();
         this.els.content.scrollTop = 0;
       });

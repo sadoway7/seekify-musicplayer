@@ -75,24 +75,63 @@ func main() {
 
 	// Covers and artist art are lazy-loaded from disk on first request
 
-	// Scan primary music directory
-	log.Printf("Scanning music directory: %s", musicDir)
-	stats := scanMusicDir(musicDir)
-	log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
-
-	// Scan additional media directories
-	for prefix, dir := range musicDirs {
-		if prefix == "" {
-			continue
+	// Check if file counts match DB — skip full scan if nothing changed
+	needScan := len(dbTracks) == 0
+	if !needScan {
+		for prefix, dir := range musicDirs {
+			if prefix != "" {
+				continue
+			}
+			count := countAudioFiles(dir)
+			if count != len(dbTracks) {
+				log.Printf("Primary dir file count changed (%d in DB vs %d on disk), rescanning", len(dbTracks), count)
+				needScan = true
+			}
+			break
 		}
-		log.Printf("Scanning media directory [%s]: %s", prefix, dir)
-		mediaStats := scanMusicDirWithPrefix(dir, prefix)
-		log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(tracks))
+		if !needScan {
+			for prefix, dir := range musicDirs {
+				if prefix == "" {
+					continue
+				}
+				count := countAudioFiles(dir)
+				mediaDBCount := 0
+				for _, t := range tracks {
+					if strings.HasPrefix(t.FilePath, prefix+":") {
+						mediaDBCount++
+					}
+				}
+				if count != mediaDBCount {
+					log.Printf("Media dir [%s] file count changed (%d in DB vs %d on disk), rescanning", prefix, mediaDBCount, count)
+					needScan = true
+				}
+				break
+			}
+		}
 	}
 
-	// Cleanup recent/favorites AFTER all scans so media track IDs exist
-	dbCleanupFavorites()
-	dbCleanupRecent()
+	if needScan {
+		// Scan primary music directory
+		log.Printf("Scanning music directory: %s", musicDir)
+		stats := scanMusicDir(musicDir)
+		log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
+
+		// Scan additional media directories
+		for prefix, dir := range musicDirs {
+			if prefix == "" {
+				continue
+			}
+			log.Printf("Scanning media directory [%s]: %s", prefix, dir)
+			mediaStats := scanMusicDirWithPrefix(dir, prefix)
+			log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(tracks))
+		}
+
+		// Cleanup recent/favorites AFTER all scans so media track IDs exist
+		dbCleanupFavorites()
+		dbCleanupRecent()
+	} else {
+		log.Printf("File counts match DB, skipping full scan")
+	}
 
 	applied := applyApprovedMatches()
 	if applied > 0 {

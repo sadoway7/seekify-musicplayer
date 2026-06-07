@@ -214,7 +214,7 @@ func coverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	mu.RUnlock()
 
-	svg := generatePlaceholderSVG(albumName)
+	svg := generatePlaceholderSVG(albumName, albumID)
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write([]byte(svg))
@@ -276,7 +276,7 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	mu.RUnlock()
 
-	svg := generatePlaceholderSVG(artistName)
+	svg := generatePlaceholderSVG(artistName, artistName)
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write([]byte(svg))
