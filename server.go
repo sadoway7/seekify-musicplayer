@@ -98,6 +98,7 @@ func main() {
 	extractEmbeddedCovers()
 	go fetchMissingCovers()
 	go fetchMissingArtistArt()
+	go startWatcher()
 
 	mux := http.NewServeMux()
 

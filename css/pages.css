@@ -265,13 +265,13 @@
 }
 
 .quick-play-card-inline.artist-pill {
-  height: 48px;
+  height: 54px;
 }
 
 .quick-play-card-inline.artist-pill .quick-play-art {
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
+  width: 54px;
+  height: 54px;
+  min-width: 54px;
   border-radius: 50%;
   overflow: hidden;
 }
@@ -281,6 +281,11 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.quick-play-card-inline.artist-pill .quick-play-title {
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .greeting {
@@ -558,6 +563,9 @@
 
 .list-item-art.round {
   border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
 }
 
 .list-item-info {

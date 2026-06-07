@@ -933,33 +933,6 @@ func rebuildAlbumsFromTracks() {
 	}
 }
 
-func loadCachedCovers() {
-	coverDir := filepath.Join(musicDir, "images")
-	entries, err := os.ReadDir(coverDir)
-	if err != nil {
-		return
-	}
-
-	coverMu.Lock()
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(strings.ToLower(name), ".jpg") {
-			continue
-		}
-		albumID := strings.TrimSuffix(name, ".jpg")
-		data, err := os.ReadFile(filepath.Join(coverDir, name))
-		if err == nil {
-			coverCache[albumID] = data
-		}
-	}
-	coverMu.Unlock()
-
-	log.Printf("Loaded %d cached covers", len(coverCache))
-}
-
 // ── Artist art ──
 
 var (
@@ -1094,31 +1067,4 @@ func fetchMissingArtistArt() {
 		fetchArtistImage(a.name)
 		time.Sleep(400 * time.Millisecond)
 	}
-}
-
-func loadCachedArtistArt() {
-	artDir := filepath.Join(musicDir, "images", "artists")
-	entries, err := os.ReadDir(artDir)
-	if err != nil {
-		return
-	}
-
-	artistArtMu.Lock()
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(strings.ToLower(name), ".jpg") {
-			continue
-		}
-		key := strings.TrimSuffix(name, ".jpg")
-		data, err := os.ReadFile(filepath.Join(artDir, name))
-		if err == nil {
-			artistArtCache[key] = data
-		}
-	}
-	artistArtMu.Unlock()
-
-	log.Printf("Loaded %d cached artist images", len(artistArtCache))
 }

@@ -374,10 +374,6 @@ func extractEmbeddedCovers() {
 			continue
 		}
 
-		coverMu.Lock()
-		coverCache[j.albumID] = pic.Data
-		coverMu.Unlock()
-
 		mu.Lock()
 		if a, ok := albums[j.albumID]; ok {
 			a.HasCover = true

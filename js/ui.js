@@ -1187,7 +1187,7 @@ const tmore = e.target.closest('.track-more');
     if (tracks.length === 0) {
       return this._emptyState('No favorites yet', 'Songs you like will appear here', Icons.heart());
     }
-    return this.renderTrackList(tracks, { showArt: true });
+    return this.renderTrackList(tracks, { showArt: true, filterable: true });
   },
 
   renderAllMusic() {
@@ -1936,6 +1936,7 @@ const tmore = e.target.closest('.track-more');
   renderTrackList(tracks, options) {
     const opts = options || {};
     const showArt = !!opts.showArt;
+    const filterable = !!opts.filterable;
     const currentTrack = Player.getCurrentTrack();
 
     return '<div class="track-list">' + tracks.map((track) => {
@@ -1950,7 +1951,12 @@ const tmore = e.target.closest('.track-more');
         ? this._esc(track.artist) + ' - ' + this._esc(track.album)
         : this._esc(track.artist);
 
-      return '<div class="track-row" data-track-id="' + track.id + '">'
+      const cls = 'track-row' + (filterable ? ' lib-item' : '');
+      const attrs = filterable
+        ? ' data-title="' + this._esc(track.title) + '" data-subtitle="' + this._esc(track.artist + ' ' + (track.album || '')) + '"'
+        : '';
+
+      return '<div class="' + cls + '" data-track-id="' + track.id + '"' + attrs + '>'
         + artHtml
         + '<div class="track-info">'
         + '<div class="track-title' + (isCurrent ? ' on' : '') + '">' + this._esc(track.title) + '</div>'
@@ -2729,7 +2735,7 @@ const tmore = e.target.closest('.track-more');
     if (!str) return '';
     if (!this._escDiv) this._escDiv = document.createElement('div');
     this._escDiv.textContent = String(str);
-    return this._escDiv.innerHTML;
+    return this._escDiv.innerHTML.replace(/"/g, '&quot;');
   },
 
   _trackTitle(track) {

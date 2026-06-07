@@ -95,6 +95,13 @@ func initDB(path string) {
 		track_id TEXT PRIMARY KEY
 	)`)
 
+	// Add orig_* columns for undo support (SQLite ALTER TABLE ADD COLUMN is safe)
+	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_title TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_artist TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_album TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_album_artist TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_album_id TEXT NOT NULL DEFAULT ''`)
+
 	migrateFromJSON()
 }
 
@@ -376,7 +383,14 @@ func dbUndoMatch(id string) (string, bool) {
 	}
 
 	db.Exec(`UPDATE metadata_matches SET status = 'pending' WHERE id = ?`, id)
-	db.Exec(`UPDATE tracks SET has_metadata = 0 WHERE id = ?`, trackID)
+	db.Exec(`UPDATE tracks SET
+		title = CASE WHEN orig_title != '' THEN orig_title ELSE title END,
+		artist = CASE WHEN orig_artist != '' THEN orig_artist ELSE artist END,
+		album = CASE WHEN orig_album != '' THEN orig_album ELSE album END,
+		album_artist = CASE WHEN orig_album_artist != '' THEN orig_album_artist ELSE album_artist END,
+		album_id = CASE WHEN orig_album_id != '' THEN orig_album_id ELSE album_id END,
+		has_metadata = 0
+		WHERE id = ?`, trackID)
 
 	return trackID, true
 }
@@ -434,7 +448,13 @@ func dbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
 	if album != "" {
 		albumID = generateAlbumID(albumArtist, album)
 	}
-	db.Exec(`UPDATE tracks SET title=?, artist=?, album=?, album_artist=?, album_id=?, has_metadata=1 WHERE id=?`,
+	db.Exec(`UPDATE tracks SET
+		orig_title = CASE WHEN orig_title = '' AND has_metadata = 0 THEN title ELSE orig_title END,
+		orig_artist = CASE WHEN orig_artist = '' AND has_metadata = 0 THEN artist ELSE orig_artist END,
+		orig_album = CASE WHEN orig_album = '' AND has_metadata = 0 THEN album ELSE orig_album END,
+		orig_album_artist = CASE WHEN orig_album_artist = '' AND has_metadata = 0 THEN album_artist ELSE orig_album_artist END,
+		orig_album_id = CASE WHEN orig_album_id = '' AND has_metadata = 0 THEN album_id ELSE orig_album_id END,
+		title=?, artist=?, album=?, album_artist=?, album_id=?, has_metadata=1 WHERE id=?`,
 		title, artist, album, albumArtist, albumID, trackID)
 }
 
