@@ -1321,13 +1321,12 @@ const tmore = e.target.closest('.track-more');
 
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.database() + ' MusicBrainz Metadata</div>'
-      + '<div class="settings-section-desc">Match your tracks against MusicBrainz to fetch titles, artists, albums, and cover art.</div>'
+      + '<div class="settings-section-desc">Match your tracks against MusicBrainz to fix titles, artists, albums, and fetch cover art.</div>'
       + '<div id="metadata-status" class="settings-status"></div>'
       + '<div class="settings-actions">'
       + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
-      + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Matches</span></button>'
       + '<button class="settings-btn" id="btn-meta-history">' + Icons.search() + '<span>Match History</span></button>'
-      + '<button class="settings-btn settings-btn-danger" id="btn-meta-clear">' + Icons.trash() + '<span>Clear Matches</span></button>'
+      + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Pending</span></button>'
       + '</div></div>';
 
     html += '<div class="settings-section">'
