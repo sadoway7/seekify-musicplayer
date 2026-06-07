@@ -338,9 +338,10 @@
   .np-art-wrapper {
     --disc-size: min(480px, 50vh, 80%);
     width: var(--disc-size) !important;
-    height: var(--disc-size) !important;
-    max-height: none !important;
-    max-width: none !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1;
+    max-height: 50vh;
+    max-width: 80%;
     opacity: 1 !important;
     border-radius: 50% !important;
     flex-shrink: 0;
@@ -612,8 +613,8 @@
   }
 
   .np-art-wrapper {
-    max-width: none;
-    max-height: none;
+    max-width: 480px;
+    max-height: 50vh;
   }
 
   .np-play-main {
@@ -640,8 +641,8 @@
   }
 
   .np-art-wrapper {
-    max-width: none;
-    max-height: none;
+    max-width: 480px;
+    max-height: 50vh;
   }
 
   .np-header {
