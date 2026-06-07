@@ -30,6 +30,7 @@ const UI = {
     this._colorCtx = this._colorCanvas.getContext('2d', { willReadFrequently: true });
     this._lastColorAlbumId = null;
     this._renderQueue();
+    this._setupMiniVolume();
   },
 
   _cacheDom() {
@@ -61,6 +62,9 @@ const UI = {
       queueVolumeBar: document.querySelector('.queue-volume-bar'),
       queueVolumeFill: document.querySelector('.queue-volume-fill'),
       queueVolumeBtn: document.querySelector('.queue-volume-btn'),
+      miniVolumeBtn: null,
+      miniVolumeBar: null,
+      miniVolumeFill: null,
       queuePanel: document.getElementById('queue-panel'),
       queueList: document.getElementById('queue-list'),
       playlistModal: document.getElementById('playlist-modal'),
@@ -357,6 +361,52 @@ const UI = {
 
     bindBar(this.els.volumeBar, this.els.volumeFill);
     bindBar(this.els.queueVolumeBar, this.els.queueVolumeFill);
+  },
+
+  _setupMiniVolume() {
+    const miniRight = document.querySelector('.mini-right');
+    if (!miniRight) return;
+
+    miniRight.innerHTML =
+      '<button class="mini-btn mini-volume-btn" aria-label="Volume">' + Icons.volume() + '</button>'
+      + '<div class="mini-volume-bar"><div class="mini-volume-fill"></div></div>';
+
+    this.els.miniVolumeBtn = miniRight.querySelector('.mini-volume-btn');
+    this.els.miniVolumeBar = miniRight.querySelector('.mini-volume-bar');
+    this.els.miniVolumeFill = miniRight.querySelector('.mini-volume-fill');
+
+    // Toggle mute
+    this.els.miniVolumeBtn.addEventListener('click', () => {
+      if (Player.volume > 0) {
+        prevVolume = Player.volume;
+        Player.setVolume(0);
+      } else {
+        Player.setVolume(prevVolume || 0.5);
+      }
+      this._updateVolumeBar();
+    });
+
+    // Drag bar
+    const bar = this.els.miniVolumeBar;
+    const fill = this.els.miniVolumeFill;
+    if (bar) {
+      const getFrac = (e) => {
+        const rect = bar.getBoundingClientRect();
+        const cx = e.touches ? e.touches[0].clientX : e.clientX;
+        return Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
+      };
+      bar.addEventListener('mousedown', (e) => {
+        this.volumeDragging = true;
+        Player.setVolume(getFrac(e));
+        this._updateVolumeBar();
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (!this.volumeDragging) return;
+        Player.setVolume(getFrac(e));
+        this._updateVolumeBar();
+      });
+      document.addEventListener('mouseup', () => { this.volumeDragging = false; });
+    }
   },
 
   _bindQueuePanel() {
@@ -806,22 +856,6 @@ const tmore = e.target.closest('.track-more');
       html += '<div class="empty-state" style="padding:16px"><div class="empty-state-text" style="color:var(--text3)">Play some music to see your history</div></div>';
     }
 
-    const allTracks = Store.library.tracks.slice();
-    const newTracks = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0)).slice(0, 6);
-    if (newTracks.length > 0) {
-      html += '<div class="mega-title"><span>New Songs</span></div>';
-      html += '<div class="new-songs-grid">';
-      newTracks.forEach(t => {
-        html += '<div class="new-song-card" data-track-id="' + t.id + '">'
-          + '<div class="new-song-art" style="background-image:url(' + Api.coverUrl(t.albumID) + ')"></div>'
-          + '<div class="new-song-info">'
-          + '<div class="new-song-title">' + this._esc(this._trackTitle(t)) + '</div>'
-          + '<div class="new-song-artist">' + this._esc(this._trackArtist(t)) + '</div>'
-          + '</div></div>';
-      });
-      html += '</div>';
-    }
-
     const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, 6);
     html += '<div class="mega-title"><span>Artists</span></div>';
@@ -852,6 +886,22 @@ const tmore = e.target.closest('.track-more');
       html += '</div>';
     } else {
       html += '<div class="empty-state" style="padding:16px 22px">' + Icons.library() + '<div class="empty-state-title">No albums yet</div><div class="empty-state-text">Add tagged music files to see albums</div></div>';
+    }
+
+    const allTracks = Store.library.tracks.slice();
+    const newTracks = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0)).slice(0, 6);
+    if (newTracks.length > 0) {
+      html += '<div class="mega-title"><span>New Songs</span></div>';
+      html += '<div class="new-songs-grid">';
+      newTracks.forEach(t => {
+        html += '<div class="new-song-card" data-track-id="' + t.id + '">'
+          + '<div class="new-song-art" style="background-image:url(' + Api.coverUrl(t.albumID) + ')"></div>'
+          + '<div class="new-song-info">'
+          + '<div class="new-song-title">' + this._esc(this._trackTitle(t)) + '</div>'
+          + '<div class="new-song-artist">' + this._esc(this._trackArtist(t)) + '</div>'
+          + '</div></div>';
+      });
+      html += '</div>';
     }
 
     if (Store.playlists.length > 0) {
@@ -962,14 +1012,6 @@ const tmore = e.target.closest('.track-more');
   },
 
   _renderBrowseGrid() {
-    const colorMap = {
-      'pop': '#8b5cf6', 'rock': '#ef4444', 'hip-hop': '#f59e0b', 'hip hop': '#f59e0b',
-      'electronic': '#06b6d4', 'jazz': '#22c55e', 'classical': '#a855f7',
-      'r&b': '#ec4899', 'rhythm': '#ec4899', 'country': '#f97316',
-      'metal': '#64748b', 'indie': '#14b8a6', 'folk': '#84cc16',
-      'latin': '#eab308', 'blues': '#3b82f6', 'soul': '#d946ef',
-      'punk': '#f43f5e', 'reggae': '#10b981', 'alternative': '#6366f1',
-    };
     const found = {};
     Store.library.tracks.forEach(t => {
       if (t.genre && t.genre.trim()) {
@@ -979,9 +1021,31 @@ const tmore = e.target.closest('.track-more');
     });
     const genres = Object.values(found).sort((a, b) => a.localeCompare(b));
     if (genres.length === 0) return '';
+
+    // Build a map of genre → list of album IDs with covers
+    const genreAlbums = {};
+    Store.library.tracks.forEach(t => {
+      if (t.genre && t.genre.trim() && t.albumID) {
+        const key = t.genre.trim().toLowerCase();
+        if (!genreAlbums[key]) genreAlbums[key] = [];
+        if (!genreAlbums[key].includes(t.albumID)) {
+          genreAlbums[key].push(t.albumID);
+        }
+      }
+    });
+
     return '<div class="browse-grid">' + genres.map(g => {
-      const color = colorMap[g.toLowerCase()] || '#' + (Math.floor(Math.random()*4 + 4).toString(16)) + (Math.floor(Math.random()*8 + 4).toString(16)) + (Math.floor(Math.random()*8 + 4).toString(16));
-      return '<div class="category-card" data-genre="' + this._esc(g) + '" style="background:' + color + '">' + this._esc(g) + '</div>';
+      const key = g.toLowerCase();
+      const albums = genreAlbums[key] || [];
+      // Pick a random album cover for this genre
+      let coverHtml = '';
+      if (albums.length > 0) {
+        const randomAlbumId = albums[Math.floor(Math.random() * albums.length)];
+        coverHtml = '<img src="' + Api.coverUrl(randomAlbumId) + '" alt="" class="category-card-bg">';
+      }
+      return '<div class="category-card" data-genre="' + this._esc(g) + '">'
+        + coverHtml
+        + '<div class="category-card-label">' + this._esc(g) + '</div></div>';
     }).join('') + '</div>';
   },
 
@@ -2752,9 +2816,11 @@ const tmore = e.target.closest('.track-more');
   _updateVolumeBar() {
     const pct = (Player.volume * 100) + '%';
     const icon = Player.volume === 0 ? Icons.volumeMute() : Icons.volume();
-    this.els.volumeFill.style.width = pct;
-    this.els.volumeBtn.innerHTML = icon;
+    if (this.els.volumeFill) this.els.volumeFill.style.width = pct;
+    if (this.els.volumeBtn) this.els.volumeBtn.innerHTML = icon;
     if (this.els.queueVolumeFill) this.els.queueVolumeFill.style.width = pct;
     if (this.els.queueVolumeBtn) this.els.queueVolumeBtn.innerHTML = icon;
+    if (this.els.miniVolumeFill) this.els.miniVolumeFill.style.width = pct;
+    if (this.els.miniVolumeBtn) this.els.miniVolumeBtn.innerHTML = icon;
   }
 };

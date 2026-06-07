@@ -153,6 +153,39 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .mini-volume-btn {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text2);
+  }
+
+  .mini-volume-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mini-volume-bar {
+    flex: 1;
+    max-width: 120px;
+    height: 4px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .mini-volume-fill {
+    height: 100%;
+    background: var(--text2);
+    border-radius: 2px;
+    transition: width 0.05s linear;
   }
 
   .mini-art {
