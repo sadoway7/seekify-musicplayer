@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"hash/fnv"
 	"log"
 	"os"
 	"path/filepath"
@@ -309,10 +310,22 @@ func generatePlaceholderSVG(name string) string {
 		initial = strings.ToUpper(string(name[0]))
 	}
 
+	// Generate a color from the name
+	h := fnv.New32a()
+	h.Write([]byte(name))
+	hash := h.Sum32()
+	hue := hash % 360
+
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
-  <rect width="300" height="300" fill="#1a1c1a"/>
-  <text x="150" y="158" font-family="sans-serif" font-size="80" font-weight="800" fill="#2e302e" text-anchor="middle" dominant-baseline="middle" letter-spacing="-2">%s</text>
-</svg>`, initial)
+  <defs>
+    <linearGradient id="bg" x1="0%%" y1="0%%" x2="100%%" y2="100%%">
+      <stop offset="0%%" stop-color="hsl(%d, 35%%, 30%%)"/>
+      <stop offset="100%%" stop-color="hsl(%d, 45%%, 40%%)"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="300" fill="url(#bg)"/>
+  <text x="150" y="158" font-family="sans-serif" font-size="80" font-weight="800" fill="hsl(%d, 55%%, 80%%)" text-anchor="middle" dominant-baseline="middle" letter-spacing="-2">%s</text>
+</svg>`, hue, (hue+30)%360, hue, initial)
 }
 
 func extractEmbeddedCovers() {

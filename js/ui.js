@@ -804,6 +804,15 @@ const UI = {
         else if (type === 'playlist') this.navigateTo('playlist', { playlistId: id });
         return;
       }
+
+      const showMore = e.target.closest('.show-more-btn');
+      if (showMore) {
+        if (showMore.dataset.action === 'show-more-new') {
+          this._newSongsLimit = (this._newSongsLimit || 6) + 12;
+          this.renderHome();
+        }
+        return;
+      }
     });
   },
 
@@ -959,7 +968,9 @@ const UI = {
     }
 
     const allTracks = Store.library.tracks.slice();
-    const newTracks = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0)).slice(0, 6);
+    const sortedNew = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0));
+    const newLimit = this._newSongsLimit || 6;
+    const newTracks = sortedNew.slice(0, newLimit);
     if (newTracks.length > 0) {
       html += '<div class="mega-title"><span>New Songs</span></div>';
       html += '<div class="new-songs-grid">';
@@ -972,6 +983,9 @@ const UI = {
           + '</div></div>';
       });
       html += '</div>';
+      if (sortedNew.length > newLimit) {
+        html += '<button class="btn-text show-more-btn" data-action="show-more-new">Show more</button>';
+      }
     }
 
     if (Store.playlists.length > 0) {

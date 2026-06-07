@@ -386,7 +386,15 @@ func favoritesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func favoriteToggleHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	trackID := strings.TrimPrefix(r.URL.Path, "/api/favorites/")
+	if trackID == "" {
+		http.Error(w, "missing track id", http.StatusBadRequest)
+		return
+	}
 	added := dbToggleFavorite(trackID)
 
 	w.Header().Set("Content-Type", "application/json")
