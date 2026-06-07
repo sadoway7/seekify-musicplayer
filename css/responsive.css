@@ -153,7 +153,12 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+  }
+
+  .mini-volume-wrap {
+    display: flex;
+    align-items: center;
+    position: relative;
   }
 
   .mini-volume-btn {
@@ -164,6 +169,7 @@
     align-items: center;
     justify-content: center;
     color: var(--text2);
+    cursor: pointer;
   }
 
   .mini-volume-btn svg {
@@ -172,13 +178,22 @@
   }
 
   .mini-volume-bar {
-    flex: 1;
-    max-width: 120px;
+    width: 0;
+    overflow: hidden;
     height: 4px;
     background: rgba(255,255,255,0.12);
     border-radius: 2px;
     cursor: pointer;
-    position: relative;
+    transition: width 0.2s ease, margin 0.2s ease, opacity 0.2s ease;
+    opacity: 0;
+    margin-left: 0;
+  }
+
+  .mini-volume-wrap:hover .mini-volume-bar,
+  .mini-volume-wrap.active .mini-volume-bar {
+    width: 100px;
+    margin-left: 8px;
+    opacity: 1;
   }
 
   .mini-volume-fill {

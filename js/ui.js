@@ -368,12 +368,15 @@ const UI = {
     if (!miniRight) return;
 
     miniRight.innerHTML =
-      '<button class="mini-btn mini-volume-btn" aria-label="Volume">' + Icons.volume() + '</button>'
-      + '<div class="mini-volume-bar"><div class="mini-volume-fill"></div></div>';
+      '<div class="mini-volume-wrap">'
+      + '<button class="mini-volume-btn" aria-label="Volume">' + Icons.volume() + '</button>'
+      + '<div class="mini-volume-bar"><div class="mini-volume-fill"></div></div>'
+      + '</div>';
 
-    this.els.miniVolumeBtn = miniRight.querySelector('.mini-volume-btn');
-    this.els.miniVolumeBar = miniRight.querySelector('.mini-volume-bar');
-    this.els.miniVolumeFill = miniRight.querySelector('.mini-volume-fill');
+    const wrap = miniRight.querySelector('.mini-volume-wrap');
+    this.els.miniVolumeBtn = wrap.querySelector('.mini-volume-btn');
+    this.els.miniVolumeBar = wrap.querySelector('.mini-volume-bar');
+    this.els.miniVolumeFill = wrap.querySelector('.mini-volume-fill');
 
     // Toggle mute
     this.els.miniVolumeBtn.addEventListener('click', () => {
@@ -397,6 +400,7 @@ const UI = {
       };
       bar.addEventListener('mousedown', (e) => {
         this.volumeDragging = true;
+        wrap.classList.add('active');
         Player.setVolume(getFrac(e));
         this._updateVolumeBar();
       });
@@ -405,7 +409,12 @@ const UI = {
         Player.setVolume(getFrac(e));
         this._updateVolumeBar();
       });
-      document.addEventListener('mouseup', () => { this.volumeDragging = false; });
+      document.addEventListener('mouseup', () => {
+        if (this.volumeDragging) {
+          this.volumeDragging = false;
+          wrap.classList.remove('active');
+        }
+      });
     }
   },
 
