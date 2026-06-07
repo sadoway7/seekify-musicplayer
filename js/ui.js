@@ -1015,17 +1015,30 @@ const tmore = e.target.closest('.track-more');
       searchInput.addEventListener('input', (e) => {
         const q = e.target.value.trim().toLowerCase();
         if (q.length >= 2) {
-          Store.currentView = 'search';
-          this.searchQuery = q;
-          this.searchGenre = '';
-          this.renderSearch();
-          const tabItems = document.querySelectorAll('.tab-item');
-          tabItems.forEach(t => {
-            t.classList.toggle('active', t.dataset.tab === 'search');
-          });
+          this._filterLibResults(q);
+        } else {
+          this._filterLibResults('');
         }
       });
     }
+  },
+
+  _filterLibResults(query) {
+    const container = this.els.content.querySelector('.lib-results');
+    if (!container) return;
+
+    if (!query) {
+      // Show all items, restore current filter
+      container.querySelectorAll('.lib-item').forEach(el => el.style.display = '');
+      return;
+    }
+
+    container.querySelectorAll('.lib-item').forEach(el => {
+      const title = (el.dataset.title || '').toLowerCase();
+      const subtitle = (el.dataset.subtitle || '').toLowerCase();
+      const match = title.includes(query) || subtitle.includes(query);
+      el.style.display = match ? '' : 'none';
+    });
   },
 
   _renderLibPlaylists() {

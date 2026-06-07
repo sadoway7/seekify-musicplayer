@@ -773,8 +773,6 @@ func applyApprovedMatches() int {
 	}
 	mu.Unlock()
 
-	loadCachedCovers()
-
 	go func() {
 		for _, job := range coverJobs {
 			coverMu.RLock()

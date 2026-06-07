@@ -73,8 +73,7 @@ func main() {
 		log.Printf("Loaded %d tracks and %d albums from database", len(tracks), len(albums))
 	}
 
-	loadCachedCovers()
-	loadCachedArtistArt()
+	// Covers and artist art are lazy-loaded from disk on first request
 
 	// Scan primary music directory
 	log.Printf("Scanning music directory: %s", musicDir)

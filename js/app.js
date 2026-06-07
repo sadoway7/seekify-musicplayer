@@ -33,10 +33,6 @@ const App = {
 
     UI.els.content.innerHTML = '<div class="loading-spinner"></div>';
 
-    try {
-      await Api.scan();
-    } catch (err) {}
-
     await Store.init();
     UI.renderPage();
     UI.updateMiniPlayer();
