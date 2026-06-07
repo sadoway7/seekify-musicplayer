@@ -98,6 +98,7 @@ const UI = {
         }
         this.searchGenre = '';
         this.renderPage();
+        this.els.content.scrollTop = 0;
       });
     });
   },
@@ -611,14 +612,7 @@ const UI = {
         return;
       }
 
-      const viewToggle = e.target.closest('.lib-view-toggle');
-      if (viewToggle) {
-        this.viewMode = this.viewMode === 'list' ? 'grid' : 'list';
-        this.renderLibrary();
-        return;
-      }
-
-const tmore = e.target.closest('.track-more');
+ const tmore = e.target.closest('.track-more');
         if (tmore) {
           const row = tmore.closest('.track-row');
         if (row) {
@@ -992,7 +986,7 @@ const tmore = e.target.closest('.track-more');
 
     const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
     if (favTracks.length > 0) {
-      html += '<div class="mega-title"><span>Liked Songs</span></div>';
+      html += '<div class="mega-title"><span>Favorites</span></div>';
       html += this.renderTrackList(favTracks.slice(0, 5), { showArt: true });
     }
 
@@ -1021,8 +1015,6 @@ const tmore = e.target.closest('.track-more');
 
     const input = this.els.content.querySelector('.search-input');
     if (input) {
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
       input.addEventListener('input', (e) => {
         this.searchQuery = e.target.value.trim();
         this.searchGenre = '';
@@ -1130,9 +1122,7 @@ const tmore = e.target.closest('.track-more');
     this._viewTrackList = [];
     let html = '<div class="library-header">'
       + '<h1>Your Library</h1>'
-      + '<div class="library-header-actions">'
-      + '<button class="lib-view-toggle">' + (this.viewMode === 'list' ? Icons.grid() : Icons.sort()) + '</button>'
-      + '</div></div>'
+      + '</div>'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input lib-search-input" type="text" placeholder="Search your library...">'
@@ -1191,7 +1181,7 @@ const tmore = e.target.closest('.track-more');
     let html = '<div class="list-item" data-action="favorites" style="cursor:pointer">'
       + '<div class="list-item-art" style="background:rgba(212,240,64,.1);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
       + Icons.heartFilled() + '</div>'
-      + '<div class="list-item-info"><div class="list-item-title">Liked Songs</div>'
+      + '<div class="list-item-info"><div class="list-item-title">Favorites</div>'
       + '<div class="list-item-subtitle">' + Store.favorites.length + ' songs</div></div></div>';
 
     html += '<div class="list-item" data-action="all-music" style="cursor:pointer">'
@@ -2082,6 +2072,14 @@ const tmore = e.target.closest('.track-more');
     this.els.npRepeat.classList.toggle('active', Player.repeat !== 'off');
     this.els.npRepeat.innerHTML = Player.repeat === 'one' ? Icons.repeatOne() : Icons.repeat();
 
+    // Grey out prev/next when no track available in that direction
+    const hasNext = Player.repeat !== 'off' || Player.currentIndex < Player.queue.length - 1;
+    const hasPrev = Player.currentIndex > 0;
+    this.els.npNext.style.opacity = hasNext ? '' : '0.3';
+    this.els.npNext.style.pointerEvents = hasNext ? '' : 'none';
+    this.els.npPrev.style.opacity = hasPrev ? '' : '0.3';
+    this.els.npPrev.style.pointerEvents = hasPrev ? '' : 'none';
+
     this.els.nowPlaying.classList.toggle('playing', Player.playing);
 
     this._checkTitleOverflow();
@@ -2231,8 +2229,11 @@ const tmore = e.target.closest('.track-more');
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
     this._applyNowPlayingBg();
-    // Show queue (it's inside now-playing on desktop, standalone on mobile)
-    this.els.queuePanel.classList.remove('hidden');
+    // Show queue on desktop only (it's a flex column inside now-playing)
+    // On mobile it stays hidden — user opens it via the queue button
+    if (window.innerWidth >= 768) {
+      this.els.queuePanel.classList.remove('hidden');
+    }
   },
 
   hideNowPlaying() {
@@ -2696,14 +2697,15 @@ const tmore = e.target.closest('.track-more');
   _handleAction(action) {
     if (!action) return;
     if (action === 'shuffle' || action === 'shuffle-all') {
-      const list = Store.library.tracks.slice();
+      let list = Store.library.tracks.slice();
       if (list.length > 0) {
         const shuffled = list.sort(() => Math.random() - 0.5);
+        const capped = shuffled.slice(0, 100);
         Player.shuffle = true;
         const source = (action === 'shuffle-all')
           ? { type: 'all', name: 'All Music' }
           : this._getViewSource();
-        Player.play(shuffled[0], shuffled, source);
+        Player.play(capped[0], capped, source);
         this.showNowPlaying();
       }
       return;
@@ -2800,7 +2802,7 @@ const tmore = e.target.closest('.track-more');
       return { type: 'playlist', name: pl ? pl.name : 'Playlist', id: data.playlistId };
     }
     if (view === 'favorites') {
-      return { type: 'favorites', name: 'Liked Songs' };
+      return { type: 'favorites', name: 'Favorites' };
     }
     if (view === 'all-music') {
       return { type: 'all', name: 'All Music' };
