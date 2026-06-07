@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -102,6 +103,9 @@ func initDB(path string) {
 	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_album_artist TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_album_id TEXT NOT NULL DEFAULT ''`)
 
+	// Add added_at to favorites for ordering (newest first)
+	db.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
+
 	migrateFromJSON()
 }
 
@@ -143,7 +147,7 @@ func migrateFromJSON() {
 }
 
 func dbGetFavorites() []string {
-	rows, err := db.Query("SELECT track_id FROM favorites")
+	rows, err := db.Query("SELECT track_id FROM favorites ORDER BY added_at DESC")
 	if err != nil {
 		return []string{}
 	}
@@ -167,7 +171,7 @@ func dbToggleFavorite(trackID string) bool {
 		db.Exec("DELETE FROM favorites WHERE track_id = ?", trackID)
 		return false
 	}
-	db.Exec("INSERT INTO favorites (track_id) VALUES (?)", trackID)
+	db.Exec("INSERT INTO favorites (track_id, added_at) VALUES (?, ?)", trackID, time.Now().Unix())
 	return true
 }
 

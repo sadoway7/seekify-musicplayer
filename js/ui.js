@@ -845,10 +845,16 @@ const UI = {
       this.els.content.scrollTop = 0;
       return;
     }
-    Store.currentView = Store.currentTab;
+    // Default: go to home
+    Store.currentView = 'home';
     Store.viewData = {};
     this._navHistory = [];
     this.renderPage();
+    // Activate home tab
+    document.querySelectorAll('.tab-item').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === 'home');
+    });
+    Store.currentTab = 'home';
   },
 
   renderPage() {
@@ -1151,7 +1157,6 @@ const UI = {
       + '<button class="chip' + (this.libFilter === 'playlists' ? ' active' : '') + '" data-filter="playlists">Playlists</button>'
       + '<button class="chip' + (this.libFilter === 'albums' ? ' active' : '') + '" data-filter="albums">Albums</button>'
       + '<button class="chip' + (this.libFilter === 'artists' ? ' active' : '') + '" data-filter="artists">Artists</button>'
-      + '<button class="chip' + (this.libFilter === 'favorites' ? ' active' : '') + '" data-filter="favorites">Favorites</button>'
       + '</div>'
       + '<div class="lib-results">';
 
@@ -1159,7 +1164,6 @@ const UI = {
       case 'playlists': html += this._renderLibPlaylists(); break;
       case 'albums': html += this._renderLibAlbums(); break;
       case 'artists': html += this._renderLibArtists(); break;
-      case 'favorites': html += this._renderLibFavorites(); break;
     }
 
     html += '</div>';
