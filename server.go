@@ -91,6 +91,7 @@ func main() {
 	}
 
 	// Cleanup recent/favorites AFTER all scans so media track IDs exist
+	dbCleanupFavorites()
 	dbCleanupRecent()
 
 	applied := applyApprovedMatches()

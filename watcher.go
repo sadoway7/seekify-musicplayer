@@ -117,6 +117,7 @@ func checkAndRescan() {
 		extractEmbeddedCovers()
 
 		// Cleanup stale recent/favorites after rescan
+		dbCleanupFavorites()
 		dbCleanupRecent()
 
 		// Update stored count
