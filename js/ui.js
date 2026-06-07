@@ -1031,8 +1031,10 @@ const tmore = e.target.closest('.track-more');
     const genres = Object.values(found).sort((a, b) => a.localeCompare(b));
     if (genres.length === 0) return '';
 
-    // Build a map of genre → list of album IDs with covers
+    // Build a map of genre → list of album IDs (prefer ones with covers)
     const genreAlbums = {};
+    const albumCoverMap = {};
+    Store.library.albums.forEach(a => { albumCoverMap[a.id] = a.hasCover; });
     Store.library.tracks.forEach(t => {
       if (t.genre && t.genre.trim() && t.albumID) {
         const key = t.genre.trim().toLowerCase();
@@ -1045,12 +1047,15 @@ const tmore = e.target.closest('.track-more');
 
     return '<div class="browse-grid">' + genres.map(g => {
       const key = g.toLowerCase();
-      const albums = genreAlbums[key] || [];
-      // Pick a random album cover for this genre
+      const albumIds = genreAlbums[key] || [];
+      // Pick a random album that has a cover, fall back to any
+      const withCovers = albumIds.filter(id => albumCoverMap[id]);
+      const pick = withCovers.length > 0
+        ? withCovers[Math.floor(Math.random() * withCovers.length)]
+        : (albumIds.length > 0 ? albumIds[Math.floor(Math.random() * albumIds.length)] : null);
       let coverHtml = '';
-      if (albums.length > 0) {
-        const randomAlbumId = albums[Math.floor(Math.random() * albums.length)];
-        coverHtml = '<img src="' + Api.coverUrl(randomAlbumId) + '" alt="" class="category-card-bg">';
+      if (pick) {
+        coverHtml = '<img src="' + Api.coverUrl(pick) + '" alt="" class="category-card-bg" onerror="this.style.display=\'none\'">';
       }
       return '<div class="category-card" data-genre="' + this._esc(g) + '">'
         + coverHtml
