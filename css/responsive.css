@@ -23,17 +23,14 @@
 
   #app-content {
     margin-left: 76px;
-    margin-right: 360px;
   }
 
   body.mini-player-visible #app-content {
     margin-left: 76px;
-    margin-right: 360px;
   }
 
   #app-header {
     margin-left: 76px;
-    margin-right: 360px;
   }
 
   #tab-bar {
@@ -85,7 +82,7 @@
   .mini-player {
     position: fixed;
     left: 76px;
-    right: 360px;
+    right: 0;
     bottom: 0;
     width: auto;
     max-width: none;
@@ -474,7 +471,7 @@
     align-self: stretch;
   }
 
-  /* Queue: persistent sidebar on desktop, always visible */
+  /* Queue: sidebar on desktop, only visible when now-playing is open */
   .queue-panel {
     position: fixed;
     top: 0;
@@ -490,6 +487,11 @@
     background: var(--bg);
     border-left: 1px solid rgba(255,255,255,0.04);
     padding: 20px 24px;
+    display: none;
+  }
+
+  /* Show queue when now-playing is visible */
+  .now-playing:not(.hidden) ~ .queue-panel {
     display: flex !important;
   }
 

@@ -219,8 +219,14 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 				file2.Close()
 				if err == nil && tagReader2 != nil {
 					pic := tagReader2.Picture()
-					if pic != nil {
+					if pic != nil && albumID != "" {
 						newCovers[albumID] = pic.Data
+						if newAlbums[albumID] == nil {
+							newAlbums[albumID] = &Album{
+								ID:   albumID,
+								Name: track.Album,
+							}
+						}
 						newAlbums[albumID].HasCover = true
 
 						// Always store covers in the primary musicDir
