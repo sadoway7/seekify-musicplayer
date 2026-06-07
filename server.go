@@ -40,6 +40,24 @@ func main() {
 		log.Fatalf("Music directory does not exist: %s", musicDir)
 	}
 
+	// Initialize musicDirs with the primary directory
+	musicDirs = map[string]string{"": musicDir}
+
+	// Check for additional media music directory
+	mediaDir := os.Getenv("MEDIA_MUSIC_DIR")
+	if mediaDir != "" {
+		absMedia, err := filepath.Abs(mediaDir)
+		if err != nil {
+			log.Fatalf("Could not resolve media music directory path: %v", err)
+		}
+		mediaInfo, err := os.Stat(absMedia)
+		if err != nil || !mediaInfo.IsDir() {
+			log.Fatalf("Media music directory does not exist: %s", absMedia)
+		}
+		musicDirs["media"] = absMedia
+		log.Printf("Media music directory: %s", absMedia)
+	}
+
 	tracks = make(map[string]*Track)
 	albums = make(map[string]*Album)
 	coverCache = make(map[string][]byte)
@@ -58,9 +76,20 @@ func main() {
 	loadCachedCovers()
 	loadCachedArtistArt()
 
+	// Scan primary music directory
 	log.Printf("Scanning music directory: %s", musicDir)
 	stats := scanMusicDir(musicDir)
-	log.Printf("Scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
+	log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
+
+	// Scan additional media directories
+	for prefix, dir := range musicDirs {
+		if prefix == "" {
+			continue
+		}
+		log.Printf("Scanning media directory [%s]: %s", prefix, dir)
+		mediaStats := scanMusicDirWithPrefix(dir, prefix)
+		log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(tracks))
+	}
 
 	applied := applyApprovedMatches()
 	if applied > 0 {
@@ -91,6 +120,10 @@ func main() {
 	mux.HandleFunc("/api/upload", requireAdmin(uploadHandler))
 	mux.HandleFunc("/api/delete", requireAdmin(deleteFileHandler))
 	mux.HandleFunc("/api/folders", requireAdmin(createFolderHandler))
+
+	mux.HandleFunc("/api/download/", downloadHandler)
+	mux.HandleFunc("/api/admin/downloads", requireAdmin(downloadsListHandler))
+	mux.HandleFunc("/api/admin/download-toggle/", requireAdmin(downloadToggleHandler))
 
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
 	mux.HandleFunc("/api/metadata/resync/", metadataRescanHandler)

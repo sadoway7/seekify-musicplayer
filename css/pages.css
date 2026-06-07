@@ -276,7 +276,7 @@
   letter-spacing: var(--ls-tight);
   line-height: 1;
   color: var(--text1);
-  opacity: 0.1;
+  opacity: 0.2;
   position: absolute;
   bottom: -10px;
   left: var(--page-margin);

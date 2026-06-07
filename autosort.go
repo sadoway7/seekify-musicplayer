@@ -20,6 +20,12 @@ func autoSortMusic() {
 			continue
 		}
 
+		// Only auto-sort files in the primary musicDir
+		// (media dir is read-only, no prefix in FilePath means primary dir)
+		if musicDirForPath(t.FilePath) != musicDir {
+			continue
+		}
+
 		expectedDir := filepath.Join(musicDir, sanitizePath(t.Artist))
 		if t.Album != "" {
 			expectedDir = filepath.Join(expectedDir, sanitizePath(t.Album))

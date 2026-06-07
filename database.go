@@ -91,6 +91,10 @@ func initDB(path string) {
 		has_cover INTEGER NOT NULL DEFAULT 0
 	)`)
 
+	db.Exec(`CREATE TABLE IF NOT EXISTS downloads (
+		track_id TEXT PRIMARY KEY
+	)`)
+
 	migrateFromJSON()
 }
 
@@ -430,6 +434,7 @@ func dbLoadTracks() map[string]*Track {
 			&hasCover, &t.ModTime, &hasMetadata)
 		t.HasCover = hasCover == 1
 		t.HasMetadata = hasMetadata == 1
+		t.DownloadEnabled = dbIsDownloadable(t.ID)
 		result[t.ID] = t
 	}
 	return result
@@ -470,4 +475,41 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// --- Download management ---
+
+func dbToggleDownload(trackID string) bool {
+	var exists bool
+	db.QueryRow("SELECT 1 FROM downloads WHERE track_id = ?", trackID).Scan(&exists)
+	if exists {
+		db.Exec("DELETE FROM downloads WHERE track_id = ?", trackID)
+		return false
+	}
+	db.Exec("INSERT INTO downloads (track_id) VALUES (?)", trackID)
+	return true
+}
+
+func dbIsDownloadable(trackID string) bool {
+	var exists bool
+	db.QueryRow("SELECT 1 FROM downloads WHERE track_id = ?", trackID).Scan(&exists)
+	return exists
+}
+
+func dbGetDownloadableTracks() []string {
+	rows, err := db.Query("SELECT track_id FROM downloads")
+	if err != nil {
+		return []string{}
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	return ids
 }

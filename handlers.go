@@ -82,7 +82,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath := filepath.Join(musicDir, track.FilePath)
+	fullPath := resolveFilePath(track.FilePath)
 	file, err := os.Open(fullPath)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
@@ -263,6 +263,18 @@ func artistArtFetchHandler(w http.ResponseWriter, r *http.Request) {
 
 func scanHandler(w http.ResponseWriter, r *http.Request) {
 	stats := scanMusicDir(musicDir)
+
+	// Scan additional media directories
+	for prefix, dir := range musicDirs {
+		if prefix == "" {
+			continue
+		}
+		mediaStats := scanMusicDirWithPrefix(dir, prefix)
+		stats.Scanned += mediaStats.Scanned
+		stats.Added += mediaStats.Added
+		stats.Removed += mediaStats.Removed
+	}
+
 	applyApprovedMatches()
 	autoSortMusic()
 	extractEmbeddedCovers()
@@ -686,6 +698,122 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 		"created": true,
 		"path":    relPath,
 	})
+}
+
+func downloadHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/download/")
+
+	mu.RLock()
+	track, exists := tracks[id]
+	mu.RUnlock()
+
+	if !exists {
+		http.Error(w, "Track not found", http.StatusNotFound)
+		return
+	}
+
+	if !track.DownloadEnabled {
+		http.Error(w, "Downloads not enabled for this track", http.StatusForbidden)
+		return
+	}
+
+	fullPath := resolveFilePath(track.FilePath)
+	file, err := os.Open(fullPath)
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		http.Error(w, "Could not stat file", http.StatusInternalServerError)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(fullPath))
+	contentType := audioExtensions[ext]
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	// Build a friendly filename: Artist - Title.ext
+	filename := filepath.Base(fullPath)
+	if track.Artist != "" && track.Title != "" {
+		filename = sanitizePath(track.Artist) + " - " + sanitizePath(track.Title) + ext
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	http.ServeContent(w, r, filename, stat.ModTime(), file)
+}
+
+func downloadsListHandler(w http.ResponseWriter, r *http.Request) {
+	ids := dbGetDownloadableTracks()
+
+	type downloadTrack struct {
+		ID      string `json:"id"`
+		Title   string `json:"title"`
+		Artist  string `json:"artist"`
+		Album   string `json:"album"`
+		Enabled bool   `json:"enabled"`
+	}
+
+	var result []downloadTrack
+	mu.RLock()
+	for _, id := range ids {
+		if t, ok := tracks[id]; ok {
+			result = append(result, downloadTrack{
+				ID:      t.ID,
+				Title:   t.Title,
+				Artist:  t.Artist,
+				Album:   t.Album,
+				Enabled: true,
+			})
+		}
+	}
+	mu.RUnlock()
+
+	if result == nil {
+		result = []downloadTrack{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func downloadToggleHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/admin/download-toggle/")
+	if trackID == "" {
+		http.Error(w, "Track ID required", http.StatusBadRequest)
+		return
+	}
+
+	mu.RLock()
+	_, exists := tracks[trackID]
+	mu.RUnlock()
+
+	if !exists {
+		http.Error(w, "Track not found", http.StatusNotFound)
+		return
+	}
+
+	enabled := dbToggleDownload(trackID)
+
+	mu.Lock()
+	if t, ok := tracks[trackID]; ok {
+		t.DownloadEnabled = enabled
+	}
+	mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"enabled": enabled})
 }
 
 func metadataScanHandler(w http.ResponseWriter, r *http.Request) {

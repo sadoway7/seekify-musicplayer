@@ -10,11 +10,12 @@ deploy:
     IMAGE_NAME: musicapp
     DATA_PATH: /mnt/user/appdata/musicapp/data
     MUSIC_PATH: /mnt/user/appdata/musicapp/music
+    MEDIA_MUSIC_PATH: /mnt/user/Media/music
   script:
     - docker build --no-cache -t $IMAGE_NAME .
     - docker stop $CONTAINER_NAME || true
     - docker rm $CONTAINER_NAME || true
-    - docker run -d --name $CONTAINER_NAME --restart unless-stopped -p 8298:8081 -v $DATA_PATH:/app/data -v $MUSIC_PATH:/music -e MUSIC_DIR=/music $IMAGE_NAME
+    - docker run -d --name $CONTAINER_NAME --restart unless-stopped -p 8298:8081 -v $DATA_PATH:/app/data -v $MUSIC_PATH:/music -v $MEDIA_MUSIC_PATH:/media-music -e MUSIC_DIR=/music -e MEDIA_MUSIC_DIR=/media-music $IMAGE_NAME
     - docker image prune -f
   only:
     - main

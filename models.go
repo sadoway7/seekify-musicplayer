@@ -1,21 +1,22 @@
 package main
 
 type Track struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Artist      string `json:"artist"`
-	Album       string `json:"album"`
-	AlbumArtist string `json:"albumArtist"`
-	AlbumID     string `json:"albumID"`
-	TrackNumber int    `json:"trackNumber"`
-	Year        int    `json:"year"`
-	Genre       string `json:"genre"`
-	Duration    int    `json:"duration"`
-	FilePath    string `json:"filePath"`
-	HasCover    bool   `json:"hasCover"`
-	ModTime     int64  `json:"modTime"`
-	MBID        string `json:"mbid,omitempty"`
-	HasMetadata bool   `json:"hasMetadata"`
+	ID               string `json:"id"`
+	Title            string `json:"title"`
+	Artist           string `json:"artist"`
+	Album            string `json:"album"`
+	AlbumArtist      string `json:"albumArtist"`
+	AlbumID          string `json:"albumID"`
+	TrackNumber      int    `json:"trackNumber"`
+	Year             int    `json:"year"`
+	Genre            string `json:"genre"`
+	Duration         int    `json:"duration"`
+	FilePath         string `json:"filePath"`
+	HasCover         bool   `json:"hasCover"`
+	ModTime          int64  `json:"modTime"`
+	MBID             string `json:"mbid,omitempty"`
+	HasMetadata      bool   `json:"hasMetadata"`
+	DownloadEnabled  bool   `json:"downloadEnabled"`
 }
 
 type Album struct {

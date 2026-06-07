@@ -9,6 +9,10 @@ const Api = {
     return '/api/stream/' + trackId;
   },
 
+  downloadUrl(trackId) {
+    return '/api/download/' + trackId;
+  },
+
   coverUrl(albumId) {
     return '/api/cover/' + albumId;
   },
@@ -217,6 +221,22 @@ const Api = {
   async metadataCounts() {
     try {
       const res = await fetch('/api/metadata/counts');
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
+  },
+
+  async getDownloadable() {
+    try {
+      const res = await fetch('/api/admin/downloads');
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
+  },
+
+  async toggleDownload(trackId) {
+    try {
+      const res = await fetch('/api/admin/download-toggle/' + trackId, { method: 'POST' });
       if (!res.ok) return null;
       return res.json();
     } catch { return null; }

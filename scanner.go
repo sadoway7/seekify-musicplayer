@@ -30,7 +30,44 @@ var (
 	coverMu    sync.RWMutex
 	musicDir   string
 	statePath  string
+
+	// musicDirs maps a prefix to an absolute directory path.
+	// The primary musicDir has prefix "" (empty string).
+	// Additional directories use prefixes like "media".
+	musicDirs map[string]string
 )
+
+// resolveFilePath expands a prefixed FilePath into an absolute path on disk.
+// If filePath contains a known prefix like "media:", it resolves against that dir.
+// Otherwise it resolves against the primary musicDir.
+func resolveFilePath(filePath string) string {
+	for prefix, dir := range musicDirs {
+		if prefix == "" {
+			continue
+		}
+		prefixKey := prefix + ":"
+		if strings.HasPrefix(filePath, prefixKey) {
+			relPath := strings.TrimPrefix(filePath, prefixKey)
+			return filepath.Join(dir, relPath)
+		}
+	}
+	return filepath.Join(musicDir, filePath)
+}
+
+// musicDirForPath returns the music directory root for a given FilePath.
+// Used to determine where to write images/covers for a track.
+func musicDirForPath(filePath string) string {
+	for prefix, dir := range musicDirs {
+		if prefix == "" {
+			continue
+		}
+		prefixKey := prefix + ":"
+		if strings.HasPrefix(filePath, prefixKey) {
+			return dir
+		}
+	}
+	return musicDir
+}
 
 func titleFromFilename(path string) string {
 	name := filepath.Base(path)
@@ -39,6 +76,10 @@ func titleFromFilename(path string) string {
 }
 
 func scanMusicDir(dir string) ScanStats {
+	return scanMusicDirWithPrefix(dir, "")
+}
+
+func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 	var stats ScanStats
 
 	newTracks := make(map[string]*Track)
@@ -61,7 +102,7 @@ func scanMusicDir(dir string) ScanStats {
 	})
 
 	stats.Scanned = len(files)
-	log.Printf("Found %d audio files", len(files))
+	log.Printf("Found %d audio files in %s", len(files), dir)
 
 	for _, fpath := range files {
 		relPath, err := filepath.Rel(dir, fpath)
@@ -69,7 +110,13 @@ func scanMusicDir(dir string) ScanStats {
 			relPath = fpath
 		}
 
-		trackID := generateID(relPath)
+		// Prefix the stored FilePath so we can resolve it later
+		storedPath := relPath
+		if prefix != "" {
+			storedPath = prefix + ":" + relPath
+		}
+
+		trackID := generateID(storedPath)
 
 		parts := strings.Split(relPath, string(filepath.Separator))
 		folderArtist := ""
@@ -93,7 +140,7 @@ func scanMusicDir(dir string) ScanStats {
 
 		track := &Track{
 			ID:       trackID,
-			FilePath: relPath,
+			FilePath: storedPath,
 			Duration: 0,
 			ModTime:  modTime,
 		}
@@ -176,7 +223,8 @@ func scanMusicDir(dir string) ScanStats {
 						newCovers[albumID] = pic.Data
 						newAlbums[albumID].HasCover = true
 
-						coverDir := filepath.Join(dir, "images")
+						// Always store covers in the primary musicDir
+						coverDir := filepath.Join(musicDir, "images")
 						os.MkdirAll(coverDir, 0755)
 						coverPath := filepath.Join(coverDir, albumID+".jpg")
 						if _, err := os.Stat(coverPath); os.IsNotExist(err) {
@@ -291,7 +339,7 @@ func extractEmbeddedCovers() {
 
 	saved := 0
 	for _, j := range jobs {
-		fullPath := filepath.Join(musicDir, j.filePath)
+		fullPath := resolveFilePath(j.filePath)
 		f, err := os.Open(fullPath)
 		if err != nil {
 			continue

@@ -811,7 +811,7 @@ const tmore = e.target.closest('.track-more');
       html += '<div class="scroll-row" style="flex-wrap:nowrap">';
       newArtists.forEach(a => {
         html += '<div class="quick-play-card-inline" data-type="artist" data-id="' + this._esc(a.name) + '">'
-          + '<div class="quick-play-art"></div>'
+          + '<div class="quick-play-art"><img src="' + Api.artistArtUrl(a.name) + '" alt=""></div>'
           + '<div class="quick-play-title">' + this._esc(a.name) + '</div>'
           + '</div>';
       });
@@ -1077,8 +1077,7 @@ const tmore = e.target.closest('.track-more');
     }
     return artistsWithName.map(a =>
       '<div class="list-item" data-type="artist" data-id="' + this._esc(a.name) + '">'
-      + '<div class="list-item-art round" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
-      + Icons.person() + '</div>'
+      + '<div class="list-item-art round"><img src="' + Api.artistArtUrl(a.name) + '" alt=""></div>'
       + '<div class="list-item-info"><div class="list-item-title">' + this._esc(a.name) + '</div>'
       + '<div class="list-item-subtitle">' + a.albumCount + ' album' + (a.albumCount !== 1 ? 's' : '') + '</div></div></div>'
     ).join('');
@@ -1304,6 +1303,14 @@ const tmore = e.target.closest('.track-more');
       + '</div></div>';
 
     html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.download() + ' Downloads</div>'
+      + '<div class="settings-section-desc">Manage which songs can be downloaded. Downloaded songs appear as a button in their menu.</div>'
+      + '<div class="settings-actions">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-manage-downloads">' + Icons.download() + '<span>Manage Downloadable Songs</span></button>'
+      + '</div>'
+      + '<div id="download-list"></div></div>';
+
+    html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.settings() + ' About</div>'
       + '<div class="settings-about">'
       + '<div>MusicApp</div>'
@@ -1317,6 +1324,7 @@ const tmore = e.target.closest('.track-more');
     document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());
     document.getElementById('btn-meta-clear').addEventListener('click', () => this._clearMetadata());
     document.getElementById('btn-rescan').addEventListener('click', () => this._rescanLibrary());
+    document.getElementById('btn-manage-downloads').addEventListener('click', () => this._toggleDownloadPanel());
 
     const reviewBtn = document.getElementById('btn-meta-review');
     if (reviewBtn) {
@@ -1471,6 +1479,92 @@ const tmore = e.target.closest('.track-more');
     }
     btn.disabled = false;
     btn.innerHTML = Icons.refresh() + '<span>Rescan Library</span>';
+  },
+
+  async _toggleDownloadPanel() {
+    const container = document.getElementById('download-list');
+    if (!container) return;
+
+    if (container.innerHTML !== '') {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = '<div class="loading-spinner" style="margin:12px auto"></div>';
+
+    try {
+      const downloadable = await Api.getDownloadable();
+      const allTracks = Store.library.tracks.slice().sort((a, b) => a.title.localeCompare(b.title));
+
+      let html = '<div style="margin-top:12px">'
+        + '<input type="text" id="download-search" placeholder="Search songs..." style="width:100%;padding:10px 14px;background:var(--l2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:14px;margin-bottom:8px">';
+
+      const renderList = (filter) => {
+        const filtered = filter ? allTracks.filter(t =>
+          t.title.toLowerCase().includes(filter) || (t.artist && t.artist.toLowerCase().includes(filter))
+        ) : allTracks;
+
+        let listHtml = '<div style="max-height:400px;overflow-y:auto;border-radius:var(--radius-sm)">';
+        filtered.forEach(t => {
+          const enabled = t.downloadEnabled;
+          listHtml += '<div class="download-track-row" data-track-id="' + t.id + '" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer">'
+            + '<button class="download-toggle" data-track-id="' + t.id + '" style="width:36px;height:36px;border-radius:50%;border:2px solid ' + (enabled ? 'var(--accent)' : 'var(--l4)') + ';background:' + (enabled ? 'var(--accent)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;color:' + (enabled ? 'var(--bg)' : 'var(--text-muted)') + '">' + (enabled ? Icons.check() : '') + '</button>'
+            + '<div style="flex:1;min-width:0">'
+            + '<div style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + this._esc(t.title) + '</div>'
+            + '<div style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + this._esc(t.artist || 'Unknown') + '</div>'
+            + '</div></div>';
+        });
+        listHtml += '</div>';
+        return listHtml;
+      };
+
+      html += renderList('');
+      html += '</div>';
+      container.innerHTML = html;
+
+      // Search filter
+      const searchInput = document.getElementById('download-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', () => {
+          const filter = searchInput.value.toLowerCase().trim();
+          const listContainer = container.querySelector('[style*="max-height"]');
+          if (listContainer) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = renderList(filter);
+            const newList = tempDiv.querySelector('[style*="max-height"]');
+            listContainer.replaceWith(newList);
+            bindToggles(newList);
+          }
+        });
+      }
+
+      const bindToggles = (root) => {
+        root.querySelectorAll('.download-toggle').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const trackId = btn.dataset.trackId;
+            btn.disabled = true;
+            const result = await Api.toggleDownload(trackId);
+            if (result !== null) {
+              const track = Store.getTrack(trackId);
+              if (track) track.downloadEnabled = result.enabled;
+              const enabled = result.enabled;
+              btn.style.borderColor = enabled ? 'var(--accent)' : 'var(--l4)';
+              btn.style.background = enabled ? 'var(--accent)' : 'transparent';
+              btn.style.color = enabled ? 'var(--bg)' : 'var(--text-muted)';
+              btn.innerHTML = enabled ? Icons.check() : '';
+              this.showToast(enabled ? 'Download enabled' : 'Download disabled');
+            }
+            btn.disabled = false;
+          });
+        });
+      };
+
+      bindToggles(container);
+
+    } catch (err) {
+      container.innerHTML = '<div style="padding:12px;color:var(--text-muted);font-size:13px">Failed to load tracks</div>';
+    }
   },
 
   renderMetadataReview() {
@@ -2107,7 +2201,7 @@ const tmore = e.target.closest('.track-more');
     if (!track) return;
     this.contextTrackId = trackId;
     const isFav = Store.isFavorite(trackId);
-    this.showContextMenu([
+    const menuItems = [
       { label: 'Add to Queue', icon: Icons.queue(), action: () => {
         this.hideContextMenu();
         Player.addToQueue(track);
@@ -2144,7 +2238,23 @@ const tmore = e.target.closest('.track-more');
           this.showToast('Failed to update favorites');
         }
       }}
-    ], triggerEl);
+    ];
+
+    if (track.downloadEnabled) {
+      menuItems.push({ type: 'divider' });
+      menuItems.push({ label: 'Download', icon: Icons.download(), action: () => {
+        this.hideContextMenu();
+        const a = document.createElement('a');
+        a.href = Api.downloadUrl(trackId);
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        this.showToast('Downloading...');
+      }});
+    }
+
+    this.showContextMenu(menuItems, triggerEl);
   },
 
   async _showRescanModal(trackId) {
