@@ -896,11 +896,18 @@ const UI = {
     if (recentCards.length > 0 || currentTrack) {
       html += '<div class="quick-play-grid">';
 
-      // Spot 1: All Music
-      html += '<div class="quick-play-card quick-play-card-all" data-navigate="all-music">'
-        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--l3), var(--l2))">'
-        + '<div class="quick-play-card-icon-text">ALL</div></div>'
-        + '<div class="quick-play-title">All Music</div>'
+      // Spot 1: Shuffle
+      html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
+        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--accent), #a8c830);display:flex;align-items:center;justify-content:center">'
+        + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
+        + '<circle cx="28" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="72" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="50" cy="50" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="28" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<circle cx="72" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '</svg>'
+        + '</div>'
+        + '<div class="quick-play-title">Shuffle</div>'
         + '</div>';
 
       // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows
@@ -922,18 +929,11 @@ const UI = {
           + '</div>';
       });
 
-      // Spot 9: Shuffle
-      html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
-        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--accent), #a8c830);display:flex;align-items:center;justify-content:center">'
-        + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
-        + '<circle cx="28" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="72" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="50" cy="50" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="28" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="72" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '</svg>'
-        + '</div>'
-        + '<div class="quick-play-title">Shuffle</div>'
+      // Last spot: All Music
+      html += '<div class="quick-play-card quick-play-card-all" data-navigate="all-music">'
+        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--l3), var(--l2))">'
+        + '<div class="quick-play-card-icon-text">ALL</div></div>'
+        + '<div class="quick-play-title">All Music</div>'
         + '</div>';
 
       html += '</div>';
