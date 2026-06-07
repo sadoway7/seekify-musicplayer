@@ -1083,7 +1083,7 @@ const UI = {
         if (!found[key]) found[key] = t.genre.trim();
       }
     });
-    const genres = Object.values(found).sort((a, b) => a.localeCompare(b));
+    const genres = Object.values(found).sort(() => Math.random() - 0.5);
     if (genres.length === 0) return '';
 
     // Build a map of genre → list of album IDs (prefer ones with covers)
