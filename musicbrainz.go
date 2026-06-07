@@ -294,6 +294,23 @@ func fetchMetadataForTrack(artist, title string) (string, string, string, error)
 	return rec.Title, mbArtist, mbAlbum, nil
 }
 
+func isCompilationTitle(title string) bool {
+	t := strings.ToLower(title)
+	keywords := []string{
+		"best of", "greatest hits", "compilation", "collection",
+		"anthology", "essential", "ultimate", "various artists",
+		"now that's what i call", "gold - greatest", "very best of",
+		"definitive collection", "number ones", "top hits",
+		"cream of", "classic hits", "100 hits",
+	}
+	for _, kw := range keywords {
+		if strings.Contains(t, kw) {
+			return true
+		}
+	}
+	return false
+}
+
 func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, error) {
 	var results []mbRecordingResult
 
@@ -335,11 +352,23 @@ func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, e
 			artistName = rec.ArtistCredit[0].Name
 		}
 
+		// Pick the best release: prefer non-compilation albums
 		albumName := ""
 		albumID := ""
 		if len(rec.Releases) > 0 {
-			albumName = rec.Releases[0].Title
-			albumID = rec.Releases[0].ID
+			found := false
+			for _, r := range rec.Releases {
+				if !isCompilationTitle(r.Title) {
+					albumName = r.Title
+					albumID = r.ID
+					found = true
+					break
+				}
+			}
+			if !found {
+				albumName = rec.Releases[0].Title
+				albumID = rec.Releases[0].ID
+			}
 		}
 
 		results = append(results, mbRecordingResult{
@@ -362,7 +391,7 @@ type mbRecordingResult struct {
 	AlbumID     string
 }
 
-func scoreMatch(localArtist, localTitle, mbArtist, mbTitle string) float64 {
+func scoreMatch(localArtist, localTitle, mbArtist, mbTitle, mbAlbum string) float64 {
 	score := 0.0
 
 	la := strings.ToLower(strings.TrimSpace(localArtist))
@@ -380,6 +409,11 @@ func scoreMatch(localArtist, localTitle, mbArtist, mbTitle string) float64 {
 		score += 0.5
 	} else if strings.Contains(la, ma) || strings.Contains(ma, la) {
 		score += 0.3
+	}
+
+	// Penalize compilation releases
+	if mbAlbum != "" && isCompilationTitle(mbAlbum) {
+		score -= 0.2
 	}
 
 	return score
@@ -525,7 +559,7 @@ func scanMetadataForTracks() MetadataScanResult {
 
 			_ = s
 
-			candidates, err := mbSearchRecordings(info.artist, info.title, 3)
+			candidates, err := mbSearchRecordings(info.artist, info.title, 5)
 			if err != nil {
 				if strings.Contains(err.Error(), "503") {
 					log.Printf("[metadata] Rate limited, waiting 5s before retry...")
@@ -567,7 +601,7 @@ func scanMetadataForTracks() MetadataScanResult {
 			}
 
 			for _, cand := range candidates {
-				score := scoreMatch(info.artist, info.title, cand.Artist, cand.Title)
+				score := scoreMatch(info.artist, info.title, cand.Artist, cand.Title, cand.Album)
 
 				if score < 0.5 {
 					continue
@@ -626,11 +660,27 @@ func scanMetadataForTracks() MetadataScanResult {
 
 	result.Failed = metaScan.Failed
 
+	// Auto-approve high-confidence matches (score >= 0.8)
+	autoApproved := dbApproveAllMatches()
+	result.AutoApproved = autoApproved
+	result.Pending -= autoApproved
+	if result.Pending < 0 {
+		result.Pending = 0
+	}
+
 	metaScanLock.Lock()
 	metaScan.Result = &result
 	metaScanLock.Unlock()
 
-	log.Printf("[metadata] Scan complete: %d matched, %d conflicts, %d failed", result.Matched, result.Conflicts, result.Failed)
+	log.Printf("[metadata] Scan complete: %d matched, %d auto-approved, %d pending review, %d conflicts, %d failed",
+		result.Matched, autoApproved, result.Pending, result.Conflicts, result.Failed)
+
+	// Apply auto-approved matches to tracks
+	if autoApproved > 0 {
+		applied := applyApprovedMatches()
+		log.Printf("[metadata] Applied %d auto-approved metadata updates", applied)
+	}
+
 	return result
 }
 

@@ -1459,7 +1459,18 @@ const tmore = e.target.closest('.track-more');
         btn.innerHTML = Icons.refresh() + '<span>Scan Metadata</span>';
 
         if (p.result) {
-          this.showToast('Found ' + p.result.pending + ' matches (' + p.result.failed + ' failed)');
+          const r = p.result;
+          let msg = '';
+          if (r.autoApproved > 0) {
+            msg = 'Auto-approved ' + r.autoApproved + ' tracks';
+            if (r.pending > 0) msg += ', ' + r.pending + ' need review';
+          } else if (r.pending > 0) {
+            msg = 'Found ' + r.pending + ' matches to review';
+          } else {
+            msg = 'Scan complete';
+          }
+          if (r.failed > 0) msg += ' (' + r.failed + ' failed)';
+          this.showToast(msg);
         } else {
           this.showToast('Scan complete');
         }

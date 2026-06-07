@@ -904,7 +904,7 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 
 		inserted := 0
 		for _, cand := range candidates {
-			score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title)
+			score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 			if score < 0.5 {
 				continue
 			}
@@ -984,7 +984,7 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	var results []rescanCandidate
 	for _, cand := range candidates {
-		score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title)
+		score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 
 		mu.RLock()
 		hasCover := false

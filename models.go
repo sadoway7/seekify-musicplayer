@@ -75,8 +75,9 @@ type MetadataMatch struct {
 }
 
 type MetadataScanResult struct {
-	Matched   int `json:"matched"`
-	Pending   int `json:"pending"`
-	Conflicts int `json:"conflicts"`
-	Failed    int `json:"failed"`
+	Matched      int `json:"matched"`
+	Pending      int `json:"pending"`
+	Conflicts    int `json:"conflicts"`
+	Failed       int `json:"failed"`
+	AutoApproved int `json:"autoApproved"`
 }
