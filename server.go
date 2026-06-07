@@ -127,7 +127,7 @@ func main() {
 
 	mux.HandleFunc("/api/track-duration/", trackDurationHandler)
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
-	mux.HandleFunc("/api/metadata/resync/", metadataRescanHandler)
+	mux.HandleFunc("/api/metadata/rescan/", metadataRescanHandler)
 	mux.HandleFunc("/api/metadata/rescan-sync/", metadataRescanSyncHandler)
 	mux.HandleFunc("/api/metadata/update-track/", metadataUpdateTrackHandler)
 	mux.HandleFunc("/api/metadata/scan-progress", metadataScanProgressHandler)

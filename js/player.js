@@ -37,6 +37,32 @@ const Player = {
       this.playing = false;
       if (this.onStateChange) this.onStateChange();
     });
+
+    // Media Session API — lock screen controls, keyboard media keys
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('play', () => {
+        this.audio.play().catch(() => {});
+        this.playing = true;
+        if (this.onStateChange) this.onStateChange();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        this.audio.pause();
+        this.playing = false;
+        if (this.onStateChange) this.onStateChange();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
+      navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
+    }
+  },
+
+  _updateMediaSession(track) {
+    if (!('mediaSession' in navigator) || !track) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title || '',
+      artist: track.artist || '',
+      album: track.album || '',
+      artwork: track.albumID ? [{ src: Api.coverUrl(track.albumID), sizes: '512x512', type: 'image/jpeg' }] : []
+    });
   },
 
   play(track, trackList, source) {
@@ -84,9 +110,8 @@ const Player = {
     this.playing = true;
     if (this.onTrackChange) this.onTrackChange(track);
     if (this.onStateChange) this.onStateChange();
-  },
-
-  pause() {
+    this._updateMediaSession(track);
+  }, {
     this.audio.pause();
   },
 

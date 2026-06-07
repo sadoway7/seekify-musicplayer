@@ -824,9 +824,9 @@ const tmore = e.target.closest('.track-more');
     const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, 6);
     html += '<div class="mega-title"><span>Artists</span></div>';
     if (newArtists.length > 0) {
-      html += '<div class="scroll-row" style="flex-wrap:nowrap">';
+      html += '<div class="scroll-row artist-row">';
       newArtists.forEach(a => {
-        html += '<div class="quick-play-card-inline" data-type="artist" data-id="' + this._esc(a.name) + '">'
+        html += '<div class="quick-play-card-inline artist-pill" data-type="artist" data-id="' + this._esc(a.name) + '">'
           + '<div class="quick-play-art"><img src="' + Api.artistArtUrl(a.name) + '" alt=""></div>'
           + '<div class="quick-play-title">' + this._esc(a.name) + '</div>'
           + '</div>';
@@ -2198,6 +2198,19 @@ const tmore = e.target.closest('.track-more');
         }
       }},
       { type: 'divider' },
+      { label: 'Rename', icon: Icons.edit(), action: () => {
+        this.hideContextMenu();
+        const newName = prompt('Playlist name:', playlist.name);
+        if (!newName || !newName.trim() || newName.trim() === playlist.name) return;
+        Api.updatePlaylist(playlistId, { name: newName.trim() }).then(() => {
+          Store.refreshPlaylists().then(() => {
+            this.renderPage();
+            this.showToast('Playlist renamed');
+          });
+        }).catch(() => {
+          this.showToast('Failed to rename playlist');
+        });
+      }},
       { label: 'Delete', icon: Icons.trash(), action: async () => {
         this.hideContextMenu();
         if (!confirm('Delete this playlist?')) return;

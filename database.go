@@ -390,11 +390,18 @@ func dbUpsertTrack(t *Track) {
 	db.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			title=excluded.title, artist=excluded.artist, album=excluded.album,
-			album_artist=excluded.album_artist, album_id=excluded.album_id,
-			track_number=excluded.track_number, year=excluded.year, genre=excluded.genre,
-			duration=excluded.duration, has_cover=excluded.has_cover,
-			mod_time=excluded.mod_time, has_metadata=excluded.has_metadata`,
+			title=CASE WHEN tracks.has_metadata = 1 THEN tracks.title ELSE excluded.title END,
+			artist=CASE WHEN tracks.has_metadata = 1 THEN tracks.artist ELSE excluded.artist END,
+			album=CASE WHEN tracks.has_metadata = 1 THEN tracks.album ELSE excluded.album END,
+			album_artist=CASE WHEN tracks.has_metadata = 1 THEN tracks.album_artist ELSE excluded.album_artist END,
+			album_id=CASE WHEN tracks.has_metadata = 1 THEN tracks.album_id ELSE excluded.album_id END,
+			track_number=CASE WHEN tracks.has_metadata = 1 THEN tracks.track_number ELSE excluded.track_number END,
+			year=CASE WHEN tracks.has_metadata = 1 THEN tracks.year ELSE excluded.year END,
+			genre=CASE WHEN tracks.has_metadata = 1 THEN tracks.genre ELSE excluded.genre END,
+			duration=CASE WHEN tracks.duration > 0 THEN tracks.duration ELSE excluded.duration END,
+			has_cover=excluded.has_cover,
+			mod_time=excluded.mod_time,
+			has_metadata=CASE WHEN tracks.has_metadata = 1 THEN 1 ELSE excluded.has_metadata END`,
 		t.ID, t.Title, t.Artist, t.Album, t.AlbumArtist, t.AlbumID,
 		t.TrackNumber, t.Year, t.Genre, t.Duration, t.FilePath,
 		boolToInt(t.HasCover), t.ModTime, boolToInt(t.HasMetadata))

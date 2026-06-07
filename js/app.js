@@ -56,7 +56,19 @@ const App = {
         if (Player.onStateChange) Player.onStateChange();
         UI.showNowPlaying();
       }
-      // Clean the URL without reloading
+    }
+
+    // Deep link: ?artist=NAME or ?album=ID
+    const artistName = params.get('artist');
+    const albumId = params.get('album');
+    if (artistName) {
+      UI.navigateTo('artist', { artistName });
+    } else if (albumId) {
+      UI.navigateTo('album', { albumId });
+    }
+
+    // Clean the URL without reloading
+    if (playId || artistName || albumId) {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }

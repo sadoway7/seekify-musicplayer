@@ -443,8 +443,15 @@ func scanMetadataForTracks() MetadataScanResult {
 	}
 
 	var unmatched []trackInfo
+	var skipped int
 	for _, t := range tracks {
 		if existingMatches[t.ID] {
+			continue
+		}
+
+		// Skip tracks that already have complete tags (e.g. Lidarr-managed files)
+		if t.Artist != "" && t.Title != "" && t.Album != "" {
+			skipped++
 			continue
 		}
 
@@ -479,103 +486,143 @@ func scanMetadataForTracks() MetadataScanResult {
 	mu.RUnlock()
 
 	var result MetadataScanResult
+	var resultMu sync.Mutex
 
 	metaScanLock.Lock()
 	metaScan.Total = len(unmatched)
 	metaScanLock.Unlock()
 
-	log.Printf("[metadata] Starting scan of %d tracks via MusicBrainz...", len(unmatched))
+	if skipped > 0 {
+		log.Printf("[metadata] Skipped %d tracks with complete tags", skipped)
+	}
+	log.Printf("[metadata] Starting parallel scan of %d tracks (3 workers)...", len(unmatched))
 
-	for i, info := range unmatched {
+	if len(unmatched) == 0 {
 		metaScanLock.Lock()
-		metaScan.Scanned = i + 1
-		metaScan.Current = info.artist + " - " + info.title
+		metaScan.Result = &result
 		metaScanLock.Unlock()
+		return result
+	}
 
-		candidates, err := mbSearchRecordings(info.artist, info.title, 3)
-		if err != nil {
-			if strings.Contains(err.Error(), "503") {
-				log.Printf("[metadata] Rate limited, waiting 5s before retry...")
-				time.Sleep(5 * time.Second)
-				candidates, err = mbSearchRecordings(info.artist, info.title, 3)
-				if err != nil {
-					log.Printf("[metadata] Retry failed for %q - %q: %v", info.artist, info.title, err)
+	// Feed tracks to workers via channel
+	trackCh := make(chan trackInfo, len(unmatched))
+	for _, info := range unmatched {
+		trackCh <- info
+	}
+	close(trackCh)
+
+	const numWorkers = 3
+	var wg sync.WaitGroup
+
+	worker := func() {
+		defer wg.Done()
+		for info := range trackCh {
+			metaScanLock.Lock()
+			metaScan.Scanned++
+			s := metaScan.Scanned
+			metaScan.Current = info.artist + " - " + info.title
+			metaScanLock.Unlock()
+
+			_ = s
+
+			candidates, err := mbSearchRecordings(info.artist, info.title, 3)
+			if err != nil {
+				if strings.Contains(err.Error(), "503") {
+					log.Printf("[metadata] Rate limited, waiting 5s before retry...")
+					time.Sleep(5 * time.Second)
+					candidates, err = mbSearchRecordings(info.artist, info.title, 3)
+					if err != nil {
+						log.Printf("[metadata] Retry failed for %q - %q: %v", info.artist, info.title, err)
+						resultMu.Lock()
+						result.Failed++
+						metaScanLock.Lock()
+						metaScan.Failed = result.Failed
+						metaScanLock.Unlock()
+						resultMu.Unlock()
+						time.Sleep(1200 * time.Millisecond)
+						continue
+					}
+				} else {
+					log.Printf("[metadata] No results for %q - %q: %v", info.artist, info.title, err)
+					resultMu.Lock()
 					result.Failed++
 					metaScanLock.Lock()
 					metaScan.Failed = result.Failed
 					metaScanLock.Unlock()
-					time.Sleep(1200 * time.Millisecond)
+					resultMu.Unlock()
+					time.Sleep(600 * time.Millisecond)
 					continue
 				}
-			} else {
-				log.Printf("[metadata] No results for %q - %q: %v", info.artist, info.title, err)
+			}
+
+			if len(candidates) == 0 {
+				resultMu.Lock()
 				result.Failed++
 				metaScanLock.Lock()
 				metaScan.Failed = result.Failed
 				metaScanLock.Unlock()
-				time.Sleep(1200 * time.Millisecond)
-				continue
-			}
-		}
-
-		if len(candidates) == 0 {
-			result.Failed++
-			metaScanLock.Lock()
-			metaScan.Failed = result.Failed
-			metaScanLock.Unlock()
-			time.Sleep(600 * time.Millisecond)
-			continue
-		}
-
-		for _, cand := range candidates {
-			score := scoreMatch(info.artist, info.title, cand.Artist, cand.Title)
-
-			if score < 0.5 {
+				resultMu.Unlock()
+				time.Sleep(600 * time.Millisecond)
 				continue
 			}
 
-			mu.RLock()
-			hasCover := false
-			if cand.AlbumID != "" {
-				coverDir := filepath.Join(musicDir, "images")
-				coverPath := filepath.Join(coverDir, cand.AlbumID+".jpg")
-				if _, err := os.Stat(coverPath); err == nil {
-					hasCover = true
+			for _, cand := range candidates {
+				score := scoreMatch(info.artist, info.title, cand.Artist, cand.Title)
+
+				if score < 0.5 {
+					continue
 				}
-			}
-			mu.RUnlock()
 
-			match := &MetadataMatch{
-				ID:          generateUUID(),
-				TrackID:     info.id,
-				TrackTitle:  info.title,
-				TrackArtist: info.artist,
-				MBTitle:     cand.Title,
-				MBArtist:    cand.Artist,
-				MBAlbum:     cand.Album,
-				MBAlbumID:   cand.AlbumID,
-				MBScore:     score,
-				Status:      "pending",
-				HasCover:    hasCover,
-				FilePath:    info.filePath,
+				mu.RLock()
+				hasCover := false
+				if cand.AlbumID != "" {
+					coverDir := filepath.Join(musicDir, "images")
+					coverPath := filepath.Join(coverDir, cand.AlbumID+".jpg")
+					if _, err := os.Stat(coverPath); err == nil {
+						hasCover = true
+					}
+				}
+				mu.RUnlock()
+
+				match := &MetadataMatch{
+					ID:          generateUUID(),
+					TrackID:     info.id,
+					TrackTitle:  info.title,
+					TrackArtist: info.artist,
+					MBTitle:     cand.Title,
+					MBArtist:    cand.Artist,
+					MBAlbum:     cand.Album,
+					MBAlbumID:   cand.AlbumID,
+					MBScore:     score,
+					Status:      "pending",
+					HasCover:    hasCover,
+					FilePath:    info.filePath,
+				}
+
+				dbInsertMetadataMatch(match)
+
+				resultMu.Lock()
+				if score >= 0.8 {
+					result.Matched++
+				} else {
+					result.Conflicts++
+				}
+				result.Pending++
+				metaScanLock.Lock()
+				metaScan.Matched = result.Pending
+				metaScanLock.Unlock()
+				resultMu.Unlock()
 			}
 
-			dbInsertMetadataMatch(match)
-
-			if score >= 0.8 {
-				result.Matched++
-			} else {
-				result.Conflicts++
-			}
-			result.Pending++
+			time.Sleep(600 * time.Millisecond)
 		}
-
-		metaScanLock.Lock()
-		metaScan.Matched = result.Pending
-		metaScanLock.Unlock()
-
-		time.Sleep(600 * time.Millisecond)
 	}
+
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go worker()
+	}
+	wg.Wait()
 
 	result.Failed = metaScan.Failed
 
