@@ -233,6 +233,12 @@ const Api = {
     } catch { return null; }
   },
 
+  async metadataUndo(id) {
+    const res = await fetch('/api/metadata/undo/' + id, { method: 'POST' });
+    if (!res.ok) throw new Error('Undo failed');
+    return res.json();
+  },
+
   async getDownloadable() {
     try {
       const res = await fetch('/api/admin/downloads');

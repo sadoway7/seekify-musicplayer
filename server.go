@@ -137,6 +137,7 @@ func main() {
 	mux.HandleFunc("/api/metadata/approve-all", metadataApproveAllHandler)
 	mux.HandleFunc("/api/metadata/clear", metadataClearHandler)
 	mux.HandleFunc("/api/metadata/counts", metadataCountsHandler)
+	mux.HandleFunc("/api/metadata/undo/", metadataUndoHandler)
 
 	var handler http.Handler = mux
 	handler = loggingMiddleware(recoveryMiddleware(handler))

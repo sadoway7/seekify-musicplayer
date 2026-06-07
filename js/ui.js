@@ -736,6 +736,7 @@ const tmore = e.target.closest('.track-more');
       case 'all-music': this.renderAllMusic(); break;
       case 'settings': this.renderSettings(); break;
       case 'metadata-review': this.renderMetadataReview(); break;
+      case 'metadata-history': this.renderMetadataHistory(); break;
       default: this.renderHome();
     }
   },
@@ -999,7 +1000,8 @@ const tmore = e.target.closest('.track-more');
       + '<button class="chip' + (this.libFilter === 'albums' ? ' active' : '') + '" data-filter="albums">Albums</button>'
       + '<button class="chip' + (this.libFilter === 'artists' ? ' active' : '') + '" data-filter="artists">Artists</button>'
       + '<button class="chip' + (this.libFilter === 'favorites' ? ' active' : '') + '" data-filter="favorites">Favorites</button>'
-      + '</div>';
+      + '</div>'
+      + '<div class="lib-results">';
 
     switch (this.libFilter) {
       case 'playlists': html += this._renderLibPlaylists(); break;
@@ -1007,6 +1009,8 @@ const tmore = e.target.closest('.track-more');
       case 'artists': html += this._renderLibArtists(); break;
       case 'favorites': html += this._renderLibFavorites(); break;
     }
+
+    html += '</div>';
 
     this.els.content.innerHTML = html;
 
@@ -1063,7 +1067,7 @@ const tmore = e.target.closest('.track-more');
       html += this._emptyState('No playlists yet', 'Create a playlist to organize your music', Icons.library());
     } else {
       Store.playlists.forEach(p => {
-        html += '<div class="list-item" data-type="playlist" data-id="' + p.id + '">'
+        html += '<div class="list-item lib-item" data-type="playlist" data-id="' + p.id + '" data-title="' + this._esc(p.name) + '" data-subtitle="' + p.trackIds.length + ' tracks">'
           + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)">'
           + Icons.music() + '</div>'
           + '<div class="list-item-info">'
@@ -1083,14 +1087,14 @@ const tmore = e.target.closest('.track-more');
     }
     if (this.viewMode === 'grid') {
       return '<div class="scroll-row" style="flex-wrap:wrap">' + albumsWithName.map(a =>
-        '<div class="card" data-album-id="' + a.id + '">'
+        '<div class="card lib-item" data-album-id="' + a.id + '" data-title="' + this._esc(a.name) + '" data-subtitle="' + this._esc(a.artist) + '">'
         + '<div class="card-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
         + '<div class="card-title">' + this._esc(a.name) + '</div>'
         + '<div class="card-subtitle">' + this._esc(a.artist) + '</div></div>'
       ).join('') + '</div>';
     }
     return albumsWithName.map(a =>
-      '<div class="list-item" data-type="album" data-id="' + a.id + '">'
+      '<div class="list-item lib-item" data-type="album" data-id="' + a.id + '" data-title="' + this._esc(a.name) + '" data-subtitle="' + this._esc(a.artist) + '">'
       + '<div class="list-item-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
       + '<div class="list-item-info">'
       + '<div class="list-item-title">' + this._esc(a.name) + '</div>'
@@ -1105,7 +1109,7 @@ const tmore = e.target.closest('.track-more');
       return this._emptyState('No artists yet', 'Scan your music library to see artists', Icons.music());
     }
     return artistsWithName.map(a =>
-      '<div class="list-item" data-type="artist" data-id="' + this._esc(a.name) + '">'
+      '<div class="list-item lib-item" data-type="artist" data-id="' + this._esc(a.name) + '" data-title="' + this._esc(a.name) + '" data-subtitle="' + a.albumCount + ' album' + (a.albumCount !== 1 ? 's' : '') + '">'
       + '<div class="list-item-art round"><img src="' + Api.artistArtUrl(a.name) + '" alt=""></div>'
       + '<div class="list-item-info"><div class="list-item-title">' + this._esc(a.name) + '</div>'
       + '<div class="list-item-subtitle">' + a.albumCount + ' album' + (a.albumCount !== 1 ? 's' : '') + '</div></div></div>'
@@ -1321,6 +1325,7 @@ const tmore = e.target.closest('.track-more');
       + '<div class="settings-actions">'
       + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
       + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Matches</span></button>'
+      + '<button class="settings-btn" id="btn-meta-history">' + Icons.search() + '<span>Match History</span></button>'
       + '<button class="settings-btn settings-btn-danger" id="btn-meta-clear">' + Icons.trash() + '<span>Clear Matches</span></button>'
       + '</div></div>';
 
@@ -1352,6 +1357,7 @@ const tmore = e.target.closest('.track-more');
 
     document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());
     document.getElementById('btn-meta-clear').addEventListener('click', () => this._clearMetadata());
+    document.getElementById('btn-meta-history').addEventListener('click', () => this.navigateTo('metadata-history'));
     document.getElementById('btn-rescan').addEventListener('click', () => this._rescanLibrary());
     document.getElementById('btn-manage-downloads').addEventListener('click', () => this._toggleDownloadPanel());
 
@@ -1727,6 +1733,140 @@ const tmore = e.target.closest('.track-more');
       this.showToast('Failed to approve all');
     }
     btn.disabled = false;
+  },
+
+  renderMetadataHistory() {
+    this._viewTrackList = [];
+    let html = '<div class="page-header">'
+      + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<span class="page-header-title">Match History</span></div>'
+      + '<div class="search-container" style="margin-bottom:12px">'
+      + '<span class="search-icon">' + Icons.search() + '</span>'
+      + '<input class="search-input" id="history-search" type="text" placeholder="Search by track, artist, or album...">'
+      + '</div>'
+      + '<div class="filter-chips">'
+      + '<button class="chip active" data-hist-filter="all">All</button>'
+      + '<button class="chip" data-hist-filter="approved">Approved</button>'
+      + '<button class="chip" data-hist-filter="rejected">Rejected</button>'
+      + '</div>'
+      + '<div id="history-list"><div class="loading-spinner"></div></div>';
+
+    this.els.content.innerHTML = html;
+    this._histFilter = 'all';
+
+    const searchInput = document.getElementById('history-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => this._filterHistory());
+    }
+
+    this.els.content.querySelectorAll('[data-hist-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.els.content.querySelectorAll('[data-hist-filter]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this._histFilter = btn.dataset.histFilter;
+        this._filterHistory();
+      });
+    });
+
+    this._loadHistory();
+  },
+
+  async _loadHistory() {
+    const listEl = document.getElementById('history-list');
+    if (!listEl) return;
+
+    try {
+      const matches = await Api.metadataAll();
+      this._historyMatches = matches || [];
+
+      if (this._historyMatches.length === 0) {
+        listEl.innerHTML = this._emptyState('No matches yet', 'Run a metadata scan to see results here', Icons.search());
+        return;
+      }
+
+      this._renderHistoryList(this._historyMatches);
+    } catch (err) {
+      listEl.innerHTML = this._emptyState('Failed to load history', 'Try again later', Icons.xCircle());
+    }
+  },
+
+  _renderHistoryList(matches) {
+    const listEl = document.getElementById('history-list');
+    if (!listEl) return;
+
+    if (matches.length === 0) {
+      listEl.innerHTML = this._emptyState('No matches found', 'Try a different filter or search', Icons.search());
+      return;
+    }
+
+    let html = '';
+    matches.forEach(m => {
+      const scorePct = Math.round(m.mbScore * 100);
+      const statusLabel = m.status === 'approved' ? '<span class="review-score score-high">Approved</span>'
+        : m.status === 'rejected' ? '<span class="review-score score-low">Rejected</span>'
+        : '<span class="review-score score-mid">Pending</span>';
+
+      html += '<div class="review-card history-item" data-status="' + m.status + '" data-search="' + this._esc(m.trackTitle + ' ' + m.trackArtist + ' ' + m.mbTitle + ' ' + m.mbArtist + ' ' + m.mbAlbum).toLowerCase() + '">'
+        + '<div class="review-card-header">'
+        + '<div class="review-card-local">'
+        + '<div class="review-card-label">Your Track</div>'
+        + '<div class="review-card-title">' + this._esc(m.trackTitle) + '</div>'
+        + '<div class="review-card-artist">' + this._esc(m.trackArtist) + '</div>'
+        + '</div>'
+        + '<div class="review-card-arrow">' + Icons.chevronRight() + '</div>'
+        + '<div class="review-card-local">'
+        + '<div class="review-card-label">MusicBrainz ' + statusLabel + '</div>'
+        + '<div class="review-candidate-title">' + this._esc(m.mbTitle) + '</div>'
+        + '<div class="review-candidate-artist">' + this._esc(m.mbArtist) + '</div>'
+        + '<div class="review-candidate-album">' + this._esc(m.mbAlbum) + '</div>'
+        + '<span class="review-score ' + (scorePct >= 80 ? 'score-high' : scorePct >= 50 ? 'score-mid' : 'score-low') + '">' + scorePct + '%</span>'
+        + '</div>'
+        + '</div>';
+
+      if (m.status === 'approved') {
+        html += '<div class="review-candidate-actions" style="padding:8px 0">'
+          + '<button class="settings-btn settings-btn-danger" style="font-size:12px;padding:6px 12px" data-undo-id="' + m.id + '">Undo Match</button>'
+          + '</div>';
+      }
+
+      html += '</div>';
+    });
+
+    listEl.innerHTML = html;
+    this._filterHistory();
+
+    listEl.querySelectorAll('[data-undo-id]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.undoId;
+        btn.disabled = true;
+        try {
+          await Api.metadataUndo(id);
+          this.showToast('Match undone — will be re-evaluated on next scan');
+          await Store.refreshLibrary();
+          this._loadHistory();
+        } catch (err) {
+          this.showToast('Failed to undo match');
+        }
+      });
+    });
+  },
+
+  _filterHistory() {
+    const listEl = document.getElementById('history-list');
+    if (!listEl) return;
+
+    const searchInput = document.getElementById('history-search');
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+    listEl.querySelectorAll('.history-item').forEach(el => {
+      const status = el.dataset.status;
+      const searchData = el.dataset.search || '';
+
+      const statusMatch = this._histFilter === 'all' || status === this._histFilter;
+      const searchMatch = !q || searchData.includes(q);
+
+      el.style.display = (statusMatch && searchMatch) ? '' : 'none';
+    });
   },
 
   renderTrackList(tracks, options) {
@@ -2522,11 +2662,12 @@ const tmore = e.target.closest('.track-more');
     return null;
   },
 
+  _escDiv: null,
   _esc(str) {
     if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = String(str);
-    return div.innerHTML;
+    if (!this._escDiv) this._escDiv = document.createElement('div');
+    this._escDiv.textContent = String(str);
+    return this._escDiv.innerHTML;
   },
 
   _trackTitle(track) {

@@ -368,6 +368,19 @@ func dbClearMatches() {
 	db.Exec(`DELETE FROM metadata_matches`)
 }
 
+func dbUndoMatch(id string) (string, bool) {
+	var trackID string
+	err := db.QueryRow(`SELECT track_id FROM metadata_matches WHERE id = ? AND status = 'approved'`, id).Scan(&trackID)
+	if err != nil {
+		return "", false
+	}
+
+	db.Exec(`UPDATE metadata_matches SET status = 'pending' WHERE id = ?`, id)
+	db.Exec(`UPDATE tracks SET has_metadata = 0 WHERE id = ?`, trackID)
+
+	return trackID, true
+}
+
 func dbGetMatchCount() map[string]int {
 	counts := map[string]int{"pending": 0, "approved": 0, "rejected": 0}
 	rows, err := db.Query(`SELECT status, COUNT(*) FROM metadata_matches GROUP BY status`)

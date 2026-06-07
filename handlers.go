@@ -1172,6 +1172,30 @@ func metadataCountsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(counts)
 }
 
+func metadataUndoHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/metadata/undo/")
+	if id == "" {
+		http.Error(w, "Match ID required", http.StatusBadRequest)
+		return
+	}
+
+	trackID, ok := dbUndoMatch(id)
+	if !ok {
+		http.Error(w, "Match not found or not approved", http.StatusNotFound)
+		return
+	}
+
+	// Restore track from file tags on next scan
+	mu.Lock()
+	if t, exists := tracks[trackID]; exists {
+		t.HasMetadata = false
+	}
+	mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"undone": true})
+}
+
 func spaHandler(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Clean(r.URL.Path)
 	if path == "/" {
