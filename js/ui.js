@@ -324,43 +324,48 @@ const UI = {
   },
 
   _bindVolumeBar() {
-    const bindBar = (bar, fillEl) => {
+    const self = this;
+
+    const bindBar = (bar, opts) => {
       if (!bar) return;
+      const state = { dragging: false };
 
       const getFraction = (e) => {
         const rect = bar.getBoundingClientRect();
+        if (rect.width === 0) return Player.volume;
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       };
 
       const onStart = (e) => {
-        this.volumeDragging = true;
-        const f = getFraction(e);
-        Player.setVolume(f);
-        this._updateVolumeBar();
+        state.dragging = true;
+        e.preventDefault();
+        Player.setVolume(getFraction(e));
+        self._updateVolumeBar();
       };
 
       const onMove = (e) => {
-        if (!this.volumeDragging) return;
-        const f = getFraction(e);
-        Player.setVolume(f);
-        this._updateVolumeBar();
+        if (!state.dragging) return;
+        Player.setVolume(getFraction(e));
+        self._updateVolumeBar();
       };
 
       const onEnd = () => {
-        this.volumeDragging = false;
+        if (!state.dragging) return;
+        state.dragging = false;
+        if (opts && opts.onEnd) opts.onEnd();
       };
 
       bar.addEventListener('mousedown', onStart);
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onEnd);
-      bar.addEventListener('touchstart', onStart, { passive: true });
+      bar.addEventListener('touchstart', onStart, { passive: false });
       document.addEventListener('touchmove', onMove, { passive: true });
       document.addEventListener('touchend', onEnd);
     };
 
-    bindBar(this.els.volumeBar, this.els.volumeFill);
-    bindBar(this.els.queueVolumeBar, this.els.queueVolumeFill);
+    bindBar(this.els.volumeBar);
+    bindBar(this.els.queueVolumeBar);
   },
 
   _setupMiniVolume() {
@@ -389,29 +394,34 @@ const UI = {
       this._updateVolumeBar();
     });
 
-    // Drag bar
+    // Drag bar — independent state, keeps wrap active during drag
     const bar = this.els.miniVolumeBar;
-    const fill = this.els.miniVolumeFill;
+    const self = this;
     if (bar) {
+      let dragging = false;
+
       const getFrac = (e) => {
         const rect = bar.getBoundingClientRect();
+        if (rect.width === 0) return Player.volume;
         const cx = e.touches ? e.touches[0].clientX : e.clientX;
         return Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
       };
+
       bar.addEventListener('mousedown', (e) => {
-        this.volumeDragging = true;
+        dragging = true;
         wrap.classList.add('active');
+        e.preventDefault();
         Player.setVolume(getFrac(e));
-        this._updateVolumeBar();
+        self._updateVolumeBar();
       });
       document.addEventListener('mousemove', (e) => {
-        if (!this.volumeDragging) return;
+        if (!dragging) return;
         Player.setVolume(getFrac(e));
-        this._updateVolumeBar();
+        self._updateVolumeBar();
       });
       document.addEventListener('mouseup', () => {
-        if (this.volumeDragging) {
-          this.volumeDragging = false;
+        if (dragging) {
+          dragging = false;
           wrap.classList.remove('active');
         }
       });
@@ -866,7 +876,8 @@ const tmore = e.target.closest('.track-more');
     }
 
     const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
-    const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, 6);
+    const artistLimit = window.innerWidth >= 768 ? 10 : 6;
+    const newArtists = namedArtists.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0)).slice(0, artistLimit);
     html += '<div class="mega-title"><span>Artists</span></div>';
     if (newArtists.length > 0) {
       html += '<div class="scroll-row artist-row">';
