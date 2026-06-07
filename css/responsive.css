@@ -148,7 +148,8 @@
     flex-direction: row;
     align-items: center;
     gap: 14px;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
+    max-width: 300px;
     min-width: 0;
     cursor: pointer;
   }
@@ -161,12 +162,14 @@
     flex-shrink: 0;
     padding: 0;
     justify-content: center;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
   }
 
   .mini-right {
-    flex: 1;
-    min-width: 0;
-    max-width: 320px;
+    flex: 0 0 auto;
+    margin-left: auto;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -313,9 +316,7 @@
     color: var(--accent);
   }
 
-  .np-header-actions {
-    display: none;
-  }
+
 
   /* Vinyl disc area - in-flow on desktop */
   .np-artwork {

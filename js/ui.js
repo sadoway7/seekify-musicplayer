@@ -2700,7 +2700,9 @@ const UI = {
   _handleAction(action) {
     if (!action) return;
     if (action === 'shuffle' || action === 'shuffle-all') {
-      let list = Store.library.tracks.slice();
+      let list = (this._viewTrackList && this._viewTrackList.length > 0)
+        ? this._viewTrackList.slice()
+        : Store.library.tracks.slice();
       if (list.length > 0) {
         const shuffled = list.sort(() => Math.random() - 0.5);
         const capped = shuffled.slice(0, 100);
