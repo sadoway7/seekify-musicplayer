@@ -461,23 +461,10 @@ const UI = {
   },
 
   _bindResize() {
-    let prevDesktop = window.innerWidth >= 768;
     window.addEventListener('resize', () => {
-      const isDesktop = window.innerWidth >= 768;
-      if (isDesktop !== prevDesktop) {
-        prevDesktop = isDesktop;
-        if (isDesktop) {
-          // Switched to desktop: show queue if now-playing is open
-          if (!this.els.nowPlaying.classList.contains('hidden')) {
-            this.els.queuePanel.classList.remove('hidden');
-            document.getElementById('app').classList.add('queue-visible');
-            this._renderQueue();
-          }
-        } else {
-          // Switched to mobile: hide queue
-          this.els.queuePanel.classList.add('hidden');
-          document.getElementById('app').classList.remove('queue-visible');
-        }
+      // Re-render queue if visible
+      if (!this.els.queuePanel.classList.contains('hidden')) {
+        this._renderQueue();
       }
     });
   },
@@ -2244,11 +2231,8 @@ const tmore = e.target.closest('.track-more');
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
     this._applyNowPlayingBg();
-    // Show queue sidebar on desktop
-    if (window.innerWidth >= 768) {
-      this.els.queuePanel.classList.remove('hidden');
-      document.getElementById('app').classList.add('queue-visible');
-    }
+    // Show queue (it's inside now-playing on desktop, standalone on mobile)
+    this.els.queuePanel.classList.remove('hidden');
   },
 
   hideNowPlaying() {
@@ -2263,24 +2247,17 @@ const tmore = e.target.closest('.track-more');
     if (Player.getCurrentTrack()) {
       this.els.miniPlayer.classList.remove('hidden');
     }
-    // Hide queue sidebar on desktop
-    if (window.innerWidth >= 768) {
-      this.els.queuePanel.classList.add('hidden');
-      document.getElementById('app').classList.remove('queue-visible');
-    }
+    // Hide queue
+    this.els.queuePanel.classList.add('hidden');
   },
 
   showQueue() {
     this._renderQueue();
     this.els.queuePanel.classList.remove('hidden');
-    if (window.innerWidth >= 768) {
-      document.getElementById('app').classList.add('queue-visible');
-    }
   },
 
   hideQueue() {
     this.els.queuePanel.classList.add('hidden');
-    document.getElementById('app').classList.remove('queue-visible');
   },
 
   updateQueueIfVisible() {
