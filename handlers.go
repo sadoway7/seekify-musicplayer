@@ -14,8 +14,27 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+// libraryVersion is incremented whenever the library changes (scan, watcher, metadata update).
+var libraryVersion atomic.Int64
+
+func statsHandler(w http.ResponseWriter, r *http.Request) {
+	mu.RLock()
+	trackCount := len(tracks)
+	albumCount := len(albums)
+	mu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tracks":   trackCount,
+		"albums":   albumCount,
+		"version":  libraryVersion.Load(),
+	})
+}
 
 func libraryHandler(w http.ResponseWriter, r *http.Request) {
 	mu.RLock()

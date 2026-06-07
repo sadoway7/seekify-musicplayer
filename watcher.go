@@ -120,5 +120,8 @@ func checkAndRescan() {
 		watcherMu.Lock()
 		lastFileCounts[d.dir] = current
 		watcherMu.Unlock()
+
+		// Notify frontend that library changed
+		libraryVersion.Add(1)
 	}
 }

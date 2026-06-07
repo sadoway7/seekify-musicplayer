@@ -2168,6 +2168,10 @@ const tmore = e.target.closest('.track-more');
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
     this._applyNowPlayingBg();
+    // Show queue sidebar on desktop
+    if (window.innerWidth >= 768) {
+      this.els.queuePanel.classList.remove('hidden');
+    }
   },
 
   hideNowPlaying() {
@@ -2181,6 +2185,10 @@ const tmore = e.target.closest('.track-more');
     }, { once: true });
     if (Player.getCurrentTrack()) {
       this.els.miniPlayer.classList.remove('hidden');
+    }
+    // Hide queue sidebar on desktop
+    if (window.innerWidth >= 768) {
+      this.els.queuePanel.classList.add('hidden');
     }
   },
 

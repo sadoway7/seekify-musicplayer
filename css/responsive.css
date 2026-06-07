@@ -15,6 +15,7 @@
 
   .quick-play-grid {
     grid-template-columns: repeat(4, 1fr);
+    max-width: 900px;
   }
 
   .search-container {
@@ -471,7 +472,7 @@
     align-self: stretch;
   }
 
-  /* Queue: sidebar on desktop, only visible when now-playing is open */
+  /* Queue: sidebar on desktop, toggled by JS when now-playing opens/closes */
   .queue-panel {
     position: fixed;
     top: 0;
@@ -487,12 +488,6 @@
     background: var(--bg);
     border-left: 1px solid rgba(255,255,255,0.04);
     padding: 20px 24px;
-    display: none;
-  }
-
-  /* Show queue when now-playing is visible */
-  .now-playing:not(.hidden) ~ .queue-panel {
-    display: flex !important;
   }
 
   .queue-close {

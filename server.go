@@ -103,6 +103,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/library", libraryHandler)
+	mux.HandleFunc("/api/stats", statsHandler)
 	mux.HandleFunc("/api/stream/", streamHandler)
 	mux.HandleFunc("/api/cover/", coverHandler)
 	mux.HandleFunc("/api/artist-art/", artistArtHandler)
