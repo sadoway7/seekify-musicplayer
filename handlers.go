@@ -816,6 +816,44 @@ func downloadToggleHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"enabled": enabled})
 }
 
+func trackDurationHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/track-duration/")
+	if trackID == "" {
+		http.Error(w, "Track ID required", http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		Duration int `json:"duration"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if body.Duration <= 0 {
+		http.Error(w, "Invalid duration", http.StatusBadRequest)
+		return
+	}
+
+	mu.Lock()
+	if t, ok := tracks[trackID]; ok {
+		if t.Duration == 0 {
+			t.Duration = body.Duration
+			db.Exec("UPDATE tracks SET duration = ? WHERE id = ?", body.Duration, trackID)
+		}
+	}
+	mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"updated": true})
+}
+
 func metadataScanHandler(w http.ResponseWriter, r *http.Request) {
 	metaScanLock.Lock()
 	if metaScan.Running {

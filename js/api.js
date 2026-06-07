@@ -53,6 +53,13 @@ const Api = {
     return res.json();
   },
 
+  async removeTrackFromPlaylist(playlistId, trackId) {
+    const playlist = await this.getPlaylists().then(ps => ps.find(p => p.id === playlistId));
+    if (!playlist) throw new Error('Playlist not found');
+    const newTrackIds = playlist.trackIds.filter(id => id !== trackId);
+    return this.updatePlaylist(playlistId, { name: playlist.name, trackIds: newTrackIds });
+  },
+
   async deletePlaylist(id) {
     const res = await fetch('/api/playlists/' + id, {
       method: 'DELETE'
@@ -240,5 +247,15 @@ const Api = {
       if (!res.ok) return null;
       return res.json();
     } catch { return null; }
+  },
+
+  async reportDuration(trackId, duration) {
+    try {
+      await fetch('/api/track-duration/' + trackId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration })
+      });
+    } catch {}
   }
 };

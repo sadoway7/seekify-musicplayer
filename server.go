@@ -125,6 +125,7 @@ func main() {
 	mux.HandleFunc("/api/admin/downloads", requireAdmin(downloadsListHandler))
 	mux.HandleFunc("/api/admin/download-toggle/", requireAdmin(downloadToggleHandler))
 
+	mux.HandleFunc("/api/track-duration/", trackDurationHandler)
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
 	mux.HandleFunc("/api/metadata/resync/", metadataRescanHandler)
 	mux.HandleFunc("/api/metadata/rescan-sync/", metadataRescanSyncHandler)

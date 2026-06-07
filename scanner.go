@@ -239,13 +239,6 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 	mu.Lock()
 	oldTrackCount := len(tracks)
 
-	// Figure out which track IDs were removed (files deleted)
-	for oldID := range tracks {
-		if _, exists := newTracks[oldID]; !exists {
-			dbDeleteTrack(oldID)
-		}
-	}
-
 	// Persist all scanned tracks and albums to DB
 	for _, t := range newTracks {
 		dbUpsertTrack(t)
@@ -254,31 +247,51 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 		dbUpsertAlbum(a)
 	}
 
-	// Clean up stale DB entries: tracks whose file_path no longer exists on disk
-	for dbID, dbTrack := range dbLoadTracks() {
-		if _, exists := newTracks[dbID]; !exists {
-			dbDeleteTrack(dbID)
-			_ = dbTrack
+	if prefix == "" {
+		// Primary scan: full cleanup of removed tracks
+		for oldID := range tracks {
+			if _, exists := newTracks[oldID]; !exists {
+				dbDeleteTrack(oldID)
+			}
+		}
+		for dbID, dbTrack := range dbLoadTracks() {
+			if _, exists := newTracks[dbID]; !exists {
+				dbDeleteTrack(dbID)
+				_ = dbTrack
+			}
+		}
+		dbCleanupFavorites()
+		dbCleanupRecent()
+
+		// Primary scan: replace global maps
+		tracks = newTracks
+		albums = newAlbums
+	} else {
+		// Additional directory: merge into existing maps
+		for id, t := range newTracks {
+			tracks[id] = t
+		}
+		for id, a := range newAlbums {
+			albums[id] = a
 		}
 	}
-
-	// Clean up orphaned favorites (pointing to track IDs that no longer exist)
-	dbCleanupFavorites()
-
-	tracks = newTracks
-	albums = newAlbums
 	mu.Unlock()
 
 	coverMu.Lock()
-	coverCache = newCovers
+	for id, data := range newCovers {
+		coverCache[id] = data
+	}
 	coverMu.Unlock()
 
-	stats.Added = len(newTracks) - oldTrackCount
-	if stats.Added < 0 {
-		stats.Removed = -stats.Added
-		stats.Added = 0
-	} else {
-		stats.Removed = 0
+	stats.Added = len(newTracks)
+	if prefix == "" {
+		stats.Added = len(newTracks) - oldTrackCount
+		if stats.Added < 0 {
+			stats.Removed = -stats.Added
+			stats.Added = 0
+		} else {
+			stats.Removed = 0
+		}
 	}
 
 	return stats

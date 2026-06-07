@@ -470,6 +470,10 @@ func dbCleanupFavorites() {
 	db.Exec(`DELETE FROM favorites WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }
 
+func dbCleanupRecent() {
+	db.Exec(`DELETE FROM recent WHERE track_id NOT IN (SELECT id FROM tracks)`)
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

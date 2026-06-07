@@ -13,6 +13,7 @@ const UI = {
   _toastTimer: null,
   _contextMenuActions: null,
   _contextMenuTrigger: null,
+  _navHistory: [],
 
   init() {
     this._cacheDom();
@@ -692,6 +693,10 @@ const tmore = e.target.closest('.track-more');
     if (!this.els.nowPlaying.classList.contains('hidden')) {
       this.hideNowPlaying();
     }
+    // Push current state to history before navigating
+    if (Store.currentView && Store.currentView !== view) {
+      this._navHistory.push({ view: Store.currentView, data: Object.assign({}, Store.viewData) });
+    }
     Store.currentView = view;
     Store.viewData = data || {};
     this.renderPage();
@@ -701,9 +706,20 @@ const tmore = e.target.closest('.track-more');
   navigateBack() {
     if (!this.els.nowPlaying.classList.contains('hidden')) {
       this.hideNowPlaying();
+      return;
+    }
+    // Pop from history stack if available
+    if (this._navHistory.length > 0) {
+      const prev = this._navHistory.pop();
+      Store.currentView = prev.view;
+      Store.viewData = prev.data;
+      this.renderPage();
+      this.els.content.scrollTop = 0;
+      return;
     }
     Store.currentView = Store.currentTab;
     Store.viewData = {};
+    this._navHistory = [];
     this.renderPage();
   },
 
@@ -1191,7 +1207,7 @@ const tmore = e.target.closest('.track-more');
     }
 
     html += '<div class="section-header"><h2>Tracks</h2></div>'
-      + this.renderTrackList(tracks.slice(0, 30), { showArt: true });
+      + this.renderTrackList(tracks, { showArt: true });
 
     this.els.content.innerHTML = html;
   },
@@ -2184,6 +2200,7 @@ const tmore = e.target.closest('.track-more');
       { type: 'divider' },
       { label: 'Delete', icon: Icons.trash(), action: async () => {
         this.hideContextMenu();
+        if (!confirm('Delete this playlist?')) return;
         try {
           await Api.deletePlaylist(playlistId);
           await Store.refreshPlaylists();
@@ -2239,6 +2256,25 @@ const tmore = e.target.closest('.track-more');
         }
       }}
     ];
+
+    // If viewing a playlist, offer "Remove from Playlist"
+    if (Store.currentView === 'playlist' && Store.viewData.playlistId) {
+      const playlist = Store.getPlaylist(Store.viewData.playlistId);
+      if (playlist && playlist.trackIds.includes(trackId)) {
+        menuItems.push({ type: 'divider' });
+        menuItems.push({ label: 'Remove from Playlist', icon: Icons.trash(), action: async () => {
+          this.hideContextMenu();
+          try {
+            await Api.removeTrackFromPlaylist(Store.viewData.playlistId, trackId);
+            await Store.refreshPlaylists();
+            this.renderPage();
+            this.showToast('Removed from playlist');
+          } catch (err) {
+            this.showToast('Failed to remove track');
+          }
+        }});
+      }
+    }
 
     if (track.downloadEnabled) {
       menuItems.push({ type: 'divider' });
@@ -2349,6 +2385,7 @@ const tmore = e.target.closest('.track-more');
     if (action === 'delete-playlist') {
       const playlistId = Store.viewData.playlistId;
       if (!playlistId) return;
+      if (!confirm('Delete this playlist? This cannot be undone.')) return;
       Api.deletePlaylist(playlistId).then(() => {
         Store.refreshPlaylists();
         this.navigateBack();

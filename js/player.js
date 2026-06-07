@@ -21,6 +21,13 @@ const Player = {
     this.audio.addEventListener('ended', () => this._onEnded());
     this.audio.addEventListener('loadedmetadata', () => {
       if (this.onTimeUpdate) this.onTimeUpdate();
+      // Report duration to server if track doesn't have one yet
+      const track = this.getCurrentTrack();
+      if (track && (!track.duration || track.duration === 0) && this.audio.duration && isFinite(this.audio.duration)) {
+        const dur = Math.round(this.audio.duration);
+        track.duration = dur;
+        Api.reportDuration(track.id, dur);
+      }
     });
     this.audio.addEventListener('play', () => {
       this.playing = true;
@@ -70,6 +77,9 @@ const Player = {
     this.audio.play().catch(() => {
       this.playing = false;
       if (this.onStateChange) this.onStateChange();
+      if (typeof UI !== 'undefined' && UI.showToast) {
+        UI.showToast('Could not play this track');
+      }
     });
     this.playing = true;
     if (this.onTrackChange) this.onTrackChange(track);
