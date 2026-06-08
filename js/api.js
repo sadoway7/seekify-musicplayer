@@ -263,5 +263,27 @@ const Api = {
         body: JSON.stringify({ duration })
       });
     } catch {}
+  },
+
+  finderCoverUrl(mbid) {
+    return '/api/finder/cover/' + mbid;
+  },
+
+  async finderSearch(query, type) {
+    const res = await fetch('/api/finder/search?q=' + encodeURIComponent(query) + '&type=' + (type || 'recording'));
+    if (!res.ok) throw new Error('Finder search failed');
+    return res.json();
+  },
+
+  async finderArtistReleases(mbid) {
+    const res = await fetch('/api/finder/artist/' + mbid + '/releases');
+    if (!res.ok) throw new Error('Failed to load artist releases');
+    return res.json();
+  },
+
+  async finderReleaseTracks(mbid) {
+    const res = await fetch('/api/finder/release/' + mbid + '/tracks');
+    if (!res.ok) throw new Error('Failed to load release tracks');
+    return res.json();
   }
 };

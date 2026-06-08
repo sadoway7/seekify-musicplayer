@@ -1,0 +1,57 @@
+services:
+  music-grabber:
+    build: .
+    container_name: music-grabber
+    restart: unless-stopped
+    # Chromium needs more shared memory for headless browser - Spotify playlists over 100 tracks WILL fail without this
+    shm_size: '2gb'
+    ports:
+      - "38274:8080"
+    volumes:
+      # Mount your music library - adjust path as needed
+      - /mnt/music:/music
+      # Persist the job database and settings
+      - ./data:/data
+      # Optional: slskd downloads directory for Soulseek integration
+      - /mnt/music/downloads:/downloads
+    environment:
+      # Required paths
+      - MUSIC_DIR=/music
+      - DB_PATH=/data/music_grabber.db
+      # Optional: serve behind a reverse-proxy subpath (proxy must strip the prefix)
+      # - ROOT_PATH=/musicgrabber
+      # Optional: custom bind (defaults to 0.0.0.0:8080 if unset)
+      # IPv6 demo (commented out):
+      # - LISTEN_ADDR=::
+      # - LISTEN_PORT=8080
+      # Optional: Run as specific user (like *arr stack)
+      # - PUID=1000
+      # - PGID=1000
+      # Optional: slskd downloads path (if using Soulseek)
+      - SLSKD_DOWNLOADS_PATH=/downloads
+      # Optional: increase timeouts for long tracks (DJ mixes, symphonies) or slow connections
+      # - TIMEOUT_YTDLP_DOWNLOAD=300      # yt-dlp download (default 5 min)
+      # - TIMEOUT_FFMPEG_CONVERT=120      # ffmpeg format conversion (default 2 min)
+      # - TIMEOUT_MP3PHOENIX_DOWNLOAD=120 # MP3Phoenix stream download (default 2 min)
+    # Optional: add to your existing network if running with Navidrome/Jellyfin
+    # networks:
+    #   - your-network
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+# Most settings can now be configured via the Settings tab in the web UI.
+# Settings are stored in the SQLite database and persist across restarts.
+#
+# Environment variables can still be used to override UI settings:
+#   - SLSKD_URL, SLSKD_USER, SLSKD_PASS
+#   - NAVIDROME_URL, NAVIDROME_USER, NAVIDROME_PASS
+#   - JELLYFIN_URL, JELLYFIN_API_KEY
+#   - TELEGRAM_WEBHOOK_URL
+#   - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SMTP_TO, SMTP_TLS
+#   - NOTIFY_ON (singles,playlists,bulk,errors)
+#   - ENABLE_MUSICBRAINZ, ENABLE_LYRICS, DEFAULT_CONVERT_TO_FLAC
+#   - API_KEY (for authentication)
+#
+# When an env var is set, that setting will be locked in the UI.
+#      - DEFAULT_CONVERT_TO_FLAC=true

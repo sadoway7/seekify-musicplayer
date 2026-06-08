@@ -1268,3 +1268,139 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 
 	http.NotFound(w, r)
 }
+
+func finderSearchHandler(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	searchType := r.URL.Query().Get("type")
+	if searchType == "" {
+		searchType = "recording"
+	}
+
+	if q == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	limit := 20
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+
+	switch searchType {
+	case "recording":
+		results, err := finderSearchRecordings(q, limit)
+		if err != nil {
+			log.Printf("[finder] Recording search error: %v", err)
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		if results == nil {
+			results = []FinderRecording{}
+		}
+		json.NewEncoder(w).Encode(results)
+
+	case "artist":
+		results, err := finderSearchArtists(q, limit)
+		if err != nil {
+			log.Printf("[finder] Artist search error: %v", err)
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		if results == nil {
+			results = []FinderArtist{}
+		}
+		json.NewEncoder(w).Encode(results)
+
+	case "release":
+		results, err := finderSearchReleases(q, limit)
+		if err != nil {
+			log.Printf("[finder] Release search error: %v", err)
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		if results == nil {
+			results = []FinderRelease{}
+		}
+		json.NewEncoder(w).Encode(results)
+
+	default:
+		http.Error(w, `{"error":"invalid type"}`, http.StatusBadRequest)
+	}
+}
+
+func finderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
+	mbid := strings.TrimPrefix(r.URL.Path, "/api/finder/artist/")
+	mbid = strings.TrimSuffix(mbid, "/releases")
+	if mbid == "" {
+		http.Error(w, `{"error":"missing mbid"}`, http.StatusBadRequest)
+		return
+	}
+
+	results, err := finderArtistReleases(mbid)
+	if err != nil {
+		log.Printf("[finder] Artist releases error: %v", err)
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+	if results == nil {
+		results = []FinderRelease{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	json.NewEncoder(w).Encode(results)
+}
+
+func finderReleaseTracksHandler(w http.ResponseWriter, r *http.Request) {
+	mbid := strings.TrimPrefix(r.URL.Path, "/api/finder/release/")
+	mbid = strings.TrimSuffix(mbid, "/tracks")
+	if mbid == "" {
+		http.Error(w, `{"error":"missing mbid"}`, http.StatusBadRequest)
+		return
+	}
+
+	results, err := finderReleaseTracks(mbid)
+	if err != nil {
+		log.Printf("[finder] Release tracks error: %v", err)
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+	if results == nil {
+		results = []FinderReleaseTrack{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	json.NewEncoder(w).Encode(results)
+}
+
+func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
+	mbid := strings.TrimPrefix(r.URL.Path, "/api/finder/cover/")
+	if mbid == "" {
+		http.Error(w, `{"error":"missing mbid"}`, http.StatusBadRequest)
+		return
+	}
+
+	coverURL := fmt.Sprintf("%s/release/%s/front-250", coverArtBaseURL, mbid)
+	req, err := http.NewRequest("GET", coverURL, nil)
+	if err != nil {
+		http.Error(w, "failed", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
+
+	resp, err := mbClient.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer resp.Body.Close()
+
+	ct := resp.Header.Get("Content-Type")
+	if ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	io.Copy(w, resp.Body)
+}

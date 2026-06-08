@@ -868,6 +868,9 @@ const UI = {
       case 'playlist': this.renderPlaylist(Store.viewData.playlistId); break;
       case 'favorites': this.renderFavorites(); break;
       case 'all-music': this.renderAllMusic(); break;
+      case 'finder': this.renderFinder(); break;
+      case 'finder-artist': this.renderFinderArtist(Store.viewData); break;
+      case 'finder-release': this.renderFinderRelease(Store.viewData); break;
       case 'settings': this.renderSettings(); break;
       case 'metadata-review': this.renderMetadataReview(); break;
       case 'metadata-history': this.renderMetadataHistory(); break;
@@ -1513,6 +1516,271 @@ const UI = {
     }
 
     this.els.content.innerHTML = html;
+  },
+
+  renderFinder() {
+    this._viewTrackList = [];
+    if (!this._finderType) this._finderType = 'recording';
+    if (!this._finderQuery) this._finderQuery = '';
+    if (!this._finderResults) this._finderResults = null;
+
+    let html = '<div class="page-header">'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Finder</span></div>'
+      + '<div class="search-container">'
+      + '<span class="search-icon">' + Icons.search() + '</span>'
+      + '<input class="search-input finder-search-input" type="text" placeholder="Search MusicBrainz..." value="' + this._esc(this._finderQuery) + '">'
+      + '</div>'
+      + '<div class="filter-chips finder-type-chips">'
+      + '<button class="chip' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
+      + '<button class="chip' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
+      + '<button class="chip' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
+      + '</div>'
+      + '<div id="finder-results"></div>';
+
+    this.els.content.innerHTML = html;
+
+    const input = this.els.content.querySelector('.finder-search-input');
+    if (input) {
+      input.addEventListener('input', (e) => {
+        this._finderQuery = e.target.value.trim();
+        clearTimeout(this._finderTimer);
+        this._finderTimer = setTimeout(() => this._renderFinderResults(), 300);
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          clearTimeout(this._finderTimer);
+          this._renderFinderResults();
+        }
+      });
+    }
+
+    this.els.content.querySelectorAll('.finder-type-chips .chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        this._finderType = chip.dataset.finderType;
+        this._finderResults = null;
+        this.renderFinder();
+        if (this._finderQuery) {
+          this._renderFinderResults();
+        }
+      });
+    });
+
+    if (this._finderQuery) {
+      this._renderFinderResults();
+    }
+  },
+
+  async _renderFinderResults() {
+    const container = this.els.content.querySelector('#finder-results');
+    if (!container) return;
+
+    if (!this._finderQuery) {
+      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+        + '<div class="empty-state-text">Search for songs, artists, or albums on MusicBrainz</div></div>';
+      return;
+    }
+
+    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+
+    try {
+      const results = await Api.finderSearch(this._finderQuery, this._finderType);
+      this._finderResults = results;
+      this._renderFinderResultsList(container, results);
+    } catch (err) {
+      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+        + '<div class="empty-state-text">Search failed. MusicBrainz may be rate-limited — try again in a moment.</div></div>';
+    }
+  },
+
+  _renderFinderResultsList(container, results) {
+    if (!results || results.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+        + '<div class="empty-state-title">No results</div>'
+        + '<div class="empty-state-text">Try different keywords</div></div>';
+      return;
+    }
+
+    let html = '';
+
+    if (this._finderType === 'recording') {
+      html += '<div class="finder-results-count">' + results.length + ' recording' + (results.length !== 1 ? 's' : '') + '</div>';
+      html += '<div class="finder-list">';
+      results.forEach(r => {
+        const length = r.length > 0 ? Math.floor(r.length / 60) + ':' + String(r.length % 60).padStart(2, '0') : '';
+        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
+        html += '<div class="finder-item" data-finder-recording="' + this._esc(r.id) + '">'
+          + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
+          + '<div class="finder-item-info">'
+          + '<div class="finder-item-title">' + this._esc(r.title) + '</div>'
+          + '<div class="finder-item-subtitle">' + this._esc(r.artist) + (r.album ? ' · ' + this._esc(r.album) : '') + (r.year ? ' (' + r.year + ')' : '') + '</div>'
+          + '</div>'
+          + '<div class="finder-item-meta">'
+          + (length ? '<span class="finder-duration">' + length + '</span>' : '')
+          + badge
+          + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    } else if (this._finderType === 'artist') {
+      html += '<div class="finder-results-count">' + results.length + ' artist' + (results.length !== 1 ? 's' : '') + '</div>';
+      html += '<div class="finder-list">';
+      results.forEach(r => {
+        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
+        const type = r.type ? '<span class="finder-type-badge">' + this._esc(r.type) + '</span>' : '';
+        html += '<div class="finder-item finder-item-artist" data-finder-artist="' + this._esc(r.id) + '" data-finder-artist-name="' + this._esc(r.name) + '">'
+          + '<div class="finder-item-art round"><img src="' + Api.artistArtUrl(r.name) + '" alt="" onerror="this.style.display=\'none\'"></div>'
+          + '<div class="finder-item-info">'
+          + '<div class="finder-item-title">' + this._esc(r.name) + '</div>'
+          + '<div class="finder-item-subtitle">' + (r.disambiguation ? this._esc(r.disambiguation) + ' · ' : '') + (r.country || '') + '</div>'
+          + '</div>'
+          + '<div class="finder-item-meta">' + type + badge + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    } else if (this._finderType === 'release') {
+      html += '<div class="finder-results-count">' + results.length + ' release' + (results.length !== 1 ? 's' : '') + '</div>';
+      html += '<div class="finder-list">';
+      results.forEach(r => {
+        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
+        const typeBadge = r.type ? '<span class="finder-type-badge">' + this._esc(r.type) + '</span>' : '';
+        html += '<div class="finder-item" data-finder-release="' + this._esc(r.id) + '" data-finder-release-title="' + this._esc(r.title) + '" data-finder-release-artist="' + this._esc(r.artist) + '">'
+          + '<div class="finder-item-art"><img src="' + Api.finderCoverUrl(r.id) + '" alt="" onerror="this.style.display=\'none\'"></div>'
+          + '<div class="finder-item-info">'
+          + '<div class="finder-item-title">' + this._esc(r.title) + '</div>'
+          + '<div class="finder-item-subtitle">' + this._esc(r.artist) + (r.year ? ' · ' + r.year : '') + (r.trackCount ? ' · ' + r.trackCount + ' tracks' : '') + '</div>'
+          + '</div>'
+          + '<div class="finder-item-meta">' + typeBadge + badge + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+    this._bindFinderResults();
+  },
+
+  _bindFinderResults() {
+    const container = this.els.content.querySelector('#finder-results');
+    if (!container) return;
+
+    container.addEventListener('click', (e) => {
+      const artistItem = e.target.closest('.finder-item-artist');
+      if (artistItem) {
+        const mbid = artistItem.dataset.finderArtist;
+        const name = artistItem.dataset.finderArtistName;
+        if (mbid) this.navigateTo('finder-artist', { mbid, name });
+        return;
+      }
+
+      const releaseItem = e.target.closest('[data-finder-release]');
+      if (releaseItem) {
+        const mbid = releaseItem.dataset.finderRelease;
+        const title = releaseItem.dataset.finderReleaseTitle;
+        const artist = releaseItem.dataset.finderReleaseArtist;
+        if (mbid) this.navigateTo('finder-release', { mbid, title, artist });
+        return;
+      }
+    });
+  },
+
+  renderFinderArtist(data) {
+    this._viewTrackList = [];
+    const name = data.name || 'Artist';
+
+    let html = '<div class="page-header">'
+      + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<span class="page-header-title">' + this._esc(name) + '</span>'
+      + '</div>'
+      + '<div id="finder-artist-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+
+    this.els.content.innerHTML = html;
+
+    Api.finderArtistReleases(data.mbid).then(releases => {
+      const container = document.getElementById('finder-artist-content');
+      if (!container) return;
+
+      if (!releases || releases.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+          + '<div class="empty-state-text">No releases found for this artist</div></div>';
+        return;
+      }
+
+      let rhtml = '<div class="finder-results-count">' + releases.length + ' release' + (releases.length !== 1 ? 's' : '') + '</div>';
+      rhtml += '<div class="scroll-row" style="flex-wrap:wrap">';
+      releases.forEach(r => {
+        const typeLabel = r.type || '';
+        rhtml += '<div class="card" data-finder-release="' + this._esc(r.id) + '" data-finder-release-title="' + this._esc(r.title) + '" data-finder-release-artist="' + this._esc(r.artist) + '">'
+          + '<div class="card-art"><img src="' + Api.finderCoverUrl(r.id) + '" alt="" onerror="this.style.display=\'none\'"></div>'
+          + '<div class="card-title">' + this._esc(r.title) + '</div>'
+          + '<div class="card-subtitle">' + (r.year || '') + (typeLabel && r.year ? ' · ' : '') + (typeLabel ? typeLabel : '') + '</div>'
+          + '</div>';
+      });
+      rhtml += '</div>';
+
+      container.innerHTML = rhtml;
+
+      container.querySelectorAll('[data-finder-release]').forEach(el => {
+        el.addEventListener('click', () => {
+          this.navigateTo('finder-release', {
+            mbid: el.dataset.finderRelease,
+            title: el.dataset.finderReleaseTitle,
+            artist: el.dataset.finderReleaseArtist
+          });
+        });
+      });
+    }).catch(() => {
+      const container = document.getElementById('finder-artist-content');
+      if (container) container.innerHTML = '<div class="empty-state-text">Failed to load releases</div>';
+    });
+  },
+
+  renderFinderRelease(data) {
+    this._viewTrackList = [];
+    const title = data.title || 'Album';
+    const artist = data.artist || '';
+
+    let html = '<div class="detail-hero">'
+      + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<div class="detail-hero-overlay"></div>'
+      + '<div class="finder-hero-art"><img src="' + Api.finderCoverUrl(data.mbid) + '" alt="" onerror="this.style.display=\'none\'"></div>'
+      + '<div class="detail-hero-info">'
+      + '<div class="detail-hero-text">'
+      + '<div class="detail-hero-title">' + this._esc(title) + '</div>'
+      + '<div class="detail-hero-meta">' + this._esc(artist) + '</div>'
+      + '</div></div></div>'
+      + '<div id="finder-release-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+
+    this.els.content.innerHTML = html;
+
+    Api.finderReleaseTracks(data.mbid).then(tracks => {
+      const container = document.getElementById('finder-release-content');
+      if (!container) return;
+
+      if (!tracks || tracks.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+          + '<div class="empty-state-text">No track listing available</div></div>';
+        return;
+      }
+
+      let thtml = '<div class="finder-tracklist">';
+      tracks.forEach(t => {
+        const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
+        thtml += '<div class="finder-track-row">'
+          + '<div class="finder-track-num">' + t.position + '</div>'
+          + '<div class="finder-track-info">'
+          + '<div class="finder-track-title">' + this._esc(t.title) + '</div>'
+          + (t.artist && t.artist !== artist ? '<div class="finder-track-artist">' + this._esc(t.artist) + '</div>' : '')
+          + '</div>'
+          + (length ? '<div class="finder-track-length">' + length + '</div>' : '')
+          + '</div>';
+      });
+      thtml += '</div>';
+
+      container.innerHTML = thtml;
+    }).catch(() => {
+      const container = document.getElementById('finder-release-content');
+      if (container) container.innerHTML = '<div class="empty-state-text">Failed to load tracks</div>';
+    });
   },
 
   renderSettings() {

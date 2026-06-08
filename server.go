@@ -184,6 +184,11 @@ func main() {
 	mux.HandleFunc("/api/metadata/counts", metadataCountsHandler)
 	mux.HandleFunc("/api/metadata/undo/", metadataUndoHandler)
 
+	mux.HandleFunc("/api/finder/search", finderSearchHandler)
+	mux.HandleFunc("/api/finder/artist/", finderArtistReleasesHandler)
+	mux.HandleFunc("/api/finder/release/", finderReleaseTracksHandler)
+	mux.HandleFunc("/api/finder/cover/", finderCoverHandler)
+
 	var handler http.Handler = mux
 	handler = loggingMiddleware(recoveryMiddleware(handler))
 
