@@ -1321,8 +1321,9 @@ func finderSearchArtists(query string, limit int) ([]FinderArtist, error) {
 func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 	var results []FinderRelease
 
-	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=%d&inc=artist-credits+release-groups",
-		mbBaseURL, url.QueryEscape(query), limit)
+	luceneQuery := buildReleaseQuery(query)
+	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=%d",
+		mbBaseURL, url.QueryEscape(luceneQuery), limit)
 
 	body, err := mbDoRequest(reqURL)
 	if err != nil {
@@ -1345,6 +1346,7 @@ func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 			} `json:"artist-credit"`
 			ReleaseGroup struct {
 				Type string `json:"primary-type"`
+				ID   string `json:"id"`
 			} `json:"release-group"`
 			Media []struct {
 				Format string `json:"format"`
@@ -1360,13 +1362,33 @@ func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 	libraryAlbums := albums
 	mu.RUnlock()
 
+	seen := map[string]bool{}
 	for _, rel := range searchResp.Releases {
+		if rel.Score < 80 {
+			continue
+		}
+
 		artistName := ""
 		artistID := ""
 		if len(rel.ArtistCredit) > 0 {
 			artistName = rel.ArtistCredit[0].Name
 			artistID = rel.ArtistCredit[0].Artist.ID
 		}
+
+		if artistName == "" || strings.EqualFold(artistName, "Various Artists") {
+			continue
+		}
+
+		rgType := rel.ReleaseGroup.Type
+		if rgType == "Compilation" {
+			continue
+		}
+
+		dedupKey := strings.ToLower(artistName + "|" + rel.Title)
+		if seen[dedupKey] {
+			continue
+		}
+		seen[dedupKey] = true
 
 		year := ""
 		if len(rel.Date) >= 4 {
@@ -1392,16 +1414,29 @@ func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 			Artist:     artistName,
 			ArtistID:   artistID,
 			Year:       year,
-			Country:    rel.Country,
 			TrackCount: rel.TrackCount,
 			Format:     format,
-			Type:       rel.ReleaseGroup.Type,
+			Type:       rgType,
 			Score:      rel.Score,
 			InLibrary:  inLibrary,
 		})
 	}
 
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
 	return results, nil
+}
+
+func buildReleaseQuery(raw string) string {
+	parts := strings.SplitN(raw, " - ", 2)
+	if len(parts) == 2 {
+		artist := strings.TrimSpace(parts[0])
+		album := strings.TrimSpace(parts[1])
+		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, escapeLucene(artist), escapeLucene(album))
+	}
+	return raw
 }
 
 func finderArtistReleases(mbid string) ([]FinderRelease, error) {
@@ -1477,10 +1512,15 @@ func finderArtistReleases(mbid string) ([]FinderRelease, error) {
 	return results, nil
 }
 
-func finderReleaseTracks(mbid string) ([]FinderReleaseTrack, error) {
+func finderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
 	var tracks []FinderReleaseTrack
 
-	reqURL := fmt.Sprintf("%s/release/%s?inc=recordings+artist-credits&fmt=json", mbBaseURL, mbid)
+	releaseID := resolveToReleaseID(idOrRGID)
+	if releaseID == "" {
+		return nil, fmt.Errorf("could not resolve release for %s", idOrRGID)
+	}
+
+	reqURL := fmt.Sprintf("%s/release/%s?inc=recordings+artist-credits&fmt=json", mbBaseURL, releaseID)
 
 	body, err := mbDoRequest(reqURL)
 	if err != nil {
@@ -1488,6 +1528,7 @@ func finderReleaseTracks(mbid string) ([]FinderReleaseTrack, error) {
 	}
 
 	var resp struct {
+		Title string `json:"title"`
 		Media []struct {
 			Tracks []struct {
 				Position  int    `json:"position"`
@@ -1524,4 +1565,36 @@ func finderReleaseTracks(mbid string) ([]FinderReleaseTrack, error) {
 	}
 
 	return tracks, nil
+}
+
+func resolveToReleaseID(id string) string {
+	reqURL := fmt.Sprintf("%s/release/%s?fmt=json", mbBaseURL, id)
+	body, err := mbDoRequest(reqURL)
+	if err == nil {
+		var check struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(body, &check) == nil && check.ID == id {
+			return id
+		}
+	}
+
+	reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1&status=official", mbBaseURL, id)
+	body, err = mbDoRequest(reqURL)
+	if err != nil {
+		reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1", mbBaseURL, id)
+		body, err = mbDoRequest(reqURL)
+		if err != nil {
+			return ""
+		}
+	}
+	var resp struct {
+		Releases []struct {
+			ID string `json:"id"`
+		} `json:"releases"`
+	}
+	if json.Unmarshal(body, &resp) != nil || len(resp.Releases) == 0 {
+		return ""
+	}
+	return resp.Releases[0].ID
 }

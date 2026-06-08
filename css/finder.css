@@ -167,3 +167,67 @@
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+
+.finder-download-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.finder-download-btn:hover {
+  opacity: 1;
+  color: var(--accent);
+  background: rgba(212, 240, 64, 0.08);
+}
+
+.finder-download-btn:active {
+  transform: scale(0.9);
+}
+
+.finder-item:hover .finder-download-btn {
+  opacity: 0.8;
+}
+
+.finder-track-row .finder-download-btn {
+  opacity: 0;
+}
+
+.finder-track-row:hover .finder-download-btn {
+  opacity: 0.7;
+}
+
+.finder-track-row .finder-download-btn:hover {
+  opacity: 1;
+}
+
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--l2);
+  color: var(--text-primary);
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
