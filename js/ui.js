@@ -881,8 +881,14 @@ const UI = {
     }
   },
 
-  renderHome() {
+  async renderHome() {
     this._viewTrackList = [];
+
+    await Promise.all([
+      Store.refreshLibrary(),
+      Store.refreshRecent()
+    ]);
+
     let html = '';
 
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);

@@ -318,11 +318,13 @@ func processSingleDownload(job *DownloadJob) {
 	ytdlpPath := findYtDlp()
 	if ytdlpPath == "" {
 		job.Status = "failed"
-		job.Error = "yt-dlp not installed. Run: brew install yt-dlp"
+		job.Error = "yt-dlp not found. Install with: pip install yt-dlp  OR  apt install yt-dlp  OR  apk add yt-dlp"
 		job.CompletedAt = time.Now().Format(time.RFC3339)
 		dbUpdateJob(job)
+		log.Printf("[download] yt-dlp not found on PATH or known locations")
 		return
 	}
+	log.Printf("[download] using yt-dlp at %s", ytdlpPath)
 
 	job.Status = "searching"
 	job.ProgressStage = "Searching YouTube"
