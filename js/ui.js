@@ -884,10 +884,14 @@ const UI = {
   async renderHome() {
     this._viewTrackList = [];
 
-    await Promise.all([
-      Store.refreshLibrary(),
-      Store.refreshRecent()
-    ]);
+    this.els.content.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+
+    try {
+      await Promise.all([
+        Store.refreshLibrary(),
+        Store.refreshRecent()
+      ]);
+    } catch (e) {}
 
     let html = '';
 
