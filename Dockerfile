@@ -6,6 +6,7 @@ COPY *.go ./
 RUN go build -mod=vendor -o server .
 
 FROM alpine:latest
+RUN apk add --no-cache yt-dlp ffmpeg
 WORKDIR /app
 COPY --from=build /build/server .
 COPY index.html .
