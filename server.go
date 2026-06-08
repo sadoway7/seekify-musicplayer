@@ -140,9 +140,6 @@ func main() {
 			log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(tracks))
 		}
 
-		// Cleanup recent/favorites AFTER all scans so media track IDs exist
-		dbCleanupFavorites()
-		dbCleanupRecent()
 	} else {
 		log.Printf("File counts match DB, skipping full scan")
 	}

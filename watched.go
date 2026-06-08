@@ -82,9 +82,12 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, [][2]string, erro
 			continue
 		}
 		var entry struct {
-			Title        string `json:"title"`
-			Channel      string `json:"channel"`
-			Uploader     string `json:"uploader"`
+			Title         string `json:"title"`
+			Channel       string `json:"channel"`
+			Uploader      string `json:"uploader"`
+			Creator       string `json:"creator"`
+			Artist        string `json:"artist"`
+			AlbumArtist   string `json:"album_artist"`
 			PlaylistTitle string `json:"playlist_title"`
 		}
 		if json.Unmarshal([]byte(line), &entry) != nil {
@@ -97,22 +100,39 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, [][2]string, erro
 			continue
 		}
 
-		artist := entry.Uploader
+		artist := entry.Artist
+		if artist == "" {
+			artist = entry.AlbumArtist
+		}
+		if artist == "" {
+			artist = entry.Creator
+		}
+		if artist == "" {
+			artist = entry.Uploader
+		}
 		if artist == "" {
 			artist = entry.Channel
 		}
-		if artist == "" {
-			artist = "Unknown Artist"
-		}
 		title := entry.Title
 
-		if idx := strings.Index(title, " - "); idx > 0 && artist == entry.Uploader {
-			possibleArtist := strings.TrimSpace(title[:idx])
-			possibleTitle := strings.TrimSpace(title[idx+3:])
-			if possibleArtist != "" && possibleTitle != "" {
-				artist = possibleArtist
-				title = possibleTitle
+		for _, sep := range []string{" - ", " – ", " | "} {
+			if idx := strings.Index(title, sep); idx > 0 {
+				possibleArtist := strings.TrimSpace(title[:idx])
+				possibleTitle := strings.TrimSpace(title[idx+len(sep):])
+				if possibleArtist != "" && possibleTitle != "" {
+					artist = possibleArtist
+					title = possibleTitle
+					break
+				}
 			}
+		}
+
+		artist = strings.TrimSuffix(artist, " - Topic")
+		artist = strings.TrimSuffix(artist, " Topic")
+		artist = strings.TrimSuffix(artist, "VEVO")
+
+		if artist == "" {
+			artist = "Unknown"
 		}
 
 		tracks = append(tracks, [2]string{artist, title})

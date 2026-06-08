@@ -116,11 +116,6 @@ func checkAndRescan() {
 		// Extract covers for any new files
 		extractEmbeddedCovers()
 
-		// Cleanup stale recent/favorites after rescan
-		dbCleanupFavorites()
-		dbCleanupRecent()
-
-		// Update stored count
 		watcherMu.Lock()
 		lastFileCounts[d.dir] = current
 		watcherMu.Unlock()
