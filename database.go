@@ -107,6 +107,8 @@ func initDB(path string) {
 	db.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
 
 	initDownloadTables()
+	initSettingsTable()
+	initWatchedTables()
 
 	migrateFromJSON()
 }

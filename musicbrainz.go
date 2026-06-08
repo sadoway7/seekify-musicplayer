@@ -1445,7 +1445,7 @@ func finderArtistReleases(mbid string) ([]FinderRelease, error) {
 	var artistName string
 	offset := 0
 	for {
-		reqURL := fmt.Sprintf("%s/release-group?artist=%s&fmt=json&limit=100&offset=%d&type=album|single|ep",
+		reqURL := fmt.Sprintf("%s/release-group?artist=%s&fmt=json&limit=25&offset=%d&type=album",
 			mbBaseURL, mbid, offset)
 
 		body, err := mbDoRequest(reqURL)
@@ -1494,7 +1494,7 @@ func finderArtistReleases(mbid string) ([]FinderRelease, error) {
 		}
 
 		offset += len(resp.ReleaseGroups)
-		if offset >= resp.ReleaseGroupCount || len(resp.ReleaseGroups) == 0 {
+		if len(results) >= 50 || offset >= resp.ReleaseGroupCount || len(resp.ReleaseGroups) == 0 {
 			break
 		}
 		time.Sleep(300 * time.Millisecond)

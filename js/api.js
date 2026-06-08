@@ -275,6 +275,12 @@ const Api = {
     return res.json();
   },
 
+  async finderYouTubeSearch(query) {
+    const res = await fetch('/api/finder/youtube?q=' + encodeURIComponent(query));
+    if (!res.ok) throw new Error('YouTube search failed');
+    return res.json();
+  },
+
   async finderArtistReleases(mbid) {
     const res = await fetch('/api/finder/artist/' + mbid + '/releases');
     if (!res.ok) throw new Error('Failed to load artist releases');
@@ -323,5 +329,85 @@ const Api = {
     const res = await fetch('/api/queue/' + id + '/delete', { method: 'POST' });
     if (!res.ok) throw new Error('Failed to delete job');
     return res.json();
+  },
+
+  async getQueueCounts() {
+    const res = await fetch('/api/queue/counts');
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async bulkImport(lines) {
+    const res = await fetch('/api/bulk-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines })
+    });
+    if (!res.ok) throw new Error('Bulk import failed');
+    return res.json();
+  },
+
+  async getSettings() {
+    const res = await fetch('/api/settings');
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async saveSettings(settings) {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    });
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async importPlaylist(url) {
+    const res = await fetch('/api/playlist-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (!res.ok) throw new Error('Import failed');
+    return res.json();
+  },
+
+  async getWatched() {
+    const res = await fetch('/api/watch');
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async watchPlaylist(url) {
+    const res = await fetch('/api/watch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async refreshWatch(id) {
+    const res = await fetch('/api/watch/' + id + '/refresh');
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async deleteWatch(id) {
+    const res = await fetch('/api/watch/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async previewUrl(videoId) {
+    const res = await fetch('/api/preview/' + videoId);
+    if (!res.ok) throw new Error('Preview failed');
+    return res.json();
+  },
+
+  downloadJobUrl(jobId) {
+    return '/api/download-job/' + jobId;
   }
 };

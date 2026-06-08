@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // libraryVersion is incremented whenever the library changes (scan, watcher, metadata update).
@@ -1382,7 +1384,7 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	coverURL := fmt.Sprintf("%s/release/%s/front-250", coverArtBaseURL, mbid)
+	coverURL := fmt.Sprintf("%s/release-group/%s/front-250", coverArtBaseURL, mbid)
 	req, err := http.NewRequest("GET", coverURL, nil)
 	if err != nil {
 		http.Error(w, "failed", http.StatusInternalServerError)
@@ -1392,8 +1394,14 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := mbClient.Do(req)
 	if err != nil || resp.StatusCode != 200 {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
+		coverURL = fmt.Sprintf("%s/release/%s/front-250", coverArtBaseURL, mbid)
+		req, _ = http.NewRequest("GET", coverURL, nil)
+		req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
+		resp, err = mbClient.Do(req)
+		if err != nil || resp.StatusCode != 200 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 	}
 	defer resp.Body.Close()
 
@@ -1570,4 +1578,352 @@ func downloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+func settingsGetHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(getAllSettings())
+}
+
+func settingsSetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var settings map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	for k, v := range settings {
+		setSetting(k, v)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func queueCountsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dbGetJobCounts())
+}
+
+func bulkImportHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Lines       string `json:"lines"`
+		OverrideDir string `json:"overrideDir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	var jobs []string
+	for _, line := range strings.Split(req.Lines, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		artist, title := "", line
+		if idx := strings.Index(line, " - "); idx > 0 {
+			artist = strings.TrimSpace(line[:idx])
+			title = strings.TrimSpace(line[idx+3:])
+		}
+
+		job, err := createDownloadJob("", artist, title, "", "", 0, 0, req.OverrideDir)
+		if err != nil {
+			log.Printf("[bulk] Skipped %q: %v", line, err)
+			continue
+		}
+		jobs = append(jobs, job.ID)
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"queued": len(jobs), "ids": jobs})
+}
+
+func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+		http.Error(w, `{"error":"url required"}`, http.StatusBadRequest)
+		return
+	}
+
+	name, tracks, err := extractYouTubePlaylistTracks(req.URL)
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	wp := &WatchedPlaylist{
+		ID:        uuid.New().String()[:8],
+		URL:       req.URL,
+		Name:      name,
+		TrackCount: len(tracks),
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}
+
+	db.Exec(`INSERT INTO watched_playlists (id, url, name, track_count, last_refresh, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		wp.ID, wp.URL, wp.Name, wp.TrackCount, wp.CreatedAt, wp.CreatedAt)
+
+	queued := 0
+	for _, t := range tracks {
+		artist, title := t[0], t[1]
+		inLib := checkDuplicateInLibrary(artist, title)
+
+		status := "pending"
+		if inLib {
+			status = "completed"
+		}
+
+		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, artist, title, status) VALUES (?, ?, ?, ?)",
+			wp.ID, artist, title, status)
+
+		if !inLib {
+			createDownloadJob("", artist, title, "", "", 0, 0, "")
+			queued++
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":        wp.ID,
+		"name":      name,
+		"total":     len(tracks),
+		"queued":    queued,
+		"inLibrary": len(tracks) - queued,
+	})
+}
+
+func watchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		var req struct {
+			URL string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+			http.Error(w, `{"error":"url required"}`, http.StatusBadRequest)
+			return
+		}
+
+		name, _, err := extractYouTubePlaylistTracks(req.URL)
+		if err != nil {
+			http.Error(w, `{"error":"could not fetch playlist"}`, http.StatusBadRequest)
+			return
+		}
+
+		wp := &WatchedPlaylist{
+			ID:        uuid.New().String()[:8],
+			URL:       req.URL,
+			Name:      name,
+			CreatedAt: time.Now().Format(time.RFC3339),
+		}
+		db.Exec("INSERT INTO watched_playlists (id, url, name, track_count, last_refresh, created_at) VALUES (?, ?, ?, 0, ?, ?)",
+			wp.ID, wp.URL, wp.Name, wp.CreatedAt, wp.CreatedAt)
+
+		go refreshWatchedPlaylist(wp)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(wp)
+		return
+	}
+
+	if strings.HasSuffix(r.URL.Path, "/refresh") {
+		id := strings.TrimPrefix(r.URL.Path, "/api/watch/")
+		id = strings.TrimSuffix(id, "/refresh")
+		if id != "" {
+			var wp WatchedPlaylist
+			row := db.QueryRow("SELECT id, url, name, track_count, last_refresh, created_at FROM watched_playlists WHERE id = ?", id)
+			row.Scan(&wp.ID, &wp.URL, &wp.Name, &wp.TrackCount, &wp.LastRefresh, &wp.CreatedAt)
+			if wp.ID != "" {
+				go refreshWatchedPlaylist(&wp)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
+	if r.Method == "DELETE" {
+		id := strings.TrimPrefix(r.URL.Path, "/api/watch/")
+		db.Exec("DELETE FROM watched_playlist_tracks WHERE playlist_id = ?", id)
+		db.Exec("DELETE FROM watched_playlists WHERE id = ?", id)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
+	playlists, err := dbGetWatchedPlaylists()
+	if err != nil {
+		playlists = []WatchedPlaylist{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(playlists)
+}
+
+func checkDuplicateInLibrary(artist, title string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, t := range tracks {
+		if strings.EqualFold(t.Artist, artist) && strings.EqualFold(t.Title, title) {
+			return true
+		}
+	}
+	return false
+}
+
+type youtubeSearchResult struct {
+	VideoID  string `json:"videoId"`
+	Title    string `json:"title"`
+	Channel  string `json:"channel"`
+	Duration int    `json:"duration"`
+	InLibrary bool  `json:"inLibrary"`
+}
+
+func youtubeSearchHandler(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	ytdlpPath := findYtDlp()
+	if ytdlpPath == "" {
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	cmd := exec.Command(ytdlpPath,
+		"--dump-json",
+		"--flat-playlist",
+		"--no-warnings",
+		fmt.Sprintf("ytsearch10:%s", q),
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	var results []youtubeSearchResult
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry struct {
+			ID       string `json:"id"`
+			Title    string `json:"title"`
+			Channel  string `json:"channel"`
+			Duration float64 `json:"duration"`
+		}
+		if json.Unmarshal([]byte(line), &entry) != nil || entry.ID == "" || entry.Duration < 10 {
+			continue
+		}
+
+		artist := entry.Channel
+		title := entry.Title
+		if idx := strings.Index(title, " - "); idx > 0 {
+			a := strings.TrimSpace(title[:idx])
+			t := strings.TrimSpace(title[idx+3:])
+			if a != "" && t != "" {
+				artist = a
+				title = t
+			}
+		}
+
+		inLib := checkDuplicateInLibrary(artist, title)
+
+		results = append(results, youtubeSearchResult{
+			VideoID:  entry.ID,
+			Title:    title,
+			Channel:  artist,
+			Duration: int(entry.Duration),
+			InLibrary: inLib,
+		})
+	}
+
+	if results == nil {
+		results = []youtubeSearchResult{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
+func previewAudioHandler(w http.ResponseWriter, r *http.Request) {
+	videoID := strings.TrimPrefix(r.URL.Path, "/api/preview/")
+	if videoID == "" {
+		http.Error(w, `{"error":"missing video id"}`, http.StatusBadRequest)
+		return
+	}
+
+	ytdlpPath := findYtDlp()
+	if ytdlpPath == "" {
+		http.Error(w, `{"error":"yt-dlp not available"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	cmd := exec.Command(ytdlpPath,
+		"-f", "bestaudio[protocol=https]/bestaudio/best",
+		"-g", "--no-warnings",
+		fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID),
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		http.Error(w, `{"error":"could not resolve stream"}`, http.StatusInternalServerError)
+		return
+	}
+
+	streamURL := strings.TrimSpace(strings.Split(string(output), "\n")[0])
+	if streamURL == "" {
+		http.Error(w, `{"error":"no stream url"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"url": streamURL, "videoId": videoID})
+}
+
+func downloadJobFileHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/download-job/")
+	if id == "" {
+		http.Error(w, "missing job id", http.StatusBadRequest)
+		return
+	}
+
+	job, err := dbGetJob(id)
+	if err != nil || job.FilePath == "" {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+
+	f, err := os.Open(job.FilePath)
+	if err != nil {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	stat, _ := f.Stat()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(job.FilePath)))
+	w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
+	io.Copy(w, f)
 }

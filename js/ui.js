@@ -33,6 +33,8 @@ const UI = {
     this._setupMiniVolume();
     this._bindResize();
     this._bindQueueSwipe();
+    this._pollDownloadBadge();
+    setInterval(() => this._pollDownloadBadge(), 5000);
   },
 
   _cacheDom() {
@@ -871,6 +873,7 @@ const UI = {
       case 'finder': this.renderFinder(); break;
       case 'finder-artist': this.renderFinderArtist(Store.viewData); break;
       case 'finder-release': this.renderFinderRelease(Store.viewData); break;
+      case 'downloads': this.renderSettings(); break;
       case 'settings': this.renderSettings(); break;
       case 'metadata-review': this.renderMetadataReview(); break;
       case 'metadata-history': this.renderMetadataHistory(); break;
@@ -1523,6 +1526,7 @@ const UI = {
     if (!this._finderType) this._finderType = 'artist';
     if (!this._finderQuery) this._finderQuery = '';
     if (!this._finderResults) this._finderResults = null;
+    if (!this._finderHistory) this._finderHistory = [];
 
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Finder</span></div>'
@@ -1530,12 +1534,35 @@ const UI = {
       + '<button class="chip' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
       + '<button class="chip' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
       + '<button class="chip' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
+      + '<button class="chip' + (this._finderType === 'youtube' ? ' active' : '') + '" data-finder-type="youtube"><span style="vertical-align:middle;margin-right:2px">' + Icons.download() + '</span>YouTube</button>'
       + '</div>'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input finder-search-input" type="text" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
+      + '</div>';
+
+    if (!this._finderQuery && this._finderHistory.length > 0) {
+      html += '<div class="finder-search-history">';
+      this._finderHistory.slice(0, 8).forEach(h => {
+        html += '<button class="finder-history-chip" data-history="' + this._esc(h) + '">' + this._esc(h) + '</button>';
+      });
+      html += '</div>';
+    }
+
+    html += '<div id="finder-results"></div>'
+      + '<div class="playlist-import-section">'
+      + '<div class="playlist-import-header">' + Icons.download() + ' Import YouTube Playlist</div>'
+      + '<div class="playlist-import-form">'
+      + '<input class="settings-input" type="text" id="playlist-url-input" placeholder="Paste YouTube playlist URL..." style="flex:1">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-import-playlist" style="white-space:nowrap">Import</button>'
       + '</div>'
-      + '<div id="finder-results"></div>';
+      + '<div class="settings-field settings-field-toggle" style="padding-top:4px">'
+      + '<label style="font-size:11px">Watch for new songs (auto-download)</label>'
+      + '<input type="checkbox" id="watch-playlist-toggle" class="settings-toggle" checked>'
+      + '</div>'
+      + '<div id="playlist-import-result"></div>'
+      + '<div id="watched-playlists"></div>'
+      + '</div>';
 
     this.els.content.innerHTML = html;
 
@@ -1568,6 +1595,221 @@ const UI = {
     if (this._finderQuery) {
       this._renderFinderResults();
     }
+
+    this.els.content.querySelectorAll('.finder-history-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        this._finderQuery = chip.dataset.history;
+        this.renderFinder();
+        this._renderFinderResults();
+      });
+    });
+
+    const importBtn = document.getElementById('btn-import-playlist');
+    const urlInput = document.getElementById('playlist-url-input');
+    if (importBtn && urlInput) {
+      importBtn.addEventListener('click', () => this._doPlaylistImport());
+      urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this._doPlaylistImport();
+      });
+    }
+
+    this._loadWatchedPlaylists();
+  },
+
+  async _doPlaylistImport() {
+    const input = document.getElementById('playlist-url-input');
+    const watchToggle = document.getElementById('watch-playlist-toggle');
+    if (!input || !input.value.trim()) return;
+    const url = input.value.trim();
+
+    const resultEl = document.getElementById('playlist-import-result');
+    if (resultEl) resultEl.innerHTML = '<div class="loading-spinner" style="margin:12px auto"></div>';
+
+    try {
+      const watching = watchToggle && watchToggle.checked;
+      const result = watching ? await Api.watchPlaylist(url) : await Api.importPlaylist(url);
+      const msg = '<strong>' + this._esc(result.name || 'Playlist') + '</strong>: ' + result.total + ' tracks found' + (result.queued ? ', ' + result.queued + ' downloading' : '');
+      if (resultEl) resultEl.innerHTML = '<div class="playlist-import-success">' + msg + '</div>';
+      input.value = '';
+      this._loadWatchedPlaylists();
+      this._pollDownloadBadge();
+      this._showToast((result.queued || 0) + ' tracks added to queue');
+      setTimeout(() => this.navigateTo('downloads'), 1500);
+    } catch (e) {
+      if (resultEl) resultEl.innerHTML = '<div class="playlist-import-error">Failed: invalid URL or yt-dlp not available</div>';
+    }
+  },
+
+  async _loadWatchedPlaylists() {
+    try {
+      const playlists = await Api.getWatched();
+      const container = document.getElementById('watched-playlists');
+      if (!container) return;
+      if (!playlists || playlists.length === 0) { container.innerHTML = ''; return; }
+
+      let html = '<div class="watched-list">';
+      playlists.forEach(p => {
+        html += '<div class="watched-item">'
+          + '<div class="watched-info">'
+          + '<div class="watched-name">' + this._esc(p.name || 'Unnamed') + '</div>'
+          + '<div class="watched-meta">' + (p.trackCount || 0) + ' tracks'
+          + (p.lastRefresh ? ' · refreshed ' + new Date(p.lastRefresh).toLocaleDateString() : '')
+          + '</div>'
+          + '</div>'
+          + '<div class="watched-actions">'
+          + '<button class="watched-btn" data-refresh="' + this._esc(p.id) + '" title="Refresh now">&#x21bb;</button>'
+          + '<button class="watched-btn watched-delete" data-delete="' + this._esc(p.id) + '" title="Stop watching">&times;</button>'
+          + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+      container.innerHTML = html;
+
+      container.querySelectorAll('[data-refresh]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await Api.refreshWatch(btn.dataset.refresh);
+          this._loadWatchedPlaylists();
+          this._pollDownloadBadge();
+        });
+      });
+      container.querySelectorAll('[data-delete]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await Api.deleteWatch(btn.dataset.delete);
+          this._loadWatchedPlaylists();
+        });
+      });
+    } catch (e) {}
+  },
+
+  renderDownloads() {
+    this._viewTrackList = [];
+
+    let html = '<div class="page-header">'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Downloads</span></div>'
+      + '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+
+    this.els.content.innerHTML = html;
+    this._loadDownloads();
+    this._downloadPollTimer = setInterval(() => this._loadDownloads(), 3000);
+  },
+
+  async _loadDownloads() {
+    const container = document.getElementById('downloads-content');
+    if (!container) return;
+
+    try {
+      const jobs = await Api.getQueue(100);
+      const counts = await Api.getQueueCounts();
+      this._updateDownloadBadge(counts);
+
+      if (!jobs || jobs.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+          + '<div class="empty-state-title">No Downloads Yet</div>'
+          + '<div class="empty-state-text">Search for music in the Finder tab and tap download to start.</div></div>';
+        return;
+      }
+
+      const activeCount = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0);
+      const failedCount = counts.failed || 0;
+      let html = '';
+
+      if (failedCount > 0) {
+        html += '<div style="padding:8px 0"><button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:12px">&#x21bb; Retry All Failed (' + failedCount + ')</button></div>';
+      }
+
+      if (activeCount > 0 || counts.completed > 0 || counts.failed > 0) {
+        html += '<div class="queue-stats">'
+          + (counts.queued > 0 ? '<span class="stat-badge stat-queued">' + counts.queued + ' queued</span>' : '')
+          + (activeCount > 0 && counts.queued <= 0 ? '<span class="stat-badge stat-active">' + activeCount + ' active</span>' : '')
+          + (counts.completed > 0 ? '<span class="stat-badge stat-completed">' + counts.completed + ' done</span>' : '')
+          + (counts.failed > 0 ? '<span class="stat-badge stat-failed">' + counts.failed + ' failed</span>' : '')
+          + '</div>';
+      }
+
+      html += '<div class="queue-job-list">';
+      jobs.forEach(j => {
+        const active = j.status === 'queued' || j.status === 'searching' || j.status === 'downloading' || j.status === 'tagging';
+        const failed = j.status === 'failed';
+
+        html += '<div class="queue-job-card">'
+          + '<div class="queue-job-status ' + (active ? 'job-active' : failed ? 'job-failed' : 'job-done') + '">'
+          + (active ? '<div class="queue-spinner"></div>' : (failed ? '<div class="queue-status-dot dot-failed"></div>' : '<div class="queue-status-dot dot-done"></div>'))
+          + '</div>'
+          + '<div class="queue-job-info">'
+          + '<div class="queue-job-title">' + this._esc(j.artist || '') + (j.artist && j.title ? ' - ' : '') + this._esc(j.title || j.query || 'Unknown') + '</div>'
+      + '<div class="queue-job-detail">'
+      + (j.progressStage ? '<span>' + this._esc(j.progressStage) + '</span>' : '<span>' + j.status + '</span>')
+      + (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
+      + (failed && j.error ? '<span class="queue-job-error">' + this._esc(j.error) + '</span>' : '')
+      + (j.filePath ? '<div class="queue-job-file">' + this._esc(j.filePath) + '</div>' : '')
+      + '</div>'
+          + '</div>'
+      + '<div class="queue-job-actions">'
+      + (j.status === 'completed' && j.filePath ? '<a class="queue-item-download" href="' + Api.downloadJobUrl(j.id) + '" title="Download file" download>' + Icons.download() + '</a>' : '')
+      + (failed ? '<button class="queue-item-retry" data-job-id="' + this._esc(j.id) + '" title="Retry">&#x21bb;</button>' : '')
+      + '<button class="queue-item-delete" data-job-id="' + this._esc(j.id) + '" title="Remove">&times;</button>'
+      + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+      container.innerHTML = html;
+
+      container.querySelectorAll('.queue-item-retry').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          Api.retryJob(btn.dataset.jobId).then(() => this._loadDownloads());
+        });
+      });
+      container.querySelectorAll('.queue-item-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          Api.deleteJob(btn.dataset.jobId).then(() => this._loadDownloads());
+        });
+      });
+
+      const retryAllBtn = document.getElementById('btn-retry-all-failed');
+      if (retryAllBtn) {
+        retryAllBtn.addEventListener('click', async () => {
+          retryAllBtn.disabled = true;
+          retryAllBtn.textContent = 'Retrying...';
+          const failed = jobs.filter(j => j.status === 'failed');
+          for (const j of failed) {
+            await Api.retryJob(j.id);
+            await new Promise(r => setTimeout(r, 200));
+          }
+          this._loadDownloads();
+        });
+      }
+    } catch (e) {
+      container.innerHTML = '<div class="empty-state-text">Failed to load downloads</div>';
+    }
+  },
+
+  _updateDownloadBadge(counts) {
+    const tab = document.querySelector('[data-tab="downloads"]');
+    if (!tab) return;
+    const existing = tab.querySelector('.nav-badge');
+    const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
+    if (active > 0) {
+      if (!existing) {
+        const badge = document.createElement('span');
+        badge.className = 'nav-badge';
+        badge.textContent = active;
+        tab.appendChild(badge);
+      } else {
+        existing.textContent = active;
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  },
+
+  _pollDownloadBadge() {
+    Api.getQueueCounts().then(counts => {
+      this._updateDownloadBadge(counts);
+    }).catch(() => {});
   },
 
   async _renderFinderResults() {
@@ -1583,13 +1825,27 @@ const UI = {
     container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
 
     try {
-      const results = await Api.finderSearch(this._finderQuery, this._finderType);
+      let results;
+      if (this._finderType === 'youtube') {
+        results = await Api.finderYouTubeSearch(this._finderQuery);
+      } else {
+        results = await Api.finderSearch(this._finderQuery, this._finderType);
+      }
       this._finderResults = results;
+      this._addSearchHistory(this._finderQuery);
       this._renderFinderResultsList(container, results);
     } catch (err) {
       container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
         + '<div class="empty-state-text">Search failed. MusicBrainz may be rate-limited — try again in a moment.</div></div>';
     }
+  },
+
+  _addSearchHistory(q) {
+    if (!q) return;
+    if (!this._finderHistory) this._finderHistory = [];
+    this._finderHistory = this._finderHistory.filter(h => h !== q);
+    this._finderHistory.unshift(q);
+    if (this._finderHistory.length > 20) this._finderHistory = this._finderHistory.slice(0, 20);
   },
 
   _renderFinderResultsList(container, results) {
@@ -1619,6 +1875,27 @@ const UI = {
           + badge
           + '</div>'
           + '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>'
+          + '</div>';
+      });
+      html += '</div>';
+    } else if (this._finderType === 'youtube') {
+      html += '<div class="finder-results-count">' + results.length + ' result' + (results.length !== 1 ? 's' : '') + ' on YouTube</div>';
+      html += '<div class="finder-list">';
+      results.forEach(r => {
+        const length = r.duration > 0 ? Math.floor(r.duration / 60) + ':' + String(r.duration % 60).padStart(2, '0') : '';
+        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
+        html += '<div class="finder-item">'
+          + '<button class="finder-preview-btn" data-preview="' + this._esc(r.videoId) + '" title="Preview">&#9654;</button>'
+          + '<div class="finder-item-art"><img src="https://i.ytimg.com/vi/' + this._esc(r.videoId) + '/default.jpg" alt="" onerror="this.style.display=\'none\'"></div>'
+          + '<div class="finder-item-info">'
+          + '<div class="finder-item-title">' + this._esc(r.title) + '</div>'
+          + '<div class="finder-item-subtitle">' + this._esc(r.channel) + '</div>'
+          + '</div>'
+          + '<div class="finder-item-meta">'
+          + (length ? '<span class="finder-duration">' + length + '</span>' : '')
+          + badge
+          + '</div>'
+          + '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.channel) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>'
           + '</div>';
       });
       html += '</div>';
@@ -1665,6 +1942,13 @@ const UI = {
     if (!container) return;
 
     container.addEventListener('click', (e) => {
+      const previewBtn = e.target.closest('.finder-preview-btn');
+      if (previewBtn) {
+        e.stopPropagation();
+        this._doPreview(previewBtn);
+        return;
+      }
+
       const dlBtn = e.target.closest('[data-action="download-song"]');
       if (dlBtn) {
         e.stopPropagation();
@@ -1692,6 +1976,26 @@ const UI = {
         return;
       }
     });
+  },
+
+  async _doPreview(btn) {
+    const videoId = btn.dataset.preview;
+    const original = btn.textContent;
+    btn.textContent = '...';
+    btn.disabled = true;
+    try {
+      const result = await Api.previewUrl(videoId);
+      const streamUrl = result.url;
+      if (!streamUrl) { this._showToast('Preview unavailable'); return; }
+      const audio = new Audio(streamUrl);
+      audio.volume = 0.3;
+      audio.play().catch(() => this._showToast('Preview failed'));
+    } catch (e) {
+      this._showToast('Preview failed');
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
   },
 
   async _addToQueue(track) {
@@ -1876,6 +2180,59 @@ const UI = {
       + '</div></div>';
 
     html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.search() + ' Finder & Downloads</div>'
+      + '<div class="settings-section-desc">Configure how the Finder searches and downloads music. Files go to your music directory.</div>'
+      + '<div id="finder-settings" class="settings-status"></div>'
+      + '<div class="settings-actions">'
+      + '<div class="settings-field"><label>Audio Format</label>'
+      + '<select id="setting-download-format" class="settings-select">'
+      + '<option value="flac">FLAC (lossless)</option>'
+      + '<option value="mp3">MP3</option>'
+      + '<option value="opus">Opus</option>'
+      + '<option value="m4a">M4A/AAC</option>'
+      + '<option value="best">Original (no conversion)</option>'
+      + '</select></div>'
+      + '<div id="mp3-quality-group" class="settings-field"><label>MP3 Quality</label>'
+      + '<select id="setting-mp3-bitrate" class="settings-select">'
+      + '<option value="v2">V2 ~192kbps (recommended)</option>'
+      + '<option value="v0">V0 ~245kbps</option>'
+      + '<option value="320k">320kbps CBR</option>'
+      + '<option value="256k">256kbps CBR</option>'
+      + '<option value="192k">192kbps CBR</option>'
+      + '<option value="128k">128kbps CBR</option>'
+      + '</select></div>'
+      + '<div id="opus-quality-group" class="settings-field" style="display:none"><label>Opus Bitrate</label>'
+      + '<select id="setting-opus-bitrate" class="settings-select">'
+      + '<option value="320k">320kbps</option>'
+      + '<option value="256k">256kbps</option>'
+      + '<option value="192k">192kbps</option>'
+      + '<option value="128k">128kbps</option>'
+      + '<option value="96k">96kbps</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Max Concurrent Downloads</label>'
+      + '<select id="setting-download-concurrent" class="settings-select">'
+      + '<option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option>'
+      + '</select></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Convert to FLAC</label>'
+      + '<input type="checkbox" id="setting-download-convert-to-flac" class="settings-toggle"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Organise by Artist</label>'
+      + '<input type="checkbox" id="setting-download-organise-by-artist" class="settings-toggle"></div>'
+      + '<div class="settings-field"><label>Album Subdirectory</label>'
+      + '<input type="text" id="setting-download-album-subdir" class="settings-input" placeholder="Albums"></div>'
+      + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
+      + '<input type="text" id="setting-download-min-bitrate" class="settings-input" placeholder="0 (no minimum)"></div>'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Settings</span></button>'
+      + '</div></div>';
+
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.download() + ' Bulk Import</div>'
+      + '<div class="settings-section-desc">Paste a list of tracks (one per line, "Artist - Title") to search and download.</div>'
+      + '<textarea id="bulk-import-input" class="settings-textarea" rows="6" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion&#10;Tame Impala - Let It Happen"></textarea>'
+      + '<div class="settings-actions" style="margin-top:8px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-bulk-import">' + Icons.download() + '<span>Import & Download All</span></button>'
+      + '</div></div>';
+
+    html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.download() + ' Downloads</div>'
       + '<div class="settings-section-desc">Manage which songs can be downloaded. Downloaded songs appear as a button in their menu.</div>'
       + '<div class="settings-actions">'
@@ -1905,6 +2262,89 @@ const UI = {
       reviewBtn.addEventListener('click', () => {
         this.navigateTo('metadata-review');
       });
+    }
+
+    this._loadFinderSettings();
+
+    const saveSettingsBtn = document.getElementById('btn-save-finder-settings');
+    if (saveSettingsBtn) {
+      saveSettingsBtn.addEventListener('click', () => this._saveFinderSettings());
+    }
+
+    const bulkImportBtn = document.getElementById('btn-bulk-import');
+    if (bulkImportBtn) {
+      bulkImportBtn.addEventListener('click', () => this._doBulkImport());
+    }
+  },
+
+  async _loadFinderSettings() {
+    try {
+      const settings = await Api.getSettings();
+      const fmt = document.getElementById('setting-download-format');
+      const conc = document.getElementById('setting-download-concurrent');
+      const flac = document.getElementById('setting-download-convert-to-flac');
+      const org = document.getElementById('setting-download-organise-by-artist');
+      const subdir = document.getElementById('setting-download-album-subdir');
+      const mp3 = document.getElementById('setting-mp3-bitrate');
+      const opus = document.getElementById('setting-opus-bitrate');
+      const minBr = document.getElementById('setting-download-min-bitrate');
+      if (fmt && settings.download_format) fmt.value = settings.download_format;
+      if (conc && settings.download_concurrent) conc.value = settings.download_concurrent;
+      if (flac) flac.checked = settings.download_convert_to_flac !== 'false';
+      if (org) org.checked = settings.download_organise_by_artist !== 'false';
+      if (subdir && settings.download_album_subdir) subdir.value = settings.download_album_subdir;
+      if (mp3 && settings.mp3_bitrate) mp3.value = settings.mp3_bitrate;
+      if (opus && settings.opus_bitrate) opus.value = settings.opus_bitrate;
+      if (minBr && settings.download_min_bitrate) minBr.value = settings.download_min_bitrate;
+      this._updateQualityVisibility();
+      if (fmt) fmt.addEventListener('change', () => this._updateQualityVisibility());
+    } catch (e) {}
+  },
+
+  _updateQualityVisibility() {
+    const fmt = document.getElementById('setting-download-format');
+    const mp3Group = document.getElementById('mp3-quality-group');
+    const opusGroup = document.getElementById('opus-quality-group');
+    if (!fmt || !mp3Group || !opusGroup) return;
+    mp3Group.style.display = fmt.value === 'mp3' ? '' : 'none';
+    opusGroup.style.display = fmt.value === 'opus' ? '' : 'none';
+  },
+
+  async _saveFinderSettings() {
+    const fmt = document.getElementById('setting-download-format');
+    const conc = document.getElementById('setting-download-concurrent');
+    const flac = document.getElementById('setting-download-convert-to-flac');
+    const org = document.getElementById('setting-download-organise-by-artist');
+    const subdir = document.getElementById('setting-download-album-subdir');
+    const mp3 = document.getElementById('setting-mp3-bitrate');
+    const opus = document.getElementById('setting-opus-bitrate');
+    const minBr = document.getElementById('setting-download-min-bitrate');
+    try {
+      await Api.saveSettings({
+        download_format: fmt ? fmt.value : 'flac',
+        download_concurrent: conc ? conc.value : '3',
+        download_convert_to_flac: flac ? String(flac.checked) : 'true',
+        download_organise_by_artist: org ? String(org.checked) : 'true',
+        download_album_subdir: subdir ? subdir.value : 'Albums',
+        mp3_bitrate: mp3 ? mp3.value : 'v2',
+        opus_bitrate: opus ? opus.value : '320k',
+        download_min_bitrate: minBr ? minBr.value : '0'
+      });
+      this._showToast('Settings saved');
+    } catch (e) {
+      this._showToast('Failed to save settings');
+    }
+  },
+
+  async _doBulkImport() {
+    const input = document.getElementById('bulk-import-input');
+    if (!input || !input.value.trim()) return;
+    try {
+      const result = await Api.bulkImport(input.value);
+      this._showToast(result.queued + ' tracks queued');
+      input.value = '';
+    } catch (e) {
+      this._showToast('Bulk import failed');
     }
   },
 

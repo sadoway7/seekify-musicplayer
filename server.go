@@ -142,6 +142,7 @@ func main() {
 	go fetchMissingCovers()
 	go fetchMissingArtistArt()
 	go startWatcher()
+	go startWatchScheduler()
 
 	mux := http.NewServeMux()
 
@@ -188,10 +189,14 @@ func main() {
 	mux.HandleFunc("/api/finder/artist/", finderArtistReleasesHandler)
 	mux.HandleFunc("/api/finder/release/", finderReleaseTracksHandler)
 	mux.HandleFunc("/api/finder/cover/", finderCoverHandler)
+	mux.HandleFunc("/api/finder/youtube", youtubeSearchHandler)
+	mux.HandleFunc("/api/preview/", previewAudioHandler)
+	mux.HandleFunc("/api/download-job/", downloadJobFileHandler)
 
 	mux.HandleFunc("/api/queue", downloadQueueHandler)
 	mux.HandleFunc("/api/queue/add", downloadQueueAddHandler)
 	mux.HandleFunc("/api/queue/add-batch", downloadQueueAddBatchHandler)
+	mux.HandleFunc("/api/queue/counts", queueCountsHandler)
 	mux.HandleFunc("/api/queue/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/retry") {
@@ -200,6 +205,20 @@ func main() {
 			downloadJobDeleteHandler(w, r)
 		} else {
 			downloadJobStatusHandler(w, r)
+		}
+	})
+
+	mux.HandleFunc("/api/bulk-import", bulkImportHandler)
+
+	mux.HandleFunc("/api/playlist-import", playlistImportHandler)
+	mux.HandleFunc("/api/watch/", watchedPlaylistsHandler)
+	mux.HandleFunc("/api/watch", watchedPlaylistsHandler)
+
+	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			settingsSetHandler(w, r)
+		} else {
+			settingsGetHandler(w, r)
 		}
 	})
 
