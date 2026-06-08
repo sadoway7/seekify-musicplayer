@@ -1520,20 +1520,20 @@ const UI = {
 
   renderFinder() {
     this._viewTrackList = [];
-    if (!this._finderType) this._finderType = 'recording';
+    if (!this._finderType) this._finderType = 'artist';
     if (!this._finderQuery) this._finderQuery = '';
     if (!this._finderResults) this._finderResults = null;
 
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Finder</span></div>'
+      + '<div class="filter-chips finder-type-chips">'
+      + '<button class="chip' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
+      + '<button class="chip' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
+      + '<button class="chip' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
+      + '</div>'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input finder-search-input" type="text" placeholder="Search MusicBrainz..." value="' + this._esc(this._finderQuery) + '">'
-      + '</div>'
-      + '<div class="filter-chips finder-type-chips">'
-      + '<button class="chip' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
-      + '<button class="chip' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
-      + '<button class="chip' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
+      + '<input class="search-input finder-search-input" type="text" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
       + '</div>'
       + '<div id="finder-results"></div>';
 
@@ -1603,12 +1603,12 @@ const UI = {
     let html = '';
 
     if (this._finderType === 'recording') {
-      html += '<div class="finder-results-count">' + results.length + ' recording' + (results.length !== 1 ? 's' : '') + '</div>';
+      html += '<div class="finder-results-count">' + results.length + ' song' + (results.length !== 1 ? 's' : '') + '</div>';
       html += '<div class="finder-list">';
       results.forEach(r => {
         const length = r.length > 0 ? Math.floor(r.length / 60) + ':' + String(r.length % 60).padStart(2, '0') : '';
         const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
-        html += '<div class="finder-item" data-finder-recording="' + this._esc(r.id) + '">'
+        html += '<div class="finder-item">'
           + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
           + '<div class="finder-item-info">'
           + '<div class="finder-item-title">' + this._esc(r.title) + '</div>'
@@ -1618,6 +1618,7 @@ const UI = {
           + (length ? '<span class="finder-duration">' + length + '</span>' : '')
           + badge
           + '</div>'
+          + '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>'
           + '</div>';
       });
       html += '</div>';
@@ -1638,7 +1639,7 @@ const UI = {
       });
       html += '</div>';
     } else if (this._finderType === 'release') {
-      html += '<div class="finder-results-count">' + results.length + ' release' + (results.length !== 1 ? 's' : '') + '</div>';
+      html += '<div class="finder-results-count">' + results.length + ' album' + (results.length !== 1 ? 's' : '') + '</div>';
       html += '<div class="finder-list">';
       results.forEach(r => {
         const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
@@ -1664,6 +1665,16 @@ const UI = {
     if (!container) return;
 
     container.addEventListener('click', (e) => {
+      const dlBtn = e.target.closest('[data-action="download-song"]');
+      if (dlBtn) {
+        e.stopPropagation();
+        this._addToQueue({
+          artist: dlBtn.dataset.artist,
+          title: dlBtn.dataset.title
+        });
+        return;
+      }
+
       const artistItem = e.target.closest('.finder-item-artist');
       if (artistItem) {
         const mbid = artistItem.dataset.finderArtist;
@@ -1681,6 +1692,26 @@ const UI = {
         return;
       }
     });
+  },
+
+  async _addToQueue(track) {
+    try {
+      await Api.queueAdd(track);
+      this._showToast('Added to download queue');
+    } catch (err) {
+      this._showToast('Failed to add to queue');
+    }
+  },
+
+  _showToast(msg) {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2500);
   },
 
   renderFinderArtist(data) {
@@ -1748,6 +1779,7 @@ const UI = {
       + '<div class="detail-hero-title">' + this._esc(title) + '</div>'
       + '<div class="detail-hero-meta">' + this._esc(artist) + '</div>'
       + '</div></div></div>'
+      + '<div id="finder-release-actions" style="display:none;padding:0 22px 8px"></div>'
       + '<div id="finder-release-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
 
     this.els.content.innerHTML = html;
@@ -1762,8 +1794,29 @@ const UI = {
         return;
       }
 
+      const actionsEl = document.getElementById('finder-release-actions');
+      if (actionsEl) {
+        actionsEl.style.display = '';
+        actionsEl.innerHTML = '<button class="settings-btn settings-btn-primary" id="btn-download-album" style="margin-bottom:8px">' + Icons.download() + '<span>Download All Tracks</span></button>';
+        document.getElementById('btn-download-album').addEventListener('click', () => {
+          const trackList = tracks.map((t, i) => ({
+            artist: t.artist || artist,
+            title: t.title,
+            album: title,
+            albumMbid: data.mbid,
+            trackNumber: t.position || (i + 1),
+            trackTotal: tracks.length
+          }));
+          Api.queueAddBatch(trackList).then(() => {
+            this._showToast(tracks.length + ' tracks added to queue');
+          }).catch(() => {
+            this._showToast('Failed to add tracks to queue');
+          });
+        });
+      }
+
       let thtml = '<div class="finder-tracklist">';
-      tracks.forEach(t => {
+      tracks.forEach((t, i) => {
         const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
         thtml += '<div class="finder-track-row">'
           + '<div class="finder-track-num">' + t.position + '</div>'
@@ -1772,11 +1825,22 @@ const UI = {
           + (t.artist && t.artist !== artist ? '<div class="finder-track-artist">' + this._esc(t.artist) + '</div>' : '')
           + '</div>'
           + (length ? '<div class="finder-track-length">' + length + '</div>' : '')
+          + '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist || artist) + '" data-title="' + this._esc(t.title) + '" title="Download">' + Icons.download() + '</button>'
           + '</div>';
       });
       thtml += '</div>';
 
       container.innerHTML = thtml;
+
+      container.querySelectorAll('.finder-track-dl').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._addToQueue({
+            artist: btn.dataset.artist,
+            title: btn.dataset.title
+          });
+        });
+      });
     }).catch(() => {
       const container = document.getElementById('finder-release-content');
       if (container) container.innerHTML = '<div class="empty-state-text">Failed to load tracks</div>';

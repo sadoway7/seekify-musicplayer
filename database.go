@@ -106,6 +106,8 @@ func initDB(path string) {
 	// Add added_at to favorites for ordering (newest first)
 	db.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
 
+	initDownloadTables()
+
 	migrateFromJSON()
 }
 

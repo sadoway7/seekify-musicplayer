@@ -189,6 +189,20 @@ func main() {
 	mux.HandleFunc("/api/finder/release/", finderReleaseTracksHandler)
 	mux.HandleFunc("/api/finder/cover/", finderCoverHandler)
 
+	mux.HandleFunc("/api/queue", downloadQueueHandler)
+	mux.HandleFunc("/api/queue/add", downloadQueueAddHandler)
+	mux.HandleFunc("/api/queue/add-batch", downloadQueueAddBatchHandler)
+	mux.HandleFunc("/api/queue/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/retry") {
+			downloadJobRetryHandler(w, r)
+		} else if strings.HasSuffix(path, "/delete") {
+			downloadJobDeleteHandler(w, r)
+		} else {
+			downloadJobStatusHandler(w, r)
+		}
+	})
+
 	var handler http.Handler = mux
 	handler = loggingMiddleware(recoveryMiddleware(handler))
 

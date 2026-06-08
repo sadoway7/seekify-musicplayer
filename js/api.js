@@ -285,5 +285,43 @@ const Api = {
     const res = await fetch('/api/finder/release/' + mbid + '/tracks');
     if (!res.ok) throw new Error('Failed to load release tracks');
     return res.json();
+  },
+
+  async queueAdd(track) {
+    const res = await fetch('/api/queue/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(track)
+    });
+    if (!res.ok) throw new Error('Failed to add to queue');
+    return res.json();
+  },
+
+  async queueAddBatch(tracks, overrideDir) {
+    const res = await fetch('/api/queue/add-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tracks, overrideDir })
+    });
+    if (!res.ok) throw new Error('Failed to add batch to queue');
+    return res.json();
+  },
+
+  async getQueue(limit) {
+    const res = await fetch('/api/queue?limit=' + (limit || 100));
+    if (!res.ok) throw new Error('Failed to load queue');
+    return res.json();
+  },
+
+  async retryJob(id) {
+    const res = await fetch('/api/queue/' + id + '/retry', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to retry job');
+    return res.json();
+  },
+
+  async deleteJob(id) {
+    const res = await fetch('/api/queue/' + id + '/delete', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to delete job');
+    return res.json();
   }
 };

@@ -1124,8 +1124,9 @@ func fetchMissingArtistArt() {
 func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) {
 	var results []FinderRecording
 
-	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d&inc=artist-credits+releases+release-groups+tags",
-		mbBaseURL, url.QueryEscape(query), limit)
+	luceneQuery := buildRecordingQuery(query)
+	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d",
+		mbBaseURL, url.QueryEscape(luceneQuery), limit)
 
 	body, err := mbDoRequest(reqURL)
 	if err != nil {
@@ -1144,19 +1145,16 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 					ID string `json:"id"`
 				} `json:"artist"`
 			} `json:"artist-credit"`
-			Releases []struct {
-				ID           string `json:"id"`
-				Title        string `json:"title"`
-				Date         string `json:"date"`
-				Country      string `json:"country"`
-				TrackCount   int    `json:"track-count"`
+			FirstReleaseDate string `json:"first-release-date"`
+			Releases         []struct {
+				ID     string `json:"id"`
+				Title  string `json:"title"`
+				Date   string `json:"date"`
+				Country string `json:"country"`
 				ReleaseGroup struct {
 					Type string `json:"primary-type"`
 				} `json:"release-group"`
 			} `json:"releases"`
-			Tags []struct {
-				Name string `json:"name"`
-			} `json:"tags"`
 		} `json:"recordings"`
 	}
 
@@ -1168,7 +1166,12 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 	libraryTracks := tracks
 	mu.RUnlock()
 
+	seen := map[string]bool{}
 	for _, rec := range searchResp.Recordings {
+		if rec.Score < 80 {
+			continue
+		}
+
 		artistName := ""
 		artistID := ""
 		if len(rec.ArtistCredit) > 0 {
@@ -1176,11 +1179,16 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 			artistID = rec.ArtistCredit[0].Artist.ID
 		}
 
+		dedupKey := strings.ToLower(artistName + "|" + rec.Title)
+		if seen[dedupKey] {
+			continue
+		}
+		seen[dedupKey] = true
+
 		albumName := ""
 		albumID := ""
 		year := ""
-		country := ""
-		trackCount := 0
+		rgType := ""
 
 		bestScore := -999
 		for _, rel := range rec.Releases {
@@ -1192,20 +1200,30 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 				bestScore = s
 				albumName = rel.Title
 				albumID = rel.ID
+				rgType = rel.ReleaseGroup.Type
 				if len(rel.Date) >= 4 {
 					year = rel.Date[:4]
 				}
-				country = rel.Country
-				trackCount = rel.TrackCount
 			}
 		}
 
-		var tags []string
-		for _, t := range rec.Tags {
-			tags = append(tags, t.Name)
+		if year == "" && len(rec.FirstReleaseDate) >= 4 {
+			year = rec.FirstReleaseDate[:4]
 		}
-		if len(tags) > 5 {
-			tags = tags[:5]
+
+		if rgType == "Compilation" || rgType == "Soundtrack" {
+			if len(rec.Releases) > 0 {
+				found := false
+				for _, rel := range rec.Releases {
+					if rel.ReleaseGroup.Type != "Compilation" && rel.ReleaseGroup.Type != "Soundtrack" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			}
 		}
 
 		inLibrary := false
@@ -1217,23 +1235,34 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 		}
 
 		results = append(results, FinderRecording{
-			ID:         rec.ID,
-			Title:      rec.Title,
-			Artist:     artistName,
-			ArtistID:   artistID,
-			Album:      albumName,
-			AlbumID:    albumID,
-			Year:       year,
-			Country:    country,
-			Length:     rec.Length / 1000,
-			TrackCount: trackCount,
-			Score:      rec.Score,
-			Tags:       tags,
-			InLibrary:  inLibrary,
+			ID:        rec.ID,
+			Title:     rec.Title,
+			Artist:    artistName,
+			ArtistID:  artistID,
+			Album:     albumName,
+			AlbumID:   albumID,
+			Year:      year,
+			Length:    rec.Length / 1000,
+			Score:     rec.Score,
+			InLibrary: inLibrary,
 		})
 	}
 
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
 	return results, nil
+}
+
+func buildRecordingQuery(raw string) string {
+	parts := strings.SplitN(raw, " - ", 2)
+	if len(parts) == 2 {
+		artist := strings.TrimSpace(parts[0])
+		title := strings.TrimSpace(parts[1])
+		return fmt.Sprintf(`artistname:"%s" AND recording:"%s"`, escapeLucene(artist), escapeLucene(title))
+	}
+	return raw
 }
 
 func finderSearchArtists(query string, limit int) ([]FinderArtist, error) {

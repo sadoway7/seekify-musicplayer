@@ -1404,3 +1404,170 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	io.Copy(w, resp.Body)
 }
+
+func downloadQueueHandler(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	limit := 100
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+		limit = l
+	}
+
+	jobs, err := dbGetJobs(limit)
+	if err != nil {
+		http.Error(w, `{"error":"failed to load jobs"}`, http.StatusInternalServerError)
+		return
+	}
+	if jobs == nil {
+		jobs = []DownloadJob{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(jobs)
+}
+
+func downloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Query      string `json:"query"`
+		Artist     string `json:"artist"`
+		Title      string `json:"title"`
+		Album      string `json:"album"`
+		AlbumMBID  string `json:"albumMbid"`
+		TrackNum   int    `json:"trackNumber"`
+		TrackTotal int    `json:"trackTotal"`
+		OverrideDir string `json:"overrideDir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	job, err := createDownloadJob(
+		req.Query, req.Artist, req.Title, req.Album,
+		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir,
+	)
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(job)
+}
+
+func downloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Tracks []struct {
+			Artist     string `json:"artist"`
+			Title      string `json:"title"`
+			Album      string `json:"album"`
+			AlbumMBID  string `json:"albumMbid"`
+			TrackNum   int    `json:"trackNumber"`
+			TrackTotal int    `json:"trackTotal"`
+		} `json:"tracks"`
+		OverrideDir string `json:"overrideDir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	var jobs []*DownloadJob
+	for _, t := range req.Tracks {
+		query := ""
+		if t.Artist != "" && t.Title != "" {
+			query = t.Artist + " - " + t.Title
+		} else if t.Title != "" {
+			query = t.Title
+		}
+
+		job, err := createDownloadJob(
+			query, t.Artist, t.Title, t.Album,
+			t.AlbumMBID, t.TrackNum, t.TrackTotal, req.OverrideDir,
+		)
+		if err != nil {
+			log.Printf("[download] Failed to create job for %q: %v", query, err)
+			continue
+		}
+		jobs = append(jobs, job)
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(jobs)
+}
+
+func downloadJobStatusHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/queue/")
+	if id == "" {
+		http.Error(w, `{"error":"missing job id"}`, http.StatusBadRequest)
+		return
+	}
+
+	job, err := dbGetJob(id)
+	if err != nil {
+		http.Error(w, `{"error":"job not found"}`, http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(job)
+}
+
+func downloadJobRetryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/queue/")
+	id = strings.TrimSuffix(id, "/retry")
+	if id == "" {
+		http.Error(w, `{"error":"missing job id"}`, http.StatusBadRequest)
+		return
+	}
+
+	job, err := dbGetJob(id)
+	if err != nil {
+		http.Error(w, `{"error":"job not found"}`, http.StatusNotFound)
+		return
+	}
+
+	job.Status = "queued"
+	job.Error = ""
+	job.ProgressStage = ""
+	job.CompletedAt = ""
+	dbUpdateJob(job)
+
+	go processDownloadQueue()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(job)
+}
+
+func downloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" && r.Method != "DELETE" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/queue/")
+	id = strings.TrimSuffix(id, "/delete")
+	if id == "" {
+		http.Error(w, `{"error":"missing job id"}`, http.StatusBadRequest)
+		return
+	}
+
+	db.Exec("DELETE FROM download_jobs WHERE id = ?", id)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
