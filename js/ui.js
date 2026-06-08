@@ -1534,34 +1534,14 @@ const UI = {
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Finder</span></div>'
       + '<div class="filter-chips finder-type-chips">'
       + '<button class="chip finder-chip' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Search</button>'
+      + '<button class="chip finder-chip' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">Import</button>'
       + '<button class="chip finder-chip' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
       + '</div>';
 
     if (this._finderTab === 'downloads') {
       html += '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
-    } else {
-      html += '<div class="finder-type-chips finder-sub-chips">'
-        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
-        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
-        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
-        + '</div>'
-        + '<div class="search-container finder-search-container">'
-        + '<span class="search-icon">' + Icons.search() + '</span>'
-        + '<input class="search-input finder-search-input" type="text" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
-        + '</div>';
-
-      if (!this._finderQuery && this._finderHistory.length > 0) {
-        html += '<div class="finder-search-history">';
-        this._finderHistory.slice(0, 5).forEach(h => {
-          html += '<button class="finder-history-chip" data-history="' + this._esc(h) + '">' + this._esc(h) + '</button>';
-        });
-        html += '</div>';
-      }
-
-      html += '<div id="finder-results"></div>'
-        + '<div class="playlist-import-section">'
-        + '<details class="playlist-import-details">'
-        + '<summary class="playlist-import-header"><span>' + Icons.download() + ' Import YouTube Playlist</span><span class="playlist-import-chevron">&#x25BC;</span></summary>'
+    } else if (this._finderTab === 'import') {
+      html += '<div class="playlist-import-section" style="margin:8px 0 0">'
         + '<div class="playlist-import-body">'
         + '<div class="playlist-import-form">'
         + '<input class="settings-input" type="text" id="playlist-url-input" placeholder="Paste YouTube playlist URL..." style="flex:1">'
@@ -1576,8 +1556,31 @@ const UI = {
         + '<div id="playlist-import-result"></div>'
         + '<div id="watched-playlists"></div>'
         + '</div>'
-        + '</details>'
         + '</div>';
+    } else {
+      const subChips = '<div class="finder-type-chips finder-sub-chips">'
+        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
+        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
+        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
+        + '</div>';
+      html += '<div class="finder-search-row">'
+        + '<div class="search-container finder-search-container">'
+        + '<span class="search-icon">' + Icons.search() + '</span>'
+        + '<input class="search-input finder-search-input" type="text" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
+        + subChips
+        + '</div>'
+        + '</div>'
+        + '<div class="finder-mobile-chips">' + subChips + '</div>';
+
+      if (!this._finderQuery && this._finderHistory.length > 0) {
+        html += '<div class="finder-search-history">';
+        this._finderHistory.slice(0, 5).forEach(h => {
+          html += '<button class="finder-history-chip" data-history="' + this._esc(h) + '">' + this._esc(h) + '</button>';
+        });
+        html += '</div>';
+      }
+
+      html += '<div id="finder-results"></div>';
     }
 
     this.els.content.innerHTML = html;

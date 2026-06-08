@@ -410,7 +410,7 @@
   left: var(--sp-4);
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-muted);
+  color: var(--text-primary);
   pointer-events: none;
 }
 
@@ -432,7 +432,8 @@
 }
 
 .search-input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-primary);
+  opacity: 0.5;
 }
 
 .page-header + .search-container {

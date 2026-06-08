@@ -31,14 +31,65 @@
   box-shadow: none;
 }
 
+.finder-search-row {
+  padding: 8px var(--page-margin) 0;
+}
+
+.finder-search-row .finder-search-container {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.finder-search-row .finder-search-input {
+  padding-right: 16px;
+}
+
 .finder-sub-chips {
-  margin: 0 var(--page-margin);
-  margin-top: 8px;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  gap: 3px;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  z-index: 1;
+}
+
+.finder-mobile-chips {
+  display: flex;
+  gap: 4px;
+  padding: 6px var(--page-margin) 0;
+}
+
+@media (min-width: 480px) {
+  .finder-mobile-chips {
+    display: none;
+  }
+  .finder-sub-chips {
+    display: flex;
+  }
+  .finder-search-row .finder-search-input {
+    padding-right: 240px;
+  }
 }
 
 .finder-sub-chips .finder-chip {
   font-size: 11px;
   padding: 3px 10px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.finder-sub-chips .finder-chip.active {
+  background: var(--accent);
+  color: #111;
+  border-color: var(--accent);
 }
 
 .finder-search-container {
@@ -54,6 +105,15 @@
   height: 44px;
   font-size: var(--fs-body);
   width: 100%;
+}
+
+.finder-search-container .search-icon {
+  color: var(--text-primary);
+}
+
+.finder-search-container .search-input::placeholder {
+  color: var(--text-primary);
+  opacity: 0.5;
 }
 
 .finder-list {
