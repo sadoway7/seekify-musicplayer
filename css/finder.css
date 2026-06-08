@@ -74,6 +74,7 @@
   height: 44px;
   background: var(--l3);
   margin: 8px var(--page-margin) 12px;
+  max-width: 480px;
   cursor: pointer;
 }
 
@@ -89,6 +90,7 @@
   height: 44px;
   background: var(--l3);
   margin: 8px var(--page-margin) 16px;
+  max-width: 480px;
 }
 
 @media (min-width: 480px) {
