@@ -35,6 +35,7 @@ type DownloadJob struct {
 	OverrideDir    string `json:"overrideDir,omitempty"`
 	SearchQuery    string `json:"searchQuery,omitempty"`
 	ConvertToFlac  bool   `json:"convertToFlac"`
+	PlaylistID     string `json:"playlistId,omitempty"`
 	CreatedAt      string `json:"createdAt"`
 	CompletedAt    string `json:"completedAt,omitempty"`
 }
@@ -113,6 +114,7 @@ func initDownloadTables() {
 		override_dir TEXT NOT NULL DEFAULT '',
 		search_query TEXT NOT NULL DEFAULT '',
 		convert_to_flac INTEGER NOT NULL DEFAULT 1,
+		playlist_id TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL,
 		completed_at TEXT NOT NULL DEFAULT ''
 	)`)
@@ -130,6 +132,7 @@ func initDownloadTables() {
 		`ALTER TABLE download_jobs ADD COLUMN track_number INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE download_jobs ADD COLUMN track_total INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE download_jobs ADD COLUMN completed_at TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN playlist_id TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m)
@@ -140,12 +143,12 @@ func dbCreateJob(job *DownloadJob) error {
 	_, err := db.Exec(`INSERT INTO download_jobs
 		(id, query, artist, title, album, album_mbid, track_number, track_total,
 		 status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		 override_dir, search_query, convert_to_flac, created_at, completed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 override_dir, search_query, convert_to_flac, playlist_id, created_at, completed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		job.ID, job.Query, job.Artist, job.Title, job.Album, job.AlbumMBID,
 		job.TrackNumber, job.TrackTotal, job.Status, job.Error, job.Source,
 		job.AudioQuality, job.FilePath, boolToInt(job.FileDeleted), job.ProgressStage,
-		job.OverrideDir, job.SearchQuery, boolToInt(job.ConvertToFlac), job.CreatedAt, job.CompletedAt)
+		job.OverrideDir, job.SearchQuery, boolToInt(job.ConvertToFlac), job.PlaylistID, job.CreatedAt, job.CompletedAt)
 	return err
 }
 

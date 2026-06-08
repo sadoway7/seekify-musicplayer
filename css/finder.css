@@ -631,6 +631,15 @@
 
 .queue-job-error {
   color: #f87171;
+  font-size: 11px;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.queue-job-file {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .queue-job-actions {

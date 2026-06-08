@@ -7,7 +7,7 @@ RUN go build -mod=vendor -o server .
 
 FROM alpine:latest
 RUN apk add --no-cache python3 py3-pip ffmpeg \
-    && pip install --no-cache-dir --break-system-packages yt-dlp || apk add --no-cache yt-dlp
+    && pip install --no-cache-dir --break-system-packages yt-dlp mutagen
 WORKDIR /app
 COPY --from=build /build/server .
 COPY index.html .
