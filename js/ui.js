@@ -896,6 +896,11 @@ const UI = {
   _renderHomeContent() {
     let html = '';
 
+    html += '<div class="home-search-bar" id="home-search-bar">'
+      + '<span class="search-icon">' + Icons.search() + '</span>'
+      + '<input class="search-input" type="text" placeholder="Search library..." readonly>'
+      + '</div>';
+
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
     const currentTrack = Player.getCurrentTrack();
 
@@ -1038,17 +1043,29 @@ const UI = {
     }
 
     this.els.content.innerHTML = html;
+
+    const homeSearch = document.getElementById('home-search-bar');
+    if (homeSearch) {
+      homeSearch.addEventListener('click', () => {
+        Store.currentView = 'search';
+        Store.viewData = {};
+        document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+        const searchTab = document.querySelector('[data-tab="search"]');
+        if (searchTab) searchTab.classList.add('active');
+        this.renderSearch();
+        const input = this.els.content.querySelector('.search-input');
+        if (input) input.focus();
+      });
+    }
   },
 
   renderSearch() {
     this._viewTrackList = [];
-    let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Search</span></div>'
-      + '<div class="search-container">'
+    let html = '<div class="library-search-bar">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input" type="text" placeholder="Songs, artists, or albums" value="' + this._esc(this.searchQuery) + '">'
       + '</div>'
-      + '<div id="search-results"></div>';
+      + '<div id="search-results" style="margin-top:12px"></div>';
 
     if (!this.searchQuery && !this.searchGenre) {
       html += this._renderBrowseGrid();
@@ -1542,7 +1559,7 @@ const UI = {
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
     let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Finder</span></div>'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Find & Import</span></div>'
       + '<div class="filter-chips finder-type-chips">'
       + '<button class="chip finder-chip' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Search</button>'
       + '<button class="chip finder-chip' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">Import</button>'

@@ -66,6 +66,31 @@
   padding: 6px var(--page-margin) 0;
 }
 
+.home-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 24px;
+  height: 44px;
+  background: var(--l3);
+  margin: 8px var(--page-margin) 12px;
+  cursor: pointer;
+}
+
+.home-search-bar .search-input {
+  cursor: pointer;
+}
+
+.library-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 24px;
+  height: 44px;
+  background: var(--l3);
+  margin: 8px var(--page-margin) 16px;
+}
+
 @media (min-width: 480px) {
   .finder-mobile-chips {
     display: none;

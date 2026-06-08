@@ -81,9 +81,10 @@ body.mini-player-visible #app-content {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  height: 76px;
-  padding: 0 var(--sp-1);
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  height: auto;
+  min-height: 60px;
+  padding: 6px var(--sp-1);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
   background: var(--bg);
   box-shadow: 0 -1px 0 var(--border-subtle);
   z-index: 100;
@@ -96,28 +97,30 @@ body.mini-player-visible #app-content {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   color: var(--text3);
-  font-size: var(--fs-caption);
+  font-size: 10px;
   font-weight: 500;
-  padding: 14px var(--sp-3) var(--sp-3);
-  margin: 4px 3px;
+  padding: 8px var(--sp-2);
+  margin: 2px;
+  border-radius: 10px;
   transition: color var(--t-fast) var(--ease-soft);
   position: relative;
 }
 
 .tab-item svg {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
 }
 
 .tab-item span {
-  display: none;
+  display: block;
 }
 
 .tab-item.active {
   color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .tab-item:active {
