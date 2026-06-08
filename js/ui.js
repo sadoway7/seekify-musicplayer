@@ -881,18 +881,19 @@ const UI = {
     }
   },
 
-  async renderHome() {
+  renderHome() {
     this._viewTrackList = [];
+    this._renderHomeContent();
 
-    this.els.content.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+    Store.refreshLibrary().then(() => {
+      if (Store.currentView === 'home') this._renderHomeContent();
+    });
+    Store.refreshRecent().then(() => {
+      if (Store.currentView === 'home') this._renderHomeContent();
+    });
+  },
 
-    try {
-      await Promise.all([
-        Store.refreshLibrary(),
-        Store.refreshRecent()
-      ]);
-    } catch (e) {}
-
+  _renderHomeContent() {
     let html = '';
 
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
