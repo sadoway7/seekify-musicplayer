@@ -31,8 +31,11 @@ func initDB(path string) {
 	db.Exec("PRAGMA busy_timeout=5000")
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS favorites (
-		track_id TEXT PRIMARY KEY
+		track_id TEXT PRIMARY KEY,
+		added_at INTEGER NOT NULL DEFAULT 0
 	)`)
+
+	db.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS recent (
 		track_id TEXT PRIMARY KEY,

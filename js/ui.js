@@ -3466,6 +3466,11 @@ const UI = {
         this.navigateTo('artist', { artistName: track.artist });
       }},
       { type: 'divider' },
+      { label: 'Download from YouTube', icon: Icons.download(), action: () => {
+        this.hideContextMenu();
+        this._addToQueue({ artist: track.artist, title: track.title });
+      }},
+      { type: 'divider' },
       { label: isFav ? 'Remove from Favorites' : 'Add to Favorites', icon: isFav ? Icons.heartFilled() : Icons.heart(), action: async () => {
         try {
           await Api.toggleFavorite(trackId);
