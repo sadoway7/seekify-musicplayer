@@ -61,6 +61,38 @@ func findYtDlp() string {
 	return ""
 }
 
+func findFfmpeg() string {
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p
+	}
+	for _, p := range []string{
+		"/opt/homebrew/bin/ffmpeg",
+		"/usr/local/bin/ffmpeg",
+		"/usr/bin/ffmpeg",
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func findFfprobe() string {
+	if p, err := exec.LookPath("ffprobe"); err == nil {
+		return p
+	}
+	for _, p := range []string{
+		"/opt/homebrew/bin/ffprobe",
+		"/usr/local/bin/ffprobe",
+		"/usr/bin/ffprobe",
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
 func initDownloadTables() {
 	db.Exec(`CREATE TABLE IF NOT EXISTS download_jobs (
 		id TEXT PRIMARY KEY,

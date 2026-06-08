@@ -1531,19 +1531,18 @@ const UI = {
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Finder</span></div>'
       + '<div class="filter-chips finder-type-chips">'
-      + '<button class="chip' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
-      + '<button class="chip' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
-      + '<button class="chip' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
-      + '<button class="chip' + (this._finderType === 'youtube' ? ' active' : '') + '" data-finder-type="youtube"><span style="vertical-align:middle;margin-right:2px">' + Icons.download() + '</span>YouTube</button>'
+      + '<button class="chip finder-chip' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
+      + '<button class="chip finder-chip' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
+      + '<button class="chip finder-chip' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
       + '</div>'
-      + '<div class="search-container">'
+      + '<div class="search-container finder-search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input finder-search-input" type="text" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
       + '</div>';
 
     if (!this._finderQuery && this._finderHistory.length > 0) {
       html += '<div class="finder-search-history">';
-      this._finderHistory.slice(0, 8).forEach(h => {
+      this._finderHistory.slice(0, 5).forEach(h => {
         html += '<button class="finder-history-chip" data-history="' + this._esc(h) + '">' + this._esc(h) + '</button>';
       });
       html += '</div>';
@@ -1551,17 +1550,23 @@ const UI = {
 
     html += '<div id="finder-results"></div>'
       + '<div class="playlist-import-section">'
-      + '<div class="playlist-import-header">' + Icons.download() + ' Import YouTube Playlist</div>'
+      + '<details class="playlist-import-details"' + (this._finderResults === null || (this._finderResults && this._finderResults.length === 0) ? '' : '') + '>'
+      + '<summary class="playlist-import-header"><span>' + Icons.download() + ' Import YouTube Playlist</span><span class="playlist-import-chevron">&#x25BC;</span></summary>'
+      + '<div class="playlist-import-body">'
       + '<div class="playlist-import-form">'
       + '<input class="settings-input" type="text" id="playlist-url-input" placeholder="Paste YouTube playlist URL..." style="flex:1">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-import-playlist" style="white-space:nowrap">Import</button>'
       + '</div>'
-      + '<div class="settings-field settings-field-toggle" style="padding-top:4px">'
-      + '<label style="font-size:11px">Watch for new songs (auto-download)</label>'
+      + '<div class="playlist-import-form" style="margin-top:8px">'
+      + '<div class="settings-field settings-field-toggle" style="flex:1;margin:0">'
+      + '<label style="font-size:12px">Watch for new songs</label>'
       + '<input type="checkbox" id="watch-playlist-toggle" class="settings-toggle" checked>'
+      + '</div>'
+      + '<button class="settings-btn settings-btn-primary" id="btn-import-playlist">Import</button>'
       + '</div>'
       + '<div id="playlist-import-result"></div>'
       + '<div id="watched-playlists"></div>'
+      + '</div>'
+      + '</details>'
       + '</div>';
 
     this.els.content.innerHTML = html;
@@ -2233,6 +2238,11 @@ const UI = {
       + '</div></div>';
 
     html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.download() + ' Download Queue</div>'
+      + '<div class="settings-section-desc">Active and recent downloads. Polls every 3 seconds.</div>'
+      + '<div id="downloads-queue"></div></div>';
+
+    html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.download() + ' Downloads</div>'
       + '<div class="settings-section-desc">Manage which songs can be downloaded. Downloaded songs appear as a button in their menu.</div>'
       + '<div class="settings-actions">'
@@ -2275,6 +2285,86 @@ const UI = {
     if (bulkImportBtn) {
       bulkImportBtn.addEventListener('click', () => this._doBulkImport());
     }
+
+    this._loadDownloadQueue();
+    this._settingsPollTimer = setInterval(() => this._loadDownloadQueue(), 3000);
+  },
+
+  async _loadDownloadQueue() {
+    const container = document.getElementById('downloads-queue');
+    if (!container) return;
+
+    try {
+      const jobs = await Api.getQueue(50);
+      const counts = await Api.getQueueCounts();
+
+      if (!jobs || jobs.length === 0) {
+        container.innerHTML = '<div class="empty-state-text" style="padding:12px 0">No downloads yet. Search in Finder to add tracks.</div>';
+        return;
+      }
+
+      const activeCount = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0);
+      const failedCount = counts.failed || 0;
+
+      let html = '';
+      if (failedCount > 0) {
+        html += '<button class="settings-btn" id="btn-retry-all-failed" style="font-size:11px;margin-bottom:8px">&#x21bb; Retry Failed (' + failedCount + ')</button>';
+      }
+
+      html += '<div class="queue-stats">'
+        + (activeCount > 0 ? '<span class="stat-badge stat-active">' + activeCount + ' active</span>' : '')
+        + (counts.completed > 0 ? '<span class="stat-badge stat-completed">' + counts.completed + ' done</span>' : '')
+        + (counts.failed > 0 ? '<span class="stat-badge stat-failed">' + counts.failed + ' failed</span>' : '')
+        + '</div>';
+
+      html += '<div class="queue-job-list">';
+      jobs.forEach(j => {
+        const active = j.status === 'queued' || j.status === 'searching' || j.status === 'downloading';
+        const failed = j.status === 'failed';
+
+        html += '<div class="queue-job-card">'
+          + (active ? '<div class="queue-spinner"></div>' : (failed ? '<span style="color:#f87171;width:12px">&#x2717;</span>' : '<span style="color:#22c55e;width:12px">&#x2713;</span>'))
+          + '<div class="queue-job-info">'
+          + '<div class="queue-job-title">' + this._esc(j.artist || '') + (j.artist && j.title ? ' - ' : '') + this._esc(j.title || j.query || 'Unknown') + '</div>'
+          + '<div class="queue-job-detail">'
+          + (active ? '<span>' + (j.progressStage || j.status) + '</span>' : '')
+          + (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
+          + (failed && j.error ? '<span class="queue-job-error">' + this._esc(j.error) + '</span>' : '')
+          + (j.filePath ? '<div class="queue-job-file">' + this._esc(j.filePath) + '</div>' : '')
+          + '</div>'
+          + '</div>'
+          + (failed ? '<button class="queue-item-retry" data-job-id="' + this._esc(j.id) + '">&#x21bb;</button>' : '')
+          + '<button class="queue-item-delete" data-job-id="' + this._esc(j.id) + '">&times;</button>'
+          + (j.status === 'completed' && j.filePath ? '<a class="queue-item-download" href="' + Api.downloadJobUrl(j.id) + '" download>&#x2B07;</a>' : '')
+          + '</div>';
+      });
+      html += '</div>';
+
+      container.innerHTML = html;
+
+      container.querySelectorAll('.queue-item-retry').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          Api.retryJob(btn.dataset.jobId).then(() => this._loadDownloadQueue());
+        });
+      });
+      container.querySelectorAll('.queue-item-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          Api.deleteJob(btn.dataset.jobId).then(() => this._loadDownloadQueue());
+        });
+      });
+
+      const retryAll = document.getElementById('btn-retry-all-failed');
+      if (retryAll) {
+        retryAll.addEventListener('click', async () => {
+          retryAll.disabled = true;
+          const failed = jobs.filter(j => j.status === 'failed');
+          for (const j of failed) { await Api.retryJob(j.id); await new Promise(r => setTimeout(r, 200)); }
+          this._loadDownloadQueue();
+        });
+      }
+    } catch (e) {}
   },
 
   async _loadFinderSettings() {
