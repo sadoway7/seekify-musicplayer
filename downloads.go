@@ -36,6 +36,7 @@ type DownloadJob struct {
 	SearchQuery    string `json:"searchQuery,omitempty"`
 	ConvertToFlac  bool   `json:"convertToFlac"`
 	PlaylistID     string `json:"playlistId,omitempty"`
+	VideoID        string `json:"videoId,omitempty"`
 	CreatedAt      string `json:"createdAt"`
 	CompletedAt    string `json:"completedAt,omitempty"`
 }
@@ -133,6 +134,7 @@ func initDownloadTables() {
 		`ALTER TABLE download_jobs ADD COLUMN track_total INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE download_jobs ADD COLUMN completed_at TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE download_jobs ADD COLUMN playlist_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN video_id TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m)
@@ -143,12 +145,12 @@ func dbCreateJob(job *DownloadJob) error {
 	_, err := db.Exec(`INSERT INTO download_jobs
 		(id, query, artist, title, album, album_mbid, track_number, track_total,
 		 status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		 override_dir, search_query, convert_to_flac, playlist_id, created_at, completed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		job.ID, job.Query, job.Artist, job.Title, job.Album, job.AlbumMBID,
 		job.TrackNumber, job.TrackTotal, job.Status, job.Error, job.Source,
 		job.AudioQuality, job.FilePath, boolToInt(job.FileDeleted), job.ProgressStage,
-		job.OverrideDir, job.SearchQuery, boolToInt(job.ConvertToFlac), job.PlaylistID, job.CreatedAt, job.CompletedAt)
+		job.OverrideDir, job.SearchQuery, boolToInt(job.ConvertToFlac), job.PlaylistID, job.VideoID, job.CreatedAt, job.CompletedAt)
 	return err
 }
 
@@ -254,7 +256,7 @@ func scanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 	return jobs, nil
 }
 
-func createDownloadJob(query, artist, title, album, albumMBID string, trackNum, trackTotal int, overrideDir string) (*DownloadJob, error) {
+func createDownloadJob(query, artist, title, album, albumMBID string, trackNum, trackTotal int, overrideDir, videoID string) (*DownloadJob, error) {
 	id := uuid.New().String()[:8]
 	searchQuery := query
 	if searchQuery == "" && (artist != "" || title != "") {
@@ -292,6 +294,7 @@ func createDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 		OverrideDir:   overrideDir,
 		SearchQuery:   searchQuery,
 		ConvertToFlac: true,
+		VideoID:       videoID,
 		CreatedAt:     time.Now().Format(time.RFC3339),
 	}
 
@@ -349,14 +352,21 @@ func processSingleDownload(job *DownloadJob) {
 	job.ProgressStage = "Searching YouTube"
 	dbUpdateJob(job)
 
-	videoID, err := searchYouTube(job.SearchQuery, job.Artist, job.Title)
-	if err != nil {
-		job.Status = "failed"
-		job.Error = fmt.Sprintf("Search failed: %v", err)
-		job.CompletedAt = time.Now().Format(time.RFC3339)
-		dbUpdateJob(job)
-		log.Printf("[download] Search failed for %q: %v", job.SearchQuery, err)
-		return
+	var videoID string
+	var searchErr error
+	if job.VideoID != "" {
+		videoID = job.VideoID
+		log.Printf("[download] Using direct video ID %s for %q", videoID, job.SearchQuery)
+	} else {
+		videoID, searchErr = searchYouTube(job.SearchQuery, job.Artist, job.Title)
+		if searchErr != nil {
+			job.Status = "failed"
+			job.Error = fmt.Sprintf("Search failed: %v", searchErr)
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			dbUpdateJob(job)
+			log.Printf("[download] Search failed for %q: %v", job.SearchQuery, searchErr)
+			return
+		}
 	}
 
 	destDir := musicDir

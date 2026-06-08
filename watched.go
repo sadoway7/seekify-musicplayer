@@ -32,12 +32,14 @@ func initWatchedTables() {
 	db.Exec(`CREATE TABLE IF NOT EXISTS watched_playlist_tracks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		playlist_id TEXT NOT NULL,
+		video_id TEXT NOT NULL DEFAULT '',
 		artist TEXT NOT NULL DEFAULT '',
 		title TEXT NOT NULL DEFAULT '',
 		job_id TEXT,
 		status TEXT NOT NULL DEFAULT 'pending',
 		FOREIGN KEY (playlist_id) REFERENCES watched_playlists(id)
 	)`)
+	db.Exec(`ALTER TABLE watched_playlist_tracks ADD COLUMN video_id TEXT NOT NULL DEFAULT ''`)
 }
 
 func dbGetWatchedPlaylists() ([]WatchedPlaylist, error) {
@@ -56,7 +58,13 @@ func dbGetWatchedPlaylists() ([]WatchedPlaylist, error) {
 	return result, nil
 }
 
-func extractYouTubePlaylistTracks(playlistURL string) (string, [][2]string, error) {
+type PlaylistTrackInfo struct {
+	VideoID string
+	Artist  string
+	Title   string
+}
+
+func extractYouTubePlaylistTracks(playlistURL string) (string, []PlaylistTrackInfo, error) {
 	ytdlpPath := findYtDlp()
 	if ytdlpPath == "" {
 		return "", nil, fmt.Errorf("yt-dlp not found")
@@ -74,7 +82,7 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, [][2]string, erro
 		return "", nil, err
 	}
 
-	var tracks [][2]string
+	var result []PlaylistTrackInfo
 	playlistName := ""
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(line)
@@ -82,6 +90,7 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, [][2]string, erro
 			continue
 		}
 		var entry struct {
+			ID            string `json:"id"`
 			Title         string `json:"title"`
 			Channel       string `json:"channel"`
 			Uploader      string `json:"uploader"`
@@ -135,14 +144,18 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, [][2]string, erro
 			artist = "Unknown"
 		}
 
-		tracks = append(tracks, [2]string{artist, title})
+		result = append(result, PlaylistTrackInfo{
+			VideoID: entry.ID,
+			Artist:  artist,
+			Title:   title,
+		})
 	}
 
 	if playlistName == "" {
 		playlistName = "Playlist"
 	}
 
-	return playlistName, tracks, nil
+	return playlistName, result, nil
 }
 
 var (
@@ -198,21 +211,28 @@ func refreshWatchedPlaylist(p *WatchedPlaylist) error {
 	}
 
 	existingTracks := map[string]bool{}
-	rows, err := db.Query("SELECT artist, title FROM watched_playlist_tracks WHERE playlist_id = ?", p.ID)
+	rows, err := db.Query("SELECT video_id, artist, title FROM watched_playlist_tracks WHERE playlist_id = ?", p.ID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var artist, title string
-			if rows.Scan(&artist, &title) == nil {
-				existingTracks[strings.ToLower(artist+"|"+title)] = true
+			var videoID, artist, title string
+			if rows.Scan(&videoID, &artist, &title) == nil {
+				key := strings.ToLower(artist + "|" + title)
+				if videoID != "" {
+					key = "vid:" + videoID
+				}
+				existingTracks[key] = true
 			}
 		}
 	}
 
 	newCount := 0
 	for _, t := range tracksFromYT {
-		artist, title := t[0], t[1]
+		artist, title, videoID := t.Artist, t.Title, t.VideoID
 		key := strings.ToLower(artist + "|" + title)
+		if videoID != "" {
+			key = "vid:" + videoID
+		}
 		if existingTracks[key] {
 			continue
 		}
@@ -227,12 +247,12 @@ func refreshWatchedPlaylist(p *WatchedPlaylist) error {
 		}
 		mu.RUnlock()
 		if inLib {
-			db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, artist, title, status) VALUES (?, ?, ?, 'completed')", p.ID, artist, title)
+			db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'completed')", p.ID, videoID, artist, title)
 			continue
 		}
 
-		createDownloadJob("", artist, title, "", "", 0, 0, "")
-		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, artist, title, status) VALUES (?, ?, ?, 'queued')", p.ID, artist, title)
+		createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
+		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'queued')", p.ID, videoID, artist, title)
 		newCount++
 	}
 

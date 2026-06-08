@@ -1455,7 +1455,7 @@ func downloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 
 	job, err := createDownloadJob(
 		req.Query, req.Artist, req.Title, req.Album,
-		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir,
+		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir, "",
 	)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
@@ -1499,7 +1499,7 @@ func downloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
 
 		job, err := createDownloadJob(
 			query, t.Artist, t.Title, t.Album,
-			t.AlbumMBID, t.TrackNum, t.TrackTotal, req.OverrideDir,
+			t.AlbumMBID, t.TrackNum, t.TrackTotal, req.OverrideDir, "",
 		)
 		if err != nil {
 			log.Printf("[download] Failed to create job for %q: %v", query, err)
@@ -1638,7 +1638,7 @@ func bulkImportHandler(w http.ResponseWriter, r *http.Request) {
 			title = strings.TrimSpace(line[idx+3:])
 		}
 
-		job, err := createDownloadJob("", artist, title, "", "", 0, 0, req.OverrideDir)
+		job, err := createDownloadJob("", artist, title, "", "", 0, 0, req.OverrideDir, "")
 		if err != nil {
 			log.Printf("[bulk] Skipped %q: %v", line, err)
 			continue
@@ -1684,7 +1684,7 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 
 	queued := 0
 	for _, t := range tracks {
-		artist, title := t[0], t[1]
+		artist, title, videoID := t.Artist, t.Title, t.VideoID
 		inLib := checkDuplicateInLibrary(artist, title)
 
 		status := "pending"
@@ -1692,11 +1692,11 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 			status = "completed"
 		}
 
-		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, artist, title, status) VALUES (?, ?, ?, ?)",
-			wp.ID, artist, title, status)
+		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, ?)",
+			wp.ID, videoID, artist, title, status)
 
 		if !inLib {
-			createDownloadJob("", artist, title, "", "", 0, 0, "")
+			createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
 			queued++
 			time.Sleep(100 * time.Millisecond)
 		}
