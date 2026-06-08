@@ -117,7 +117,23 @@ func initDownloadTables() {
 		completed_at TEXT NOT NULL DEFAULT ''
 	)`)
 
-	db.Exec(`ALTER TABLE download_jobs ADD COLUMN file_path TEXT NOT NULL DEFAULT ''`)
+	migrations := []string{
+		`ALTER TABLE download_jobs ADD COLUMN file_path TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN file_deleted INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE download_jobs ADD COLUMN progress_stage TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN override_dir TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN search_query TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN convert_to_flac INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE download_jobs ADD COLUMN audio_quality TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN source TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN album_mbid TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN track_number INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE download_jobs ADD COLUMN track_total INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE download_jobs ADD COLUMN completed_at TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, m := range migrations {
+		db.Exec(m)
+	}
 }
 
 func dbCreateJob(job *DownloadJob) error {

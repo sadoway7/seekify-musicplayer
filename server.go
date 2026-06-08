@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -74,6 +75,19 @@ func main() {
 	}
 
 	// Covers and artist art are lazy-loaded from disk on first request
+
+	ytdlp := findYtDlp()
+	ffmpeg := findFfmpeg()
+	if ytdlp != "" {
+		log.Printf("yt-dlp found: %s", ytdlp)
+	} else {
+		log.Printf("WARNING: yt-dlp not found — downloads will fail. Install: pip install yt-dlp")
+	}
+	if ffmpeg != "" {
+		log.Printf("ffmpeg found: %s", ffmpeg)
+	} else {
+		log.Printf("WARNING: ffmpeg not found — audio conversion will fail. Install: apt install ffmpeg")
+	}
 
 	// Check if file counts match DB — skip full scan if nothing changed
 	needScan := len(dbTracks) == 0
@@ -160,6 +174,15 @@ func main() {
 	mux.HandleFunc("/api/recent", recentHandler)
 	mux.HandleFunc("/api/recent/", recentAddHandler)
 	mux.HandleFunc("/admin", adminHandler)
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		ytdlp := findYtDlp()
+		ffmpeg := findFfmpeg()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"yt-dlp": ytdlp,
+			"ffmpeg": ffmpeg,
+		})
+	})
 	mux.HandleFunc("/api/admin-login", adminLoginHandler)
 	mux.HandleFunc("/api/files", requireAdmin(fileListHandler))
 	mux.HandleFunc("/api/upload", requireAdmin(uploadHandler))
