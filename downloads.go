@@ -169,7 +169,7 @@ func dbGetJob(id string) (*DownloadJob, error) {
 	row := db.QueryRow(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		override_dir, search_query, convert_to_flac, created_at, completed_at
+		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
 		FROM download_jobs WHERE id = ?`, id)
 	return scanJob(row)
 }
@@ -181,7 +181,7 @@ func dbGetJobs(limit int) ([]DownloadJob, error) {
 	rows, err := db.Query(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		override_dir, search_query, convert_to_flac, created_at, completed_at
+		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
 		FROM download_jobs ORDER BY created_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func dbGetQueuedJobs() ([]DownloadJob, error) {
 	rows, err := db.Query(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		override_dir, search_query, convert_to_flac, created_at, completed_at
+		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
 		FROM download_jobs WHERE status = 'queued' ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -227,7 +227,8 @@ func scanJob(row *sql.Row) (*DownloadJob, error) {
 		&j.AlbumMBID, &j.TrackNumber, &j.TrackTotal,
 		&j.Status, &j.Error, &j.Source, &j.AudioQuality,
 		&j.FilePath, &fileDeleted, &j.ProgressStage,
-		&j.OverrideDir, &j.SearchQuery, &convertFlac, &j.CreatedAt, &j.CompletedAt)
+		&j.OverrideDir, &j.SearchQuery, &convertFlac,
+		&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +246,8 @@ func scanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 			&j.AlbumMBID, &j.TrackNumber, &j.TrackTotal,
 			&j.Status, &j.Error, &j.Source, &j.AudioQuality,
 			&j.FilePath, &fileDeleted, &j.ProgressStage,
-			&j.OverrideDir, &j.SearchQuery, &convertFlac, &j.CreatedAt, &j.CompletedAt)
+			&j.OverrideDir, &j.SearchQuery, &convertFlac,
+			&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt)
 		if err != nil {
 			continue
 		}

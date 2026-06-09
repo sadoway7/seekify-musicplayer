@@ -934,7 +934,7 @@ const UI = {
 
       // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows
       const cols = window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
-      const maxRecent = window.innerWidth >= 768 ? (cols * 3) - 1 : 7;
+      const maxRecent = window.innerWidth >= 768 ? 12 : 7;
       let addedRecent = 0;
       recentCards.forEach(c => {
         if (addedRecent >= maxRecent) return;
@@ -1688,14 +1688,18 @@ const UI = {
     try {
       const watching = watchToggle && watchToggle.checked;
       const result = watching ? await Api.watchPlaylist(url) : await Api.importPlaylist(url);
-      const msg = '<strong>' + this._esc(result.name || 'Playlist') + '</strong>: ' + result.total + ' tracks found' + (result.queued ? ', ' + result.queued + ' downloading' : '');
+      const total = result.total || result.trackCount || 0;
+      const queued = result.queued || 0;
+      const inLib = result.inLibrary || 0;
+      const msg = '<strong>' + this._esc(result.name || 'Playlist') + '</strong>: ' + total + ' tracks found' + (queued > 0 ? ', ' + queued + ' downloading' : '') + (inLib > 0 ? ', ' + inLib + ' already in library' : '');
       if (resultEl) resultEl.innerHTML = '<div class="playlist-import-success">' + msg + '</div>';
       input.value = '';
       this._loadWatchedPlaylists();
       this._pollDownloadBadge();
-      this._showToast((result.queued || 0) + ' tracks added to queue');
+      this._showToast(queued > 0 ? queued + ' tracks added to queue' : (total > 0 ? total + ' tracks imported' : 'Playlist imported'));
     } catch (e) {
-      if (resultEl) resultEl.innerHTML = '<div class="playlist-import-error">Failed: invalid URL or yt-dlp not available</div>';
+      const detail = e && e.message ? e.message : '';
+      if (resultEl) resultEl.innerHTML = '<div class="playlist-import-error">Failed' + (detail ? ': ' + this._esc(detail) : ': invalid URL or yt-dlp not available') + '</div>';
     }
   },
 
@@ -1775,7 +1779,12 @@ const UI = {
       let html = '';
 
       if (failedCount > 0) {
-        html += '<div style="padding:8px 0"><button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:12px">&#x21bb; Retry All Failed (' + failedCount + ')</button></div>';
+        html += '<div style="padding:8px 0;display:flex;gap:8px;flex-wrap:wrap">'
+          + '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:12px">&#x21bb; Retry All Failed (' + failedCount + ')</button>'
+          + '<button class="settings-btn" id="btn-clear-history" style="font-size:12px">Clear History</button>'
+          + '</div>';
+      } else if (counts.completed > 0) {
+        html += '<div style="padding:8px 0"><button class="settings-btn" id="btn-clear-history" style="font-size:12px">Clear History</button></div>';
       }
 
       if (activeCount > 0 || counts.completed > 0 || counts.failed > 0) {
@@ -1841,6 +1850,17 @@ const UI = {
           this._loadDownloads();
         });
       }
+
+      const clearBtn = document.getElementById('btn-clear-history');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+          clearBtn.disabled = true;
+          clearBtn.textContent = 'Clearing...';
+          await Api.clearCompletedJobs();
+          this._pollDownloadBadge();
+          this._loadDownloads();
+        });
+      }
     } catch (e) {
       container.innerHTML = '<div class="empty-state-text">Failed to load downloads</div>';
     }
@@ -1884,6 +1904,9 @@ const UI = {
     container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
 
     try {
+      if (!this._downloadJobs) {
+        try { this._downloadJobs = await Api.getQueue(); } catch(e) { this._downloadJobs = []; }
+      }
       let results;
       if (this._finderType === 'youtube') {
         results = await Api.finderYouTubeSearch(this._finderQuery);
@@ -1922,17 +1945,22 @@ const UI = {
       html += '<div class="finder-list">';
       results.forEach(r => {
         const length = r.length > 0 ? Math.floor(r.length / 60) + ':' + String(r.length % 60).padStart(2, '0') : '';
+        let statusHtml;
+        if (r.inLibrary) {
+          statusHtml = '<span class="finder-status-badge finder-in-library">In Library</span>';
+        } else if (this._isQueued(r.artist, r.title)) {
+          statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
+        } else {
+          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>';
+        }
         html += '<div class="finder-item">'
           + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
           + '<div class="finder-item-info">'
           + '<div class="finder-item-title">' + this._esc(r.title) + '</div>'
           + '<div class="finder-item-subtitle">' + this._esc(r.artist) + (r.album ? ' · ' + this._esc(r.album) : '') + (r.year ? ' (' + r.year + ')' : '') + '</div>'
           + '</div>'
-          + '<div class="finder-item-meta">'
           + (length ? '<span class="finder-duration">' + length + '</span>' : '')
-          + (r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '')
-          + '</div>'
-          + (r.inLibrary ? '' : '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>')
+          + statusHtml
           + '</div>';
       });
       html += '</div>';
@@ -1961,15 +1989,16 @@ const UI = {
       html += '<div class="finder-results-count">' + results.length + ' artist' + (results.length !== 1 ? 's' : '') + '</div>';
       html += '<div class="finder-list">';
       results.forEach(r => {
-        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
         const type = r.type ? '<span class="finder-type-badge">' + this._esc(r.type) + '</span>' : '';
         html += '<div class="finder-item finder-item-artist" data-finder-artist="' + this._esc(r.id) + '" data-finder-artist-name="' + this._esc(r.name) + '">'
-          + '<div class="finder-item-art round"><img src="' + Api.artistArtUrl(r.name) + '" alt="" onerror="this.style.display=\'none\'"></div>'
+          + '<div class="finder-item-art round"><img src="' + Api.artistArtUrl(r.name) + '" alt="" data-artist-art-fetch="' + this._esc(r.name) + '"></div>'
           + '<div class="finder-item-info">'
           + '<div class="finder-item-title">' + this._esc(r.name) + '</div>'
           + '<div class="finder-item-subtitle">' + (r.disambiguation ? this._esc(r.disambiguation) + ' · ' : '') + (r.country || '') + '</div>'
           + '</div>'
-          + '<div class="finder-item-meta">' + type + badge + '</div>'
+          + '<div class="finder-item-meta">' + type
+          + (r.inLibrary ? '<span class="finder-status-badge finder-in-library">In Library</span>' : '')
+          + '</div>'
           + '</div>';
       });
       html += '</div>';
@@ -1977,7 +2006,6 @@ const UI = {
       html += '<div class="finder-results-count">' + results.length + ' album' + (results.length !== 1 ? 's' : '') + '</div>';
       html += '<div class="finder-list">';
       results.forEach(r => {
-        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
         const typeBadge = r.type ? '<span class="finder-type-badge">' + this._esc(r.type) + '</span>' : '';
         html += '<div class="finder-item" data-finder-release="' + this._esc(r.id) + '" data-finder-release-title="' + this._esc(r.title) + '" data-finder-release-artist="' + this._esc(r.artist) + '">'
           + '<div class="finder-item-art"><img src="' + Api.finderCoverUrl(r.id) + '" alt="" onerror="this.style.display=\'none\'"></div>'
@@ -1985,7 +2013,9 @@ const UI = {
           + '<div class="finder-item-title">' + this._esc(r.title) + '</div>'
           + '<div class="finder-item-subtitle">' + this._esc(r.artist) + (r.year ? ' · ' + r.year : '') + (r.trackCount ? ' · ' + r.trackCount + ' tracks' : '') + '</div>'
           + '</div>'
-          + '<div class="finder-item-meta">' + typeBadge + badge + '</div>'
+          + '<div class="finder-item-meta">' + typeBadge
+          + (r.inLibrary ? '<span class="finder-status-badge finder-in-library">In Library</span>' : '')
+          + '</div>'
           + '</div>';
       });
       html += '</div>';
@@ -2085,13 +2115,26 @@ const UI = {
     this._viewTrackList = [];
     const name = data.name || 'Artist';
 
+    if (!this._artistView) this._artistView = 'tracklist';
+
     let html = '<div class="page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">' + this._esc(name) + '</span>'
       + '</div>'
+      + '<div class="filter-chips finder-type-chips">'
+      + '<button class="chip finder-chip' + (this._artistView === 'tracklist' ? ' active' : '') + '" data-artist-tab="tracklist">Tracklist</button>'
+      + '<button class="chip finder-chip' + (this._artistView === 'albums' ? ' active' : '') + '" data-artist-tab="albums">Albums</button>'
+      + '</div>'
       + '<div id="finder-artist-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
 
     this.els.content.innerHTML = html;
+
+    this.els.content.querySelectorAll('[data-artist-tab]').forEach(chip => {
+      chip.addEventListener('click', () => {
+        this._artistView = chip.dataset.artistTab;
+        this.renderFinderArtist(data);
+      });
+    });
 
     Api.finderArtistReleases(data.mbid).then(releases => {
       const container = document.getElementById('finder-artist-content');
@@ -2103,32 +2146,112 @@ const UI = {
         return;
       }
 
-      let rhtml = '<div class="finder-results-count">' + releases.length + ' release' + (releases.length !== 1 ? 's' : '') + '</div>';
-      rhtml += '<div class="scroll-row" style="flex-wrap:wrap">';
-      releases.forEach(r => {
-        const typeLabel = r.type || '';
-        rhtml += '<div class="card" data-finder-release="' + this._esc(r.id) + '" data-finder-release-title="' + this._esc(r.title) + '" data-finder-release-artist="' + this._esc(r.artist) + '">'
-          + '<div class="card-art"><img src="' + Api.finderCoverUrl(r.id) + '" alt="" onerror="this.style.display=\'none\'"></div>'
-          + '<div class="card-title">' + this._esc(r.title) + '</div>'
-          + '<div class="card-subtitle">' + (r.year || '') + (typeLabel && r.year ? ' · ' : '') + (typeLabel ? typeLabel : '') + '</div>'
-          + '</div>';
-      });
-      rhtml += '</div>';
-
-      container.innerHTML = rhtml;
-
-      container.querySelectorAll('[data-finder-release]').forEach(el => {
-        el.addEventListener('click', () => {
-          this.navigateTo('finder-release', {
-            mbid: el.dataset.finderRelease,
-            title: el.dataset.finderReleaseTitle,
-            artist: el.dataset.finderReleaseArtist
-          });
-        });
-      });
+      if (this._artistView === 'tracklist') {
+        this._renderArtistTracklist(container, releases, name);
+      } else {
+        this._renderArtistAlbums(container, releases);
+      }
     }).catch(() => {
       const container = document.getElementById('finder-artist-content');
       if (container) container.innerHTML = '<div class="empty-state-text">Failed to load releases</div>';
+    });
+  },
+
+  _renderArtistAlbums(container, releases) {
+    let rhtml = '<div class="finder-results-count">' + releases.length + ' release' + (releases.length !== 1 ? 's' : '') + '</div>';
+    rhtml += '<div class="scroll-row" style="flex-wrap:wrap">';
+    releases.forEach(r => {
+      const typeLabel = r.type || '';
+      rhtml += '<div class="card" data-finder-release="' + this._esc(r.id) + '" data-finder-release-title="' + this._esc(r.title) + '" data-finder-release-artist="' + this._esc(r.artist) + '">'
+        + '<div class="card-art"><img src="' + Api.finderCoverUrl(r.id) + '" alt="" onerror="this.style.display=\'none\'"></div>'
+        + '<div class="card-title">' + this._esc(r.title) + '</div>'
+        + '<div class="card-subtitle">' + (r.year || '') + (typeLabel && r.year ? ' · ' : '') + (typeLabel ? typeLabel : '') + '</div>'
+        + '</div>';
+    });
+    rhtml += '</div>';
+
+    container.innerHTML = rhtml;
+
+    container.querySelectorAll('[data-finder-release]').forEach(el => {
+      el.addEventListener('click', () => {
+        this.navigateTo('finder-release', {
+          mbid: el.dataset.finderRelease,
+          title: el.dataset.finderReleaseTitle,
+          artist: el.dataset.finderReleaseArtist
+        });
+      });
+    });
+  },
+
+  async _renderArtistTracklist(container, releases, artistName) {
+    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div><div style="text-align:center;color:var(--text3);font-size:13px;margin-top:8px">Loading tracks...</div>';
+
+    const seen = {};
+    const albumScores = {};
+    releases.forEach((r, i) => { albumScores[r.id] = r.score || (releases.length - i); });
+
+    const promises = releases.slice(0, 30).map(r =>
+      Api.finderReleaseTracks(r.id)
+        .then(tracks => {
+          if (!tracks) return;
+          for (const t of tracks) {
+            const key = (t.title || '').toLowerCase().trim();
+            if (!key) continue;
+            if (!seen[key]) {
+              seen[key] = { title: t.title, artist: t.artist || artistName, album: r.title, albumId: r.id, length: t.length || 0, position: t.position || 0, count: 0, bestScore: albumScores[r.id] || 0 };
+            }
+            seen[key].count++;
+            if ((albumScores[r.id] || 0) > seen[key].bestScore) {
+              seen[key].bestScore = albumScores[r.id];
+            }
+          }
+        })
+        .catch(() => {})
+    );
+
+    await Promise.all(promises);
+
+    const allTracks = Object.values(seen).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return b.bestScore - a.bestScore;
+    });
+
+    if (allTracks.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+        + '<div class="empty-state-text">No tracks found</div></div>';
+      return;
+    }
+
+    let html = '<div class="finder-results-count">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
+    html += '<div class="finder-tracklist">';
+    allTracks.forEach((t, i) => {
+      const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
+      html += '<div class="finder-track-row">'
+        + '<div class="finder-track-num">' + (i + 1) + '</div>'
+        + '<div class="finder-track-info">'
+        + '<div class="finder-track-title">' + this._esc(t.title) + '</div>'
+        + '<div class="finder-track-artist">' + this._esc(t.album || '') + '</div>'
+        + '</div>'
+        + (length ? '<div class="finder-track-length">' + length + '</div>' : '')
+        + '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(t.album) + '" data-album-mbid="' + this._esc(t.albumId) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="0" title="Download">' + Icons.download() + '</button>'
+        + '</div>';
+    });
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    container.querySelectorAll('.finder-track-dl').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._addToQueue({
+          artist: btn.dataset.artist,
+          title: btn.dataset.title,
+          album: btn.dataset.album || '',
+          albumMbid: btn.dataset.albumMbid || '',
+          trackNumber: parseInt(btn.dataset.trackNumber) || 0,
+          trackTotal: parseInt(btn.dataset.trackTotal) || 0
+        });
+      });
     });
   },
 
@@ -3787,6 +3910,14 @@ const UI = {
 
   _strEq(a, b) {
     return a && b && a.toLowerCase().trim() === b.toLowerCase().trim();
+  },
+
+  _isQueued(artist, title) {
+    if (!this._downloadJobs) return false;
+    return this._downloadJobs.some(j =>
+      j.status !== 'completed' && j.status !== 'failed' &&
+      this._strEq(j.artist, artist) && this._strEq(j.title, title)
+    );
   },
 
   _applyNowPlayingBg() {

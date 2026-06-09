@@ -1,6 +1,7 @@
 const Player = {
   audio: null,
   queue: [],
+  _originalQueue: [],
   currentIndex: -1,
   shuffle: false,
   repeat: 'off',
@@ -134,17 +135,12 @@ const Player = {
 
   next() {
     if (this.queue.length === 0) return;
-    let nextIndex;
-    if (this.shuffle) {
-      nextIndex = this._randomIndex();
-    } else {
-      nextIndex = this.currentIndex + 1;
-      if (nextIndex >= this.queue.length) {
-        if (this.repeat === 'all') {
-          nextIndex = 0;
-        } else {
-          return;
-        }
+    let nextIndex = this.currentIndex + 1;
+    if (nextIndex >= this.queue.length) {
+      if (this.repeat === 'all') {
+        nextIndex = 0;
+      } else {
+        return;
       }
     }
     this.currentIndex = nextIndex;
@@ -193,7 +189,28 @@ const Player = {
 
   toggleShuffle() {
     this.shuffle = !this.shuffle;
+    if (this.queue.length <= 1) {
+      if (this.onStateChange) this.onStateChange();
+      return;
+    }
+    const currentTrack = this.getCurrentTrack();
+    if (this.shuffle) {
+      this._originalQueue = this.queue.slice();
+      const remaining = this.queue.filter((t, i) => i !== this.currentIndex);
+      for (let i = remaining.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+      }
+      this.queue = [currentTrack, ...remaining];
+      this.currentIndex = 0;
+    } else {
+      this.queue = this._originalQueue.slice();
+      this.currentIndex = this.queue.findIndex(t => t.id === currentTrack.id);
+      if (this.currentIndex === -1) this.currentIndex = 0;
+      this._originalQueue = [];
+    }
     if (this.onStateChange) this.onStateChange();
+    if (this.onQueueChange) this.onQueueChange();
   },
 
   cycleRepeat() {
@@ -226,9 +243,11 @@ const Player = {
     const current = this.getCurrentTrack();
     if (current) {
       this.queue = [current];
+      this._originalQueue = [];
       this.currentIndex = 0;
     } else {
       this.queue = [];
+      this._originalQueue = [];
       this.currentIndex = -1;
     }
     if (this.onQueueChange) this.onQueueChange();

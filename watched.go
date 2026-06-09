@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -42,6 +43,46 @@ func initWatchedTables() {
 	db.Exec(`ALTER TABLE watched_playlist_tracks ADD COLUMN video_id TEXT NOT NULL DEFAULT ''`)
 }
 
+func syncWatchedPlaylistsToLibrary() {
+	playlists, err := dbGetWatchedPlaylists()
+	if err != nil || len(playlists) == 0 {
+		return
+	}
+
+	mu.RLock()
+	libTracks := make(map[string]string)
+	for _, t := range tracks {
+		key := strings.ToLower(t.Artist + "|" + t.Title)
+		libTracks[key] = t.ID
+	}
+	mu.RUnlock()
+
+	for _, wp := range playlists {
+		libraryPlaylistID := dbGetOrCreatePlaylistByName(wp.Name)
+
+		rows, err := db.Query("SELECT artist, title FROM watched_playlist_tracks WHERE playlist_id = ? AND status = 'completed'", wp.ID)
+		if err != nil {
+			continue
+		}
+		added := 0
+		for rows.Next() {
+			var artist, title string
+			if rows.Scan(&artist, &title) != nil {
+				continue
+			}
+			key := strings.ToLower(artist + "|" + title)
+			if trackID, ok := libTracks[key]; ok {
+				dbAddTrackToPlaylist(libraryPlaylistID, trackID)
+				added++
+			}
+		}
+		rows.Close()
+		if added > 0 {
+			log.Printf("[watched] Synced %d tracks from %q to library playlist", added, wp.Name)
+		}
+	}
+}
+
 func dbGetWatchedPlaylists() ([]WatchedPlaylist, error) {
 	rows, err := db.Query(`SELECT id, url, name, track_count, last_refresh, created_at FROM watched_playlists ORDER BY created_at DESC`)
 	if err != nil {
@@ -77,9 +118,11 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, []PlaylistTrackIn
 		"--playlist-end", "500",
 		playlistURL,
 	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("yt-dlp: %s: %s", err.Error(), strings.TrimSpace(stderr.String()))
 	}
 
 	var result []PlaylistTrackInfo
@@ -172,6 +215,10 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, []PlaylistTrackIn
 	if playlistName == "" {
 		playlistName = "Playlist"
 	}
+	playlistName = strings.TrimPrefix(playlistName, "Album - ")
+	playlistName = strings.TrimPrefix(playlistName, "Single - ")
+	playlistName = strings.TrimPrefix(playlistName, "EP - ")
+	playlistName = strings.TrimSpace(playlistName)
 
 	return playlistName, result, nil
 }

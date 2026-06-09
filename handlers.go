@@ -1580,6 +1580,23 @@ func downloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 }
 
+func queueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	result, err := db.Exec("DELETE FROM download_jobs WHERE status IN ('completed', 'failed')")
+	cleared := 0
+	if err == nil {
+		affected, _ := result.RowsAffected()
+		cleared = int(affected)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"cleared": cleared})
+}
+
 func settingsGetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(getAllSettings())
@@ -1667,7 +1684,9 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 
 	name, ytTracks, err := extractYouTubePlaylistTracks(req.URL)
 	if err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -1754,7 +1773,14 @@ func watchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 		go refreshWatchedPlaylist(wp)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(wp)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":        wp.ID,
+			"name":      name,
+			"url":       wp.URL,
+			"total":     0,
+			"queued":    0,
+			"trackCount": 0,
+		})
 		return
 	}
 

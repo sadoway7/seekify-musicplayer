@@ -150,6 +150,7 @@ func main() {
 	}
 
 	extractEmbeddedCovers()
+	syncWatchedPlaylistsToLibrary()
 	go fetchMissingCovers()
 	go fetchMissingArtistArt()
 	go startWatcher()
@@ -217,6 +218,7 @@ func main() {
 	mux.HandleFunc("/api/queue/add", downloadQueueAddHandler)
 	mux.HandleFunc("/api/queue/add-batch", downloadQueueAddBatchHandler)
 	mux.HandleFunc("/api/queue/counts", queueCountsHandler)
+	mux.HandleFunc("/api/queue/clear-completed", queueClearCompletedHandler)
 	mux.HandleFunc("/api/queue/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/retry") {

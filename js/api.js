@@ -331,6 +331,12 @@ const Api = {
     return res.json();
   },
 
+  async clearCompletedJobs() {
+    const res = await fetch('/api/queue/clear-completed', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to clear jobs');
+    return res.json();
+  },
+
   async getQueueCounts() {
     const res = await fetch('/api/queue/counts');
     if (!res.ok) throw new Error('Failed');
@@ -369,7 +375,11 @@ const Api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
     });
-    if (!res.ok) throw new Error('Import failed');
+    if (!res.ok) {
+      let msg = 'Import failed';
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+      throw new Error(msg);
+    }
     return res.json();
   },
 
