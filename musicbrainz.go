@@ -1617,22 +1617,24 @@ type ArtistTrack struct {
 	Count    int    `json:"count"`
 }
 
+type mbRecording struct {
+	Title        string `json:"title"`
+	Length       int    `json:"length"`
+	Video        bool   `json:"video"`
+	ArtistCredit []struct {
+		Name   string `json:"name"`
+		Artist struct {
+			ID string `json:"id"`
+		} `json:"artist"`
+	} `json:"artist-credit"`
+	Releases []struct {
+		Title string `json:"title"`
+		ID    string `json:"id"`
+	} `json:"releases"`
+}
+
 func finderArtistTracks(mbid, artistName string) []ArtistTrack {
-	var allRecordings []struct {
-		Title   string `json:"title"`
-		Length  int    `json:"length"`
-		Video   bool   `json:"video"`
-		ArtistCredit []struct {
-			Name   string `json:"name"`
-			Artist struct {
-				ID string `json:"id"`
-			} `json:"artist"`
-		} `json:"artist-credit"`
-		Releases []struct {
-			Title string `json:"title"`
-			ID    string `json:"id"`
-		} `json:"releases"`
-	}
+	var allRecordings []mbRecording
 
 	offset := 0
 	for {
@@ -1643,32 +1645,14 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 		}
 
 		var resp struct {
-			Recordings     []json.RawMessage `json:"recordings"`
-			RecordingCount int               `json:"recording-count"`
+			Recordings     []mbRecording `json:"recordings"`
+			RecordingCount int           `json:"recording-count"`
 		}
 		if json.Unmarshal(body, &resp) != nil {
 			break
 		}
 
-		for _, raw := range resp.Recordings {
-			var rec struct {
-				Title   string `json:"title"`
-				Length  int    `json:"length"`
-				ArtistCredit []struct {
-					Name   string `json:"name"`
-					Artist struct {
-						ID string `json:"id"`
-					} `json:"artist"`
-				} `json:"artist-credit"`
-				Releases []struct {
-					Title string `json:"title"`
-					ID    string `json:"id"`
-				} `json:"releases"`
-				Video bool `json:"video"`
-			}
-			if json.Unmarshal(raw, &rec) != nil {
-				continue
-			}
+		for _, rec := range resp.Recordings {
 			if rec.Video {
 				continue
 			}
