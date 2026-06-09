@@ -1634,72 +1634,46 @@ type mbRecording struct {
 }
 
 func finderArtistTracks(mbid, artistName string) []ArtistTrack {
-	var allRecordings []mbRecording
-
-	offset := 0
-	for {
-		reqURL := fmt.Sprintf("%s/recording?artist=%s&fmt=json&limit=100&offset=%d", mbBaseURL, mbid, offset)
-		body, err := mbDoRequestWithRetry(reqURL, 2)
-		if err != nil {
-			break
-		}
-
-		var resp struct {
-			Recordings     []mbRecording `json:"recordings"`
-			RecordingCount int           `json:"recording-count"`
-		}
-		if json.Unmarshal(body, &resp) != nil {
-			break
-		}
-
-		for _, rec := range resp.Recordings {
-			if rec.Video {
-				continue
-			}
-			allRecordings = append(allRecordings, rec)
-		}
-
-		offset += len(resp.Recordings)
-		if offset >= resp.RecordingCount || len(resp.Recordings) == 0 || offset >= 300 {
-			break
-		}
-		time.Sleep(600 * time.Millisecond)
+	releases, err := finderArtistReleases(mbid)
+	if err != nil || len(releases) == 0 {
+		return nil
 	}
 
 	seen := map[string]*ArtistTrack{}
-	for _, rec := range allRecordings {
-		title := strings.TrimSpace(rec.Title)
-		key := strings.ToLower(title)
-		if key == "" || strings.HasPrefix(key, "[") {
+	limit := len(releases)
+	if limit > 50 {
+		limit = 50
+	}
+
+	for i := 0; i < limit; i++ {
+		r := releases[i]
+		time.Sleep(500 * time.Millisecond)
+
+		tracks, err := finderReleaseTracks(r.ID)
+		if err != nil || len(tracks) == 0 {
 			continue
 		}
 
-		length := rec.Length / 1000
-		artist := artistName
-		if len(rec.ArtistCredit) > 0 && rec.ArtistCredit[0].Name != "" {
-			artist = rec.ArtistCredit[0].Name
-		}
-
-		album := ""
-		albumID := ""
-		if len(rec.Releases) > 0 {
-			album = rec.Releases[0].Title
-			albumID = rec.Releases[0].ID
-		}
-
-		if existing, ok := seen[key]; ok {
-			existing.Count++
-			if length > existing.Length {
-				existing.Length = length
+		for _, t := range tracks {
+			key := strings.ToLower(strings.TrimSpace(t.Title))
+			if key == "" {
+				continue
 			}
-		} else {
-			seen[key] = &ArtistTrack{
-				Title:   title,
-				Artist:  artist,
-				Album:   album,
-				AlbumID: albumID,
-				Length:  length,
-				Count:   1,
+			if existing, ok := seen[key]; ok {
+				existing.Count++
+			} else {
+				artist := t.Artist
+				if artist == "" {
+					artist = artistName
+				}
+				seen[key] = &ArtistTrack{
+					Title:   t.Title,
+					Artist:  artist,
+					Album:   r.Title,
+					AlbumID: r.ID,
+					Length:  t.Length,
+					Count:   1,
+				}
 			}
 		}
 	}

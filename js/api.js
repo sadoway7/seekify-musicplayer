@@ -305,7 +305,11 @@ const Api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(track)
     });
-    if (!res.ok) throw new Error('Failed to add to queue');
+    if (!res.ok) {
+      let msg = 'Failed to add to queue';
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+      throw new Error(msg);
+    }
     return res.json();
   },
 

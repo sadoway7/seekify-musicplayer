@@ -1471,7 +1471,13 @@ func downloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir, "",
 	)
 	if err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "already in library") {
+			status = http.StatusConflict
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 

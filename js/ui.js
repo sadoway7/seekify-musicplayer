@@ -1022,9 +1022,13 @@ const UI = {
       html += '<div class="mega-title"><span>Playlists</span></div>';
       Store.playlists.slice(0, 4).forEach(p => {
         const pTracks = p.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
+        const firstTrack = pTracks[0];
+        const artStyle = firstTrack && firstTrack.albumID
+          ? 'background-image:url(' + Api.coverUrl(firstTrack.albumID) + ');background-size:cover;background-position:center'
+          : 'background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)';
+        const artContent = firstTrack && firstTrack.albumID ? '' : Icons.music();
         html += '<div class="list-item" data-type="playlist" data-id="' + p.id + '">'
-          + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)">'
-          + Icons.music() + '</div>'
+          + '<div class="list-item-art" style="' + artStyle + '">' + artContent + '</div>'
           + '<div class="list-item-info">'
           + '<div class="list-item-title">' + this._esc(p.name) + '</div>'
           + '<div class="list-item-subtitle">' + pTracks.length + ' tracks</div>'
@@ -2250,11 +2254,15 @@ const UI = {
       return;
     }
 
-    let html = '<div class="finder-results-count">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
+    let html = '<div style="padding:0 22px 8px"><div class="search-container" style="max-width:100%">'
+      + '<span class="search-icon">' + Icons.search() + '</span>'
+      + '<input class="search-input artist-tracklist-search" type="text" placeholder="Filter tracks...">'
+      + '</div></div>';
+    html += '<div class="finder-results-count">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
     html += '<div class="finder-tracklist">';
     allTracks.forEach((t, i) => {
       const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
-      html += '<div class="finder-track-row">'
+      html += '<div class="finder-track-row" data-track-search="' + this._esc((t.title + ' ' + t.album + ' ' + t.artist).toLowerCase()) + '">'
         + '<div class="finder-track-num">' + (i + 1) + '</div>'
         + '<div class="finder-track-info">'
         + '<div class="finder-track-title">' + this._esc(t.title) + '</div>'
@@ -2267,6 +2275,21 @@ const UI = {
     html += '</div>';
 
     container.innerHTML = html;
+
+    const searchInput = container.querySelector('.artist-tracklist-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim().toLowerCase();
+        const countEl = container.querySelector('.finder-results-count');
+        let visible = 0;
+        container.querySelectorAll('.finder-track-row').forEach(row => {
+          const match = !q || (row.dataset.trackSearch || '').includes(q);
+          row.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        if (countEl) countEl.textContent = q ? visible + ' of ' + allTracks.length + ' tracks' : allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '');
+      });
+    }
 
     container.querySelectorAll('.finder-track-dl').forEach(btn => {
       btn.addEventListener('click', (e) => {
