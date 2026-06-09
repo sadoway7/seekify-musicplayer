@@ -1559,7 +1559,7 @@ const UI = {
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
     let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Find & Import</span></div>'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Ripper Search</span></div>'
       + '<div class="filter-chips finder-type-chips">'
       + '<button class="chip finder-chip' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Search</button>'
       + '<button class="chip finder-chip' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">Import</button>'

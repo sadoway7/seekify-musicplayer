@@ -255,23 +255,43 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 	}
 
 	if prefix == "" {
-		// Primary scan: full cleanup of removed tracks
-		for oldID := range tracks {
+		// Primary scan: only cleanup primary-dir tracks (no prefix in FilePath)
+		for oldID, oldTrack := range tracks {
+			if strings.Contains(oldTrack.FilePath, ":") {
+				continue
+			}
 			if _, exists := newTracks[oldID]; !exists {
 				dbDeleteTrack(oldID)
 			}
 		}
 		for dbID, dbTrack := range dbLoadTracks() {
+			if strings.Contains(dbTrack.FilePath, ":") {
+				continue
+			}
 			if _, exists := newTracks[dbID]; !exists {
 				dbDeleteTrack(dbID)
-				_ = dbTrack
 			}
 		}
-		// dbCleanupFavorites and dbCleanupRecent moved to server.go after all scans complete
 
-		// Primary scan: replace global maps
-		tracks = newTracks
-		albums = newAlbums
+		// Primary scan: replace only primary-dir entries in global maps
+		// First remove old primary tracks
+		for id := range tracks {
+			if !strings.Contains(tracks[id].FilePath, ":") {
+				delete(tracks, id)
+			}
+		}
+		for id := range albums {
+			if !strings.Contains(albums[id].ID, ":") && !strings.HasPrefix(id, "single:") {
+				// keep non-primary albums only if they came from a prefixed dir
+			}
+		}
+		// Then merge new primary tracks in
+		for id, t := range newTracks {
+			tracks[id] = t
+		}
+		for id, a := range newAlbums {
+			albums[id] = a
+		}
 	} else {
 		// Additional directory: merge into existing maps
 		for id, t := range newTracks {
