@@ -1621,6 +1621,7 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 	var allRecordings []struct {
 		Title   string `json:"title"`
 		Length  int    `json:"length"`
+		Video   bool   `json:"video"`
 		ArtistCredit []struct {
 			Name   string `json:"name"`
 			Artist struct {
