@@ -17,6 +17,7 @@ type WatchedPlaylist struct {
 	Name        string `json:"name"`
 	TrackCount  int    `json:"trackCount"`
 	LastRefresh string `json:"lastRefresh,omitempty"`
+	Watching    bool   `json:"watching"`
 	CreatedAt   string `json:"createdAt"`
 }
 
@@ -41,6 +42,7 @@ func initWatchedTables() {
 		FOREIGN KEY (playlist_id) REFERENCES watched_playlists(id)
 	)`)
 	db.Exec(`ALTER TABLE watched_playlist_tracks ADD COLUMN video_id TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE watched_playlists ADD COLUMN watching INTEGER NOT NULL DEFAULT 1`)
 }
 
 func syncWatchedPlaylistsToLibrary() {
@@ -84,7 +86,7 @@ func syncWatchedPlaylistsToLibrary() {
 }
 
 func dbGetWatchedPlaylists() ([]WatchedPlaylist, error) {
-	rows, err := db.Query(`SELECT id, url, name, track_count, last_refresh, created_at FROM watched_playlists ORDER BY created_at DESC`)
+	rows, err := db.Query(`SELECT id, url, name, track_count, last_refresh, watching, created_at FROM watched_playlists ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +94,9 @@ func dbGetWatchedPlaylists() ([]WatchedPlaylist, error) {
 	var result []WatchedPlaylist
 	for rows.Next() {
 		var p WatchedPlaylist
-		if rows.Scan(&p.ID, &p.URL, &p.Name, &p.TrackCount, &p.LastRefresh, &p.CreatedAt) == nil {
+		var watching int
+		if rows.Scan(&p.ID, &p.URL, &p.Name, &p.TrackCount, &p.LastRefresh, &watching, &p.CreatedAt) == nil {
+			p.Watching = watching == 1
 			result = append(result, p)
 		}
 	}
@@ -258,6 +262,9 @@ func refreshAllWatchedPlaylists() {
 	}
 
 	for _, p := range playlists {
+		if !p.Watching {
+			continue
+		}
 		if err := refreshWatchedPlaylist(&p); err != nil {
 			log.Printf("[watched] Failed to refresh %s: %v", p.Name, err)
 		}

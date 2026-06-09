@@ -423,6 +423,7 @@
   .np-progress {
     padding: var(--sp-4) 48px 0 !important;
     flex-shrink: 0;
+    background: var(--bg-base);
   }
 
   .np-waveform-container {
@@ -436,10 +437,10 @@
     margin-top: 0.5vh;
   }
 
-  /* Controls */
   .np-controls {
     padding: 1.5vh 48px 2vh !important;
     flex-shrink: 0;
+    background: var(--bg-base);
   }
 
   .np-bottom {

@@ -411,6 +411,16 @@ const Api = {
     return res.json();
   },
 
+  async toggleWatch(id, watching) {
+    const res = await fetch('/api/watch/' + id + '/toggle', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ watching })
+    });
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
   async previewUrl(videoId) {
     const res = await fetch('/api/preview/' + videoId);
     if (!res.ok) throw new Error('Preview failed');

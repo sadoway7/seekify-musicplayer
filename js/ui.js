@@ -1493,7 +1493,7 @@ const UI = {
       + '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
-      + '<div class="detail-hero-text">'
+      + '<div class="detail-hero-text" style="flex-direction:column">'
       + '<div class="detail-hero-title">' + this._esc(playlist.name) + '</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
       + '</div>'
@@ -1573,12 +1573,6 @@ const UI = {
         + '<div class="playlist-import-body">'
         + '<div class="playlist-import-form">'
         + '<input class="settings-input" type="text" id="playlist-url-input" placeholder="Paste YouTube playlist URL..." style="flex:1">'
-        + '</div>'
-        + '<div class="playlist-import-form" style="margin-top:8px">'
-        + '<div class="settings-field settings-field-toggle" style="flex:1;margin:0">'
-        + '<label style="font-size:12px">Watch for new songs</label>'
-        + '<input type="checkbox" id="watch-playlist-toggle" class="settings-toggle" checked>'
-        + '</div>'
         + '<button class="settings-btn settings-btn-primary" id="btn-import-playlist">Import</button>'
         + '</div>'
         + '<div id="playlist-import-result"></div>'
@@ -1686,8 +1680,7 @@ const UI = {
     if (resultEl) resultEl.innerHTML = '<div class="loading-spinner" style="margin:12px auto"></div>';
 
     try {
-      const watching = watchToggle && watchToggle.checked;
-      const result = watching ? await Api.watchPlaylist(url) : await Api.importPlaylist(url);
+      const result = await Api.importPlaylist(url);
       const total = result.total || result.trackCount || 0;
       const queued = result.queued || 0;
       const inLib = result.inLibrary || 0;

@@ -1784,13 +1784,33 @@ func watchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasSuffix(r.URL.Path, "/toggle") && r.Method == "PUT" {
+		id := strings.TrimPrefix(r.URL.Path, "/api/watch/")
+		id = strings.TrimSuffix(id, "/toggle")
+		var req struct {
+			Watching bool `json:"watching"`
+		}
+		if json.NewDecoder(r.Body).Decode(&req) == nil && id != "" {
+			watching := 0
+			if req.Watching {
+				watching = 1
+			}
+			db.Exec("UPDATE watched_playlists SET watching = ? WHERE id = ?", watching, id)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
 	if strings.HasSuffix(r.URL.Path, "/refresh") {
 		id := strings.TrimPrefix(r.URL.Path, "/api/watch/")
 		id = strings.TrimSuffix(id, "/refresh")
 		if id != "" {
 			var wp WatchedPlaylist
-			row := db.QueryRow("SELECT id, url, name, track_count, last_refresh, created_at FROM watched_playlists WHERE id = ?", id)
-			row.Scan(&wp.ID, &wp.URL, &wp.Name, &wp.TrackCount, &wp.LastRefresh, &wp.CreatedAt)
+			var watching int
+			row := db.QueryRow("SELECT id, url, name, track_count, last_refresh, watching, created_at FROM watched_playlists WHERE id = ?", id)
+			row.Scan(&wp.ID, &wp.URL, &wp.Name, &wp.TrackCount, &wp.LastRefresh, &watching, &wp.CreatedAt)
+			wp.Watching = watching == 1
 			if wp.ID != "" {
 				go refreshWatchedPlaylist(&wp)
 			}
