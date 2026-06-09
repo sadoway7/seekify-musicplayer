@@ -2238,7 +2238,7 @@ const UI = {
   },
 
   async _renderArtistTracklist(container, releases, artistName) {
-    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div><div style="text-align:center;color:var(--text3);font-size:13px;margin-top:8px">Loading tracks (fetching up to 30 albums)...</div>';
+    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div><div style="text-align:center;color:var(--text3);font-size:13px;margin-top:8px">Loading tracks...</div>';
 
     try {
       var allTracks = await Api.finderArtistTracks(releases[0].artistId || '', artistName);

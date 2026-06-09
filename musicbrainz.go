@@ -1633,47 +1633,91 @@ type mbRecording struct {
 	} `json:"releases"`
 }
 
+func stripTrackSuffix(title string) string {
+	for {
+		trimmed := false
+		for _, suffix := range []string{
+			" (radio edit)", " (remix)", " (live)", " (instrumental)",
+			" (edit)", " (mix)", " (dub)", " (clean)", " (extended)",
+			" (acoustic)", " (demo)", " (promo)", " (album version)",
+			" (LP version)", " (single version)", " (original mix)",
+		} {
+			if strings.HasSuffix(strings.ToLower(title), strings.ToLower(suffix)) {
+				title = title[:len(title)-len(suffix)]
+				trimmed = true
+				break
+			}
+		}
+		if !trimmed {
+			break
+		}
+	}
+	return strings.TrimSpace(title)
+}
+
 func finderArtistTracks(mbid, artistName string) []ArtistTrack {
-	releases, err := finderArtistReleases(mbid)
-	if err != nil || len(releases) == 0 {
-		return nil
+	var allRecordings []mbRecording
+
+	offset := 0
+	for {
+		reqURL := fmt.Sprintf("%s/recording?artist=%s&fmt=json&limit=100&offset=%d", mbBaseURL, mbid, offset)
+		body, err := mbDoRequestWithRetry(reqURL, 2)
+		if err != nil {
+			break
+		}
+
+		var resp struct {
+			Recordings     []mbRecording `json:"recordings"`
+			RecordingCount int           `json:"recording-count"`
+		}
+		if json.Unmarshal(body, &resp) != nil {
+			break
+		}
+
+		for _, rec := range resp.Recordings {
+			if rec.Video {
+				continue
+			}
+			allRecordings = append(allRecordings, rec)
+		}
+
+		offset += len(resp.Recordings)
+		if offset >= resp.RecordingCount || len(resp.Recordings) == 0 || offset >= 500 {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	seen := map[string]*ArtistTrack{}
-	limit := len(releases)
-	if limit > 50 {
-		limit = 50
-	}
-
-	for i := 0; i < limit; i++ {
-		r := releases[i]
-		time.Sleep(500 * time.Millisecond)
-
-		tracks, err := finderReleaseTracks(r.ID)
-		if err != nil || len(tracks) == 0 {
+	for _, rec := range allRecordings {
+		title := strings.TrimSpace(rec.Title)
+		if title == "" || strings.HasPrefix(title, "[") || strings.HasPrefix(title, "\"") {
 			continue
 		}
 
-		for _, t := range tracks {
-			key := strings.ToLower(strings.TrimSpace(t.Title))
-			if key == "" {
-				continue
+		base := strings.ToLower(stripTrackSuffix(title))
+		if base == "" {
+			continue
+		}
+
+		length := rec.Length / 1000
+		artist := artistName
+		if len(rec.ArtistCredit) > 0 && rec.ArtistCredit[0].Name != "" {
+			artist = rec.ArtistCredit[0].Name
+		}
+
+		if existing, ok := seen[base]; ok {
+			existing.Count++
+			if length > existing.Length && length > 0 {
+				existing.Length = length
 			}
-			if existing, ok := seen[key]; ok {
-				existing.Count++
-			} else {
-				artist := t.Artist
-				if artist == "" {
-					artist = artistName
-				}
-				seen[key] = &ArtistTrack{
-					Title:   t.Title,
-					Artist:  artist,
-					Album:   r.Title,
-					AlbumID: r.ID,
-					Length:  t.Length,
-					Count:   1,
-				}
+		} else {
+			displayTitle := stripTrackSuffix(title)
+			seen[base] = &ArtistTrack{
+				Title:  displayTitle,
+				Artist: artist,
+				Length: length,
+				Count:  1,
 			}
 		}
 	}
