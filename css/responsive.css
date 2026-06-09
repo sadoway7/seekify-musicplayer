@@ -384,6 +384,10 @@
     padding: 48px 48px 0 !important;
   }
 
+  .np-float-actions {
+    top: 6px;
+  }
+
   .np-title-actions {
     justify-content: center;
     margin-bottom: 6px;

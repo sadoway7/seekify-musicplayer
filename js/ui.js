@@ -1694,7 +1694,6 @@ const UI = {
       this._loadWatchedPlaylists();
       this._pollDownloadBadge();
       this._showToast((result.queued || 0) + ' tracks added to queue');
-      setTimeout(() => this.navigateTo('downloads'), 1500);
     } catch (e) {
       if (resultEl) resultEl.innerHTML = '<div class="playlist-import-error">Failed: invalid URL or yt-dlp not available</div>';
     }
@@ -1923,7 +1922,6 @@ const UI = {
       html += '<div class="finder-list">';
       results.forEach(r => {
         const length = r.length > 0 ? Math.floor(r.length / 60) + ':' + String(r.length % 60).padStart(2, '0') : '';
-        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
         html += '<div class="finder-item">'
           + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
           + '<div class="finder-item-info">'
@@ -1932,9 +1930,9 @@ const UI = {
           + '</div>'
           + '<div class="finder-item-meta">'
           + (length ? '<span class="finder-duration">' + length + '</span>' : '')
-          + badge
+          + (r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '')
           + '</div>'
-          + '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>'
+          + (r.inLibrary ? '' : '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>')
           + '</div>';
       });
       html += '</div>';
@@ -2063,7 +2061,12 @@ const UI = {
       await Api.queueAdd(track);
       this._showToast('Added to download queue');
     } catch (err) {
-      this._showToast('Failed to add to queue');
+      const msg = err.message || 'Failed to add to queue';
+      if (msg.includes('already in library') || msg.includes('already')) {
+        this._showToast('Already in your library');
+      } else {
+        this._showToast(msg);
+      }
     }
   },
 
@@ -2182,6 +2185,7 @@ const UI = {
       let thtml = '<div class="finder-tracklist">';
       tracks.forEach((t, i) => {
         const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
+        const trackArtist = t.artist || artist;
         thtml += '<div class="finder-track-row">'
           + '<div class="finder-track-num">' + t.position + '</div>'
           + '<div class="finder-track-info">'
@@ -2189,7 +2193,7 @@ const UI = {
           + (t.artist && t.artist !== artist ? '<div class="finder-track-artist">' + this._esc(t.artist) + '</div>' : '')
           + '</div>'
           + (length ? '<div class="finder-track-length">' + length + '</div>' : '')
-          + '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist || artist) + '" data-title="' + this._esc(t.title) + '" title="Download">' + Icons.download() + '</button>'
+          + '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(trackArtist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(title) + '" data-album-mbid="' + this._esc(data.mbid) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="' + tracks.length + '" title="Download">' + Icons.download() + '</button>'
           + '</div>';
       });
       thtml += '</div>';
@@ -2201,7 +2205,11 @@ const UI = {
           e.stopPropagation();
           this._addToQueue({
             artist: btn.dataset.artist,
-            title: btn.dataset.title
+            title: btn.dataset.title,
+            album: btn.dataset.album || '',
+            albumMbid: btn.dataset.albumMbid || '',
+            trackNumber: parseInt(btn.dataset.trackNumber) || 0,
+            trackTotal: parseInt(btn.dataset.trackTotal) || 0
           });
         });
       });
@@ -2223,27 +2231,17 @@ const UI = {
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
 
     html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.database() + ' MusicBrainz Metadata</div>'
-      + '<div class="settings-section-desc">Match your tracks against MusicBrainz to fix titles, artists, albums, and fetch cover art.</div>'
-      + '<div id="metadata-status" class="settings-status"></div>'
-      + '<div class="settings-actions">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
-      + '<button class="settings-btn" id="btn-meta-history">' + Icons.search() + '<span>Match History</span></button>'
-      + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Pending</span></button>'
-      + '</div></div>';
-
-    html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.music() + ' Library</div>'
-      + '<div class="settings-section-desc">Rescan your music directory for new files.</div>'
+      + '<div class="settings-section-desc">Scan your music directories for new or removed files.</div>'
       + '<div class="settings-actions">'
       + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
       + '</div></div>';
 
     html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.search() + ' Finder & Downloads</div>'
-      + '<div class="settings-section-desc">Configure how the Finder searches and downloads music. Files go to your music directory.</div>'
+      + '<div class="settings-section-title">' + Icons.search() + ' Ripper Settings</div>'
+      + '<div class="settings-section-desc">Configure how music is downloaded and saved.</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
-      + '<div class="settings-actions">'
+      + '<div class="settings-form-grid">'
       + '<div class="settings-field"><label>Audio Format</label>'
       + '<select id="setting-download-format" class="settings-select">'
       + '<option value="flac">FLAC (lossless)</option>'
@@ -2273,32 +2271,38 @@ const UI = {
       + '<select id="setting-download-concurrent" class="settings-select">'
       + '<option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option>'
       + '</select></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Convert to FLAC</label>'
-      + '<input type="checkbox" id="setting-download-convert-to-flac" class="settings-toggle"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Organise by Artist</label>'
-      + '<input type="checkbox" id="setting-download-organise-by-artist" class="settings-toggle"></div>'
       + '<div class="settings-field"><label>Album Subdirectory</label>'
       + '<input type="text" id="setting-download-album-subdir" class="settings-input" placeholder="Albums"></div>'
       + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
       + '<input type="text" id="setting-download-min-bitrate" class="settings-input" placeholder="0 (no minimum)"></div>'
+      + '</div>'
+      + '<div class="settings-toggles-row">'
+      + '<div class="settings-field settings-field-toggle"><label>Convert to FLAC</label>'
+      + '<input type="checkbox" id="setting-download-convert-to-flac" class="settings-toggle"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Organise by Artist</label>'
+      + '<input type="checkbox" id="setting-download-organise-by-artist" class="settings-toggle"></div>'
+      + '</div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Settings</span></button>'
       + '</div></div>';
 
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.download() + ' Bulk Import</div>'
-      + '<div class="settings-section-desc">Paste a list of tracks (one per line, "Artist - Title") to search and download.</div>'
+      + '<div class="settings-section-desc">Paste a list of tracks (one per line, "Artist - Title") to download.</div>'
       + '<textarea id="bulk-import-input" class="settings-textarea" rows="6" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion&#10;Tame Impala - Let It Happen"></textarea>'
       + '<div class="settings-actions" style="margin-top:8px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-bulk-import">' + Icons.download() + '<span>Import & Download All</span></button>'
       + '</div></div>';
 
     html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.download() + ' Downloads</div>'
-      + '<div class="settings-section-desc">Manage which songs can be downloaded. Downloaded songs appear as a button in their menu.</div>'
+      + '<div class="settings-section-title">' + Icons.database() + ' MusicBrainz Metadata</div>'
+      + '<div class="settings-section-desc">Match tracks against MusicBrainz to fix tags and fetch cover art.</div>'
+      + '<div id="metadata-status" class="settings-status"></div>'
       + '<div class="settings-actions">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-manage-downloads">' + Icons.download() + '<span>Manage Downloadable Songs</span></button>'
-      + '</div>'
-      + '<div id="download-list"></div></div>';
+      + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
+      + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Pending</span></button>'
+      + '<button class="settings-btn" id="btn-meta-history">' + Icons.search() + '<span>Match History</span></button>'
+      + '</div></div>';
 
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.settings() + ' About</div>'
@@ -2312,10 +2316,8 @@ const UI = {
     this._loadMetadataStatus();
 
     document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());
-    document.getElementById('btn-meta-clear').addEventListener('click', () => this._clearMetadata());
     document.getElementById('btn-meta-history').addEventListener('click', () => this.navigateTo('metadata-history'));
     document.getElementById('btn-rescan').addEventListener('click', () => this._rescanLibrary());
-    document.getElementById('btn-manage-downloads').addEventListener('click', () => this._toggleDownloadPanel());
 
     const reviewBtn = document.getElementById('btn-meta-review');
     if (reviewBtn) {
@@ -2557,11 +2559,12 @@ const UI = {
     btn.disabled = true;
     btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Scanning...</span>';
     try {
-      await Api.scan();
+      const stats = await Api.scan();
       await Store.refreshLibrary();
-      this.showToast('Library rescanned');
+      const msg = stats.scanned + ' files scanned' + (stats.added > 0 ? ', ' + stats.added + ' added' : '') + (stats.removed > 0 ? ', ' + stats.removed + ' removed' : '');
+      this._showToast(msg);
     } catch (err) {
-      this.showToast('Rescan failed');
+      this._showToast('Rescan failed');
     }
     btn.disabled = false;
     btn.innerHTML = Icons.refresh() + '<span>Rescan Library</span>';
@@ -2990,6 +2993,7 @@ const UI = {
 
     this.els.nowPlaying.classList.toggle('playing', Player.playing);
 
+    this._applyNowPlayingBg();
     this._checkTitleOverflow();
   },
 
@@ -3781,6 +3785,10 @@ const UI = {
       + '</div>';
   },
 
+  _strEq(a, b) {
+    return a && b && a.toLowerCase().trim() === b.toLowerCase().trim();
+  },
+
   _applyNowPlayingBg() {
     const track = Player.getCurrentTrack();
     const glow = document.getElementById('np-bg-glow');
@@ -3810,11 +3818,7 @@ const UI = {
       const g = Math.round(gSum / count);
       const b = Math.round(bSum / count);
 
-      glow.style.background =
-        'radial-gradient(ellipse at 50% 50%, ' +
-        'rgba(' + r + ',' + g + ',' + b + ',0.35) 0%, ' +
-        'rgba(' + r + ',' + g + ',' + b + ',0.1) 60%, ' +
-        'transparent 100%)';
+      glow.style.backgroundColor = 'rgba(' + r + ',' + g + ',' + b + ',0.45)';
       glow.classList.add('active');
     };
     img.onerror = () => {

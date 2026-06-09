@@ -501,6 +501,18 @@ func processSingleDownload(job *DownloadJob) {
 	go func() {
 		time.Sleep(1 * time.Second)
 		scanMusicDir(musicDir)
+
+		if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
+			mu.RLock()
+			for _, tr := range tracks {
+				if strings.EqualFold(tr.Artist, job.Artist) && strings.EqualFold(tr.Title, job.Title) {
+					dbAddTrackToPlaylist(job.PlaylistID, tr.ID)
+					log.Printf("[download] Added %s - %s to playlist %s", tr.Artist, tr.Title, job.PlaylistID)
+					break
+				}
+			}
+			mu.RUnlock()
+		}
 	}()
 }
 

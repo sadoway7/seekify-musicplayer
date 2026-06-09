@@ -21,11 +21,11 @@
   left: -20%;
   right: -20%;
   height: 80%;
-  background: transparent;
   z-index: 0;
   filter: blur(80px);
   opacity: 0;
-  transition: background 2s var(--ease-soft), opacity 2s var(--ease-soft);
+  background-color: transparent;
+  transition: background-color 2s var(--ease-soft), opacity 2s var(--ease-soft);
   pointer-events: none;
 }
 
@@ -178,7 +178,17 @@
   padding: var(--sp-2) var(--page-margin) 0;
   width: 100%;
   flex-shrink: 0;
-  overflow: hidden;
+}
+
+.np-float-actions {
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  z-index: 3;
 }
 
 .np-title-row {

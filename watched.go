@@ -98,6 +98,7 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, []PlaylistTrackIn
 			Artist        string `json:"artist"`
 			AlbumArtist   string `json:"album_artist"`
 			PlaylistTitle string `json:"playlist_title"`
+			Duration      float64 `json:"duration"`
 		}
 		if json.Unmarshal([]byte(line), &entry) != nil {
 			continue
@@ -109,7 +110,24 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, []PlaylistTrackIn
 			continue
 		}
 
-		artist := entry.Artist
+		artist := ""
+		title := entry.Title
+
+		for _, sep := range []string{" - ", " – ", " | ", " — "} {
+			if idx := strings.Index(title, sep); idx > 0 {
+				possibleArtist := strings.TrimSpace(title[:idx])
+				possibleTitle := strings.TrimSpace(title[idx+len(sep):])
+				if possibleArtist != "" && possibleTitle != "" {
+					artist = possibleArtist
+					title = possibleTitle
+					break
+				}
+			}
+		}
+
+		if artist == "" {
+			artist = entry.Artist
+		}
 		if artist == "" {
 			artist = entry.AlbumArtist
 		}
@@ -122,27 +140,27 @@ func extractYouTubePlaylistTracks(playlistURL string) (string, []PlaylistTrackIn
 		if artist == "" {
 			artist = entry.Channel
 		}
-		title := entry.Title
-
-		for _, sep := range []string{" - ", " – ", " | "} {
-			if idx := strings.Index(title, sep); idx > 0 {
-				possibleArtist := strings.TrimSpace(title[:idx])
-				possibleTitle := strings.TrimSpace(title[idx+len(sep):])
-				if possibleArtist != "" && possibleTitle != "" {
-					artist = possibleArtist
-					title = possibleTitle
-					break
-				}
-			}
-		}
 
 		artist = strings.TrimSuffix(artist, " - Topic")
 		artist = strings.TrimSuffix(artist, " Topic")
 		artist = strings.TrimSuffix(artist, "VEVO")
+		artist = strings.TrimSpace(artist)
 
 		if artist == "" {
 			artist = "Unknown"
 		}
+
+		title = strings.TrimPrefix(title, "\"")
+		title = strings.TrimSuffix(title, "\"")
+		title = strings.TrimPrefix(title, "'")
+		title = strings.TrimSuffix(title, "'")
+		title = strings.TrimSpace(title)
+		title = strings.TrimSuffix(title, " (Official Audio)")
+		title = strings.TrimSuffix(title, " (Official Music Video)")
+		title = strings.TrimSuffix(title, " (Official Video)")
+		title = strings.TrimSuffix(title, " [Official Audio]")
+		title = strings.TrimSuffix(title, " [Official Video]")
+		title = strings.TrimSpace(title)
 
 		result = append(result, PlaylistTrackInfo{
 			VideoID: entry.ID,
@@ -226,6 +244,8 @@ func refreshWatchedPlaylist(p *WatchedPlaylist) error {
 		}
 	}
 
+	libraryPlaylistID := dbGetOrCreatePlaylistByName(p.Name)
+
 	newCount := 0
 	for _, t := range tracksFromYT {
 		artist, title, videoID := t.Artist, t.Title, t.VideoID
@@ -239,19 +259,28 @@ func refreshWatchedPlaylist(p *WatchedPlaylist) error {
 
 		mu.RLock()
 		inLib := false
+		var libTrackID string
 		for _, tr := range tracks {
 			if strings.EqualFold(tr.Artist, artist) && strings.EqualFold(tr.Title, title) {
 				inLib = true
+				libTrackID = tr.ID
 				break
 			}
 		}
 		mu.RUnlock()
 		if inLib {
+			if libTrackID != "" {
+				dbAddTrackToPlaylist(libraryPlaylistID, libTrackID)
+			}
 			db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'completed')", p.ID, videoID, artist, title)
 			continue
 		}
 
-		createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
+		job, _ := createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
+		if job != nil {
+			job.PlaylistID = libraryPlaylistID
+			db.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
+		}
 		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'queued')", p.ID, videoID, artist, title)
 		newCount++
 	}

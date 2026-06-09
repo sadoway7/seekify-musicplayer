@@ -277,6 +277,32 @@ func dbUpdatePlaylist(id string, name string, trackIDs []string) {
 	}
 }
 
+func dbAddTrackToPlaylist(playlistID, trackID string) {
+	var maxPos int
+	row := db.QueryRow("SELECT COALESCE(MAX(position),-1) FROM playlist_tracks WHERE playlist_id = ?", playlistID)
+	row.Scan(&maxPos)
+	db.Exec("INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)", playlistID, trackID, maxPos+1)
+}
+
+func dbFindPlaylistByName(name string) *Playlist {
+	row := db.QueryRow("SELECT id, name, created_at FROM playlists WHERE name = ? LIMIT 1", name)
+	var p Playlist
+	if err := row.Scan(&p.ID, &p.Name, &p.CreatedAt); err != nil {
+		return nil
+	}
+	p.TrackIDs = dbGetPlaylistTracks(p.ID)
+	return &p
+}
+
+func dbGetOrCreatePlaylistByName(name string) string {
+	existing := dbFindPlaylistByName(name)
+	if existing != nil {
+		return existing.ID
+	}
+	p := dbCreatePlaylist(name)
+	return p.ID
+}
+
 func dbDeletePlaylist(id string) bool {
 	res, _ := db.Exec("DELETE FROM playlists WHERE id = ?", id)
 	affected, _ := res.RowsAffected()

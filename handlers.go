@@ -1665,17 +1665,19 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, tracks, err := extractYouTubePlaylistTracks(req.URL)
+	name, ytTracks, err := extractYouTubePlaylistTracks(req.URL)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 
+	libraryPlaylistID := dbGetOrCreatePlaylistByName(name)
+
 	wp := &WatchedPlaylist{
 		ID:        uuid.New().String()[:8],
 		URL:       req.URL,
 		Name:      name,
-		TrackCount: len(tracks),
+		TrackCount: len(ytTracks),
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}
 
@@ -1683,20 +1685,32 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 		wp.ID, wp.URL, wp.Name, wp.TrackCount, wp.CreatedAt, wp.CreatedAt)
 
 	queued := 0
-	for _, t := range tracks {
+	for _, t := range ytTracks {
 		artist, title, videoID := t.Artist, t.Title, t.VideoID
 		inLib := checkDuplicateInLibrary(artist, title)
 
 		status := "pending"
 		if inLib {
 			status = "completed"
+			mu.RLock()
+			for _, tr := range tracks {
+				if strings.EqualFold(tr.Artist, artist) && strings.EqualFold(tr.Title, title) {
+					dbAddTrackToPlaylist(libraryPlaylistID, tr.ID)
+					break
+				}
+			}
+			mu.RUnlock()
 		}
 
 		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, ?)",
 			wp.ID, videoID, artist, title, status)
 
 		if !inLib {
-			createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
+			job, _ := createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
+			if job != nil {
+				job.PlaylistID = libraryPlaylistID
+				db.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
+			}
 			queued++
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -1706,9 +1720,9 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":        wp.ID,
 		"name":      name,
-		"total":     len(tracks),
+		"total":     len(ytTracks),
 		"queued":    queued,
-		"inLibrary": len(tracks) - queued,
+		"inLibrary": len(ytTracks) - queued,
 	})
 }
 
