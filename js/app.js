@@ -57,14 +57,16 @@ const App = {
     // Deep link: ?artist=NAME or ?album=ID
     const artistName = params.get('artist');
     const albumId = params.get('album');
+    const playlistId = params.get('playlist');
     if (artistName) {
       UI.navigateTo('artist', { artistName });
     } else if (albumId) {
       UI.navigateTo('album', { albumId });
+    } else if (playlistId) {
+      UI.navigateTo('playlist', { playlistId });
     }
 
-    // Clean the URL without reloading
-    if (playId || artistName || albumId) {
+    if (playId || artistName || albumId || playlistId) {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }

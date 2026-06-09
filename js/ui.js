@@ -1257,9 +1257,13 @@ const UI = {
       html += this._emptyState('No playlists yet', 'Create a playlist to organize your music', Icons.library());
     } else {
       Store.playlists.forEach(p => {
+        const firstTrack = p.trackIds.map(tid => Store.getTrack(tid)).find(Boolean);
+        const artStyle = firstTrack && firstTrack.albumID
+          ? 'background-image:url(' + Api.coverUrl(firstTrack.albumID) + ');background-size:cover;background-position:center'
+          : 'background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)';
+        const artContent = firstTrack && firstTrack.albumID ? '' : Icons.music();
         html += '<div class="list-item lib-item" data-type="playlist" data-id="' + p.id + '" data-title="' + this._esc(p.name) + '" data-subtitle="' + p.trackIds.length + ' tracks">'
-          + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)">'
-          + Icons.music() + '</div>'
+          + '<div class="list-item-art" style="' + artStyle + '">' + artContent + '</div>'
           + '<div class="list-item-info">'
           + '<div class="list-item-title">' + this._esc(p.name) + '</div>'
           + '<div class="list-item-subtitle">' + p.trackIds.length + ' tracks</div>'
@@ -1711,15 +1715,30 @@ const UI = {
           + '<div class="watched-meta">' + (p.trackCount || 0) + ' tracks'
           + (p.lastRefresh ? ' · refreshed ' + new Date(p.lastRefresh).toLocaleDateString() : '')
           + '</div>'
+          + '<div class="settings-field settings-field-toggle" style="margin:4px 0 0;padding:0">'
+          + '<label style="font-size:11px;color:var(--text3)">Auto-refresh</label>'
+          + '<input type="checkbox" class="settings-toggle watched-toggle" data-watch-id="' + this._esc(p.id) + '"' + (p.watching ? ' checked' : '') + '>'
+          + '</div>'
           + '</div>'
           + '<div class="watched-actions">'
           + '<button class="watched-btn" data-refresh="' + this._esc(p.id) + '" title="Refresh now">&#x21bb;</button>'
-          + '<button class="watched-btn watched-delete" data-delete="' + this._esc(p.id) + '" title="Stop watching">&times;</button>'
+          + '<button class="watched-btn watched-delete" data-delete="' + this._esc(p.id) + '" title="Remove">&times;</button>'
           + '</div>'
           + '</div>';
       });
       html += '</div>';
       container.innerHTML = html;
+
+      container.querySelectorAll('.watched-toggle').forEach(toggle => {
+        toggle.addEventListener('change', async (e) => {
+          e.stopPropagation();
+          try {
+            await Api.toggleWatch(toggle.dataset.watchId, toggle.checked);
+          } catch (err) {
+            toggle.checked = !toggle.checked;
+          }
+        });
+      });
 
       container.querySelectorAll('[data-refresh]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
@@ -3546,6 +3565,16 @@ const UI = {
         }
       }},
       { type: 'divider' },
+      { label: 'Share', icon: Icons.share(), action: async () => {
+        this.hideContextMenu();
+        const shareUrl = window.location.origin + '/?playlist=' + encodeURIComponent(playlistId);
+        const shareTitle = playlist.name || 'Playlist';
+        if (navigator.share) {
+          try { await navigator.share({ title: shareTitle, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
+        } else {
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+        }
+      }},
       { label: 'Rename', icon: Icons.edit(), action: () => {
         this.hideContextMenu();
         const newName = prompt('Playlist name:', playlist.name);
