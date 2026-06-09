@@ -1990,7 +1990,7 @@ const UI = {
         } else if (this._isQueued(r.artist, r.title)) {
           statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
         } else {
-          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>';
+          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
         }
         html += '<div class="finder-item">'
           + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
@@ -2008,7 +2008,14 @@ const UI = {
       html += '<div class="finder-list">';
       results.forEach(r => {
         const length = r.duration > 0 ? Math.floor(r.duration / 60) + ':' + String(r.duration % 60).padStart(2, '0') : '';
-        const badge = r.inLibrary ? '<span class="finder-in-library">In Library</span>' : '';
+        let statusHtml;
+        if (r.inLibrary) {
+          statusHtml = '<span class="finder-status-badge finder-in-library">In Library</span>';
+        } else if (this._isQueued(r.channel, r.title)) {
+          statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
+        } else {
+          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.channel) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
+        }
         html += '<div class="finder-item">'
           + '<button class="finder-preview-btn" data-preview="' + this._esc(r.videoId) + '" title="Preview">&#9654;</button>'
           + '<div class="finder-item-art"><img src="https://i.ytimg.com/vi/' + this._esc(r.videoId) + '/default.jpg" alt="" onerror="this.style.display=\'none\'"></div>'
@@ -2018,9 +2025,8 @@ const UI = {
           + '</div>'
           + '<div class="finder-item-meta">'
           + (length ? '<span class="finder-duration">' + length + '</span>' : '')
-          + badge
           + '</div>'
-          + '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.channel) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '</button>'
+          + statusHtml
           + '</div>';
       });
       html += '</div>';
@@ -2079,6 +2085,10 @@ const UI = {
       const dlBtn = e.target.closest('[data-action="download-song"]');
       if (dlBtn) {
         e.stopPropagation();
+        const badge = document.createElement('span');
+        badge.className = 'finder-status-badge finder-in-queue';
+        badge.textContent = 'Queued';
+        dlBtn.replaceWith(badge);
         this._addToQueue({
           artist: dlBtn.dataset.artist,
           title: dlBtn.dataset.title
@@ -2258,10 +2268,17 @@ const UI = {
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input artist-tracklist-search" type="text" placeholder="Filter tracks...">'
       + '</div></div>';
+    html += '<div style="padding:0 22px 8px"><button class="settings-btn settings-btn-primary" id="btn-download-all-artist" style="margin-bottom:0">' + Icons.download() + '<span>Download All</span></button></div>';
     html += '<div class="finder-results-count">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
     html += '<div class="finder-tracklist">';
     allTracks.forEach((t, i) => {
       const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
+      let statusHtml;
+      if (this._isQueued(t.artist, t.title)) {
+        statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
+      } else {
+        statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(t.album) + '" data-album-mbid="' + this._esc(t.albumId) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="0" title="Download">' + Icons.download() + '<span>Download</span></button>';
+      }
       html += '<div class="finder-track-row" data-track-search="' + this._esc((t.title + ' ' + t.album + ' ' + t.artist).toLowerCase()) + '">'
         + '<div class="finder-track-num">' + (i + 1) + '</div>'
         + '<div class="finder-track-info">'
@@ -2269,12 +2286,40 @@ const UI = {
         + '<div class="finder-track-artist">' + this._esc(t.album || '') + '</div>'
         + '</div>'
         + (length ? '<div class="finder-track-length">' + length + '</div>' : '')
-        + '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(t.album) + '" data-album-mbid="' + this._esc(t.albumId) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="0" title="Download">' + Icons.download() + '</button>'
+        + statusHtml
         + '</div>';
     });
     html += '</div>';
 
     container.innerHTML = html;
+
+    const dlAllBtn = container.querySelector('#btn-download-all-artist');
+    if (dlAllBtn) {
+      dlAllBtn.addEventListener('click', () => {
+        const trackList = allTracks.map((t, i) => ({
+          artist: t.artist,
+          title: t.title,
+          album: t.album || '',
+          albumMbid: t.albumId || '',
+          trackNumber: i + 1,
+          trackTotal: allTracks.length
+        }));
+        Api.queueAddBatch(trackList).then(() => {
+          this._showToast(allTracks.length + ' tracks added to queue');
+          container.querySelectorAll('.finder-track-dl').forEach(btn => {
+            const badge = document.createElement('span');
+            badge.className = 'finder-status-badge finder-in-queue';
+            badge.textContent = 'Queued';
+            btn.replaceWith(badge);
+          });
+          dlAllBtn.disabled = true;
+          dlAllBtn.innerHTML = Icons.download() + '<span>Queued</span>';
+          dlAllBtn.style.opacity = '0.6';
+        }).catch(() => {
+          this._showToast('Failed to add tracks to queue');
+        });
+      });
+    }
 
     const searchInput = container.querySelector('.artist-tracklist-search');
     if (searchInput) {
@@ -2294,6 +2339,10 @@ const UI = {
     container.querySelectorAll('.finder-track-dl').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        const badge = document.createElement('span');
+        badge.className = 'finder-status-badge finder-in-queue';
+        badge.textContent = 'Queued';
+        btn.replaceWith(badge);
         this._addToQueue({
           artist: btn.dataset.artist,
           title: btn.dataset.title,
@@ -2360,6 +2409,12 @@ const UI = {
       tracks.forEach((t, i) => {
         const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
         const trackArtist = t.artist || artist;
+        let statusHtml;
+        if (this._isQueued(trackArtist, t.title)) {
+          statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
+        } else {
+          statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(trackArtist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(title) + '" data-album-mbid="' + this._esc(data.mbid) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="' + tracks.length + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
+        }
         thtml += '<div class="finder-track-row">'
           + '<div class="finder-track-num">' + t.position + '</div>'
           + '<div class="finder-track-info">'
@@ -2367,7 +2422,7 @@ const UI = {
           + (t.artist && t.artist !== artist ? '<div class="finder-track-artist">' + this._esc(t.artist) + '</div>' : '')
           + '</div>'
           + (length ? '<div class="finder-track-length">' + length + '</div>' : '')
-          + '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(trackArtist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(title) + '" data-album-mbid="' + this._esc(data.mbid) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="' + tracks.length + '" title="Download">' + Icons.download() + '</button>'
+          + statusHtml
           + '</div>';
       });
       thtml += '</div>';
@@ -2377,6 +2432,10 @@ const UI = {
       container.querySelectorAll('.finder-track-dl').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
+          const badge = document.createElement('span');
+          badge.className = 'finder-status-badge finder-in-queue';
+          badge.textContent = 'Queued';
+          btn.replaceWith(badge);
           this._addToQueue({
             artist: btn.dataset.artist,
             title: btn.dataset.title,
