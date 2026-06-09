@@ -603,8 +603,16 @@
 
 .queue-stats {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 10px var(--page-margin);
+  flex-wrap: wrap;
+}
+
+.queue-stats-badges {
+  display: flex;
+  gap: 8px;
   flex-wrap: wrap;
 }
 

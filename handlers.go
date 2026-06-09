@@ -1332,8 +1332,21 @@ func finderSearchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func finderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
-	mbid := strings.TrimPrefix(r.URL.Path, "/api/finder/artist/")
-	mbid = strings.TrimSuffix(mbid, "/releases")
+	path := strings.TrimPrefix(r.URL.Path, "/api/finder/artist/")
+
+	if strings.HasSuffix(path, "/tracks") {
+		mbid := strings.TrimSuffix(path, "/tracks")
+		artistName := r.URL.Query().Get("artist")
+		tracks := finderArtistTracks(mbid, artistName)
+		if tracks == nil {
+			tracks = []ArtistTrack{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(tracks)
+		return
+	}
+
+	mbid := strings.TrimSuffix(path, "/releases")
 	if mbid == "" {
 		http.Error(w, `{"error":"missing mbid"}`, http.StatusBadRequest)
 		return
@@ -1586,7 +1599,7 @@ func queueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec("DELETE FROM download_jobs WHERE status IN ('completed', 'failed')")
+	result, err := db.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading')")
 	cleared := 0
 	if err == nil {
 		affected, _ := result.RowsAffected()

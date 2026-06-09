@@ -46,6 +46,10 @@ type mbArtistCredit struct {
 }
 
 func mbDoRequest(reqURL string) ([]byte, error) {
+	return mbDoRequestWithRetry(reqURL, 2)
+}
+
+func mbDoRequestWithRetry(reqURL string, retries int) ([]byte, error) {
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return nil, err
@@ -63,6 +67,10 @@ func mbDoRequest(reqURL string) ([]byte, error) {
 		return nil, err
 	}
 
+	if resp.StatusCode == 503 && retries > 0 {
+		time.Sleep(1100 * time.Millisecond)
+		return mbDoRequestWithRetry(reqURL, retries-1)
+	}
 	if resp.StatusCode == 503 {
 		return nil, fmt.Errorf("rate limited by MusicBrainz (503)")
 	}
@@ -1597,4 +1605,128 @@ func resolveToReleaseID(id string) string {
 		return ""
 	}
 	return resp.Releases[0].ID
+}
+
+type ArtistTrack struct {
+	Title    string `json:"title"`
+	Artist   string `json:"artist"`
+	Album    string `json:"album"`
+	AlbumID  string `json:"albumId"`
+	Length   int    `json:"length"`
+	Position int    `json:"position"`
+	Count    int    `json:"count"`
+}
+
+func finderArtistTracks(mbid, artistName string) []ArtistTrack {
+	var allRecordings []struct {
+		Title   string `json:"title"`
+		Length  int    `json:"length"`
+		ArtistCredit []struct {
+			Name   string `json:"name"`
+			Artist struct {
+				ID string `json:"id"`
+			} `json:"artist"`
+		} `json:"artist-credit"`
+		Releases []struct {
+			Title string `json:"title"`
+			ID    string `json:"id"`
+		} `json:"releases"`
+	}
+
+	offset := 0
+	for {
+		reqURL := fmt.Sprintf("%s/recording?artist=%s&fmt=json&limit=100&offset=%d", mbBaseURL, mbid, offset)
+		body, err := mbDoRequestWithRetry(reqURL, 2)
+		if err != nil {
+			break
+		}
+
+		var resp struct {
+			Recordings     []json.RawMessage `json:"recordings"`
+			RecordingCount int               `json:"recording-count"`
+		}
+		if json.Unmarshal(body, &resp) != nil {
+			break
+		}
+
+		for _, raw := range resp.Recordings {
+			var rec struct {
+				Title   string `json:"title"`
+				Length  int    `json:"length"`
+				ArtistCredit []struct {
+					Name   string `json:"name"`
+					Artist struct {
+						ID string `json:"id"`
+					} `json:"artist"`
+				} `json:"artist-credit"`
+				Releases []struct {
+					Title string `json:"title"`
+					ID    string `json:"id"`
+				} `json:"releases"`
+				Video bool `json:"video"`
+			}
+			if json.Unmarshal(raw, &rec) != nil {
+				continue
+			}
+			if rec.Video {
+				continue
+			}
+			allRecordings = append(allRecordings, rec)
+		}
+
+		offset += len(resp.Recordings)
+		if offset >= resp.RecordingCount || len(resp.Recordings) == 0 || offset >= 300 {
+			break
+		}
+		time.Sleep(600 * time.Millisecond)
+	}
+
+	seen := map[string]*ArtistTrack{}
+	for _, rec := range allRecordings {
+		title := strings.TrimSpace(rec.Title)
+		key := strings.ToLower(title)
+		if key == "" || strings.HasPrefix(key, "[") {
+			continue
+		}
+
+		length := rec.Length / 1000
+		artist := artistName
+		if len(rec.ArtistCredit) > 0 && rec.ArtistCredit[0].Name != "" {
+			artist = rec.ArtistCredit[0].Name
+		}
+
+		album := ""
+		albumID := ""
+		if len(rec.Releases) > 0 {
+			album = rec.Releases[0].Title
+			albumID = rec.Releases[0].ID
+		}
+
+		if existing, ok := seen[key]; ok {
+			existing.Count++
+			if length > existing.Length {
+				existing.Length = length
+			}
+		} else {
+			seen[key] = &ArtistTrack{
+				Title:   title,
+				Artist:  artist,
+				Album:   album,
+				AlbumID: albumID,
+				Length:  length,
+				Count:   1,
+			}
+		}
+	}
+
+	var result []ArtistTrack
+	for _, t := range seen {
+		result = append(result, *t)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Count > result[j].Count
+	})
+
+	return result
 }

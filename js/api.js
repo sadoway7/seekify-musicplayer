@@ -287,6 +287,12 @@ const Api = {
     return res.json();
   },
 
+  async finderArtistTracks(mbid, artistName) {
+    const res = await fetch('/api/finder/artist/' + mbid + '/tracks?artist=' + encodeURIComponent(artistName));
+    if (!res.ok) throw new Error('Failed to load artist tracks');
+    return res.json();
+  },
+
   async finderReleaseTracks(mbid) {
     const res = await fetch('/api/finder/release/' + mbid + '/tracks');
     if (!res.ok) throw new Error('Failed to load release tracks');

@@ -1204,6 +1204,25 @@ const UI = {
 
     this.els.content.innerHTML = html;
 
+    Store.refreshLibrary().then(() => {
+      if (Store.currentView === 'library') {
+        const results = this.els.content.querySelector('.lib-results');
+        if (results) {
+          switch (this.libFilter) {
+            case 'playlists': results.innerHTML = this._renderLibPlaylists(); break;
+            case 'albums': results.innerHTML = this._renderLibAlbums(); break;
+            case 'artists': results.innerHTML = this._renderLibArtists(); break;
+          }
+        }
+      }
+    });
+    Store.refreshPlaylists().then(() => {
+      if (Store.currentView === 'library' && this.libFilter === 'playlists') {
+        const results = this.els.content.querySelector('.lib-results');
+        if (results) results.innerHTML = this._renderLibPlaylists();
+      }
+    });
+
     const searchInput = this.els.content.querySelector('.lib-search-input');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
@@ -1791,20 +1810,18 @@ const UI = {
       let html = '';
 
       if (failedCount > 0) {
-        html += '<div style="padding:8px 0;display:flex;gap:8px;flex-wrap:wrap">'
-          + '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:12px">&#x21bb; Retry All Failed (' + failedCount + ')</button>'
-          + '<button class="settings-btn" id="btn-clear-history" style="font-size:12px">Clear History</button>'
-          + '</div>';
-      } else if (counts.completed > 0) {
-        html += '<div style="padding:8px 0"><button class="settings-btn" id="btn-clear-history" style="font-size:12px">Clear History</button></div>';
+        html += '<div style="padding:8px 0"><button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:12px">&#x21bb; Retry All Failed (' + failedCount + ')</button></div>';
       }
 
       if (activeCount > 0 || counts.completed > 0 || counts.failed > 0) {
         html += '<div class="queue-stats">'
+          + '<div class="queue-stats-badges">'
           + (counts.queued > 0 ? '<span class="stat-badge stat-queued">' + counts.queued + ' queued</span>' : '')
           + (activeCount > 0 && counts.queued <= 0 ? '<span class="stat-badge stat-active">' + activeCount + ' active</span>' : '')
           + (counts.completed > 0 ? '<span class="stat-badge stat-completed">' + counts.completed + ' done</span>' : '')
           + (counts.failed > 0 ? '<span class="stat-badge stat-failed">' + counts.failed + ' failed</span>' : '')
+          + '</div>'
+          + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
           + '</div>';
       }
 
@@ -1868,9 +1885,15 @@ const UI = {
         clearBtn.addEventListener('click', async () => {
           clearBtn.disabled = true;
           clearBtn.textContent = 'Clearing...';
-          await Api.clearCompletedJobs();
-          this._pollDownloadBadge();
-          this._loadDownloads();
+          try {
+            await Api.clearCompletedJobs();
+            this._pollDownloadBadge();
+            this._loadDownloads();
+          } catch (e) {
+            this.showToast('Failed to clear history');
+            clearBtn.disabled = false;
+            clearBtn.textContent = 'Clear History';
+          }
         });
       }
     } catch (e) {
@@ -2144,10 +2167,23 @@ const UI = {
     this.els.content.querySelectorAll('[data-artist-tab]').forEach(chip => {
       chip.addEventListener('click', () => {
         this._artistView = chip.dataset.artistTab;
-        this.renderFinderArtist(data);
+        if (this._artistReleases) {
+          const container = document.getElementById('finder-artist-content');
+          if (container) {
+            if (this._artistView === 'tracklist') {
+              this._renderArtistTracklist(container, this._artistReleases, name);
+            } else {
+              this._renderArtistAlbums(container, this._artistReleases);
+            }
+          }
+          this.els.content.querySelectorAll('[data-artist-tab]').forEach(c => c.classList.toggle('active', c.dataset.artistTab === this._artistView));
+        } else {
+          this.renderFinderArtist(data);
+        }
       });
     });
 
+    this._artistReleases = null;
     Api.finderArtistReleases(data.mbid).then(releases => {
       const container = document.getElementById('finder-artist-content');
       if (!container) return;
@@ -2157,6 +2193,8 @@ const UI = {
           + '<div class="empty-state-text">No releases found for this artist</div></div>';
         return;
       }
+
+      this._artistReleases = releases;
 
       if (this._artistView === 'tracklist') {
         this._renderArtistTracklist(container, releases, name);
@@ -2196,39 +2234,17 @@ const UI = {
   },
 
   async _renderArtistTracklist(container, releases, artistName) {
-    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div><div style="text-align:center;color:var(--text3);font-size:13px;margin-top:8px">Loading tracks...</div>';
+    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div><div style="text-align:center;color:var(--text3);font-size:13px;margin-top:8px">Loading tracks (fetching up to 30 albums)...</div>';
 
-    const seen = {};
-    const albumScores = {};
-    releases.forEach((r, i) => { albumScores[r.id] = r.score || (releases.length - i); });
+    try {
+      var allTracks = await Api.finderArtistTracks(releases[0].artistId || '', artistName);
+    } catch (e) {
+      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+        + '<div class="empty-state-text">Failed to load tracks</div></div>';
+      return;
+    }
 
-    const promises = releases.slice(0, 30).map(r =>
-      Api.finderReleaseTracks(r.id)
-        .then(tracks => {
-          if (!tracks) return;
-          for (const t of tracks) {
-            const key = (t.title || '').toLowerCase().trim();
-            if (!key) continue;
-            if (!seen[key]) {
-              seen[key] = { title: t.title, artist: t.artist || artistName, album: r.title, albumId: r.id, length: t.length || 0, position: t.position || 0, count: 0, bestScore: albumScores[r.id] || 0 };
-            }
-            seen[key].count++;
-            if ((albumScores[r.id] || 0) > seen[key].bestScore) {
-              seen[key].bestScore = albumScores[r.id];
-            }
-          }
-        })
-        .catch(() => {})
-    );
-
-    await Promise.all(promises);
-
-    const allTracks = Object.values(seen).sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return b.bestScore - a.bestScore;
-    });
-
-    if (allTracks.length === 0) {
+    if (!allTracks || allTracks.length === 0) {
       container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
         + '<div class="empty-state-text">No tracks found</div></div>';
       return;
