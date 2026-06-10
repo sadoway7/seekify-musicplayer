@@ -215,6 +215,16 @@
   height: 24px;
 }
 
+.np-float-actions-secondary {
+  position: absolute;
+  top: -44px;
+  right: 0;
+  transform: none;
+  scale: 1.2;
+  gap: var(--sp-4);
+  padding: 6px 10px;
+}
+
 .np-title-row {
   display: flex;
   flex-direction: column;

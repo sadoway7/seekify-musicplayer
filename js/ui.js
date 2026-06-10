@@ -3377,37 +3377,57 @@ const UI = {
   _loadWaveform(track) {
     if (!track) return;
 
-    this._prevWaveformData = this._waveformData ? this._waveformData.slice() : null;
-
-    this._generateWaveform(track.id);
+    const hadWaveform = this._waveformData && this._waveformData.length > 0;
+    this._prevWaveformData = hadWaveform ? this._waveformData.slice() : null;
     this._realWaveform = false;
     this._waveformRawPeaks = null;
-    this._startWaveformMorph();
+    this._currentWaveformTrackId = track.id;
+
+    if (!hadWaveform) {
+      this._generateWaveform(track.id);
+      this._waveformAnimProgress = 1;
+      this._paintWaveform(0);
+    }
 
     const trackId = track.id;
     Api.getWaveform(trackId).then(data => {
-      if (!data || !data.peaks || data.peaks.length === 0) return;
+      if (!data || !data.peaks || data.peaks.length === 0) {
+        if (!hadWaveform) return;
+        this._generateWaveform(trackId);
+        this._startWaveformMorph();
+        return;
+      }
       const currentTrack = Player.getCurrentTrack();
       if (!currentTrack || currentTrack.id !== trackId) return;
 
+      this._prevWaveformData = this._waveformData ? this._waveformData.slice() : null;
       this._waveformRawPeaks = data.peaks;
       this._realWaveform = true;
-      this._prevWaveformData = this._waveformData ? this._waveformData.slice() : null;
       this._scaleWaveformData();
-      this._startWaveformMorph();
-    }).catch(() => {});
+
+      if (this._prevWaveformData && this._prevWaveformData.length === this._waveformData.length) {
+        this._startWaveformMorph();
+      } else {
+        this._waveformAnimProgress = 1;
+        this._paintWaveform(this._waveformProgress || 0);
+      }
+    }).catch(() => {
+      if (hadWaveform) {
+        this._generateWaveform(trackId);
+        this._startWaveformMorph();
+      }
+    });
   },
 
   _startWaveformMorph() {
     if (this._waveformAnimFrame) cancelAnimationFrame(this._waveformAnimFrame);
     const start = performance.now();
-    const duration = 400;
+    const duration = 350;
     const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
     const prev = this._prevWaveformData;
     const next = this._waveformData;
-    const hasPrev = prev && prev.length > 0;
 
-    if (hasPrev && prev.length === next.length) {
+    if (prev && next && prev.length === next.length) {
       this._waveformMorphFrom = prev.slice();
     } else {
       this._waveformMorphFrom = null;
