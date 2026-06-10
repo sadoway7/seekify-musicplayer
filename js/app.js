@@ -40,7 +40,18 @@ const App = {
     // Deep link: ?play=TRACK_ID
     const params = new URLSearchParams(window.location.search);
     const playId = params.get('play');
-    if (playId) {
+    const sharedQueueId = params.get('q');
+
+    if (sharedQueueId) {
+      try {
+        const data = await Api.getSharedQueue(sharedQueueId);
+        const queueTracks = (data.trackIds || []).map(id => Store.getTrack(id)).filter(Boolean);
+        if (queueTracks.length > 0) {
+          Player.play(queueTracks[0], queueTracks, { type: 'shared', name: 'Shared Queue' });
+          UI.showNowPlaying();
+        }
+      } catch (e) {}
+    } else if (playId) {
       const track = Store.getTrack(playId);
       if (track) {
         // Load the track but don't auto-play — user taps play
@@ -86,7 +97,7 @@ const App = {
       }
     }
 
-    if (playId || artistName || albumId || playlistId) {
+    if (sharedQueueId || playId || artistName || albumId || playlistId) {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }

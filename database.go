@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -100,6 +101,12 @@ func initDB(path string) {
 		disabled INTEGER NOT NULL DEFAULT 0
 	)`)
 	db.Exec(`ALTER TABLE downloads ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS shared_queues (
+		id TEXT PRIMARY KEY,
+		track_ids TEXT NOT NULL,
+		created_at TEXT NOT NULL
+	)`)
 
 	// Add orig_* columns for undo support (SQLite ALTER TABLE ADD COLUMN is safe)
 	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_title TEXT NOT NULL DEFAULT ''`)
@@ -622,4 +629,22 @@ func dbGetDownloadableTracks() []string {
 		ids = []string{}
 	}
 	return ids
+}
+
+func dbSaveSharedQueue(trackIDs string) string {
+	id := uuid.New().String()[:8]
+	now := time.Now().Format(time.RFC3339)
+	db.Exec("INSERT INTO shared_queues (id, track_ids, created_at) VALUES (?, ?, ?)", id, trackIDs, now)
+	return id
+}
+
+func dbGetSharedQueue(queueID string) ([]string, error) {
+	var trackIDs string
+	err := db.QueryRow("SELECT track_ids FROM shared_queues WHERE id = ?", queueID).Scan(&trackIDs)
+	if err != nil {
+		return nil, err
+	}
+	var result []string
+	json.Unmarshal([]byte(trackIDs), &result)
+	return result, nil
 }

@@ -2095,3 +2095,36 @@ func downloadJobFileHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
 	io.Copy(w, f)
 }
+
+func sharedQueueCreateHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		TrackIDs []string `json:"trackIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.TrackIDs) == 0 {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	trackJSON, _ := json.Marshal(body.TrackIDs)
+	id := dbSaveSharedQueue(string(trackJSON))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"id": id})
+}
+
+func sharedQueueGetHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/shared-queue/")
+	if id == "" {
+		http.Error(w, "Missing queue id", http.StatusBadRequest)
+		return
+	}
+	ids, err := dbGetSharedQueue(id)
+	if err != nil {
+		http.Error(w, "Queue not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string][]string{"trackIds": ids})
+}

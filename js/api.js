@@ -447,5 +447,21 @@ const Api = {
 
   downloadJobUrl(jobId) {
     return '/api/download-job/' + jobId;
+  },
+
+  async shareQueue(trackIds) {
+    const res = await fetch('/api/shared-queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackIds })
+    });
+    if (!res.ok) throw new Error('Failed to share queue');
+    return res.json();
+  },
+
+  async getSharedQueue(id) {
+    const res = await fetch('/api/shared-queue/' + id);
+    if (!res.ok) throw new Error('Failed to load shared queue');
+    return res.json();
   }
 };

@@ -30,6 +30,26 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+}
+
+.queue-share-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  border-radius: 50%;
+}
+
+.queue-share-btn:active {
+  transform: scale(0.9);
+}
+
+.queue-share-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .queue-close {

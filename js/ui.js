@@ -485,6 +485,23 @@ const UI = {
       this.hideQueue();
     });
 
+    document.querySelector('.queue-share-btn').addEventListener('click', async () => {
+      if (Player.queue.length === 0) return;
+      const ids = Player.queue.map(t => t.id);
+      try {
+        const result = await Api.shareQueue(ids);
+        const shareUrl = window.location.origin + '/?q=' + result.id;
+        if (navigator.share) {
+          await navigator.share({ title: 'Music Queue', url: shareUrl }).catch(() => {});
+        } else {
+          await navigator.clipboard.writeText(shareUrl);
+          this.showToast('Link copied');
+        }
+      } catch (err) {
+        this.showToast('Share failed');
+      }
+    });
+
     this._queueClickActive = false;
 
     document.addEventListener('click', (e) => {
@@ -708,7 +725,26 @@ const UI = {
         if (qpCard.dataset.trackId) {
           const track = Store.getTrack(qpCard.dataset.trackId);
           if (track) {
-            this._smartPlay(track);
+            if (qpCard.classList.contains('quick-play-card-recent')) {
+              const idx = Store.recent.indexOf(track.id);
+              if (idx !== -1 && idx > 0) {
+                const nextIds = Store.recent.slice(0, idx);
+                const seen = new Set();
+                const queue = [];
+                for (const id of nextIds) {
+                  if (seen.has(id)) continue;
+                  seen.add(id);
+                  const t = Store.getTrack(id);
+                  if (t) queue.push(t);
+                  if (queue.length >= 30) break;
+                }
+                Player.play(track, [track, ...queue], { type: 'recent', name: 'Recently Played' });
+              } else {
+                Player.play(track, null, null);
+              }
+            } else {
+              this._smartPlay(track);
+            }
             this.showNowPlaying();
           }
           return;
@@ -1601,13 +1637,14 @@ const UI = {
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-text" style="flex-direction:column">'
-      + '<div class="detail-hero-title">' + this._esc(playlist.name) + '</div>'
+      + '<div class="detail-hero-title" style="display:flex;align-items:center;gap:8px"><span style="flex:1">' + this._esc(playlist.name) + '</span>'
+      + '<button class="detail-action-btn" data-action="share-playlist" data-playlist-id="' + this._esc(id) + '" style="flex-shrink:0">' + Icons.share() + '</button>'
+      + '</div>'
       + '<div class="detail-hero-meta">' + tracks.length + ' tracks</div>'
       + '</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
-      + '<button class="detail-action-btn" data-action="share-playlist" data-playlist-id="' + this._esc(id) + '">' + Icons.share() + '<span>Share</span></button>'
       + '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-playlist">' + Icons.trash() + '</button>'
       + '</div>'
       + '</div></div>';
@@ -3377,73 +3414,26 @@ const UI = {
   _loadWaveform(track) {
     if (!track) return;
 
-    const hadWaveform = this._waveformData && this._waveformData.length > 0;
-    this._prevWaveformData = hadWaveform ? this._waveformData.slice() : null;
     this._realWaveform = false;
     this._waveformRawPeaks = null;
     this._currentWaveformTrackId = track.id;
+    this._waveformMorphFrom = null;
+    this._waveformAnimProgress = 1;
 
-    if (!hadWaveform) {
-      this._generateWaveform(track.id);
-      this._waveformAnimProgress = 1;
-      this._paintWaveform(0);
-    }
+    this._generateWaveform(track.id);
+    this._paintWaveform(this._waveformProgress || 0);
 
     const trackId = track.id;
     Api.getWaveform(trackId).then(data => {
-      if (!data || !data.peaks || data.peaks.length === 0) {
-        if (!hadWaveform) return;
-        this._generateWaveform(trackId);
-        this._startWaveformMorph();
-        return;
-      }
+      if (!data || !data.peaks || data.peaks.length === 0) return;
       const currentTrack = Player.getCurrentTrack();
       if (!currentTrack || currentTrack.id !== trackId) return;
 
-      this._prevWaveformData = this._waveformData ? this._waveformData.slice() : null;
       this._waveformRawPeaks = data.peaks;
       this._realWaveform = true;
       this._scaleWaveformData();
-
-      if (this._prevWaveformData && this._prevWaveformData.length === this._waveformData.length) {
-        this._startWaveformMorph();
-      } else {
-        this._waveformAnimProgress = 1;
-        this._paintWaveform(this._waveformProgress || 0);
-      }
-    }).catch(() => {
-      if (hadWaveform) {
-        this._generateWaveform(trackId);
-        this._startWaveformMorph();
-      }
-    });
-  },
-
-  _startWaveformMorph() {
-    if (this._waveformAnimFrame) cancelAnimationFrame(this._waveformAnimFrame);
-    const start = performance.now();
-    const duration = 350;
-    const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    const prev = this._prevWaveformData;
-    const next = this._waveformData;
-
-    if (prev && next && prev.length === next.length) {
-      this._waveformMorphFrom = prev.slice();
-    } else {
-      this._waveformMorphFrom = null;
-    }
-
-    const tick = (now) => {
-      const elapsed = now - start;
-      this._waveformAnimProgress = Math.min(1, ease(elapsed / duration));
       this._paintWaveform(this._waveformProgress || 0);
-      if (this._waveformAnimProgress < 1) {
-        this._waveformAnimFrame = requestAnimationFrame(tick);
-      } else {
-        this._waveformMorphFrom = null;
-      }
-    };
-    this._waveformAnimFrame = requestAnimationFrame(tick);
+    }).catch(() => {});
   },
 
   _getWaveformBarSizes() {
@@ -3518,8 +3508,6 @@ const UI = {
     const pw = this._waveformPointWidth * dpr;
     const pg = this._waveformPointGap * dpr;
     const totalWidth = data.length * (pw + pg);
-    const animT = this._waveformAnimProgress != null ? this._waveformAnimProgress : 1;
-    const morphFrom = this._waveformMorphFrom;
 
     const style = getComputedStyle(document.documentElement);
     const playedColor = style.getPropertyValue('--waveform-played').trim() || '#D4F040';
@@ -3534,9 +3522,6 @@ const UI = {
 
     for (let i = 0; i < data.length; i++) {
       let val = data[i];
-      if (morphFrom && i < morphFrom.length) {
-        val = morphFrom[i] + (data[i] - morphFrom[i]) * animT;
-      }
       const barH = (val / 100) * h * 0.85;
       const x = (w - totalWidth) / 2 + i * (pw + pg);
       const y = (h - barH) / 2;

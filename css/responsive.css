@@ -332,7 +332,6 @@
     align-items: center !important;
     justify-content: center !important;
     pointer-events: auto !important;
-    overflow: hidden;
   }
 
   .np-art-wrapper {
@@ -345,7 +344,6 @@
     opacity: 1 !important;
     border-radius: 50% !important;
     flex-shrink: 0;
-    overflow: hidden;
   }
 
   .np-art-wrapper::after {

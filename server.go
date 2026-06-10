@@ -238,6 +238,9 @@ func main() {
 
 	mux.HandleFunc("/api/bulk-import", bulkImportHandler)
 
+	mux.HandleFunc("/api/shared-queue", sharedQueueCreateHandler)
+	mux.HandleFunc("/api/shared-queue/", sharedQueueGetHandler)
+
 	mux.HandleFunc("/api/playlist-import", playlistImportHandler)
 	mux.HandleFunc("/api/watch/", watchedPlaylistsHandler)
 	mux.HandleFunc("/api/watch", watchedPlaylistsHandler)
