@@ -195,6 +195,24 @@ const UI = {
       }
     });
 
+    document.getElementById('np-rip-btn').addEventListener('click', () => {
+      const track = Player.getCurrentTrack();
+      if (!track) return;
+      const artistName = track.artist;
+      Api.finderSearch(artistName, 'artist').then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mbid = data[0].id;
+          if (mbid) {
+            this.navigateTo('finder-artist', { mbid, name: artistName });
+            return;
+          }
+        }
+        this.showToast('Artist not found on MusicBrainz');
+      }).catch(() => {
+        this.showToast('Failed to search MusicBrainz');
+      });
+    });
+
     let prevVolume = 1;
     this.els.volumeBtn.addEventListener('click', () => {
       if (Player.volume > 0) {
@@ -1817,7 +1835,7 @@ const UI = {
     if (!container) return;
 
     try {
-      const jobs = await Api.getQueue(100);
+      const jobs = await Api.getQueue(1000);
       const counts = await Api.getQueueCounts();
       this._updateDownloadBadge(counts);
 
@@ -2283,11 +2301,13 @@ const UI = {
       return;
     }
 
-    let html = '<div style="padding:0 22px 8px"><div class="search-container" style="max-width:100%">'
+    let html = '<div class="tracklist-toolbar">'
+      + '<div class="search-container finder-search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input artist-tracklist-search" type="text" placeholder="Filter tracks...">'
-      + '</div></div>';
-    html += '<div style="padding:0 22px 8px"><button class="settings-btn settings-btn-primary" id="btn-download-all-artist" style="margin-bottom:0">' + Icons.download() + '<span>Download All</span></button></div>';
+      + '</div>'
+      + '<button class="settings-btn settings-btn-primary" id="btn-download-all-artist">' + Icons.download() + '<span>Download All</span></button>'
+      + '</div>';
     html += '<div class="finder-results-count">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
     html += '<div class="finder-tracklist">';
     allTracks.forEach((t, i) => {

@@ -262,6 +262,26 @@
   opacity: 0.4;
 }
 
+.tracklist-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--page-margin) var(--sp-2);
+}
+
+.tracklist-toolbar .search-container {
+  flex: 1;
+  margin: 0;
+  max-width: none;
+  background: var(--l3);
+  border-radius: var(--radius-full);
+}
+
+.tracklist-toolbar .settings-btn-primary {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .finder-tracklist {
   padding: var(--sp-2) 0;
 }
