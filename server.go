@@ -151,10 +151,12 @@ func main() {
 
 	extractEmbeddedCovers()
 	syncWatchedPlaylistsToLibrary()
+	recoverStalledDownloads()
 	go fetchMissingCovers()
 	go fetchMissingArtistArt()
 	go startWatcher()
 	go startWatchScheduler()
+	go downloadWatchdog()
 
 	mux := http.NewServeMux()
 

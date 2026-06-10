@@ -43,9 +43,14 @@ type DownloadJob struct {
 
 var (
 	downloadMu     sync.Mutex
-	downloadActive bool
+	downloadActive int
 	downloadSem    = make(chan struct{}, 3)
+	activeJobs     = make(map[string]*exec.Cmd)
+	activeJobTime  = make(map[string]time.Time)
 )
+
+const downloadTimeout = 10 * time.Minute
+const searchTimeout = 2 * time.Minute
 
 func findYtDlp() string {
 	if p, err := exec.LookPath("yt-dlp"); err == nil {
@@ -321,16 +326,16 @@ func createDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 
 func processDownloadQueue() {
 	downloadMu.Lock()
-	if downloadActive {
+	if downloadActive >= cap(downloadSem) {
 		downloadMu.Unlock()
 		return
 	}
-	downloadActive = true
+	downloadActive++
 	downloadMu.Unlock()
 
 	defer func() {
 		downloadMu.Lock()
-		downloadActive = false
+		downloadActive--
 		downloadMu.Unlock()
 	}()
 
@@ -339,6 +344,13 @@ func processDownloadQueue() {
 		if err != nil || len(jobs) == 0 {
 			return
 		}
+
+		downloadMu.Lock()
+		if downloadActive > cap(downloadSem) {
+			downloadMu.Unlock()
+			return
+		}
+		downloadMu.Unlock()
 
 		job := &jobs[0]
 		downloadSem <- struct{}{}
@@ -371,7 +383,7 @@ func processSingleDownload(job *DownloadJob) {
 		videoID = job.VideoID
 		log.Printf("[download] Using direct video ID %s for %q", videoID, job.SearchQuery)
 	} else {
-		videoID, searchErr = searchYouTube(job.SearchQuery, job.Artist, job.Title)
+		videoID, searchErr = searchYouTubeWithTimeout(job.SearchQuery, job.Artist, job.Title, searchTimeout)
 		if searchErr != nil {
 			job.Status = "failed"
 			job.Error = fmt.Sprintf("Search failed: %v", searchErr)
@@ -450,13 +462,46 @@ func processSingleDownload(job *DownloadJob) {
 	minBr := getSettingInt("download_min_bitrate", 0)
 
 	cmd := exec.Command(ytdlpPath, ytArgs...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+
+	downloadMu.Lock()
+	activeJobs[job.ID] = cmd
+	activeJobTime[job.ID] = time.Now()
+	downloadMu.Unlock()
+
+	defer func() {
+		downloadMu.Lock()
+		delete(activeJobs, job.ID)
+		delete(activeJobTime, job.ID)
+		downloadMu.Unlock()
+	}()
+
+	done := make(chan struct{})
+	var output []byte
+	var cmdErr error
+	go func() {
+		output, cmdErr = cmd.CombinedOutput()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if cmdErr != nil {
+			job.Status = "failed"
+			job.Error = fmt.Sprintf("yt-dlp failed: %v — %s", cmdErr, string(output))
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			dbUpdateJob(job)
+			log.Printf("[download] yt-dlp failed for %q: %v", job.SearchQuery, cmdErr)
+			return
+		}
+	case <-time.After(downloadTimeout):
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
 		job.Status = "failed"
-		job.Error = fmt.Sprintf("yt-dlp failed: %v — %s", err, string(output))
+		job.Error = "Download timed out after " + downloadTimeout.String()
 		job.CompletedAt = time.Now().Format(time.RFC3339)
 		dbUpdateJob(job)
-		log.Printf("[download] yt-dlp failed for %q: %v", job.SearchQuery, err)
+		log.Printf("[download] Timed out after %v for %q", downloadTimeout, job.SearchQuery)
 		return
 	}
 
@@ -527,6 +572,24 @@ func processSingleDownload(job *DownloadJob) {
 			mu.RUnlock()
 		}
 	}()
+}
+
+func searchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration) (string, error) {
+	type result struct {
+		videoID string
+		err     error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		id, err := searchYouTube(query, expectedArtist, expectedTitle)
+		ch <- result{id, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.videoID, r.err
+	case <-time.After(timeout):
+		return "", fmt.Errorf("search timed out after %v", timeout)
+	}
 }
 
 func searchYouTube(query, expectedArtist, expectedTitle string) (string, error) {
@@ -875,4 +938,43 @@ func extractBitrateFromQuality(quality string) int {
 		}
 	}
 	return 0
+}
+
+func recoverStalledDownloads() {
+	stalled := []string{"searching", "downloading", "tagging"}
+	for _, status := range stalled {
+		result, _ := db.Exec("UPDATE download_jobs SET status = 'queued', progress_stage = '', error = '' WHERE status = ?", status)
+		if affected, _ := result.RowsAffected(); affected > 0 {
+			log.Printf("[download] Recovered %d stalled %s jobs back to queued", affected, status)
+		}
+	}
+	go processDownloadQueue()
+}
+
+func downloadWatchdog() {
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		downloadMu.Lock()
+		now := time.Now()
+		for jobID, startTime := range activeJobTime {
+			if now.Sub(startTime) > downloadTimeout+time.Minute {
+				if cmd, ok := activeJobs[jobID]; ok && cmd.Process != nil {
+					log.Printf("[download-watchdog] Killing stalled job %s (running %v)", jobID, now.Sub(startTime))
+					cmd.Process.Kill()
+				}
+			}
+		}
+		downloadMu.Unlock()
+
+		jobs, _ := dbGetQueuedJobs()
+		if len(jobs) > 0 {
+			downloadMu.Lock()
+			active := downloadActive
+			downloadMu.Unlock()
+			if active < cap(downloadSem) {
+				go processDownloadQueue()
+			}
+		}
+	}
 }

@@ -3314,6 +3314,7 @@ const UI = {
     const track = Player.getCurrentTrack();
     if (!track) return;
 
+    const trackChanged = !this._currentWaveformTrackId || this._currentWaveformTrackId !== track.id;
     this.els.npArt.src = Api.coverUrl(track.albumID);
     this.els.npTitle.textContent = track.title;
     this.els.npArtist.textContent = track.artist;
@@ -3338,6 +3339,11 @@ const UI = {
 
     this._applyNowPlayingBg();
     this._checkTitleOverflow();
+
+    if (trackChanged) {
+      this._currentWaveformTrackId = track.id;
+      this._loadWaveform(track);
+    }
   },
 
   _checkTitleOverflow() {
@@ -3388,14 +3394,31 @@ const UI = {
 
   _scaleWaveformData() {
     if (!this._waveformRawPeaks) return;
-    const peaks = this._waveformRawPeaks;
+    const canvas = this.els.waveformCanvas;
+    if (!canvas) return;
+
+    const container = canvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+
+    const pw = 3, pg = 2;
+    const numBars = Math.floor(w / (pw + pg));
+    const raw = this._waveformRawPeaks;
     const data = [];
-    for (let i = 0; i < peaks.length; i++) {
-      data.push(Math.max(8, Math.min(100, Math.round(peaks[i] * 100))));
+    for (let i = 0; i < numBars; i++) {
+      const idx = (i / numBars) * raw.length;
+      const lo = Math.floor(idx);
+      const hi = Math.min(lo + 1, raw.length - 1);
+      const frac = idx - lo;
+      const val = raw[lo] * (1 - frac) + raw[hi] * frac;
+      data.push(Math.max(8, Math.min(100, Math.round(val * 100))));
     }
     this._waveformData = data;
-    this._waveformPointWidth = 3;
-    this._waveformPointGap = 2;
+    this._waveformPointWidth = pw;
+    this._waveformPointGap = pg;
   },
 
   _generateWaveform(trackId) {
@@ -3413,33 +3436,9 @@ const UI = {
     const pointGap = 2;
     const numPoints = Math.floor(w / (pointWidth + pointGap));
 
-    // Seeded pseudo-random from track ID for consistent waveform per track
-    const seed = trackId || 'default';
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-      hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-      hash |= 0;
-    }
-    const rand = () => {
-      hash = (hash * 16807 + 0) % 2147483647;
-      return (hash & 0x7fffffff) / 0x7fffffff;
-    };
-
     const data = [];
     for (let i = 0; i < numPoints; i++) {
-      const t = i / numPoints;
-      // Envelope: ramp up, sustain with variation, ramp down
-      let env = 1;
-      if (t < 0.05) env = t / 0.05;
-      else if (t > 0.95) env = (1 - t) / 0.05;
-
-      // Main amplitude with some structure
-      const base = rand() * 0.5 + 0.15;
-      const mid = Math.sin(t * Math.PI * (2 + rand() * 3)) * 0.15 + 0.5;
-      const amp = (base + mid) * env;
-
-      // Normalize to 8-100 range (min height so it's always visible)
-      data.push(Math.max(8, Math.min(100, Math.round(amp * 100))));
+      data.push(12);
     }
 
     this._waveformData = data;
