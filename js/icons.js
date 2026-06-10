@@ -136,5 +136,8 @@ const Icons = {
   },
   magnet() {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a3.14 3.14 0 0 0-4.44-4.43l-6.8 6.8Z"/></svg>';
+  },
+  waveform() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="2" height="6" rx="1"/><rect x="6" y="5" width="2" height="14" rx="1"/><rect x="10" y="3" width="2" height="18" rx="1"/><rect x="14" y="7" width="2" height="10" rx="1"/><rect x="18" y="4" width="2" height="16" rx="1"/><rect x="22" y="8" width="2" height="8" rx="1"/></svg>';
   }
 };

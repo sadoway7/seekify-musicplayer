@@ -18,6 +18,7 @@ func initSettingsTable() {
 	migrateSetting("download_convert_to_flac", "true")
 	migrateSetting("download_min_bitrate", "0")
 	migrateSetting("downloads_enabled", "true")
+	migrateSetting("waveform_style", "rounded")
 }
 
 func migrateSetting(key, defaultVal string) {

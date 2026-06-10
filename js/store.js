@@ -8,6 +8,7 @@ const Store = {
   viewData: {},
   loading: false,
   downloadsEnabled: true,
+  waveformStyle: 'rounded',
 
   async init() {
     this.loading = true;
@@ -25,6 +26,7 @@ const Store = {
       try {
         const settings = await Api.getSettings();
         this.downloadsEnabled = settings.downloads_enabled !== 'false';
+        this.waveformStyle = settings.waveform_style || 'rounded';
       } catch(e) {}
     } catch (err) {
       UI.showToast('Failed to load library');

@@ -35,6 +35,22 @@ const UI = {
     return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
   },
 
+  _colorAlpha(color, alpha) {
+    if (color.startsWith('rgba')) {
+      return color.replace(/,\s*[\d.]+\)$/, ', ' + alpha + ')');
+    }
+    if (color.startsWith('#')) {
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+    if (color.startsWith('rgb(')) {
+      return color.replace('rgb(', 'rgba(').replace(')', ', ' + alpha + ')');
+    }
+    return color;
+  },
+
   init() {
     this._cacheDom();
     this._bindTabBar();
@@ -603,12 +619,83 @@ const UI = {
   _bindQueueDrag() {
     const list = this.els.queueList;
     let dragItem = null;
-    let placeholder = null;
+    let spacer = null;
     let startX = 0;
     let startY = 0;
     let dragging = false;
     let offsetX = 0;
     let offsetY = 0;
+
+    const startDrag = (item, clientX, clientY) => {
+      const rect = item.getBoundingClientRect();
+      offsetX = clientX - rect.left;
+      offsetY = clientY - rect.top;
+      const itemH = item.offsetHeight;
+      const itemW = item.offsetWidth;
+
+      spacer = document.createElement('div');
+      spacer.className = 'queue-drag-spacer';
+      spacer.style.height = itemH + 'px';
+      item.parentNode.insertBefore(spacer, item);
+
+      item.classList.add('queue-item-dragging');
+      item.style.position = 'fixed';
+      item.style.left = rect.left + 'px';
+      item.style.top = (clientY - offsetY) + 'px';
+      item.style.width = itemW + 'px';
+      item.style.zIndex = '200';
+    };
+
+    const moveDrag = (clientX, clientY) => {
+      dragItem.style.top = (clientY - offsetY) + 'px';
+      const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+      let inserted = false;
+      for (const item of items) {
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (clientY < midY) {
+          list.insertBefore(spacer, item);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) {
+        list.appendChild(spacer);
+      }
+    };
+
+    const endDrag = () => {
+      if (!dragItem || !dragging || !spacer) {
+        dragItem = null;
+        dragging = false;
+        return;
+      }
+      const fromIndex = parseInt(dragItem.dataset.queueIndex);
+      let toIndex = 0;
+      const siblings = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+      siblings.forEach(el => {
+        if (el.compareDocumentPosition(spacer) & Node.DOCUMENT_POSITION_FOLLOWING) toIndex++;
+      });
+
+      spacer.remove();
+      spacer = null;
+
+      dragItem.classList.remove('queue-item-dragging');
+      dragItem.style.position = '';
+      dragItem.style.left = '';
+      dragItem.style.top = '';
+      dragItem.style.width = '';
+      dragItem.style.zIndex = '';
+
+      if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
+        Player.moveInQueue(fromIndex, toIndex);
+      } else {
+        this._renderQueue();
+      }
+
+      dragItem = null;
+      dragging = false;
+    };
 
     list.addEventListener('touchstart', (e) => {
       const handle = e.target.closest('.queue-item-drag');
@@ -616,76 +703,28 @@ const UI = {
       const item = handle.closest('.queue-item');
       if (!item) return;
       dragItem = item;
-      const rect = item.getBoundingClientRect();
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      offsetX = startX - rect.left;
-      offsetY = startY - rect.top;
       dragging = false;
     }, { passive: true });
 
     list.addEventListener('touchmove', (e) => {
       if (!dragItem) return;
-      const dx = e.touches[0].clientX - startX;
       const dy = e.touches[0].clientY - startY;
       if (!dragging) {
         if (Math.abs(dy) < 8) return;
         dragging = true;
-        placeholder = document.createElement('div');
-        placeholder.className = 'queue-item queue-item-placeholder';
-        placeholder.innerHTML = dragItem.innerHTML;
-        placeholder.style.height = dragItem.offsetHeight + 'px';
-        dragItem.parentNode.insertBefore(placeholder, dragItem);
-        dragItem.classList.add('queue-item-dragging');
-        dragItem.style.position = 'fixed';
-        dragItem.style.left = dragItem.getBoundingClientRect().left + 'px';
-        dragItem.style.top = (e.touches[0].clientY - offsetY) + 'px';
-        dragItem.style.width = dragItem.getBoundingClientRect().width + 'px';
-        dragItem.style.zIndex = '200';
+        startDrag(dragItem, e.touches[0].clientX, e.touches[0].clientY);
       }
       if (dragging) {
         e.preventDefault();
-        dragItem.style.top = (e.touches[0].clientY - offsetY) + 'px';
-        const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging):not(.queue-item-placeholder)');
-        let inserted = false;
-        for (const item of items) {
-          const rect = item.getBoundingClientRect();
-          const midY = rect.top + rect.height / 2;
-          if (e.touches[0].clientY < midY) {
-            list.insertBefore(placeholder, item);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) {
-          list.appendChild(placeholder);
-        }
+        moveDrag(e.touches[0].clientX, e.touches[0].clientY);
       }
     }, { passive: false });
 
     list.addEventListener('touchend', () => {
       if (!dragItem) return;
-      if (dragging && placeholder) {
-        const fromIndex = parseInt(dragItem.dataset.queueIndex);
-        let toIndex = 0;
-        const siblings = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
-        siblings.forEach(el => { if (el.compareDocumentPosition(placeholder) & Node.DOCUMENT_POSITION_FOLLOWING) toIndex++; });
-        dragItem.classList.remove('queue-item-dragging');
-        dragItem.style.position = '';
-        dragItem.style.left = '';
-        dragItem.style.top = '';
-        dragItem.style.width = '';
-        dragItem.style.zIndex = '';
-        placeholder.remove();
-        placeholder = null;
-        if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
-          Player.moveInQueue(fromIndex, toIndex);
-        } else {
-          this._renderQueue();
-        }
-      }
-      dragItem = null;
-      dragging = false;
+      endDrag();
     }, { passive: true });
 
     list.addEventListener('mousedown', (e) => {
@@ -695,11 +734,8 @@ const UI = {
       const item = handle.closest('.queue-item');
       if (!item) return;
       dragItem = item;
-      const rect = item.getBoundingClientRect();
       startX = e.clientX;
       startY = e.clientY;
-      offsetX = e.clientX - rect.left;
-      offsetY = e.clientY - rect.top;
       dragging = false;
 
       const onMouseMove = (e) => {
@@ -707,60 +743,17 @@ const UI = {
         if (!dragging) {
           if (Math.abs(dy) < 5) return;
           dragging = true;
-          placeholder = document.createElement('div');
-          placeholder.className = 'queue-item queue-item-placeholder';
-          placeholder.innerHTML = dragItem.innerHTML;
-          placeholder.style.height = dragItem.offsetHeight + 'px';          dragItem.parentNode.insertBefore(placeholder, dragItem);
-          dragItem.classList.add('queue-item-dragging');
-          dragItem.style.position = 'fixed';
-          dragItem.style.left = dragItem.getBoundingClientRect().left + 'px';
-          dragItem.style.top = (e.clientY - offsetY) + 'px';
-          dragItem.style.width = dragItem.getBoundingClientRect().width + 'px';
-          dragItem.style.zIndex = '200';
+          startDrag(dragItem, e.clientX, e.clientY);
         }
         if (dragging) {
-          dragItem.style.top = (e.clientY - offsetY) + 'px';
-          const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging):not(.queue-item-placeholder)');
-          let inserted = false;
-          for (const it of items) {
-            const r = it.getBoundingClientRect();
-            const midY = r.top + r.height / 2;
-            if (e.clientY < midY) {
-              list.insertBefore(placeholder, it);
-              inserted = true;
-              break;
-            }
-          }
-          if (!inserted) {
-            list.appendChild(placeholder);
-          }
+          moveDrag(e.clientX, e.clientY);
         }
       };
 
       const onMouseUp = () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
-        if (dragItem && dragging && placeholder) {
-          const fromIndex = parseInt(dragItem.dataset.queueIndex);
-          let toIndex = 0;
-          const siblings = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
-          siblings.forEach(el => { if (el.compareDocumentPosition(placeholder) & Node.DOCUMENT_POSITION_FOLLOWING) toIndex++; });
-          dragItem.classList.remove('queue-item-dragging');
-          dragItem.style.position = '';
-          dragItem.style.left = '';
-          dragItem.style.top = '';
-          dragItem.style.width = '';
-          dragItem.style.zIndex = '';
-          placeholder.remove();
-          placeholder = null;
-          if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
-            Player.moveInQueue(fromIndex, toIndex);
-          } else {
-            this._renderQueue();
-          }
-        }
-        dragItem = null;
-        dragging = false;
+        endDrag();
       };
 
       document.addEventListener('mousemove', onMouseMove);
@@ -2812,6 +2805,19 @@ const UI = {
       + '</div></div>';
 
     html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.waveform() + ' Now Playing</div>'
+      + '<div class="settings-section-desc">Customize the waveform style shown during playback.</div>'
+      + '<div class="settings-field"><label>Waveform Style</label>'
+      + '<select id="setting-waveform-style" class="settings-select">'
+      + '<option value="rounded">Rounded Bars</option>'
+      + '<option value="mirror">Mirrored</option>'
+      + '</select></div>'
+      + '<div class="settings-waveform-preview"><canvas id="waveform-preview-canvas"></canvas></div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-waveform-style">' + Icons.check() + '<span>Save</span></button>'
+      + '</div></div>';
+
+    html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.search() + ' Ripper Settings</div>'
       + '<div class="settings-section-desc">Configure how music is downloaded and saved.</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
@@ -2930,6 +2936,19 @@ const UI = {
       downloadListBtn.addEventListener('click', () => this._toggleDownloadPanel());
     }
 
+    const wfStyleSelect = document.getElementById('setting-waveform-style');
+    if (wfStyleSelect) {
+      wfStyleSelect.value = Store.waveformStyle;
+      wfStyleSelect.addEventListener('change', () => this._paintWaveformPreview());
+    }
+
+    const wfSaveBtn = document.getElementById('btn-save-waveform-style');
+    if (wfSaveBtn) {
+      wfSaveBtn.addEventListener('click', () => this._saveWaveformStyle());
+    }
+
+    this._paintWaveformPreview();
+
   },
 
   async _loadFinderSettings() {
@@ -2994,6 +3013,149 @@ const UI = {
       this._showToast('Settings saved');
     } catch (e) {
       this._showToast('Failed to save settings');
+    }
+  },
+
+  async _saveWaveformStyle() {
+    const sel = document.getElementById('setting-waveform-style');
+    if (!sel) return;
+    try {
+      await Api.saveSettings({ waveform_style: sel.value });
+      Store.waveformStyle = sel.value;
+      const track = Player.getCurrentTrack();
+      if (track) this._loadWaveform(track);
+      this._showToast('Waveform style saved');
+    } catch (e) {
+      this._showToast('Failed to save waveform style');
+    }
+  },
+
+  _generateWaveformPreviewPeaks(numBars) {
+    const peaks = [];
+    for (let i = 0; i < numBars; i++) {
+      const t = i / numBars;
+      const base = 0.15 + 0.7 * Math.pow(Math.sin(t * Math.PI), 0.8);
+      const noise = 0.15 * (Math.sin(i * 1.7 + 0.3) * 0.5 + 0.5) * Math.cos(i * 0.4 + 1.2);
+      peaks.push(Math.max(0.08, Math.min(1, base + noise)));
+    }
+    return peaks;
+  },
+
+  _paintWaveformPreview() {
+    const canvas = document.getElementById('waveform-preview-canvas');
+    if (!canvas) return;
+    const sel = document.getElementById('setting-waveform-style');
+    const style = sel ? sel.value : Store.waveformStyle;
+
+    const dpr = window.devicePixelRatio || 1;
+    const container = canvas.parentElement;
+    const w = container.clientWidth;
+    const h = 64;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.height = h + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const numBars = Math.floor(w / 5);
+    const rawPeaks = this._generateWaveformPreviewPeaks(numBars);
+    const data = rawPeaks.map(v => Math.max(8, Math.round(v * 100)));
+
+    this._paintWaveformOnCanvas(ctx, data, 3, 2, canvas.width, canvas.height, 0.6, style);
+  },
+
+  _paintWaveformOnCanvas(ctx, data, pw, pg, w, h, progressFraction, style) {
+    const dpr = window.devicePixelRatio || 1;
+    pw *= dpr;
+    pg *= dpr;
+    const totalWidth = data.length * (pw + pg);
+
+    const styleComp = getComputedStyle(document.documentElement);
+    const playedColor = styleComp.getPropertyValue('--waveform-played').trim() || '#D4F040';
+    const unplayedColor = styleComp.getPropertyValue('--waveform-unplayed').trim() || 'rgba(255, 255, 255, 0.22)';
+
+    const playingPoint = progressFraction * data.length;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (style === 'mirror') {
+      this._paintWaveformMirror(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor);
+    } else {
+      this._paintWaveformRounded(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor);
+    }
+  },
+
+  _paintWaveformRounded(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor) {
+    const totalWidth = data.length * (pw + pg);
+    for (let i = 0; i < data.length; i++) {
+      const val = data[i];
+      const barH = (val / 100) * h * 0.85;
+      const x = (w - totalWidth) / 2 + i * (pw + pg);
+      const y = (h - barH) / 2;
+
+      ctx.fillStyle = i < playingPoint ? playedColor : unplayedColor;
+
+      const radius = Math.min(pw / 2, barH / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + pw - radius, y);
+      ctx.arcTo(x + pw, y, x + pw, y + radius, radius);
+      ctx.lineTo(x + pw, y + barH - radius);
+      ctx.arcTo(x + pw, y + barH, x + pw - radius, y + barH, radius);
+      ctx.lineTo(x + radius, y + barH);
+      ctx.arcTo(x, y + barH, x, y + barH - radius, radius);
+      ctx.lineTo(x, y + radius);
+      ctx.arcTo(x, y, x + radius, y, radius);
+      ctx.closePath();
+      ctx.fill();
+    }
+  },
+
+  _paintWaveformMirror(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor) {
+    const totalWidth = data.length * (pw + pg);
+    const mid = h * 0.62;
+    const gap = Math.max(1, h * 0.02);
+    for (let i = 0; i < data.length; i++) {
+      const val = data[i];
+      const topH = (val / 100) * mid * 0.92;
+      const botH = (val / 100) * (h - mid) * 0.92;
+      const x = (w - totalWidth) / 2 + i * (pw + pg);
+
+      const topColor = i < playingPoint ? playedColor : unplayedColor;
+
+      const rTop = Math.min(pw / 2, topH / 2);
+      ctx.fillStyle = topColor;
+      ctx.beginPath();
+      ctx.moveTo(x + rTop, mid - gap - topH);
+      ctx.lineTo(x + pw - rTop, mid - gap - topH);
+      ctx.arcTo(x + pw, mid - gap - topH, x + pw, mid - gap - topH + rTop, rTop);
+      ctx.lineTo(x + pw, mid - gap);
+      ctx.lineTo(x, mid - gap);
+      ctx.lineTo(x, mid - gap - topH + rTop);
+      ctx.arcTo(x, mid - gap - topH, x + rTop, mid - gap - topH, rTop);
+      ctx.closePath();
+      ctx.fill();
+
+      const rBot = Math.min(pw / 2, botH / 2);
+      const botTop = mid + gap;
+      const botBot = mid + gap + botH;
+      const grad = ctx.createLinearGradient(0, botTop, 0, botBot);
+      const botColorStart = i < playingPoint ? this._colorAlpha(playedColor, 0.5) : this._colorAlpha(unplayedColor, 0.2);
+      const botColorEnd = i < playingPoint ? this._colorAlpha(playedColor, 0) : this._colorAlpha(unplayedColor, 0);
+      grad.addColorStop(0, botColorStart);
+      grad.addColorStop(1, botColorEnd);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(x, botTop);
+      ctx.lineTo(x + pw, botTop);
+      ctx.lineTo(x + pw, botBot - rBot);
+      ctx.arcTo(x + pw, botBot, x + pw - rBot, botBot, rBot);
+      ctx.lineTo(x + rBot, botBot);
+      ctx.arcTo(x, botBot, x, botBot - rBot, rBot);
+      ctx.lineTo(x, botTop);
+      ctx.closePath();
+      ctx.fill();
     }
   },
 
@@ -3813,28 +3975,36 @@ const UI = {
     if (!canvas || !this._waveformData.length) return;
 
     const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
     const w = canvas.width;
     const h = canvas.height;
     const data = this._waveformData;
-    const pw = this._waveformPointWidth * dpr;
-    const pg = this._waveformPointGap * dpr;
+    const pw = this._waveformPointWidth * (window.devicePixelRatio || 1);
+    const pg = this._waveformPointGap * (window.devicePixelRatio || 1);
     const totalWidth = data.length * (pw + pg);
 
-    const style = getComputedStyle(document.documentElement);
-    const playedColor = style.getPropertyValue('--waveform-played').trim() || '#D4F040';
-    const unplayedColor = style.getPropertyValue('--waveform-unplayed').trim() || 'rgba(255, 255, 255, 0.22)';
-    const hoverPlayed = style.getPropertyValue('--waveform-hover').trim() || 'rgba(212, 240, 64, 0.8)';
+    const styleComp = getComputedStyle(document.documentElement);
+    const playedColor = styleComp.getPropertyValue('--waveform-played').trim() || '#D4F040';
+    const unplayedColor = styleComp.getPropertyValue('--waveform-unplayed').trim() || 'rgba(255, 255, 255, 0.22)';
+    const hoverPlayed = styleComp.getPropertyValue('--waveform-hover').trim() || 'rgba(212, 240, 64, 0.8)';
     const hoverUnplayed = 'rgba(255,255,255,0.45)';
 
     ctx.clearRect(0, 0, w, h);
 
     const playingPoint = progressFraction * data.length;
-    const hoverX = this._waveformHoverX >= 0 ? this._waveformHoverX * dpr : -1;
+    const hoverX = this._waveformHoverX >= 0 ? this._waveformHoverX * (window.devicePixelRatio || 1) : -1;
+    const scale = this._waveformHeightScale != null ? this._waveformHeightScale : 1;
+    const wfStyle = Store.waveformStyle;
 
+    if (wfStyle === 'mirror') {
+      this._paintWaveformMirrorScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth);
+    } else {
+      this._paintWaveformRoundedScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth);
+    }
+  },
+
+  _paintWaveformRoundedScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth) {
     for (let i = 0; i < data.length; i++) {
-      let val = data[i];
-      const scale = this._waveformHeightScale != null ? this._waveformHeightScale : 1;
+      const val = data[i];
       const barH = (val / 100) * h * 0.85 * scale;
       const x = (w - totalWidth) / 2 + i * (pw + pg);
       const y = (h - barH) / 2;
@@ -3861,6 +4031,63 @@ const UI = {
       ctx.arcTo(x, y + barH, x, y + barH - radius, radius);
       ctx.lineTo(x, y + radius);
       ctx.arcTo(x, y, x + radius, y, radius);
+      ctx.closePath();
+      ctx.fill();
+    }
+  },
+
+  _paintWaveformMirrorScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth) {
+    const mid = h * 0.62;
+    const gap = Math.max(1, h * 0.02);
+    for (let i = 0; i < data.length; i++) {
+      const val = data[i];
+      const topH = (val / 100) * mid * 0.92 * scale;
+      const botH = (val / 100) * (h - mid) * 0.92 * scale;
+      const x = (w - totalWidth) / 2 + i * (pw + pg);
+
+      const isPlayed = i < playingPoint;
+      const isHovered = hoverX >= 0 && x <= hoverX && hoverX <= x + pw;
+
+      let topColor, botColorStart;
+      if (isHovered) {
+        topColor = isPlayed ? hoverPlayed : hoverUnplayed;
+        botColorStart = isPlayed ? this._colorAlpha(hoverPlayed, 0.5) : this._colorAlpha(hoverUnplayed, 0.2);
+      } else if (isPlayed) {
+        topColor = playedColor;
+        botColorStart = this._colorAlpha(playedColor, 0.5);
+      } else {
+        topColor = unplayedColor;
+        botColorStart = this._colorAlpha(unplayedColor, 0.2);
+      }
+
+      const rTop = Math.min(pw / 2, topH / 2);
+      ctx.fillStyle = topColor;
+      ctx.beginPath();
+      ctx.moveTo(x + rTop, mid - gap - topH);
+      ctx.lineTo(x + pw - rTop, mid - gap - topH);
+      ctx.arcTo(x + pw, mid - gap - topH, x + pw, mid - gap - topH + rTop, rTop);
+      ctx.lineTo(x + pw, mid - gap);
+      ctx.lineTo(x, mid - gap);
+      ctx.lineTo(x, mid - gap - topH + rTop);
+      ctx.arcTo(x, mid - gap - topH, x + rTop, mid - gap - topH, rTop);
+      ctx.closePath();
+      ctx.fill();
+
+      const rBot = Math.min(pw / 2, botH / 2);
+      const botTop = mid + gap;
+      const botBot = mid + gap + botH;
+      const grad = ctx.createLinearGradient(0, botTop, 0, botBot);
+      grad.addColorStop(0, botColorStart);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(x, botTop);
+      ctx.lineTo(x + pw, botTop);
+      ctx.lineTo(x + pw, botBot - rBot);
+      ctx.arcTo(x + pw, botBot, x + pw - rBot, botBot, rBot);
+      ctx.lineTo(x + rBot, botBot);
+      ctx.arcTo(x, botBot, x, botBot - rBot, rBot);
+      ctx.lineTo(x, botTop);
       ctx.closePath();
       ctx.fill();
     }
