@@ -2813,6 +2813,7 @@ const UI = {
       + '<option value="mirror">Mirrored</option>'
       + '<option value="layered">Layered</option>'
       + '<option value="layered-mirror">Layered Mirror</option>'
+      + '<option value="squiggle">Squiggle</option>'
       + '</select></div>'
       + '<div class="settings-waveform-preview"><canvas id="waveform-preview-canvas"></canvas></div>'
       + '<div class="settings-actions" style="margin-top:12px">'
@@ -3085,6 +3086,10 @@ const UI = {
       this._paintWaveformMirror(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor);
     } else if (style === 'layered') {
       this._paintWaveformLayered(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor);
+    } else if (style === 'layered-mirror') {
+      this._paintWaveformLayeredMirror(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor);
+    } else if (style === 'squiggle') {
+      this._paintWaveformSquiggle(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor);
     } else {
       this._paintWaveformRounded(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor);
     }
@@ -3301,6 +3306,338 @@ const UI = {
 
     ctx.fillStyle = 'rgba(' + played[0] + ',' + played[1] + ',' + played[2] + ',0.85)';
     ctx.fillRect(playX - 0.6, 0, 1.2, h);
+  },
+
+  _paintWaveformLayeredMirror(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor) {
+    const layers = 6;
+    const opacityFalloff = 0.52;
+    const heightGrowth = 0.08;
+    const waveAmplitude = 0.15;
+    const wavePhaseShift = 1.4;
+    const waveCycles = 2.4;
+    const mirrorSplit = 0.68;
+
+    const played = this._colorToRGBA(ctx, playedColor, '#D4F040');
+    const unplayed = this._colorToRGBA(ctx, unplayedColor, 'rgba(255,255,255,0.5)');
+
+    const split = h * mirrorSplit;
+    const gap = Math.max(2, h * 0.03);
+    const maxTopH = split - gap - 2;
+    const maxBotH = (h - split - gap) * 0.9;
+    const freq = (Math.PI * 2 * waveCycles) / w;
+    const playX = (playingPoint / data.length) * w;
+    const totalWidth = data.length * (pw + pg);
+    const hShiftAmp = (pw + pg) * 0.6;
+    const hWaveFreq = (Math.PI * 2 * 1.5) / w;
+    const botStart = split + gap;
+
+    ctx.clearRect(0, 0, w, h);
+
+    for (let l = layers - 1; l >= 0; l--) {
+      const la = Math.pow(opacityFalloff, l);
+      const hsc = 1 + l * heightGrowth;
+      const phase = l * wavePhaseShift;
+      const lw = pw * (1 - l * 0.04);
+
+      for (let i = 0; i < data.length; i++) {
+        const baseX = (w - totalWidth) / 2 + i * (pw + pg);
+        const xOff = l * hShiftAmp * (0.5 + 0.5 * Math.sin(baseX * hWaveFreq + l * 0.8));
+        const x = baseX + xOff;
+        const cx = x + lw / 2;
+        const barVal = data[i] / 100;
+        const waveMod = 1 + waveAmplitude * Math.sin(baseX * freq + phase);
+        const topH = Math.max(1.5, barVal * maxTopH * hsc * waveMod);
+        const x0 = x + (pw - lw) / 2;
+
+        const isPlayed = cx <= playX;
+        const c = isPlayed ? played : unplayed;
+        const alpha = (c[3] * la).toFixed(3);
+        const full = 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
+        const fade = 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',0)';
+
+        const topGrad = ctx.createLinearGradient(0, split - gap - topH, 0, split - gap);
+        topGrad.addColorStop(0, fade);
+        topGrad.addColorStop(0.12, full);
+        topGrad.addColorStop(0.88, full);
+        topGrad.addColorStop(1, full);
+        ctx.fillStyle = topGrad;
+        ctx.fillRect(x0, split - gap - topH, lw, topH);
+      }
+    }
+
+    for (let i = 0; i < data.length; i++) {
+      const x = (w - totalWidth) / 2 + i * (pw + pg);
+      const cx = x + pw / 2;
+      const barVal = data[i] / 100;
+      const barH = Math.max(1, barVal * maxBotH);
+      const isPlayed = cx <= playX;
+      const c = isPlayed ? played : unplayed;
+      const botGrad = ctx.createLinearGradient(0, botStart, 0, botStart + barH);
+      botGrad.addColorStop(0, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (c[3] * 0.5).toFixed(3) + ')');
+      botGrad.addColorStop(0.4, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (c[3] * 0.2).toFixed(3) + ')');
+      botGrad.addColorStop(1, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',0)');
+      ctx.fillStyle = botGrad;
+      ctx.fillRect(x, botStart, pw, barH);
+    }
+
+    ctx.fillStyle = 'rgba(' + played[0] + ',' + played[1] + ',' + played[2] + ',0.85)';
+    ctx.fillRect(playX - 0.6, 0, 1.2, h);
+  },
+
+  _paintWaveformLayeredMirrorScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth) {
+    const layers = 6;
+    const opacityFalloff = 0.52;
+    const heightGrowth = 0.08;
+    const waveAmplitude = 0.15;
+    const wavePhaseShift = 1.4;
+    const waveCycles = 2.4;
+    const mirrorSplit = 0.68;
+
+    const played = this._colorToRGBA(ctx, playedColor, '#D4F040');
+    const unplayed = this._colorToRGBA(ctx, unplayedColor, 'rgba(255,255,255,0.5)');
+    const hoverC = this._colorToRGBA(ctx, hoverPlayed, 'rgba(212,240,64,0.55)');
+
+    const split = h * mirrorSplit;
+    const gap = Math.max(2, h * 0.03);
+    const maxTopH = (split - gap - 2) * scale;
+    const maxBotH = (h - split - gap) * 0.9 * scale;
+    const freq = (Math.PI * 2 * waveCycles) / w;
+    const playX = (playingPoint / data.length) * w;
+
+    const hov = hoverX >= 0;
+    const hx = hov ? hoverX : -1;
+    const hLo = hov ? Math.min(playX, hx) : 0;
+    const hHi = hov ? Math.max(playX, hx) : -1;
+    const inHover = (cx) => hov && cx >= hLo && cx <= hHi;
+
+    const hShiftAmp = (pw + pg) * 0.6;
+    const hWaveFreq = (Math.PI * 2 * 1.5) / w;
+    const botStart = split + gap;
+
+    ctx.clearRect(0, 0, w, h);
+
+    for (let l = layers - 1; l >= 0; l--) {
+      const la = Math.pow(opacityFalloff, l);
+      const hsc = 1 + l * heightGrowth;
+      const phase = l * wavePhaseShift;
+      const lw = pw * (1 - l * 0.04);
+
+      for (let i = 0; i < data.length; i++) {
+        const baseX = (w - totalWidth) / 2 + i * (pw + pg);
+        const xOff = l * hShiftAmp * (0.5 + 0.5 * Math.sin(baseX * hWaveFreq + l * 0.8));
+        const x = baseX + xOff;
+        const cx = x + lw / 2;
+        const barVal = data[i] / 100;
+        const waveMod = 1 + waveAmplitude * Math.sin(baseX * freq + phase);
+        const topH = Math.max(1.5, barVal * maxTopH * hsc * waveMod);
+        const x0 = x + (pw - lw) / 2;
+
+        let c;
+        if (inHover(cx)) {
+          c = hoverC;
+        } else if (cx <= playX) {
+          c = played;
+        } else {
+          c = unplayed;
+        }
+        const alpha = (c[3] * la).toFixed(3);
+        const full = 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
+        const fade = 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',0)';
+
+        const topGrad = ctx.createLinearGradient(0, split - gap - topH, 0, split - gap);
+        topGrad.addColorStop(0, fade);
+        topGrad.addColorStop(0.12, full);
+        topGrad.addColorStop(0.88, full);
+        topGrad.addColorStop(1, full);
+        ctx.fillStyle = topGrad;
+        ctx.fillRect(x0, split - gap - topH, lw, topH);
+      }
+    }
+
+    for (let i = 0; i < data.length; i++) {
+      const x = (w - totalWidth) / 2 + i * (pw + pg);
+      const cx = x + pw / 2;
+      const barVal = data[i] / 100;
+      const barH = Math.max(1, barVal * maxBotH);
+
+      let c;
+      if (inHover(cx)) {
+        c = hoverC;
+      } else if (cx <= playX) {
+        c = played;
+      } else {
+        c = unplayed;
+      }
+      const botGrad = ctx.createLinearGradient(0, botStart, 0, botStart + barH);
+      botGrad.addColorStop(0, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (c[3] * 0.5).toFixed(3) + ')');
+      botGrad.addColorStop(0.4, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (c[3] * 0.2).toFixed(3) + ')');
+      botGrad.addColorStop(1, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',0)');
+      ctx.fillStyle = botGrad;
+      ctx.fillRect(x, botStart, pw, barH);
+    }
+
+    ctx.fillStyle = 'rgba(' + played[0] + ',' + played[1] + ',' + played[2] + ',0.85)';
+    ctx.fillRect(playX - 0.6, 0, 1.2, h);
+  },
+
+   _paintWaveformSquiggle(ctx, data, pw, pg, w, h, playingPoint, playedColor, unplayedColor) {
+    const mid = h / 2;
+    const maxH = h / 2 - 2;
+    const playX = (playingPoint / data.length) * w;
+    const totalWidth = data.length * (pw + pg);
+    const offsetX = (w - totalWidth) / 2;
+    const per = pw + pg;
+
+    const played = this._colorToRGBA(ctx, playedColor, '#D4F040');
+
+    const greyR = Math.round(played[0] * 0.35 + 128 * 0.65);
+    const greyG = Math.round(played[1] * 0.35 + 128 * 0.65);
+    const greyB = Math.round(played[2] * 0.35 + 128 * 0.65);
+
+    ctx.clearRect(0, 0, w, h);
+
+    const upTips = [];
+    const dnTips = [];
+    for (let i = 0; i < data.length; i++) {
+      const barVal = data[i] / 100;
+      const barH = Math.max(2, barVal * maxH);
+      const x = offsetX + i * per + pw / 2;
+      upTips.push({ x, y: mid - barH });
+      dnTips.push({ x, y: mid + barH });
+    }
+
+    if (upTips.length < 2) return;
+    const drawShape = (from, to, fillColor, strokeColor, lineW) => {
+      if (to - from < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(upTips[from].x, upTips[from].y);
+      for (let i = from + 1; i < to; i++) {
+        const prev = upTips[i - 1], curr = upTips[i];
+        const cpx = (prev.x + curr.x) / 2;
+        ctx.bezierCurveTo(cpx, prev.y, cpx, curr.y, curr.x, curr.y);
+      }
+      ctx.lineTo(upTips[to - 1].x, dnTips[to - 1].y);
+      for (let i = to - 2; i >= from; i--) {
+        const prev = dnTips[i + 1], curr = dnTips[i];
+        const cpx = (prev.x + curr.x) / 2;
+        ctx.bezierCurveTo(cpx, prev.y, cpx, curr.y, curr.x, curr.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = lineW;
+      ctx.stroke();
+    };
+
+    const splitIdx = upTips.findIndex(t => t.x > playX);
+    const playedEnd = splitIdx >= 0 ? splitIdx + 1 : upTips.length;
+
+    if (playedEnd > 1) {
+      drawShape(0, playedEnd, playedColor, playedColor, 2.5);
+    }
+
+    if (playedEnd >= 2 && playedEnd < upTips.length) {
+      const midC = 'rgba(' +
+        Math.round(played[0] * 0.55 + greyR * 0.45) + ',' +
+        Math.round(played[1] * 0.55 + greyG * 0.45) + ',' +
+        Math.round(played[2] * 0.55 + greyB * 0.45) + ',0.45)';
+      drawShape(playedEnd - 1, playedEnd + 1, midC, midC, 1.5);
+    }
+
+    if (playedEnd + 1 < upTips.length) {
+      const unplayedFill = 'rgba(' + greyR + ',' + greyG + ',' + greyB + ',0.28)';
+      drawShape(playedEnd, upTips.length, unplayedFill, unplayedFill, 1);
+    }
+  },
+
+   _paintWaveformSquiggleScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth) {
+    const mid = h / 2;
+    const maxH = (h / 2 - 2) * scale;
+    const playX = (playingPoint / data.length) * w;
+    const offsetX = (w - totalWidth) / 2;
+    const per = pw + pg;
+    const dpr = window.devicePixelRatio || 1;
+
+    const played = this._colorToRGBA(ctx, playedColor, '#D4F040');
+    const hoverC = this._colorToRGBA(ctx, hoverPlayed, 'rgba(212,240,64,0.55)');
+
+    const greyR = Math.round(played[0] * 0.35 + 128 * 0.65);
+    const greyG = Math.round(played[1] * 0.35 + 128 * 0.65);
+    const greyB = Math.round(played[2] * 0.35 + 128 * 0.65);
+
+    const hov = hoverX >= 0;
+    const hLo = hov ? Math.min(playX, hoverX) : 0;
+    const hHi = hov ? Math.max(playX, hoverX) : -1;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const upTips = [];
+    const dnTips = [];
+    for (let i = 0; i < data.length; i++) {
+      const barVal = data[i] / 100;
+      const barH = Math.max(2, barVal * maxH);
+      const x = offsetX + i * per + pw / 2;
+      upTips.push({ x, y: mid - barH });
+      dnTips.push({ x, y: mid + barH });
+    }
+
+    if (upTips.length < 2) return;
+
+    const fadeBars = Math.max(2, Math.round(data.length * 0.015));
+
+    const drawShape = (from, to, fillColor, strokeColor, lineW) => {
+      if (to - from < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(upTips[from].x, upTips[from].y);
+      for (let i = from + 1; i < to; i++) {
+        const prev = upTips[i - 1], curr = upTips[i];
+        const cpx = (prev.x + curr.x) / 2;
+        ctx.bezierCurveTo(cpx, prev.y, cpx, curr.y, curr.x, curr.y);
+      }
+      ctx.lineTo(upTips[to - 1].x, dnTips[to - 1].y);
+      for (let i = to - 2; i >= from; i--) {
+        const prev = dnTips[i + 1], curr = dnTips[i];
+        const cpx = (prev.x + curr.x) / 2;
+        ctx.bezierCurveTo(cpx, prev.y, cpx, curr.y, curr.x, curr.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = lineW;
+      ctx.stroke();
+    };
+
+    const splitIdx = upTips.findIndex(t => t.x > playX);
+    const playedEnd = splitIdx >= 0 ? splitIdx + 1 : upTips.length;
+
+    if (playedEnd > 1) {
+      drawShape(0, playedEnd, playedColor, playedColor, 2.5 * dpr);
+    }
+
+    if (playedEnd >= 2 && playedEnd < upTips.length) {
+      const midC = 'rgba(' +
+        Math.round(played[0] * 0.55 + greyR * 0.45) + ',' +
+        Math.round(played[1] * 0.55 + greyG * 0.45) + ',' +
+        Math.round(played[2] * 0.55 + greyB * 0.45) + ',0.45)';
+      drawShape(playedEnd - 1, playedEnd + 1, midC, midC, 1.5 * dpr);
+    }
+
+    if (playedEnd + 1 < upTips.length) {
+      const unplayedFill = 'rgba(' + greyR + ',' + greyG + ',' + greyB + ',0.28)';
+      drawShape(playedEnd, upTips.length, unplayedFill, unplayedFill, 1 * dpr);
+    }
+
+    if (hov) {
+      const hStart = upTips.findIndex(t => t.x >= hLo);
+      const hEnd = upTips.findIndex(t => t.x > hHi);
+      const hoverFrom = Math.max(0, hStart);
+      const hoverTo = hEnd >= 0 ? hEnd + 1 : upTips.length;
+      if (hoverTo - hoverFrom >= 2) {
+        drawShape(hoverFrom, hoverTo, 'rgba(' + hoverC[0] + ',' + hoverC[1] + ',' + hoverC[2] + ',0.2)', 'rgba(' + hoverC[0] + ',' + hoverC[1] + ',' + hoverC[2] + ',0.6)', 2 * dpr);
+      }
+    }
   },
 
   async _doBulkImport() {
@@ -4143,6 +4480,10 @@ const UI = {
       this._paintWaveformMirrorScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth);
     } else if (wfStyle === 'layered') {
       this._paintWaveformLayeredScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth);
+    } else if (wfStyle === 'layered-mirror') {
+      this._paintWaveformLayeredMirrorScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth);
+    } else if (wfStyle === 'squiggle') {
+      this._paintWaveformSquiggleScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth);
     } else {
       this._paintWaveformRoundedScaled(ctx, data, pw, pg, w, h, playingPoint, scale, playedColor, unplayedColor, hoverPlayed, hoverUnplayed, hoverX, totalWidth);
     }
