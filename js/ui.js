@@ -69,9 +69,11 @@ const UI = {
       miniProgress: document.querySelector('.mini-progress'),
       nowPlaying: document.getElementById('now-playing'),
       npArt: document.getElementById('np-art'),
+      npArtBg: document.getElementById('np-art-bg'),
       npTitle: document.getElementById('np-title'),
       npArtist: document.getElementById('np-artist'),
       npLikeBtn: document.getElementById('np-like-btn'),
+      npDownloadBtn: document.getElementById('np-download-btn'),
       npPlay: document.getElementById('np-play'),
       npPrev: document.getElementById('np-prev'),
       npNext: document.getElementById('np-next'),
@@ -96,6 +98,7 @@ const UI = {
       createPlaylistBtn: document.getElementById('create-playlist-btn'),
       contextMenu: document.getElementById('context-menu'),
       contextMenuItems: document.getElementById('context-menu-items'),
+      npHeaderText: document.querySelector('.np-header-text'),
     };
   },
 
@@ -229,8 +232,20 @@ const UI = {
         }
         this.showToast('Artist not found on MusicBrainz');
       }).catch(() => {
-        this.showToast('Failed to search MusicBrainz');
+        this.showToast('Search failed');
       });
+    });
+
+    document.getElementById('np-download-btn').addEventListener('click', () => {
+      const track = Player.getCurrentTrack();
+      if (!track) return;
+      const a = document.createElement('a');
+      a.href = Api.downloadUrl(track.id);
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
     });
 
     let prevVolume = 1;
@@ -514,6 +529,8 @@ const UI = {
       if (panel.classList.contains('hidden')) return;
       if (panel.contains(e.target)) return;
       if (e.target.closest('.np-queue-btn')) return;
+      if (e.target.closest('#context-menu')) return;
+      if (e.target.closest('#playlist-modal')) return;
       this.hideQueue();
     });
 
@@ -615,7 +632,8 @@ const UI = {
         if (Math.abs(dy) < 8) return;
         dragging = true;
         placeholder = document.createElement('div');
-        placeholder.className = 'queue-item-placeholder';
+        placeholder.className = 'queue-item queue-item-placeholder';
+        placeholder.innerHTML = dragItem.innerHTML;
         placeholder.style.height = dragItem.offsetHeight + 'px';
         dragItem.parentNode.insertBefore(placeholder, dragItem);
         dragItem.classList.add('queue-item-dragging');
@@ -628,7 +646,7 @@ const UI = {
       if (dragging) {
         e.preventDefault();
         dragItem.style.top = (e.touches[0].clientY - offsetY) + 'px';
-        const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+        const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging):not(.queue-item-placeholder)');
         let inserted = false;
         for (const item of items) {
           const rect = item.getBoundingClientRect();
@@ -649,7 +667,9 @@ const UI = {
       if (!dragItem) return;
       if (dragging && placeholder) {
         const fromIndex = parseInt(dragItem.dataset.queueIndex);
-        const toIndex = Array.from(list.querySelectorAll('.queue-item:not(.queue-item-dragging)')).indexOf(placeholder);
+        let toIndex = 0;
+        const siblings = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+        siblings.forEach(el => { if (el.compareDocumentPosition(placeholder) & Node.DOCUMENT_POSITION_FOLLOWING) toIndex++; });
         dragItem.classList.remove('queue-item-dragging');
         dragItem.style.position = '';
         dragItem.style.left = '';
@@ -688,9 +708,9 @@ const UI = {
           if (Math.abs(dy) < 5) return;
           dragging = true;
           placeholder = document.createElement('div');
-          placeholder.className = 'queue-item-placeholder';
-          placeholder.style.height = dragItem.offsetHeight + 'px';
-          dragItem.parentNode.insertBefore(placeholder, dragItem);
+          placeholder.className = 'queue-item queue-item-placeholder';
+          placeholder.innerHTML = dragItem.innerHTML;
+          placeholder.style.height = dragItem.offsetHeight + 'px';          dragItem.parentNode.insertBefore(placeholder, dragItem);
           dragItem.classList.add('queue-item-dragging');
           dragItem.style.position = 'fixed';
           dragItem.style.left = dragItem.getBoundingClientRect().left + 'px';
@@ -700,7 +720,7 @@ const UI = {
         }
         if (dragging) {
           dragItem.style.top = (e.clientY - offsetY) + 'px';
-          const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+          const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging):not(.queue-item-placeholder)');
           let inserted = false;
           for (const it of items) {
             const r = it.getBoundingClientRect();
@@ -722,7 +742,9 @@ const UI = {
         document.removeEventListener('mouseup', onMouseUp);
         if (dragItem && dragging && placeholder) {
           const fromIndex = parseInt(dragItem.dataset.queueIndex);
-          const toIndex = Array.from(list.querySelectorAll('.queue-item:not(.queue-item-dragging)')).indexOf(placeholder);
+          let toIndex = 0;
+          const siblings = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+          siblings.forEach(el => { if (el.compareDocumentPosition(placeholder) & Node.DOCUMENT_POSITION_FOLLOWING) toIndex++; });
           dragItem.classList.remove('queue-item-dragging');
           dragItem.style.position = '';
           dragItem.style.left = '';
@@ -2794,6 +2816,8 @@ const UI = {
       + '<div class="settings-section-desc">Configure how music is downloaded and saved.</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
       + '<div class="settings-form-grid">'
+      + '<div class="settings-field"><label>Enable Downloads</label>'
+      + '<input type="checkbox" id="setting-downloads-enabled" class="settings-toggle"></div>'
       + '<div class="settings-field"><label>Audio Format</label>'
       + '<select id="setting-download-format" class="settings-select">'
       + '<option value="flac">FLAC (lossless)</option>'
@@ -2911,6 +2935,9 @@ const UI = {
       if (mp3 && settings.mp3_bitrate) mp3.value = settings.mp3_bitrate;
       if (opus && settings.opus_bitrate) opus.value = settings.opus_bitrate;
       if (minBr && settings.download_min_bitrate) minBr.value = settings.download_min_bitrate;
+      const dlEnabled = document.getElementById('setting-downloads-enabled');
+      if (dlEnabled) dlEnabled.checked = settings.downloads_enabled !== 'false';
+      Store.downloadsEnabled = settings.downloads_enabled !== 'false';
       this._updateQualityVisibility();
       if (fmt) fmt.addEventListener('change', () => this._updateQualityVisibility());
     } catch (e) {}
@@ -2934,6 +2961,7 @@ const UI = {
     const mp3 = document.getElementById('setting-mp3-bitrate');
     const opus = document.getElementById('setting-opus-bitrate');
     const minBr = document.getElementById('setting-download-min-bitrate');
+    const dlEnabled = document.getElementById('setting-downloads-enabled');
     try {
       await Api.saveSettings({
         download_format: fmt ? fmt.value : 'flac',
@@ -2943,8 +2971,10 @@ const UI = {
         download_album_subdir: subdir ? subdir.value : 'Albums',
         mp3_bitrate: mp3 ? mp3.value : 'v2',
         opus_bitrate: opus ? opus.value : '320k',
-        download_min_bitrate: minBr ? minBr.value : '0'
+        download_min_bitrate: minBr ? minBr.value : '0',
+        downloads_enabled: dlEnabled ? String(dlEnabled.checked) : 'true'
       });
+      Store.downloadsEnabled = dlEnabled ? dlEnabled.checked : true;
       this._showToast('Settings saved');
     } catch (e) {
       this._showToast('Failed to save settings');
@@ -3524,13 +3554,32 @@ const UI = {
     if (!track) return;
 
     const trackChanged = !this._currentWaveformTrackId || this._currentWaveformTrackId !== track.id;
-    this.els.npArt.src = Api.coverUrl(track.albumID);
+    if (trackChanged && !this.els.nowPlaying.classList.contains('hidden')) {
+      const art = this.els.npArt;
+      const bg = this.els.npArtBg;
+      const newSrc = Api.coverUrl(track.albumID);
+      bg.src = art.src;
+      bg.style.opacity = '1';
+      art.src = newSrc;
+      art.style.opacity = '0';
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          bg.style.opacity = '0';
+          art.style.opacity = '1';
+        });
+      });
+    } else if (trackChanged) {
+      this.els.npArt.src = Api.coverUrl(track.albumID);
+    }
     this.els.npTitle.textContent = track.title;
     this.els.npArtist.textContent = track.artist;
 
     const isFav = Store.isFavorite(track.id);
     this.els.npLikeBtn.innerHTML = isFav ? Icons.heartFilled() : Icons.heart();
     this.els.npLikeBtn.classList.toggle('active', isFav);
+
+    const canDownload = Store.downloadsEnabled && track.downloadEnabled !== false;
+    this.els.npDownloadBtn.style.display = canDownload ? '' : 'none';
 
     this.els.npPlay.innerHTML = Player.playing ? Icons.pause() : Icons.play();
     this.els.npShuffle.classList.toggle('active', Player.shuffle);
@@ -3545,6 +3594,11 @@ const UI = {
     // Prev always active — restarts current song if at start
 
     this.els.nowPlaying.classList.toggle('playing', Player.playing);
+
+    if (this.els.npHeaderText) {
+      const sourceName = Player.getSourceName();
+      this.els.npHeaderText.textContent = sourceName || '';
+    }
 
     this._applyNowPlayingBg();
     this._checkTitleOverflow();
@@ -3593,10 +3647,13 @@ const UI = {
     this._waveformAnimProgress = 1;
 
     if (isFirstLoad) {
-      const canvas = this.els.waveformCanvas;
-      canvas.classList.add('fading');
+      this._waveformHeightScale = 0.3;
+      this.els.waveformCanvas.classList.add('fading');
       requestAnimationFrame(() => {
-        canvas.classList.remove('fading');
+        requestAnimationFrame(() => {
+          this.els.waveformCanvas.classList.remove('fading');
+          this._animateWaveformScale(1, 400);
+        });
       });
     }
 
@@ -3611,17 +3668,52 @@ const UI = {
 
       this._waveformRawPeaks = data.peaks;
       this._realWaveform = true;
-
-      const canvas = this.els.waveformCanvas;
-      canvas.classList.add('fading');
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          this._scaleWaveformData();
-          this._paintWaveform(this._waveformProgress || 0);
-          canvas.classList.remove('fading');
-        });
-      });
+      this._waveformHeightScale = 0.4;
+      this._animateWaveformScale(1, 350);
+      this._scaleWaveformData();
+      this._paintWaveform(this._waveformProgress || 0);
     }).catch(() => {});
+  },
+
+  _animateWaveformScale(target, duration) {
+    if (this._waveformScaleFrame) cancelAnimationFrame(this._waveformScaleFrame);
+    if (this._waveformHeightScale == null) this._waveformHeightScale = 0;
+    const from = this._waveformHeightScale;
+    const delta = target - from;
+    if (Math.abs(delta) < 0.001) {
+      this._waveformHeightScale = target;
+      this._paintWaveform(this._waveformProgress || 0);
+      return;
+    }
+    const start = performance.now();
+    const mass = 1;
+    const stiffness = 120;
+    const damping = 14;
+    const omega = Math.sqrt(stiffness / mass);
+    const zeta = damping / (2 * Math.sqrt(stiffness * mass));
+    let scale = from;
+    let velocity = 0;
+    const dt = 1 / 60;
+    const maxFrames = Math.ceil(duration / 16) + 60;
+    let frame = 0;
+    const tick = () => {
+      const springForce = stiffness * (target - scale);
+      const dampForce = -damping * velocity;
+      const accel = (springForce + dampForce) / mass;
+      velocity += accel * dt;
+      scale += velocity * dt;
+      this._waveformHeightScale = scale;
+      this._paintWaveform(this._waveformProgress || 0);
+      frame++;
+      const settled = Math.abs(scale - target) < 0.002 && Math.abs(velocity) < 0.01;
+      if (!settled && frame < maxFrames) {
+        this._waveformScaleFrame = requestAnimationFrame(tick);
+      } else {
+        this._waveformHeightScale = target;
+        this._paintWaveform(this._waveformProgress || 0);
+      }
+    };
+    this._waveformScaleFrame = requestAnimationFrame(tick);
   },
 
   _getWaveformBarSizes() {
@@ -3710,7 +3802,8 @@ const UI = {
 
     for (let i = 0; i < data.length; i++) {
       let val = data[i];
-      const barH = (val / 100) * h * 0.85;
+      const scale = this._waveformHeightScale != null ? this._waveformHeightScale : 1;
+      const barH = (val / 100) * h * 0.85 * scale;
       const x = (w - totalWidth) / 2 + i * (pw + pg);
       const y = (h - barH) / 2;
 
@@ -3751,10 +3844,7 @@ const UI = {
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
     this._applyNowPlayingBg();
-    // Deactivate all tab buttons while player is open
     document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
-    // Show queue on desktop only (it's a flex column inside now-playing)
-    // On mobile it stays hidden — user opens it via the queue button
     if (window.innerWidth >= 768) {
       this.els.queuePanel.classList.remove('hidden');
     }
@@ -3817,8 +3907,9 @@ const UI = {
 
     this.els.queueList.innerHTML = Player.queue.map((track, i) => {
       const isCurrent = i === Player.currentIndex;
-      return '<div class="queue-item' + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
-        + '<div class="queue-item-drag" aria-label="Drag to reorder">' + Icons.dots() + '</div>'
+      const section = i < Player.currentIndex ? 'history' : 'upnext';
+      return '<div class="queue-item queue-item-' + section + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
+        + '<div class="queue-item-drag" aria-label="Drag to reorder">' + Icons.grip() + '</div>'
         + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
         + '<div class="queue-item-info">'
         + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
@@ -3827,6 +3918,26 @@ const UI = {
         + '<button class="queue-item-more" aria-label="More">' + Icons.more() + '</button>'
         + '</div>';
     }).join('');
+
+    const historyItems = this.els.queueList.querySelectorAll('.queue-item-history');
+    if (historyItems.length > 0) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'queue-history';
+      const header = document.createElement('div');
+      header.className = 'queue-history-header';
+      header.innerHTML = '<span class="queue-history-label">' + Icons.clock() + ' History</span><span class="queue-history-badge">' + historyItems.length + '</span>' + Icons.chevronDown();
+      wrapper.appendChild(header);
+      const body = document.createElement('div');
+      body.className = 'queue-history-body';
+      historyItems.forEach(el => body.appendChild(el));
+      wrapper.appendChild(body);
+      this.els.queueList.insertBefore(wrapper, this.els.queueList.firstChild);
+
+      header.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+      });
+    }
+
     this._bindQueueDrag();
   },
 

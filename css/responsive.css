@@ -309,11 +309,10 @@
   }
 
   .np-header-text {
-    display: block;
     font-size: 13px;
     font-weight: 700;
     letter-spacing: var(--ls-label);
-    color: var(--accent);
+    color: rgba(255, 255, 255, 0.5);
   }
 
 
@@ -332,6 +331,11 @@
     align-items: center !important;
     justify-content: center !important;
     pointer-events: auto !important;
+    z-index: 3 !important;
+  }
+
+  .np-float-tray {
+    bottom: 28px !important;
   }
 
   .np-art-wrapper {
@@ -668,5 +672,12 @@
 
   .detail-hero-info {
     padding: 0 64px var(--sp-6);
+  }
+}
+
+@media (max-width: 767px) {
+  .np-art-wrapper {
+    width: 72vmin !important;
+    height: 72vmin !important;
   }
 }

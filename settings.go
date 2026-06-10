@@ -17,6 +17,7 @@ func initSettingsTable() {
 	migrateSetting("download_album_subdir", "Albums")
 	migrateSetting("download_convert_to_flac", "true")
 	migrateSetting("download_min_bitrate", "0")
+	migrateSetting("downloads_enabled", "true")
 }
 
 func migrateSetting(key, defaultVal string) {

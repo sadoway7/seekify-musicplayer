@@ -766,6 +766,11 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !getSettingBool("downloads_enabled", true) {
+		http.Error(w, "Downloads are disabled", http.StatusForbidden)
+		return
+	}
+
 	fullPath := resolveFilePath(track.FilePath)
 	file, err := os.Open(fullPath)
 	if err != nil {

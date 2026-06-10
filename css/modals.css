@@ -98,60 +98,64 @@
 }
 
 .queue-item-drag {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text3);
   cursor: grab;
-  opacity: 0.4;
+  opacity: 0.5;
   transition: opacity 0.15s;
 }
 
 .queue-item:hover .queue-item-drag,
 .queue-item:active .queue-item-drag {
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .queue-item-drag svg {
-  width: 14px;
-  height: 14px;
-  transform: rotate(90deg);
+  width: 18px;
+  height: 18px;
 }
 
 .queue-item-dragging {
   background: var(--l2);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   pointer-events: none;
   opacity: 0.95;
 }
 
 .queue-item-placeholder {
-  border: 2px dashed var(--accent);
-  border-radius: 8px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 0;
+  gap: 10px;
+  background: var(--l2);
+  border: 2px dashed var(--text3);
+  border-radius: 12px;
   opacity: 0.4;
   margin: 4px 0;
 }
 
 .queue-item-more {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text3);
   border-radius: 50%;
-  opacity: 0;
   transition: opacity 0.15s, background 0.15s;
 }
 
 .queue-item:hover .queue-item-more,
 .queue-item-more:focus {
-  opacity: 1;
+  color: var(--text2);
 }
 
 .queue-item-more:active {
@@ -159,14 +163,11 @@
 }
 
 .queue-item-more svg {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
 }
 
 @media (hover: none) {
-  .queue-item-more {
-    opacity: 0.6;
-  }
   .queue-item-drag {
     opacity: 0.5;
   }
@@ -182,6 +183,80 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.queue-history {
+  margin-bottom: 4px;
+}
+
+.queue-history-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  color: var(--text3);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.queue-history-header:hover {
+  color: var(--text2);
+}
+
+.queue-history-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queue-history-label svg {
+  width: 14px;
+  height: 14px;
+}
+
+.queue-history-badge {
+  font-size: 11px;
+  background: var(--l3);
+  color: var(--text3);
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-weight: 500;
+}
+
+.queue-history-header > :last-child {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.queue-history.open .queue-history-header > :last-child {
+  transform: rotate(180deg);
+}
+
+.queue-history-body {
+  display: none;
+}
+
+.queue-history.open .queue-history-body {
+  display: block;
+}
+
+.queue-item-history .queue-item-title {
+  color: var(--text3);
+}
+
+.queue-item-history .queue-item-artist {
+  color: var(--text4, var(--text3));
+}
+
+.queue-item-history .queue-item-art {
+  opacity: 0.5;
 }
 
 .queue-item:active {

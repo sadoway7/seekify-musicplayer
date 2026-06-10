@@ -7,6 +7,7 @@ const Store = {
   currentView: 'home',
   viewData: {},
   loading: false,
+  downloadsEnabled: true,
 
   async init() {
     this.loading = true;
@@ -21,6 +22,10 @@ const Store = {
       this.playlists = playlists;
       this.favorites = favorites;
       this.recent = recent;
+      try {
+        const settings = await Api.getSettings();
+        this.downloadsEnabled = settings.downloads_enabled !== 'false';
+      } catch(e) {}
     } catch (err) {
       UI.showToast('Failed to load library');
     }
