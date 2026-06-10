@@ -745,6 +745,8 @@ const UI = {
       document.addEventListener('mouseup', onMouseUp);
     });
   },
+
+  _bindModals() {
     this.els.contextMenu.addEventListener('click', (e) => {
       if (e.target === this.els.contextMenu || !e.target.closest('.modal-option')) {
         this.hideContextMenu();
