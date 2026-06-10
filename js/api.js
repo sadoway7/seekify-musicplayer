@@ -255,6 +255,14 @@ const Api = {
     } catch { return null; }
   },
 
+  async getWaveform(trackId) {
+    try {
+      const res = await fetch('/api/waveform/' + trackId);
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
+  },
+
   async reportDuration(trackId, duration) {
     try {
       await fetch('/api/track-duration/' + trackId, {

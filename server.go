@@ -191,7 +191,11 @@ func main() {
 	mux.HandleFunc("/api/admin/downloads", requireAdmin(downloadsListHandler))
 	mux.HandleFunc("/api/admin/download-toggle/", requireAdmin(downloadToggleHandler))
 
+	mux.HandleFunc("/api/waveform/", waveformHandler)
 	mux.HandleFunc("/api/track-duration/", trackDurationHandler)
+	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "waveform-test.html")
+	})
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
 	mux.HandleFunc("/api/metadata/rescan/", metadataRescanHandler)
 	mux.HandleFunc("/api/metadata/rescan-sync/", metadataRescanSyncHandler)

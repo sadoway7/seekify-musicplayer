@@ -14,6 +14,26 @@ const UI = {
   _contextMenuActions: null,
   _contextMenuTrigger: null,
   _navHistory: [],
+  _realWaveform: false,
+  _waveformRawPeaks: null,
+
+  rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+    return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
+  },
 
   init() {
     this._cacheDom();
@@ -300,7 +320,11 @@ const UI = {
     });
 
     const resizeObserver = new ResizeObserver(() => {
-      this._generateWaveform();
+      if (this._realWaveform && this._waveformRawPeaks) {
+        this._scaleWaveformData();
+      } else {
+        this._generateWaveform();
+      }
       this._paintWaveform(this._waveformProgress || 0);
     });
     resizeObserver.observe(canvas.parentElement);
@@ -3343,6 +3367,36 @@ const UI = {
     this.els.miniProgress.style.setProperty('--progress', pct);
   },
 
+  _loadWaveform(track) {
+    if (!track) return;
+    this._generateWaveform(track.id);
+    this._realWaveform = false;
+    this._waveformRawPeaks = null;
+
+    Api.getWaveform(track.id).then(data => {
+      if (!data || !data.peaks || data.peaks.length === 0) return;
+      const currentTrack = Player.getCurrentTrack();
+      if (!currentTrack || currentTrack.id !== track.id) return;
+
+      this._waveformRawPeaks = data.peaks;
+      this._realWaveform = true;
+      this._scaleWaveformData();
+      this._paintWaveform(this._waveformProgress || 0);
+    });
+  },
+
+  _scaleWaveformData() {
+    if (!this._waveformRawPeaks) return;
+    const peaks = this._waveformRawPeaks;
+    const data = [];
+    for (let i = 0; i < peaks.length; i++) {
+      data.push(Math.max(8, Math.min(100, Math.round(peaks[i] * 100))));
+    }
+    this._waveformData = data;
+    this._waveformPointWidth = 3;
+    this._waveformPointGap = 2;
+  },
+
   _generateWaveform(trackId) {
     const canvas = this.els.waveformCanvas;
     if (!canvas) return;
@@ -3453,7 +3507,7 @@ const UI = {
   showNowPlaying() {
     this.updateNowPlaying();
     const track = Player.getCurrentTrack();
-    this._generateWaveform(track ? track.id : null);
+    this._loadWaveform(track);
     this.updateSeekBar();
     this._renderQueue();
     this.els.nowPlaying.style.animation = '';
@@ -3477,6 +3531,8 @@ const UI = {
       np.style.animation = '';
       np.style.background = '';
       this._lastColorAlbumId = null;
+      document.documentElement.style.setProperty('--waveform-played', '#D4F040');
+      document.documentElement.style.setProperty('--waveform-hover', 'rgba(212, 240, 64, 0.8)');
     }, { once: true });
     if (Player.getCurrentTrack()) {
       this.els.miniPlayer.classList.remove('hidden');
@@ -4157,6 +4213,12 @@ const UI = {
 
       glow.style.backgroundColor = 'rgba(' + r + ',' + g + ',' + b + ',0.45)';
       glow.classList.add('active');
+
+      const [h, s, l] = this.rgbToHsl(r, g, b);
+      const vibS = Math.min(100, s + 35);
+      const vibL = Math.min(65, Math.max(45, l + 10));
+      document.documentElement.style.setProperty('--waveform-played', 'hsl(' + h + ',' + vibS + '%,' + vibL + '%)');
+      document.documentElement.style.setProperty('--waveform-hover', 'hsl(' + h + ',' + vibS + '%,' + Math.min(80, vibL + 15) + '%)');
     };
     img.onerror = () => {
       glow.classList.remove('active');

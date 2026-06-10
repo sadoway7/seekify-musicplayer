@@ -1980,6 +1980,26 @@ func previewAudioHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"url": streamURL, "videoId": videoID})
 }
 
+func waveformHandler(w http.ResponseWriter, r *http.Request) {
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/waveform/")
+	if trackID == "" {
+		http.Error(w, `{"error":"missing track id"}`, http.StatusBadRequest)
+		return
+	}
+
+	peaks, err := getOrGenerateWaveform(trackID)
+	if err != nil || peaks == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-cache")
+		json.NewEncoder(w).Encode(map[string]interface{}{"peaks": []float64{}})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	json.NewEncoder(w).Encode(map[string]interface{}{"peaks": peaks})
+}
+
 func downloadJobFileHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/download-job/")
 	if id == "" {
