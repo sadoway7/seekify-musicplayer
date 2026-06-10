@@ -1285,7 +1285,7 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 				p := dbFindPlaylistByID(playlistID)
 				if p != nil {
 					ogTitle = p.Name + " — Music Playlist"
-					ogDesc = fmt.Sprintf("%d tracks. Listen on Music.", p.TrackCount())
+					ogDesc = fmt.Sprintf("%d tracks. Listen on Music.", len(p.TrackIDs))
 				} else {
 					ogTitle = "Music Playlist"
 					ogDesc = "Listen on Music."
