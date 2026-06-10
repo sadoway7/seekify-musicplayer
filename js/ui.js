@@ -4236,6 +4236,8 @@ const UI = {
 
     this.showContextMenu(menuItems, triggerEl);
   },
+
+  async _showRescanModal(trackId) {
     const track = Store.getTrack(trackId);
     if (!track) return;
 
