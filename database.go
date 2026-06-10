@@ -648,3 +648,7 @@ func dbGetSharedQueue(queueID string) ([]string, error) {
 	json.Unmarshal([]byte(trackIDs), &result)
 	return result, nil
 }
+
+func dbEnableAllDownloads() {
+	db.Exec("DELETE FROM downloads WHERE disabled = 1")
+}

@@ -135,10 +135,11 @@
   padding: 10px 0;
   gap: 10px;
   background: var(--l2);
-  border: 2px dashed var(--text3);
+  border: 2px dashed var(--accent);
   border-radius: 12px;
-  opacity: 0.4;
+  opacity: 0.7;
   margin: 4px 0;
+  box-shadow: 0 0 12px rgba(212,240,64,0.15);
 }
 
 .queue-item-more {

@@ -761,11 +761,6 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !track.DownloadEnabled {
-		http.Error(w, "Downloads not enabled for this track", http.StatusForbidden)
-		return
-	}
-
 	if !getSettingBool("downloads_enabled", true) {
 		http.Error(w, "Downloads are disabled", http.StatusForbidden)
 		return
@@ -2132,4 +2127,19 @@ func sharedQueueGetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string][]string{"trackIds": ids})
+}
+
+func downloadsEnableAllHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	dbEnableAllDownloads()
+	mu.Lock()
+	for _, t := range tracks {
+		t.DownloadEnabled = true
+	}
+	mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }

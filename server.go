@@ -192,6 +192,7 @@ func main() {
 	mux.HandleFunc("/api/download/", downloadHandler)
 	mux.HandleFunc("/api/admin/downloads", requireAdmin(downloadsListHandler))
 	mux.HandleFunc("/api/admin/download-toggle/", requireAdmin(downloadToggleHandler))
+	mux.HandleFunc("/api/admin/downloads-enable-all", requireAdmin(downloadsEnableAllHandler))
 
 	mux.HandleFunc("/api/waveform/", waveformHandler)
 	mux.HandleFunc("/api/track-duration/", trackDurationHandler)

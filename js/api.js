@@ -255,6 +255,12 @@ const Api = {
     } catch { return null; }
   },
 
+  async enableAllDownloads() {
+    const res = await fetch('/api/admin/downloads-enable-all', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
   async getWaveform(trackId) {
     try {
       const res = await fetch('/api/waveform/' + trackId);

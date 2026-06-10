@@ -239,9 +239,10 @@ const UI = {
     document.getElementById('np-download-btn').addEventListener('click', () => {
       const track = Player.getCurrentTrack();
       if (!track) return;
+      const ext = track.filePath ? '.' + track.filePath.split('.').pop() : '';
       const a = document.createElement('a');
       a.href = Api.downloadUrl(track.id);
-      a.download = '';
+      a.download = (track.artist ? track.artist + ' - ' : '') + (track.title || 'track') + ext;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -2815,8 +2816,6 @@ const UI = {
       + '<div class="settings-section-desc">Configure how music is downloaded and saved.</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
       + '<div class="settings-form-grid">'
-      + '<div class="settings-field"><label>Enable Downloads</label>'
-      + '<input type="checkbox" id="setting-downloads-enabled" class="settings-toggle"></div>'
       + '<div class="settings-field"><label>Audio Format</label>'
       + '<select id="setting-download-format" class="settings-select">'
       + '<option value="flac">FLAC (lossless)</option>'
@@ -2860,6 +2859,19 @@ const UI = {
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Settings</span></button>'
       + '</div></div>';
+
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.download() + ' Downloadable Tracks</div>'
+      + '<div class="settings-section-desc">Control which tracks users can download to their device. All tracks are downloadable by default.</div>'
+      + '<div class="settings-toggles-row">'
+      + '<div class="settings-field settings-field-toggle"><label>Enable Downloads</label>'
+      + '<input type="checkbox" id="setting-downloads-enabled" class="settings-toggle"></div>'
+      + '</div>'
+      + '<div class="settings-actions" style="margin-top:8px">'
+      + '<button class="settings-btn" id="btn-toggle-download-list">' + Icons.library() + '<span>Manage Per-Track</span></button>'
+      + '</div>'
+      + '<div id="download-list"></div>'
+      + '</div>';
 
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.download() + ' Bulk Import</div>'
@@ -2911,6 +2923,11 @@ const UI = {
     const bulkImportBtn = document.getElementById('btn-bulk-import');
     if (bulkImportBtn) {
       bulkImportBtn.addEventListener('click', () => this._doBulkImport());
+    }
+
+    const downloadListBtn = document.getElementById('btn-toggle-download-list');
+    if (downloadListBtn) {
+      downloadListBtn.addEventListener('click', () => this._toggleDownloadPanel());
     }
 
   },
@@ -3552,23 +3569,39 @@ const UI = {
     const track = Player.getCurrentTrack();
     if (!track) return;
 
-    const trackChanged = !this._currentWaveformTrackId || this._currentWaveformTrackId !== track.id;
-    if (trackChanged && !this.els.nowPlaying.classList.contains('hidden')) {
+    const artTrackChanged = !this._lastArtTrackId || this._lastArtTrackId !== track.id;
+    if (artTrackChanged) {
+      this._lastArtTrackId = track.id;
       const art = this.els.npArt;
       const bg = this.els.npArtBg;
       const newSrc = Api.coverUrl(track.albumID);
-      bg.src = art.src;
-      bg.style.opacity = '1';
-      art.src = newSrc;
-      art.style.opacity = '0';
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          bg.style.opacity = '0';
-          art.style.opacity = '1';
-        });
-      });
-    } else if (trackChanged) {
-      this.els.npArt.src = Api.coverUrl(track.albumID);
+      if (!this.els.nowPlaying.classList.contains('hidden') && art.src && !art.src.endsWith('/') && art.src !== newSrc) {
+        const preload = new Image();
+        preload.src = newSrc;
+        bg.src = art.src;
+        bg.style.opacity = '1';
+        art.style.opacity = '0';
+        const doSwap = () => {
+          art.src = newSrc;
+          art.style.opacity = '0';
+          bg.style.zIndex = '2';
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              art.style.opacity = '1';
+              bg.style.opacity = '0';
+              setTimeout(() => { bg.style.zIndex = '0'; }, 1000);
+            });
+          });
+        };
+        if (preload.complete) {
+          setTimeout(doSwap, 400);
+        } else {
+          preload.onload = () => setTimeout(doSwap, 400);
+          preload.onerror = () => setTimeout(doSwap, 400);
+        }
+      } else {
+        art.src = newSrc;
+      }
     }
     this.els.npTitle.textContent = track.title;
     this.els.npArtist.textContent = track.artist;
@@ -3577,8 +3610,8 @@ const UI = {
     this.els.npLikeBtn.innerHTML = isFav ? Icons.heartFilled() : Icons.heart();
     this.els.npLikeBtn.classList.toggle('active', isFav);
 
-    const canDownload = Store.downloadsEnabled && track.downloadEnabled !== false;
-    this.els.npDownloadBtn.style.display = canDownload ? '' : 'none';
+    const canDownload = Store.downloadsEnabled;
+    if (this.els.npDownloadBtn) this.els.npDownloadBtn.style.display = canDownload ? '' : 'none';
 
     this.els.npPlay.innerHTML = Player.playing ? Icons.pause() : Icons.play();
     this.els.npShuffle.classList.toggle('active', Player.shuffle);
@@ -3602,7 +3635,7 @@ const UI = {
     this._applyNowPlayingBg();
     this._checkTitleOverflow();
 
-    if (trackChanged) {
+    if (artTrackChanged) {
       this._currentWaveformTrackId = track.id;
       this._loadWaveform(track);
     }
@@ -4223,9 +4256,15 @@ const UI = {
         this.navigateTo('artist', { artistName: track.artist });
       }},
       { type: 'divider' },
-      { label: 'Download from YouTube', icon: Icons.download(), action: () => {
+      { label: 'Save File', icon: Icons.download(), action: () => {
         this.hideContextMenu();
-        this._addToQueue({ artist: track.artist, title: track.title });
+        const ext = track.filePath ? '.' + track.filePath.split('.').pop() : '';
+        const a = document.createElement('a');
+        a.href = Api.downloadUrl(trackId);
+        a.download = (track.artist ? track.artist + ' - ' : '') + (track.title || 'track') + ext;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       }},
       { type: 'divider' },
       { label: isFav ? 'Remove from Favorites' : 'Add to Favorites', icon: isFav ? Icons.heartFilled() : Icons.heart(), action: async () => {
@@ -4260,20 +4299,6 @@ const UI = {
           }
         }});
       }
-    }
-
-    if (track.downloadEnabled) {
-      menuItems.push({ type: 'divider' });
-      menuItems.push({ label: 'Download', icon: Icons.download(), action: () => {
-        this.hideContextMenu();
-        const a = document.createElement('a');
-        a.href = Api.downloadUrl(trackId);
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        this.showToast('Downloading...');
-      }});
     }
 
     this.showContextMenu(menuItems, triggerEl);
@@ -4324,25 +4349,17 @@ const UI = {
         this.showPlaylistModal(track.id);
       }},
       { type: 'divider' },
-      { label: 'Download', icon: Icons.download(), action: () => {
+      { label: 'Save File', icon: Icons.download(), action: () => {
         this.hideContextMenu();
-        this._addToQueue({ artist: track.artist, title: track.title });
-      }}
-    ];
-
-    if (track.downloadEnabled) {
-      menuItems.push({ type: 'divider' });
-      menuItems.push({ label: 'Save File', icon: Icons.download(), action: () => {
-        this.hideContextMenu();
+        const ext = track.filePath ? '.' + track.filePath.split('.').pop() : '';
         const a = document.createElement('a');
         a.href = Api.downloadUrl(track.id);
-        a.download = '';
+        a.download = (track.artist ? track.artist + ' - ' : '') + (track.title || 'track') + ext;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        this.showToast('Downloading...');
-      }});
-    }
+      }}
+    ];
 
     this.showContextMenu(menuItems, triggerEl);
   },
