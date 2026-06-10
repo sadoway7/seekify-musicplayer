@@ -4192,7 +4192,9 @@ const UI = {
     const track = Player.getCurrentTrack();
     if (!track) {
       this.els.miniPlayer.classList.add('hidden');
+      this.els.miniPlayer.style.background = '';
       document.body.classList.remove('mini-player-visible');
+      this._applyThemeColor(14, 14, 14);
       return;
     }
 
@@ -4206,6 +4208,7 @@ const UI = {
 
     const progress = Player.getProgress();
     this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
+    this._applyMiniPlayerColor();
   },
 
   updateNowPlaying() {
@@ -4603,7 +4606,8 @@ const UI = {
       np.classList.add('hidden');
       np.style.animation = '';
       np.style.background = '';
-      this._lastColorAlbumId = null;
+    this._lastColorAlbumId = null;
+    this._albumColor = null;
       document.documentElement.style.setProperty('--waveform-played', '#D4F040');
       document.documentElement.style.setProperty('--waveform-hover', 'rgba(212, 240, 64, 0.8)');
     }, { once: true });
@@ -5345,6 +5349,24 @@ const UI = {
     );
   },
 
+  _applyMiniPlayerColor() {
+    if (!this.els.miniPlayer || !this._albumColor) return;
+    const { h, s, l } = this._albumColor;
+    const vibS = Math.min(100, s + 35);
+    const vibL = Math.min(65, Math.max(45, l + 10));
+    const playedColor = 'hsl(' + h + ',' + vibS + '%,' + vibL + '%)';
+    this.els.miniProgress.style.setProperty('--mini-progress-color', playedColor);
+    this.els.miniPlayer.style.background = 'linear-gradient(135deg, hsl(' + h + ',' + Math.round(vibS * 0.4) + '%,' + Math.max(12, vibL * 0.18) + '%), hsl(' + h + ',' + Math.round(vibS * 0.2) + '%,' + Math.max(8, vibL * 0.1) + '%))';
+    this.els.miniPlayer.style.setProperty('--mini-art-glow', playedColor);
+  },
+
+  _applyThemeColor(r, g, b) {
+    const darkR = Math.round(r * 0.15);
+    const darkG = Math.round(g * 0.15);
+    const darkB = Math.round(b * 0.15);
+    document.querySelector('meta[name="theme-color"]').content = 'rgb(' + darkR + ',' + darkG + ',' + darkB + ')';
+  },
+
   _applyNowPlayingBg() {
     const track = Player.getCurrentTrack();
     const glow = document.getElementById('np-bg-glow');
@@ -5382,9 +5404,15 @@ const UI = {
       const vibL = Math.min(65, Math.max(45, l + 10));
       document.documentElement.style.setProperty('--waveform-played', 'hsl(' + h + ',' + vibS + '%,' + vibL + '%)');
       document.documentElement.style.setProperty('--waveform-hover', 'hsl(' + h + ',' + vibS + '%,' + Math.min(80, vibL + 15) + '%)');
+
+      this._albumColor = { r, g, b, h, s, l };
+      this._applyMiniPlayerColor();
+      this._applyThemeColor(r, g, b);
     };
     img.onerror = () => {
       glow.classList.remove('active');
+      this._albumColor = null;
+      this._applyThemeColor(14, 14, 14);
     };
     img.src = Api.coverUrl(track.albumID);
   },
