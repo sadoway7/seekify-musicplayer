@@ -3378,6 +3378,8 @@ const UI = {
     this._generateWaveform(track.id);
     this._realWaveform = false;
     this._waveformRawPeaks = null;
+    this._waveformAnimProgress = 0;
+    this._startWaveformAnim();
 
     const trackId = track.id;
     Api.getWaveform(trackId).then(data => {
@@ -3387,9 +3389,34 @@ const UI = {
 
       this._waveformRawPeaks = data.peaks;
       this._realWaveform = true;
+      this._waveformAnimProgress = 0;
       this._scaleWaveformData();
-      this._paintWaveform(this._waveformProgress || 0);
+      this._startWaveformAnim();
     }).catch(() => {});
+  },
+
+  _startWaveformAnim() {
+    if (this._waveformAnimFrame) cancelAnimationFrame(this._waveformAnimFrame);
+    const start = performance.now();
+    const duration = 500;
+    const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    const tick = (now) => {
+      const elapsed = now - start;
+      this._waveformAnimProgress = Math.min(1, ease(elapsed / duration));
+      this._paintWaveform(this._waveformProgress || 0);
+      if (this._waveformAnimProgress < 1) {
+        this._waveformAnimFrame = requestAnimationFrame(tick);
+      }
+    };
+    this._waveformAnimFrame = requestAnimationFrame(tick);
+  },
+
+  _getWaveformBarSizes() {
+    const w = window.innerWidth;
+    if (w < 480) return { pw: 4, pg: 3 };
+    if (w < 768) return { pw: 3, pg: 3 };
+    return { pw: 3, pg: 2 };
   },
 
   _scaleWaveformData() {
@@ -3404,7 +3431,7 @@ const UI = {
     canvas.width = w * dpr;
     canvas.height = h * dpr;
 
-    const pw = 3, pg = 2;
+    const { pw, pg } = this._getWaveformBarSizes();
     const numBars = Math.floor(w / (pw + pg));
     const raw = this._waveformRawPeaks;
     const data = [];
@@ -3432,9 +3459,8 @@ const UI = {
     canvas.width = w * dpr;
     canvas.height = h * dpr;
 
-    const pointWidth = 3;
-    const pointGap = 2;
-    const numPoints = Math.floor(w / (pointWidth + pointGap));
+    const { pw, pg } = this._getWaveformBarSizes();
+    const numPoints = Math.floor(w / (pw + pg));
 
     const data = [];
     for (let i = 0; i < numPoints; i++) {
@@ -3442,8 +3468,8 @@ const UI = {
     }
 
     this._waveformData = data;
-    this._waveformPointWidth = pointWidth;
-    this._waveformPointGap = pointGap;
+    this._waveformPointWidth = pw;
+    this._waveformPointGap = pg;
   },
 
   _paintWaveform(progressFraction) {
@@ -3458,8 +3484,8 @@ const UI = {
     const pw = this._waveformPointWidth * dpr;
     const pg = this._waveformPointGap * dpr;
     const totalWidth = data.length * (pw + pg);
+    const animScale = this._waveformAnimProgress != null ? this._waveformAnimProgress : 1;
 
-    // Read colors from CSS tokens
     const style = getComputedStyle(document.documentElement);
     const playedColor = style.getPropertyValue('--waveform-played').trim() || '#D4F040';
     const unplayedColor = style.getPropertyValue('--waveform-unplayed').trim() || 'rgba(255, 255, 255, 0.22)';
@@ -3472,7 +3498,8 @@ const UI = {
     const hoverX = this._waveformHoverX >= 0 ? this._waveformHoverX * dpr : -1;
 
     for (let i = 0; i < data.length; i++) {
-      const barH = (data[i] / 100) * h * 0.85;
+      const fullBarH = (data[i] / 100) * h * 0.85;
+      const barH = fullBarH * animScale;
       const x = (w - totalWidth) / 2 + i * (pw + pg);
       const y = (h - barH) / 2;
 
@@ -3487,7 +3514,6 @@ const UI = {
         ctx.fillStyle = unplayedColor;
       }
 
-      // Rounded bars
       const radius = Math.min(pw / 2, barH / 2);
       ctx.beginPath();
       ctx.moveTo(x + radius, y);

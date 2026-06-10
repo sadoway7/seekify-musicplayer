@@ -799,7 +799,8 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func downloadsListHandler(w http.ResponseWriter, r *http.Request) {
-	ids := dbGetDownloadableTracks()
+	mu.RLock()
+	defer mu.RUnlock()
 
 	type downloadTrack struct {
 		ID      string `json:"id"`
@@ -810,19 +811,15 @@ func downloadsListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var result []downloadTrack
-	mu.RLock()
-	for _, id := range ids {
-		if t, ok := tracks[id]; ok {
-			result = append(result, downloadTrack{
-				ID:      t.ID,
-				Title:   t.Title,
-				Artist:  t.Artist,
-				Album:   t.Album,
-				Enabled: true,
-			})
-		}
+	for _, t := range tracks {
+		result = append(result, downloadTrack{
+			ID:      t.ID,
+			Title:   t.Title,
+			Artist:  t.Artist,
+			Album:   t.Album,
+			Enabled: t.DownloadEnabled,
+		})
 	}
-	mu.RUnlock()
 
 	if result == nil {
 		result = []downloadTrack{}

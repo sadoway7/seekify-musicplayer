@@ -96,8 +96,10 @@ func initDB(path string) {
 	)`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS downloads (
-		track_id TEXT PRIMARY KEY
+		track_id TEXT PRIMARY KEY,
+		disabled INTEGER NOT NULL DEFAULT 0
 	)`)
+	db.Exec(`ALTER TABLE downloads ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0`)
 
 	// Add orig_* columns for undo support (SQLite ALTER TABLE ADD COLUMN is safe)
 	db.Exec(`ALTER TABLE tracks ADD COLUMN orig_title TEXT NOT NULL DEFAULT ''`)
@@ -561,33 +563,50 @@ func boolToInt(b bool) int {
 // --- Download management ---
 
 func dbToggleDownload(trackID string) bool {
-	var exists bool
-	db.QueryRow("SELECT 1 FROM downloads WHERE track_id = ?", trackID).Scan(&exists)
-	if exists {
-		db.Exec("DELETE FROM downloads WHERE track_id = ?", trackID)
+	var disabled int
+	err := db.QueryRow("SELECT disabled FROM downloads WHERE track_id = ?", trackID).Scan(&disabled)
+	if err != nil {
+		db.Exec("INSERT INTO downloads (track_id, disabled) VALUES (?, 1)", trackID)
 		return false
 	}
-	db.Exec("INSERT INTO downloads (track_id) VALUES (?)", trackID)
-	return true
+	if disabled == 1 {
+		db.Exec("UPDATE downloads SET disabled = 0 WHERE track_id = ?", trackID)
+		return true
+	}
+	db.Exec("UPDATE downloads SET disabled = 1 WHERE track_id = ?", trackID)
+	return false
 }
 
 func dbIsDownloadable(trackID string) bool {
-	var exists bool
-	db.QueryRow("SELECT 1 FROM downloads WHERE track_id = ?", trackID).Scan(&exists)
-	return exists
+	var disabled int
+	err := db.QueryRow("SELECT disabled FROM downloads WHERE track_id = ?", trackID).Scan(&disabled)
+	if err != nil {
+		return true
+	}
+	return disabled == 0
 }
 
 func dbGetDownloadableTracks() []string {
-	rows, err := db.Query("SELECT track_id FROM downloads")
+	rows, err := db.Query("SELECT track_id, disabled FROM downloads")
 	if err != nil {
 		return []string{}
 	}
 	defer rows.Close()
-	var ids []string
+	blacklist := map[string]bool{}
 	for rows.Next() {
 		var id string
-		rows.Scan(&id)
-		ids = append(ids, id)
+		var disabled int
+		if rows.Scan(&id, &disabled) == nil && disabled == 1 {
+			blacklist[id] = true
+		}
+	}
+	mu.RLock()
+	defer mu.RUnlock()
+	var ids []string
+	for _, t := range tracks {
+		if !blacklist[t.ID] {
+			ids = append(ids, t.ID)
+		}
 	}
 	if ids == nil {
 		ids = []string{}
