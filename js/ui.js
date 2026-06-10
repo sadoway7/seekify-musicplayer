@@ -3375,11 +3375,13 @@ const UI = {
 
   _loadWaveform(track) {
     if (!track) return;
+
+    this._prevWaveformData = this._waveformData ? this._waveformData.slice() : null;
+
     this._generateWaveform(track.id);
     this._realWaveform = false;
     this._waveformRawPeaks = null;
-    this._waveformAnimProgress = 0;
-    this._startWaveformAnim();
+    this._startWaveformMorph();
 
     const trackId = track.id;
     Api.getWaveform(trackId).then(data => {
@@ -3389,17 +3391,26 @@ const UI = {
 
       this._waveformRawPeaks = data.peaks;
       this._realWaveform = true;
-      this._waveformAnimProgress = 0;
+      this._prevWaveformData = this._waveformData ? this._waveformData.slice() : null;
       this._scaleWaveformData();
-      this._startWaveformAnim();
+      this._startWaveformMorph();
     }).catch(() => {});
   },
 
-  _startWaveformAnim() {
+  _startWaveformMorph() {
     if (this._waveformAnimFrame) cancelAnimationFrame(this._waveformAnimFrame);
     const start = performance.now();
-    const duration = 500;
-    const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const duration = 400;
+    const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const prev = this._prevWaveformData;
+    const next = this._waveformData;
+    const hasPrev = prev && prev.length > 0;
+
+    if (hasPrev && prev.length === next.length) {
+      this._waveformMorphFrom = prev.slice();
+    } else {
+      this._waveformMorphFrom = null;
+    }
 
     const tick = (now) => {
       const elapsed = now - start;
@@ -3407,6 +3418,8 @@ const UI = {
       this._paintWaveform(this._waveformProgress || 0);
       if (this._waveformAnimProgress < 1) {
         this._waveformAnimFrame = requestAnimationFrame(tick);
+      } else {
+        this._waveformMorphFrom = null;
       }
     };
     this._waveformAnimFrame = requestAnimationFrame(tick);
@@ -3484,7 +3497,8 @@ const UI = {
     const pw = this._waveformPointWidth * dpr;
     const pg = this._waveformPointGap * dpr;
     const totalWidth = data.length * (pw + pg);
-    const animScale = this._waveformAnimProgress != null ? this._waveformAnimProgress : 1;
+    const animT = this._waveformAnimProgress != null ? this._waveformAnimProgress : 1;
+    const morphFrom = this._waveformMorphFrom;
 
     const style = getComputedStyle(document.documentElement);
     const playedColor = style.getPropertyValue('--waveform-played').trim() || '#D4F040';
@@ -3498,8 +3512,11 @@ const UI = {
     const hoverX = this._waveformHoverX >= 0 ? this._waveformHoverX * dpr : -1;
 
     for (let i = 0; i < data.length; i++) {
-      const fullBarH = (data[i] / 100) * h * 0.85;
-      const barH = fullBarH * animScale;
+      let val = data[i];
+      if (morphFrom && i < morphFrom.length) {
+        val = morphFrom[i] + (data[i] - morphFrom[i]) * animT;
+      }
+      const barH = (val / 100) * h * 0.85;
       const x = (w - totalWidth) / 2 + i * (pw + pg);
       const y = (h - barH) / 2;
 
