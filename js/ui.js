@@ -3414,11 +3414,20 @@ const UI = {
   _loadWaveform(track) {
     if (!track) return;
 
+    const isFirstLoad = !this._waveformData || this._waveformData.length === 0;
     this._realWaveform = false;
     this._waveformRawPeaks = null;
     this._currentWaveformTrackId = track.id;
     this._waveformMorphFrom = null;
     this._waveformAnimProgress = 1;
+
+    if (isFirstLoad) {
+      const canvas = this.els.waveformCanvas;
+      canvas.classList.add('fading');
+      requestAnimationFrame(() => {
+        canvas.classList.remove('fading');
+      });
+    }
 
     this._generateWaveform(track.id);
     this._paintWaveform(this._waveformProgress || 0);
@@ -3431,8 +3440,16 @@ const UI = {
 
       this._waveformRawPeaks = data.peaks;
       this._realWaveform = true;
-      this._scaleWaveformData();
-      this._paintWaveform(this._waveformProgress || 0);
+
+      const canvas = this.els.waveformCanvas;
+      canvas.classList.add('fading');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this._scaleWaveformData();
+          this._paintWaveform(this._waveformProgress || 0);
+          canvas.classList.remove('fading');
+        });
+      });
     }).catch(() => {});
   },
 
