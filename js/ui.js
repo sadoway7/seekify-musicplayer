@@ -705,7 +705,25 @@ const UI = {
         return;
       }
 
-      const actionBtn = e.target.closest('.action-btn');
+      const ripMoreBtn = e.target.closest('[data-action="rip-more"]');
+      if (ripMoreBtn) {
+        const artistName = ripMoreBtn.dataset.artist;
+        Api.finderSearch(artistName, 'artist').then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            const mbid = data[0].id;
+            if (mbid) {
+              this.navigateTo('finder-artist', { mbid, name: artistName });
+              return;
+            }
+          }
+          this.showToast('Artist not found on MusicBrainz');
+        }).catch(() => {
+          this.showToast('Failed to search MusicBrainz');
+        });
+        return;
+      }
+
+      const actionBtn = e.target.closest('.detail-action-btn');
       if (actionBtn) {
         this._handleAction(actionBtn.dataset.action);
         return;
@@ -1478,6 +1496,7 @@ const UI = {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '<button class="detail-action-btn" data-action="rip-more" data-artist="' + this._esc(name) + '">' + Icons.globe() + '<span>Rip More</span></button>'
       + '</div>'
       + '</div></div>';
 

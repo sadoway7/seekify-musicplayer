@@ -1728,6 +1728,14 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 	return result
 }
 
+func cleanChannelName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimSuffix(name, " - Topic")
+	name = strings.TrimSuffix(name, " Topic")
+	name = strings.TrimSuffix(name, "VEVO")
+	return strings.TrimSpace(name)
+}
+
 func cleanTrackTitle(title string) string {
 	title = strings.TrimSpace(title)
 	if title == "" {
