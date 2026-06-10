@@ -386,6 +386,13 @@
   background: rgba(34, 197, 94, 0.12);
 }
 
+.finder-in-own-library {
+  color: #fff;
+  background: #1a1a1a;
+  cursor: default;
+  pointer-events: none;
+}
+
 .finder-in-queue {
   color: var(--accent);
   background: rgba(212, 240, 64, 0.12);

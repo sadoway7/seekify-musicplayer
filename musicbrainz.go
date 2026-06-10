@@ -506,6 +506,7 @@ type FinderReleaseTrack struct {
 	Length    int    `json:"length,omitempty"`
 	Artist    string `json:"artist,omitempty"`
 	Recording string `json:"recordingId,omitempty"`
+	InLibrary bool   `json:"inLibrary"`
 }
 
 func scoreMatch(localArtist, localTitle, mbArtist, mbTitle, mbAlbum string) float64 {
@@ -1568,6 +1569,7 @@ func finderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
 				Length:    t.Length / 1000,
 				Artist:    artist,
 				Recording: t.Recording.ID,
+				InLibrary: checkDuplicateInLibrary(artist, t.Title),
 			})
 		}
 	}
@@ -1608,13 +1610,14 @@ func resolveToReleaseID(id string) string {
 }
 
 type ArtistTrack struct {
-	Title    string `json:"title"`
-	Artist   string `json:"artist"`
-	Album    string `json:"album"`
-	AlbumID  string `json:"albumId"`
-	Length   int    `json:"length"`
-	Position int    `json:"position"`
-	Count    int    `json:"count"`
+	Title     string `json:"title"`
+	Artist    string `json:"artist"`
+	Album     string `json:"album"`
+	AlbumID   string `json:"albumId"`
+	Length    int    `json:"length"`
+	Position  int    `json:"position"`
+	Count     int    `json:"count"`
+	InLibrary bool   `json:"inLibrary"`
 }
 
 type mbRecording struct {
@@ -1700,12 +1703,13 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 					existing.Length = length
 				}
 			} else {
-				seen[key] = &ArtistTrack{
-					Title:  title,
-					Artist: artist,
-					Length: length,
-					Count:  1,
-				}
+		seen[key] = &ArtistTrack{
+				Title:     title,
+				Artist:    artist,
+				Length:    length,
+				Count:     1,
+				InLibrary: checkDuplicateInLibrary(artist, title),
+			}
 			}
 		}
 

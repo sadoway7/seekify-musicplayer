@@ -1135,24 +1135,43 @@ const UI = {
     if (this.searchQuery) {
       const q = this.searchQuery.toLowerCase();
       const words = q.split(/\s+/).filter(w => w.length > 0);
+
+      let html = '';
+
+      const artistMatches = Store.library.artists.filter(a => {
+        return a.name.toLowerCase().includes(q);
+      });
+      if (artistMatches.length > 0) {
+        html += '<div class="search-results-header">Artists</div>';
+        artistMatches.forEach(a => {
+          html += '<div class="list-item lib-item" data-type="artist" data-id="' + this._esc(a.name) + '" style="cursor:pointer">'
+            + '<div class="list-item-art round"><img src="' + Api.artistArtUrl(a.name) + '" alt=""></div>'
+            + '<div class="list-item-info">'
+            + '<div class="list-item-title">' + this._esc(a.name) + '</div>'
+            + '<div class="list-item-subtitle">' + a.trackCount + ' track' + (a.trackCount !== 1 ? 's' : '') + ' · ' + a.albumCount + ' album' + (a.albumCount !== 1 ? 's' : '') + '</div>'
+            + '</div></div>';
+        });
+        html += '<div style="height:16px"></div>';
+      }
+
       const results = Store.library.tracks.filter(t => {
         const haystack = (t.title + ' ' + t.artist + ' ' + t.album + ' ' + (t.genre || '')).toLowerCase();
         return words.every(w => haystack.includes(w));
       }).sort((a, b) => {
-        // Prioritize title matches, then artist, then album
         const aTitle = a.title.toLowerCase().includes(q) ? 3 : a.title.toLowerCase().split(/\s+/).some(w => words.includes(w)) ? 2 : 0;
         const bTitle = b.title.toLowerCase().includes(q) ? 3 : b.title.toLowerCase().split(/\s+/).some(w => words.includes(w)) ? 2 : 0;
         return bTitle - aTitle;
       });
       this._viewTrackList = results;
-      if (results.length === 0) {
+
+      if (artistMatches.length === 0 && results.length === 0) {
         container.innerHTML = this._emptyState('No results', 'Try different keywords', Icons.search());
       } else {
-        let html = '<div class="detail-actions">'
+        html += '<div class="detail-actions">'
           + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
           + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
           + '</div>';
-        html += '<div class="search-results-header">' + results.length + ' result' + (results.length !== 1 ? 's' : '') + '</div>';
+        html += '<div class="search-results-header">' + results.length + ' track' + (results.length !== 1 ? 's' : '') + '</div>';
         html += this.renderTrackList(results, { showArt: true });
         container.innerHTML = html;
       }
@@ -2313,7 +2332,9 @@ const UI = {
     allTracks.forEach((t, i) => {
       const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
       let statusHtml;
-      if (this._isQueued(t.artist, t.title)) {
+      if (t.inLibrary) {
+        statusHtml = '<span class="finder-status-badge finder-in-own-library">In Library</span>';
+      } else if (this._isQueued(t.artist, t.title)) {
         statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
       } else {
         statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(t.album) + '" data-album-mbid="' + this._esc(t.albumId) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="0" title="Download">' + Icons.download() + '<span>Download</span></button>';
@@ -2335,16 +2356,21 @@ const UI = {
     const dlAllBtn = container.querySelector('#btn-download-all-artist');
     if (dlAllBtn) {
       dlAllBtn.addEventListener('click', () => {
-        const trackList = allTracks.map((t, i) => ({
+        const toDownload = allTracks.filter(t => !t.inLibrary);
+        if (toDownload.length === 0) {
+          this._showToast('All tracks are already in your library');
+          return;
+        }
+        const trackList = toDownload.map((t, i) => ({
           artist: t.artist,
           title: t.title,
           album: t.album || '',
           albumMbid: t.albumId || '',
           trackNumber: i + 1,
-          trackTotal: allTracks.length
+          trackTotal: toDownload.length
         }));
         Api.queueAddBatch(trackList).then(() => {
-          this._showToast(allTracks.length + ' tracks added to queue');
+          this._showToast(toDownload.length + ' tracks added to queue');
           container.querySelectorAll('.finder-track-dl').forEach(btn => {
             const badge = document.createElement('span');
             badge.className = 'finder-status-badge finder-in-queue';
@@ -2449,7 +2475,9 @@ const UI = {
         const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
         const trackArtist = t.artist || artist;
         let statusHtml;
-        if (this._isQueued(trackArtist, t.title)) {
+        if (t.inLibrary) {
+          statusHtml = '<span class="finder-status-badge finder-in-own-library">In Library</span>';
+        } else if (this._isQueued(trackArtist, t.title)) {
           statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
         } else {
           statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(trackArtist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(title) + '" data-album-mbid="' + this._esc(data.mbid) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="' + tracks.length + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
