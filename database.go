@@ -296,6 +296,16 @@ func dbFindPlaylistByName(name string) *Playlist {
 	return &p
 }
 
+func dbFindPlaylistByID(id string) *Playlist {
+	row := db.QueryRow("SELECT id, name, created_at FROM playlists WHERE id = ? LIMIT 1", id)
+	var p Playlist
+	if err := row.Scan(&p.ID, &p.Name, &p.CreatedAt); err != nil {
+		return nil
+	}
+	p.TrackIDs = dbGetPlaylistTracks(p.ID)
+	return &p
+}
+
 func dbGetOrCreatePlaylistByName(name string) string {
 	existing := dbFindPlaylistByName(name)
 	if existing != nil {

@@ -58,12 +58,32 @@ const App = {
     const artistName = params.get('artist');
     const albumId = params.get('album');
     const playlistId = params.get('playlist');
-    if (artistName) {
+    if (playId) {
+      const track = Store.getTrack(playId);
+      if (track) {
+        Player.queue = [track];
+        Player.currentIndex = 0;
+        Player.audio.src = Api.streamUrl(track.id);
+        Player.playing = false;
+        if (Player.onTrackChange) Player.onTrackChange(track);
+        if (Player.onStateChange) Player.onStateChange();
+        UI.showNowPlaying();
+      }
+    } else if (artistName) {
       UI.navigateTo('artist', { artistName });
     } else if (albumId) {
       UI.navigateTo('album', { albumId });
     } else if (playlistId) {
-      UI.navigateTo('playlist', { playlistId });
+      const playlist = Store.getPlaylist(playlistId);
+      if (playlist && playlist.trackIds.length > 0) {
+        const tracks = playlist.trackIds.map(id => Store.getTrack(id)).filter(Boolean);
+        if (tracks.length > 0) {
+          Player.play(tracks[0], tracks, { type: 'playlist', name: playlist.name });
+          UI.showNowPlaying();
+        }
+      } else {
+        UI.navigateTo('playlist', { playlistId });
+      }
     }
 
     if (playId || artistName || albumId || playlistId) {

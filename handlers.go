@@ -1261,6 +1261,78 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 
 	indexPath := filepath.Join(".", "index.html")
 	if _, err := os.Stat(indexPath); err == nil {
+		q := r.URL.Query()
+		playlistID := q.Get("playlist")
+		trackID := q.Get("play")
+		albumID := q.Get("album")
+		artistName := q.Get("artist")
+
+		if playlistID != "" || trackID != "" || albumID != "" || artistName != "" {
+			html, err := os.ReadFile(indexPath)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+
+			var ogTitle, ogDesc string
+			host := "http://" + r.Host
+			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+				host = "https://" + r.Host
+			}
+			ogURL := host + r.URL.RequestURI()
+
+			if playlistID != "" {
+				p := dbFindPlaylistByID(playlistID)
+				if p != nil {
+					ogTitle = p.Name + " — Music Playlist"
+					ogDesc = fmt.Sprintf("%d tracks. Listen on Music.", p.TrackCount())
+				} else {
+					ogTitle = "Music Playlist"
+					ogDesc = "Listen on Music."
+				}
+			} else if trackID != "" {
+				mu.RLock()
+				if t, ok := tracks[trackID]; ok {
+					ogTitle = t.Artist + " — " + t.Title
+					ogDesc = "Listen on Music."
+				}
+				mu.RUnlock()
+				if ogTitle == "" {
+					ogTitle = "Music"
+					ogDesc = "Listen on Music."
+				}
+			} else if albumID != "" {
+				mu.RLock()
+				if a, ok := albums[albumID]; ok {
+					ogTitle = a.Artist + " — " + a.Name
+					ogDesc = fmt.Sprintf("%d tracks. Listen on Music.", a.TrackCount)
+				}
+				mu.RUnlock()
+				if ogTitle == "" {
+					ogTitle = "Music"
+					ogDesc = "Listen on Music."
+				}
+			} else if artistName != "" {
+				ogTitle = artistName + " — Music"
+				ogDesc = "Listen on Music."
+			}
+
+			ogTags := "\n<meta property=\"og:title\" content=\"" + ogTitle + "\">"
+			ogTags += "\n<meta property=\"og:description\" content=\"" + ogDesc + "\">"
+			ogTags += "\n<meta property=\"og:url\" content=\"" + ogURL + "\">"
+			ogTags += "\n<meta property=\"og:type\" content=\"music.playlist\">"
+			ogTags += "\n<meta name=\"twitter:card\" content=\"summary\">"
+			ogTags += "\n<meta name=\"twitter:title\" content=\"" + ogTitle + "\">"
+			ogTags += "\n<meta name=\"twitter:description\" content=\"" + ogDesc + "\">"
+
+			htmlStr := string(html)
+			htmlStr = strings.Replace(htmlStr, "</title>", "</title>"+ogTags, 1)
+
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte(htmlStr))
+			return
+		}
+
 		http.ServeFile(w, r, indexPath)
 		return
 	}
