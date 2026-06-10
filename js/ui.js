@@ -246,7 +246,6 @@ const UI = {
       a.click();
       document.body.removeChild(a);
     });
-    });
 
     let prevVolume = 1;
     this.els.volumeBtn.addEventListener('click', () => {
