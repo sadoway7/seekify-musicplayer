@@ -266,7 +266,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 var(--page-margin) var(--sp-2);
+  padding: var(--sp-3) var(--page-margin) var(--sp-2);
 }
 
 .tracklist-toolbar .search-container {
@@ -646,6 +646,12 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.queue-stats-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .stat-badge {

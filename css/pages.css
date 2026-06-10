@@ -441,7 +441,7 @@
 }
 
 .library-header + .search-container {
-  margin: 0 var(--sp-4) var(--sp-3);
+  margin: var(--sp-2) var(--sp-4) var(--sp-3);
 }
 
 .browse-grid {

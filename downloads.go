@@ -182,7 +182,18 @@ func dbGetJobs(limit int) ([]DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
-		FROM download_jobs ORDER BY created_at DESC LIMIT ?`, limit)
+		FROM download_jobs ORDER BY
+			CASE status
+				WHEN 'searching' THEN 0
+				WHEN 'downloading' THEN 1
+				WHEN 'tagging' THEN 2
+				WHEN 'completed' THEN 3
+				WHEN 'queued' THEN 4
+				ELSE 5
+			END,
+			completed_at DESC,
+			created_at DESC
+		LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +206,7 @@ func dbGetQueuedJobs() ([]DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
-		FROM download_jobs WHERE status = 'queued' ORDER BY created_at ASC`)
+		FROM download_jobs WHERE status = 'queued' ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}

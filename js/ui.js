@@ -1869,10 +1869,6 @@ const UI = {
       const failedCount = counts.failed || 0;
       let html = '';
 
-      if (failedCount > 0) {
-        html += '<div style="padding:8px 0"><button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:12px">&#x21bb; Retry All Failed (' + failedCount + ')</button></div>';
-      }
-
       if (activeCount > 0 || counts.completed > 0 || counts.failed > 0) {
         html += '<div class="queue-stats">'
           + '<div class="queue-stats-badges">'
@@ -1881,30 +1877,53 @@ const UI = {
           + (counts.completed > 0 ? '<span class="stat-badge stat-completed">' + counts.completed + ' done</span>' : '')
           + (counts.failed > 0 ? '<span class="stat-badge stat-failed">' + counts.failed + ' failed</span>' : '')
           + '</div>'
+          + '<div class="queue-stats-actions">'
+          + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
           + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
+          + '</div>'
           + '</div>';
       }
 
       html += '<div class="queue-job-list">';
+      const now = Date.now();
+      let queuedIndex = 0;
       jobs.forEach(j => {
-        const active = j.status === 'queued' || j.status === 'searching' || j.status === 'downloading' || j.status === 'tagging';
+        const active = j.status === 'searching' || j.status === 'downloading' || j.status === 'tagging';
+        const isQueued = j.status === 'queued';
         const failed = j.status === 'failed';
+        const completed = j.status === 'completed';
 
-        html += '<div class="queue-job-card">'
-          + '<div class="queue-job-status ' + (active ? 'job-active' : failed ? 'job-failed' : 'job-done') + '">'
-          + (active ? '<div class="queue-spinner"></div>' : (failed ? '<div class="queue-status-dot dot-failed"></div>' : '<div class="queue-status-dot dot-done"></div>'))
+        let elapsed = '';
+        if (active || isQueued) {
+          const created = new Date(j.createdAt).getTime();
+          const diffSec = Math.floor((now - created) / 1000);
+          if (diffSec < 60) elapsed = 'just now';
+          else if (diffSec < 3600) elapsed = Math.floor(diffSec / 60) + 'm ago';
+          else elapsed = Math.floor(diffSec / 3600) + 'h ' + Math.floor((diffSec % 3600) / 60) + 'm ago';
+        }
+
+        let queuePos = '';
+        if (isQueued) {
+          queuedIndex++;
+          queuePos = '<span class="queue-pos">#' + queuedIndex + ' in line</span>';
+        }
+
+        html += '<div class="queue-job-card' + (active ? ' queue-active' : isQueued ? ' queue-waiting' : '') + '">'
+          + '<div class="queue-job-status ' + (active ? 'job-active' : isQueued ? 'job-queued' : failed ? 'job-failed' : 'job-done') + '">'
+          + (active ? '<div class="queue-spinner"></div>' : isQueued ? '<div class="queue-status-dot dot-waiting"></div>' : (failed ? '<div class="queue-status-dot dot-failed"></div>' : '<div class="queue-status-dot dot-done"></div>'))
           + '</div>'
           + '<div class="queue-job-info">'
           + '<div class="queue-job-title">' + this._esc(j.artist || '') + (j.artist && j.title ? ' - ' : '') + this._esc(j.title || j.query || 'Unknown') + '</div>'
       + '<div class="queue-job-detail">'
-      + (j.progressStage ? '<span>' + this._esc(j.progressStage) + '</span>' : '<span>' + j.status + '</span>')
+      + (active ? '<span class="queue-elapsed">' + elapsed + '</span>' : (isQueued ? queuePos + '<span class="queue-elapsed">' + elapsed + '</span>' : '<span>' + j.status + '</span>'))
+      + (j.progressStage && !isQueued ? '<span>' + this._esc(j.progressStage) + '</span>' : '')
       + (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
       + (failed && j.error ? '<span class="queue-job-error">' + this._esc(j.error) + '</span>' : '')
       + (j.filePath ? '<div class="queue-job-file">' + this._esc(j.filePath) + '</div>' : '')
       + '</div>'
           + '</div>'
       + '<div class="queue-job-actions">'
-      + (j.status === 'completed' && j.filePath ? '<a class="queue-item-download" href="' + Api.downloadJobUrl(j.id) + '" title="Download file" download>' + Icons.download() + '</a>' : '')
+      + (completed && j.filePath ? '<a class="queue-item-download" href="' + Api.downloadJobUrl(j.id) + '" title="Download file" download>' + Icons.download() + '</a>' : '')
       + (failed ? '<button class="queue-item-retry" data-job-id="' + this._esc(j.id) + '" title="Retry">&#x21bb;</button>' : '')
       + '<button class="queue-item-delete" data-job-id="' + this._esc(j.id) + '" title="Remove">&times;</button>'
       + '</div>'
