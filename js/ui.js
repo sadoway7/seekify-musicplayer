@@ -3373,16 +3373,17 @@ const UI = {
     this._realWaveform = false;
     this._waveformRawPeaks = null;
 
-    Api.getWaveform(track.id).then(data => {
+    const trackId = track.id;
+    Api.getWaveform(trackId).then(data => {
       if (!data || !data.peaks || data.peaks.length === 0) return;
       const currentTrack = Player.getCurrentTrack();
-      if (!currentTrack || currentTrack.id !== track.id) return;
+      if (!currentTrack || currentTrack.id !== trackId) return;
 
       this._waveformRawPeaks = data.peaks;
       this._realWaveform = true;
       this._scaleWaveformData();
       this._paintWaveform(this._waveformProgress || 0);
-    });
+    }).catch(() => {});
   },
 
   _scaleWaveformData() {
