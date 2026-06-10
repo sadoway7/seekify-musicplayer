@@ -93,8 +93,83 @@
   flex-direction: row;
   align-items: center;
   padding: 10px 0;
-  gap: 12px;
-  transition: opacity 0.15s ease;
+  gap: 10px;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.queue-item-drag {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  cursor: grab;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.queue-item:hover .queue-item-drag,
+.queue-item:active .queue-item-drag {
+  opacity: 0.7;
+}
+
+.queue-item-drag svg {
+  width: 14px;
+  height: 14px;
+  transform: rotate(90deg);
+}
+
+.queue-item-dragging {
+  background: var(--l2);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.queue-item-placeholder {
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  opacity: 0.4;
+  margin: 4px 0;
+}
+
+.queue-item-more {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.queue-item:hover .queue-item-more,
+.queue-item-more:focus {
+  opacity: 1;
+}
+
+.queue-item-more:active {
+  background: var(--l3);
+}
+
+.queue-item-more svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (hover: none) {
+  .queue-item-more {
+    opacity: 0.6;
+  }
+  .queue-item-drag {
+    opacity: 0.5;
+  }
 }
 
 .queue-source {

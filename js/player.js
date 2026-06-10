@@ -239,6 +239,47 @@ const Player = {
     if (this.onQueueChange) this.onQueueChange();
   },
 
+  removeFromQueue(index) {
+    if (index < 0 || index >= this.queue.length) return;
+    this.queue.splice(index, 1);
+    if (index < this.currentIndex) {
+      this.currentIndex--;
+    } else if (index === this.currentIndex) {
+      if (this.queue.length === 0) {
+        this.currentIndex = -1;
+        this.audio.pause();
+        this.playing = false;
+        if (this.onStateChange) this.onStateChange();
+      } else {
+        this.currentIndex = Math.min(this.currentIndex, this.queue.length - 1);
+        this._loadAndPlay(this.queue[this.currentIndex]);
+      }
+    }
+    if (this.onQueueChange) this.onQueueChange();
+  },
+
+  moveInQueue(fromIndex, toIndex) {
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || fromIndex >= this.queue.length) return;
+    if (toIndex < 0 || toIndex >= this.queue.length) return;
+    const track = this.queue.splice(fromIndex, 1)[0];
+    this.queue.splice(toIndex, 0, track);
+    if (fromIndex === this.currentIndex) {
+      this.currentIndex = toIndex;
+    } else if (fromIndex < this.currentIndex && toIndex >= this.currentIndex) {
+      this.currentIndex--;
+    } else if (fromIndex > this.currentIndex && toIndex <= this.currentIndex) {
+      this.currentIndex++;
+    }
+    if (this.onQueueChange) this.onQueueChange();
+  },
+
+  playNextInQueue(track) {
+    const insertAt = this.currentIndex + 1;
+    this.queue.splice(insertAt, 0, track);
+    if (this.onQueueChange) this.onQueueChange();
+  },
+
   clearQueue() {
     const current = this.getCurrentTrack();
     if (current) {

@@ -518,6 +518,14 @@ const UI = {
     });
 
     this.els.queueList.addEventListener('click', (e) => {
+      if (e.target.closest('.queue-item-more')) {
+        const item = e.target.closest('.queue-item');
+        if (!item) return;
+        const index = parseInt(item.dataset.queueIndex);
+        if (isNaN(index)) return;
+        this._showQueueItemContextMenu(index, e.target.closest('.queue-item-more'));
+        return;
+      }
       const item = e.target.closest('.queue-item');
       if (!item) return;
       const index = parseInt(item.dataset.queueIndex);
@@ -575,7 +583,168 @@ const UI = {
     });
   },
 
-  _bindModals() {
+  _bindQueueDrag() {
+    const list = this.els.queueList;
+    let dragItem = null;
+    let placeholder = null;
+    let startX = 0;
+    let startY = 0;
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    list.addEventListener('touchstart', (e) => {
+      const handle = e.target.closest('.queue-item-drag');
+      if (!handle) return;
+      const item = handle.closest('.queue-item');
+      if (!item) return;
+      dragItem = item;
+      const rect = item.getBoundingClientRect();
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      offsetX = startX - rect.left;
+      offsetY = startY - rect.top;
+      dragging = false;
+    }, { passive: true });
+
+    list.addEventListener('touchmove', (e) => {
+      if (!dragItem) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (!dragging) {
+        if (Math.abs(dy) < 8) return;
+        dragging = true;
+        placeholder = document.createElement('div');
+        placeholder.className = 'queue-item-placeholder';
+        placeholder.style.height = dragItem.offsetHeight + 'px';
+        dragItem.parentNode.insertBefore(placeholder, dragItem);
+        dragItem.classList.add('queue-item-dragging');
+        dragItem.style.position = 'fixed';
+        dragItem.style.left = dragItem.getBoundingClientRect().left + 'px';
+        dragItem.style.top = (e.touches[0].clientY - offsetY) + 'px';
+        dragItem.style.width = dragItem.getBoundingClientRect().width + 'px';
+        dragItem.style.zIndex = '200';
+      }
+      if (dragging) {
+        e.preventDefault();
+        dragItem.style.top = (e.touches[0].clientY - offsetY) + 'px';
+        const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+        let inserted = false;
+        for (const item of items) {
+          const rect = item.getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          if (e.touches[0].clientY < midY) {
+            list.insertBefore(placeholder, item);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) {
+          list.appendChild(placeholder);
+        }
+      }
+    }, { passive: false });
+
+    list.addEventListener('touchend', () => {
+      if (!dragItem) return;
+      if (dragging && placeholder) {
+        const fromIndex = parseInt(dragItem.dataset.queueIndex);
+        const toIndex = Array.from(list.querySelectorAll('.queue-item:not(.queue-item-dragging)')).indexOf(placeholder);
+        dragItem.classList.remove('queue-item-dragging');
+        dragItem.style.position = '';
+        dragItem.style.left = '';
+        dragItem.style.top = '';
+        dragItem.style.width = '';
+        dragItem.style.zIndex = '';
+        placeholder.remove();
+        placeholder = null;
+        if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
+          Player.moveInQueue(fromIndex, toIndex);
+        } else {
+          this._renderQueue();
+        }
+      }
+      dragItem = null;
+      dragging = false;
+    }, { passive: true });
+
+    list.addEventListener('mousedown', (e) => {
+      const handle = e.target.closest('.queue-item-drag');
+      if (!handle) return;
+      e.preventDefault();
+      const item = handle.closest('.queue-item');
+      if (!item) return;
+      dragItem = item;
+      const rect = item.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+      dragging = false;
+
+      const onMouseMove = (e) => {
+        const dy = e.clientY - startY;
+        if (!dragging) {
+          if (Math.abs(dy) < 5) return;
+          dragging = true;
+          placeholder = document.createElement('div');
+          placeholder.className = 'queue-item-placeholder';
+          placeholder.style.height = dragItem.offsetHeight + 'px';
+          dragItem.parentNode.insertBefore(placeholder, dragItem);
+          dragItem.classList.add('queue-item-dragging');
+          dragItem.style.position = 'fixed';
+          dragItem.style.left = dragItem.getBoundingClientRect().left + 'px';
+          dragItem.style.top = (e.clientY - offsetY) + 'px';
+          dragItem.style.width = dragItem.getBoundingClientRect().width + 'px';
+          dragItem.style.zIndex = '200';
+        }
+        if (dragging) {
+          dragItem.style.top = (e.clientY - offsetY) + 'px';
+          const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+          let inserted = false;
+          for (const it of items) {
+            const r = it.getBoundingClientRect();
+            const midY = r.top + r.height / 2;
+            if (e.clientY < midY) {
+              list.insertBefore(placeholder, it);
+              inserted = true;
+              break;
+            }
+          }
+          if (!inserted) {
+            list.appendChild(placeholder);
+          }
+        }
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        if (dragItem && dragging && placeholder) {
+          const fromIndex = parseInt(dragItem.dataset.queueIndex);
+          const toIndex = Array.from(list.querySelectorAll('.queue-item:not(.queue-item-dragging)')).indexOf(placeholder);
+          dragItem.classList.remove('queue-item-dragging');
+          dragItem.style.position = '';
+          dragItem.style.left = '';
+          dragItem.style.top = '';
+          dragItem.style.width = '';
+          dragItem.style.zIndex = '';
+          placeholder.remove();
+          placeholder = null;
+          if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
+            Player.moveInQueue(fromIndex, toIndex);
+          } else {
+            this._renderQueue();
+          }
+        }
+        dragItem = null;
+        dragging = false;
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  },
     this.els.contextMenu.addEventListener('click', (e) => {
       if (e.target === this.els.contextMenu || !e.target.closest('.modal-option')) {
         this.hideContextMenu();
@@ -3647,12 +3816,16 @@ const UI = {
     this.els.queueList.innerHTML = Player.queue.map((track, i) => {
       const isCurrent = i === Player.currentIndex;
       return '<div class="queue-item' + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
+        + '<div class="queue-item-drag" aria-label="Drag to reorder">' + Icons.dots() + '</div>'
         + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
         + '<div class="queue-item-info">'
         + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
         + '<div class="queue-item-artist">' + this._esc(track.artist) + '</div>'
-        + '</div></div>';
+        + '</div>'
+        + '<button class="queue-item-more" aria-label="More">' + Icons.more() + '</button>'
+        + '</div>';
     }).join('');
+    this._bindQueueDrag();
   },
 
   showContextMenu(options, triggerEl) {
@@ -3994,7 +4167,73 @@ const UI = {
     this.showContextMenu(menuItems, triggerEl);
   },
 
-  async _showRescanModal(trackId) {
+  _showQueueItemContextMenu(index, triggerEl) {
+    const track = Player.queue[index];
+    if (!track) return;
+    const menuItems = [
+      { label: 'Remove from Queue', icon: Icons.trash(), action: () => {
+        this.hideContextMenu();
+        Player.removeFromQueue(index);
+      }},
+      { label: 'Play Next', icon: Icons.play(), action: () => {
+        this.hideContextMenu();
+        if (index === Player.currentIndex) return;
+        const t = Player.queue.splice(index, 1)[0];
+        const insertAt = Player.currentIndex + 1;
+        Player.queue.splice(insertAt, 0, t);
+        if (index < Player.currentIndex) {
+          Player.currentIndex--;
+        }
+        if (Player.onQueueChange) Player.onQueueChange();
+      }},
+      { type: 'divider' },
+      { label: 'Go to Album', icon: Icons.library(), action: () => {
+        this.hideContextMenu();
+        this.hideQueue();
+        this.navigateTo('album', { albumId: track.albumID });
+      }},
+      { label: 'Go to Artist', icon: Icons.music(), action: () => {
+        this.hideContextMenu();
+        this.hideQueue();
+        this.navigateTo('artist', { artistName: track.artist });
+      }},
+      { type: 'divider' },
+      { label: 'Share', icon: Icons.share(), action: async () => {
+        this.hideContextMenu();
+        const shareUrl = window.location.origin + '/?track=' + encodeURIComponent(track.id);
+        if (navigator.share) {
+          try { await navigator.share({ title: track.title, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
+        } else {
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+        }
+      }},
+      { label: 'Add to Playlist', icon: Icons.plus(), action: () => {
+        this.hideContextMenu();
+        this.showPlaylistModal(track.id);
+      }},
+      { type: 'divider' },
+      { label: 'Download', icon: Icons.download(), action: () => {
+        this.hideContextMenu();
+        this._addToQueue({ artist: track.artist, title: track.title });
+      }}
+    ];
+
+    if (track.downloadEnabled) {
+      menuItems.push({ type: 'divider' });
+      menuItems.push({ label: 'Save File', icon: Icons.download(), action: () => {
+        this.hideContextMenu();
+        const a = document.createElement('a');
+        a.href = Api.downloadUrl(track.id);
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        this.showToast('Downloading...');
+      }});
+    }
+
+    this.showContextMenu(menuItems, triggerEl);
+  },
     const track = Store.getTrack(trackId);
     if (!track) return;
 
