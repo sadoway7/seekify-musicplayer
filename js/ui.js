@@ -5404,6 +5404,7 @@ const UI = {
       const vibL = Math.min(65, Math.max(45, l + 10));
       document.documentElement.style.setProperty('--waveform-played', 'hsl(' + h + ',' + vibS + '%,' + vibL + '%)');
       document.documentElement.style.setProperty('--waveform-hover', 'hsl(' + h + ',' + vibS + '%,' + Math.min(80, vibL + 15) + '%)');
+      document.documentElement.style.setProperty('--waveform-muted', 'hsl(' + h + ',' + Math.round(vibS * 0.35) + '%,' + Math.min(85, vibL + 30) + '%)');
 
       this._albumColor = { r, g, b, h, s, l };
       this._applyMiniPlayerColor();

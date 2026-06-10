@@ -96,7 +96,7 @@
 }
 
 .np-btn:hover {
-  color: var(--text-primary);
+  color: var(--waveform-played, var(--text-primary));
 }
 
 .np-btn svg {
@@ -240,7 +240,7 @@
 }
 
 .np-float-pill .np-btn:hover {
-  color: var(--accent);
+  color: var(--waveform-played, var(--accent));
 }
 
 .np-float-pill .np-btn svg {
@@ -305,7 +305,7 @@
 }
 
 .np-like-btn.active {
-  color: var(--accent);
+  color: var(--waveform-played, var(--accent));
   background: var(--accent-soft);
 }
 
@@ -381,9 +381,19 @@
   flex-direction: row;
   justify-content: space-between;
   margin-top: var(--sp-2);
-  font-size: var(--fs-timestamp);
-  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+#np-time-current {
+  color: var(--waveform-played, var(--text-muted));
+  opacity: 0.7;
+}
+
+#np-time-total {
+  color: var(--waveform-muted, var(--text-muted));
+  opacity: 0.58;
 }
 
 .np-controls {
@@ -402,8 +412,12 @@
   color: var(--text-secondary);
 }
 
+.np-ctrl:hover {
+  color: var(--waveform-played, var(--text-primary));
+}
+
 .np-ctrl.active {
-  color: var(--accent);
+  color: var(--waveform-played, var(--accent));
 }
 
 .np-ctrl svg {
@@ -427,6 +441,10 @@
   transform: scale(0.93);
 }
 
+.np-play-main:hover {
+  background: var(--waveform-muted, var(--text1));
+}
+
 .np-play-main:active {
   transform: scale(0.93);
 }
@@ -447,6 +465,14 @@
 #np-prev,
 #np-next {
   color: var(--text-primary);
+  transition: color var(--t-fast) var(--ease-soft);
+}
+
+#np-prev:hover,
+#np-next:hover,
+#np-prev:active,
+#np-next:active {
+  color: var(--waveform-muted, var(--text-primary));
 }
 
 .np-bottom {
