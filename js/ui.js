@@ -1218,6 +1218,7 @@ const UI = {
       // Spot 1: Shuffle
       html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
         + '<div class="quick-play-art" style="background:linear-gradient(135deg, #fff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
+        + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:85px;font-weight:900;color:rgba(212,240,64,0.75);transform:rotate(-6deg);line-height:0.8;letter-spacing:-0.04em;display:block;white-space:nowrap">SHUFFLE</span></div>'
         + '<svg viewBox="0 0 100 100" width="100%" height="100%"><defs><filter id="dot-glow"><feDropShadow dx="0" dy="1" stdDeviation="2.5" flood-color="rgba(180,220,50,0.6)"/></filter></defs>'
         + '<circle cx="28" cy="28" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
         + '<circle cx="72" cy="28" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
@@ -1226,7 +1227,6 @@ const UI = {
         + '<circle cx="72" cy="72" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
         + '</svg>'
         + '</div>'
-        + '<div class="quick-play-title" style="padding-top:46px;padding-bottom:4px;display:flex;align-items:center;justify-content:center;gap:4px">' + Icons.shuffle() + '</div>'
         + '</div>';
 
       // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows
@@ -1255,7 +1255,7 @@ const UI = {
         + '<div style="position:absolute;top:-4px;right:-10px;width:40px;height:40px;background:rgba(220,50,80,0.6);border-radius:50%;pointer-events:none"></div>'
         + '<div style="position:absolute;bottom:28px;left:-6px;width:24px;height:24px;background:rgba(50,140,220,0.5);pointer-events:none"></div>'
         + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Impact,Haettenschweiler,Arial Black,sans-serif;font-size:100px;font-weight:900;color:rgba(255,255,255,0.35);transform:rotate(-10deg);line-height:0.85;letter-spacing:-0.04em;display:block;margin-top:-8px;-webkit-text-stroke:1px rgba(255,255,255,0.08)">100</span></div></div>'
-        + '<div class="quick-play-title" style="background:none;padding-top:36px;font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.85);line-height:1.3;white-space:normal">Recently<br>Added</div>'
+        + '<div class="quick-play-title" style="background:none;padding-top:38px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:rgba(255,255,255,0.7);line-height:1.3;white-space:normal">Recently<br>Added</div>'
         + '</div>';
 
       html += '</div>';
@@ -5425,8 +5425,7 @@ const UI = {
       const sorted = Store.library.tracks.slice().sort((a, b) => (b.modTime || 0) - (a.modTime || 0));
       const recent = sorted.slice(0, 100);
       if (recent.length > 0) {
-        const shuffled = recent.sort(() => Math.random() - 0.5);
-        Player.play(shuffled[0], shuffled, { type: 'recent', name: 'Last 100 Added' });
+        Player.play(recent[0], recent, { type: 'recent', name: 'Recently Added' });
         this.showNowPlaying();
       }
       return;

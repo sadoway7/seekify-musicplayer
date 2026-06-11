@@ -175,7 +175,6 @@ func main() {
 	mux.HandleFunc("/api/recent", recentHandler)
 	mux.HandleFunc("/api/recent/", recentAddHandler)
 	mux.HandleFunc("/admin", adminHandler)
-	mux.HandleFunc("/ripperv2", ripperV2Handler)
 	mux.HandleFunc("/api/v2/resolve-url", resolveURLHandler)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		ytdlp := findYtDlp()
