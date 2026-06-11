@@ -45,7 +45,12 @@ const App = {
       Store.currentView = 'ripper2';
     }
 
-    UI.renderPage();
+    try {
+      UI.renderPage();
+    } catch (e) {
+      console.error('renderPage error:', e);
+      UI.els.content.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b"><div style="font-size:16px;font-weight:600">Error loading page</div><div style="font-size:12px;margin-top:8px;color:#aaa">' + (e.message || e) + '</div></div>';
+    }
     UI.updateMiniPlayer();
 
     // Deep link: ?play=TRACK_ID

@@ -654,7 +654,7 @@ func wakeReviewWorker() {
 }
 
 func runReviewBatch() bool {
-	batch := dbGetTracksByReviewStatus("unchecked", 0)
+	batch := dbGetTracksByReviewStatus("unchecked", 50)
 	if len(batch) == 0 {
 		return false
 	}
