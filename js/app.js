@@ -31,9 +31,18 @@ const App = {
 
     UI.init();
 
+    ReviewUI.init();
+
     UI.els.content.innerHTML = '<div class="loading-spinner"></div>';
 
     await Store.init();
+
+    // URL-based routing
+    const path = window.location.pathname;
+    if (path === '/settings' || path === '/settings/') {
+      Store.currentView = 'settings';
+    }
+
     UI.renderPage();
     UI.updateMiniPlayer();
 

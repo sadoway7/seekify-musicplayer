@@ -157,6 +157,7 @@ func main() {
 	go startWatcher()
 	go startWatchScheduler()
 	go downloadWatchdog()
+	go startReviewScheduler()
 
 	mux := http.NewServeMux()
 
@@ -174,6 +175,8 @@ func main() {
 	mux.HandleFunc("/api/recent", recentHandler)
 	mux.HandleFunc("/api/recent/", recentAddHandler)
 	mux.HandleFunc("/admin", adminHandler)
+	mux.HandleFunc("/ripperv2", ripperV2Handler)
+	mux.HandleFunc("/api/v2/resolve-url", resolveURLHandler)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		ytdlp := findYtDlp()
 		ffmpeg := findFfmpeg()
@@ -253,6 +256,15 @@ func main() {
 			settingsGetHandler(w, r)
 		}
 	})
+
+	mux.HandleFunc("/api/review/tracks", reviewTracksHandler)
+	mux.HandleFunc("/api/review/counts", reviewCountsHandler)
+	mux.HandleFunc("/api/review/mark-ok", reviewMarkOkHandler)
+	mux.HandleFunc("/api/review/edit-meta", reviewEditMetaHandler)
+	mux.HandleFunc("/api/review/delete", reviewDeleteHandler)
+	mux.HandleFunc("/api/review/recheck-all", reviewRecheckAllHandler)
+	mux.HandleFunc("/api/review/progress", reviewProgressHandler)
+	mux.HandleFunc("/api/review/log", reviewLogHandler)
 
 	var handler http.Handler = mux
 	handler = loggingMiddleware(recoveryMiddleware(handler))

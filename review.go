@@ -1,0 +1,793 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	reviewMu       sync.Mutex
+	reviewActive   bool
+	reviewWake     = make(chan struct{}, 1)
+	reviewProgress struct {
+		sync.RWMutex
+		CurrentTrack string
+		CurrentID    string
+		Checked      int
+		Total        int
+		Active       bool
+	}
+	reviewLog struct {
+		sync.RWMutex
+		Entries []string
+	}
+)
+
+func initReviewTables() {
+	db.Exec(`CREATE TABLE IF NOT EXISTS track_reviews (
+		track_id TEXT PRIMARY KEY,
+		status TEXT NOT NULL DEFAULT 'unchecked',
+		flags TEXT NOT NULL DEFAULT '[]',
+		checked_at TEXT NOT NULL DEFAULT '',
+		reviewer TEXT NOT NULL DEFAULT ''
+	)`)
+	db.Exec(`ALTER TABLE track_reviews ADD COLUMN checked_at TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE track_reviews ADD COLUMN reviewer TEXT NOT NULL DEFAULT ''`)
+}
+
+func dbSetReviewStatus(trackID, status, flags, reviewer string) {
+	db.Exec(`INSERT INTO track_reviews (track_id, status, flags, checked_at, reviewer)
+		VALUES (?, ?, ?, datetime('now'), ?)
+		ON CONFLICT(track_id) DO UPDATE SET
+			status = excluded.status,
+			flags = excluded.flags,
+			checked_at = datetime('now'),
+			reviewer = excluded.reviewer`,
+		trackID, status, flags, reviewer)
+}
+
+func dbGetReviewCounts() map[string]int {
+	counts := map[string]int{"unchecked": 0, "needs_review": 0, "reviewed_ok": 0}
+	rows, err := db.Query("SELECT status, COUNT(*) FROM track_reviews GROUP BY status")
+	if err != nil {
+		return counts
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var count int
+		rows.Scan(&status, &count)
+		counts[status] = count
+	}
+	return counts
+}
+
+func dbGetTracksByReviewStatus(status string, limit int) []string {
+	var rows *sql.Rows
+	var err error
+	if limit > 0 {
+		rows, err = db.Query("SELECT track_id FROM track_reviews WHERE status = ? LIMIT ?", status, limit)
+	} else {
+		rows, err = db.Query("SELECT track_id FROM track_reviews WHERE status = ?", status)
+	}
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func dbGetReviewTracks() []Track {
+	rows, err := db.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review'")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var result []Track
+	for rows.Next() {
+		var trackID, flagsJSON string
+		rows.Scan(&trackID, &flagsJSON)
+		mu.RLock()
+		t, exists := tracks[trackID]
+		mu.RUnlock()
+		if !exists {
+			continue
+		}
+		copy := *t
+		copy.ReviewStatus = "needs_review"
+		json.Unmarshal([]byte(flagsJSON), &copy.ReviewFlags)
+		result = append(result, copy)
+	}
+	return result
+}
+
+func dbGetReviewForTrack(trackID string) (string, []string) {
+	var status, flagsJSON string
+	err := db.QueryRow("SELECT status, flags FROM track_reviews WHERE track_id = ?", trackID).Scan(&status, &flagsJSON)
+	if err == sql.ErrNoRows {
+		return "unchecked", nil
+	}
+	var flags []string
+	json.Unmarshal([]byte(flagsJSON), &flags)
+	return status, flags
+}
+
+func dbLoadAllReviewStatuses() map[string]struct {
+	Status string
+	Flags  []string
+} {
+	rows, err := db.Query("SELECT track_id, status, flags FROM track_reviews")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	result := make(map[string]struct {
+		Status string
+		Flags  []string
+	})
+	for rows.Next() {
+		var trackID, status, flagsJSON string
+		rows.Scan(&trackID, &status, &flagsJSON)
+		var flags []string
+		json.Unmarshal([]byte(flagsJSON), &flags)
+		result[trackID] = struct {
+			Status string
+			Flags  []string
+		}{status, flags}
+	}
+	return result
+}
+
+func dbResetAllReviews() {
+	db.Exec("UPDATE track_reviews SET status = 'unchecked', flags = '[]', checked_at = '', reviewer = ''")
+}
+
+func dbDeleteReview(trackID string) {
+	db.Exec("DELETE FROM track_reviews WHERE track_id = ?", trackID)
+}
+
+func dbInsertUncheckedReviews(newTracks map[string]*Track) {
+	for id := range newTracks {
+		var count int
+		db.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE track_id = ?", id).Scan(&count)
+		if count == 0 {
+			dbSetReviewStatus(id, "unchecked", "[]", "")
+		}
+	}
+}
+
+func dbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
+	mu.Lock()
+	track, exists := tracks[trackID]
+	if !exists {
+		mu.Unlock()
+		return
+	}
+	if v, ok := fields["title"].(string); ok && v != "" {
+		track.Title = v
+	}
+	if v, ok := fields["artist"].(string); ok && v != "" {
+		track.Artist = v
+	}
+	if v, ok := fields["album"].(string); ok && v != "" {
+		track.Album = v
+	}
+	if v, ok := fields["albumArtist"].(string); ok {
+		track.AlbumArtist = v
+	}
+	if v, ok := fields["trackNumber"].(float64); ok {
+		track.TrackNumber = int(v)
+	}
+	if v, ok := fields["year"].(float64); ok {
+		track.Year = int(v)
+	}
+	if v, ok := fields["genre"].(string); ok {
+		track.Genre = v
+	}
+	if track.AlbumArtist == "" {
+		track.AlbumArtist = track.Artist
+	}
+	if track.Album != "" {
+		track.AlbumID = generateAlbumID(track.AlbumArtist, track.Album)
+	}
+	track.HasMetadata = true
+
+	dbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
+
+	if tn, ok := fields["trackNumber"].(float64); ok {
+		db.Exec("UPDATE tracks SET track_number = ? WHERE id = ?", int(tn), track.ID)
+	}
+	if yr, ok := fields["year"].(float64); ok {
+		db.Exec("UPDATE tracks SET year = ? WHERE id = ?", int(yr), track.ID)
+	}
+	if g, ok := fields["genre"].(string); ok {
+		db.Exec("UPDATE tracks SET genre = ? WHERE id = ?", g, track.ID)
+	}
+
+	rebuildAlbumsFromTracks()
+	mu.Unlock()
+
+	dbSetReviewStatus(trackID, "reviewed_ok", "[]", "manual")
+}
+
+func resolveTrackFilePath(track *Track) string {
+	if strings.Contains(track.FilePath, ":") {
+		parts := strings.SplitN(track.FilePath, ":", 2)
+		prefix := parts[0]
+		relPath := parts[1]
+		if dir, ok := musicDirs[prefix]; ok {
+			return filepath.Join(dir, relPath)
+		}
+	}
+	return filepath.Join(musicDir, track.FilePath)
+}
+
+func reviewDeleteTrack(trackID string) error {
+	mu.Lock()
+	track, exists := tracks[trackID]
+	if !exists {
+		mu.Unlock()
+		return nil
+	}
+	fullPath := resolveTrackFilePath(track)
+	mu.Unlock()
+
+	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	mu.Lock()
+	delete(tracks, trackID)
+	dbDeleteTrack(trackID)
+	dbDeleteReview(trackID)
+	rebuildAlbumsFromTracks()
+	mu.Unlock()
+
+	return nil
+}
+
+// --- Review check functions ---
+
+func checkMetadataCompleteness(t *Track) []string {
+	var flags []string
+	title := strings.TrimSpace(t.Title)
+	artist := strings.TrimSpace(t.Artist)
+	album := strings.TrimSpace(t.Album)
+
+	if title == "" || isGenericName(title, []string{"unknown title", "untitled", "title"}) {
+		flags = append(flags, "missing_title")
+	}
+	if artist == "" || isGenericName(artist, []string{"unknown artist", "unknown"}) {
+		flags = append(flags, "missing_artist")
+	}
+	if album == "" || isGenericName(album, []string{"unknown album"}) {
+		flags = append(flags, "missing_album")
+	}
+	if t.TrackNumber == 0 {
+		flags = append(flags, "missing_track_number")
+	}
+	if t.Year == 0 {
+		flags = append(flags, "missing_year")
+	}
+	if t.Genre == "" {
+		flags = append(flags, "missing_genre")
+	}
+	if !t.HasCover {
+		flags = append(flags, "no_cover")
+	}
+	return flags
+}
+
+func checkSuspiciousNaming(t *Track) []string {
+	var flags []string
+	titleLower := strings.ToLower(t.Title)
+	artistLower := strings.ToLower(t.Artist)
+	combined := titleLower + " " + artistLower
+
+	suspiciousWords := []string{"episode", "podcast", "audiobook", "chapter", "interview",
+		"commentary", "copy of", "draft", "final mix", "untitled"}
+	for _, word := range suspiciousWords {
+		if strings.Contains(combined, word) {
+			flags = append(flags, "suspicious_title")
+			break
+		}
+	}
+
+	videoWords := []string{"video", " cam ", "concert footage", "bootleg", "promo",
+		"teaser", "trailer", "snippet", "clip", "behind the scenes", "making of",
+		"live cam", "audience recording"}
+	for _, word := range videoWords {
+		if strings.Contains(combined, word) {
+			flags = append(flags, "suspicious_video")
+			break
+		}
+	}
+
+	coverWords := []string{"karaoke", "backing track", "bad cover", "amateur cover",
+		"cover by", "performed by", "tribute"}
+	for _, word := range coverWords {
+		if strings.Contains(combined, word) {
+			flags = append(flags, "suspicious_cover")
+			break
+		}
+	}
+
+	if strings.TrimSpace(t.Title) == strings.TrimSpace(t.Artist) && t.Title != "" {
+		flags = append(flags, "artist_equals_title")
+	}
+
+	if len(t.Title) > 0 && len(t.Title) < 3 {
+		flags = append(flags, "very_short_title")
+	}
+	if len(t.Title) > 200 {
+		flags = append(flags, "very_long_title")
+	}
+
+	if isFilenameDerived(t) {
+		flags = append(flags, "filename_derived")
+	}
+
+	return flags
+}
+
+func checkDuration(t *Track, otherFlags []string) []string {
+	var flags []string
+	if t.Duration > 0 && t.Duration < 30 {
+		flags = append(flags, "short_duration")
+	}
+	if t.Duration > 540 && len(otherFlags) > 0 {
+		flags = append(flags, "long_duration")
+	}
+	return flags
+}
+
+func checkAllDuplicates() {
+	mu.RLock()
+	byArtist := make(map[string][]*Track)
+	for _, t := range tracks {
+		artistKey := strings.ToLower(strings.TrimSpace(t.Artist))
+		if artistKey == "" || artistKey == "unknown artist" {
+			continue
+		}
+		byArtist[artistKey] = append(byArtist[artistKey], t)
+	}
+	mu.RUnlock()
+
+	for _, artistTracks := range byArtist {
+		if len(artistTracks) < 2 {
+			continue
+		}
+		checked := make(map[string]bool)
+		for i, a := range artistTracks {
+			if checked[a.ID] {
+				continue
+			}
+			var group []*Track
+			for j, b := range artistTracks {
+				if i == j || checked[b.ID] {
+					continue
+				}
+				if titleSimilarity(a.Title, b.Title) >= 0.95 {
+					group = append(group, b)
+					checked[b.ID] = true
+				}
+			}
+			if len(group) > 0 {
+				group = append(group, a)
+				checked[a.ID] = true
+				best := pickBestQuality(group)
+				for _, t := range group {
+					if t.ID == best.ID {
+						status, _ := dbGetReviewForTrack(t.ID)
+						if status == "unchecked" {
+							dbSetReviewStatus(t.ID, "reviewed_ok", "[]", "worker")
+						}
+						continue
+					}
+					existingStatus, existingFlags := dbGetReviewForTrack(t.ID)
+					if existingStatus == "reviewed_ok" && existingFlags == nil {
+						continue
+					}
+					flagJSON, _ := json.Marshal(append(existingFlags, "potential_duplicate"))
+					dbSetReviewStatus(t.ID, "needs_review", string(flagJSON), "worker")
+				}
+			}
+		}
+	}
+}
+
+func titleSimilarity(a, b string) float64 {
+	aNorm := normalizeForCompare(a)
+	bNorm := normalizeForCompare(b)
+	if aNorm == bNorm {
+		return 1.0
+	}
+	tokensA := strings.Fields(aNorm)
+	tokensB := strings.Fields(bNorm)
+	if len(tokensA) == 0 || len(tokensB) == 0 {
+		return 0.0
+	}
+	matches := 0
+	for _, ta := range tokensA {
+		for _, tb := range tokensB {
+			if ta == tb {
+				matches++
+				break
+			}
+		}
+	}
+	maxLen := len(tokensA)
+	if len(tokensB) > maxLen {
+		maxLen = len(tokensB)
+	}
+	return float64(matches) / float64(maxLen)
+}
+
+func normalizeForCompare(s string) string {
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, "(", "")
+	s = strings.ReplaceAll(s, ")", "")
+	s = strings.ReplaceAll(s, "[", "")
+	s = strings.ReplaceAll(s, "]", "")
+	s = strings.ReplaceAll(s, "-", " ")
+	s = strings.ReplaceAll(s, "_", " ")
+	s = strings.ReplaceAll(s, "'", "")
+	s = strings.ReplaceAll(s, ".", "")
+	fields := strings.Fields(s)
+	return strings.Join(fields, " ")
+}
+
+func pickBestQuality(group []*Track) *Track {
+	best := group[0]
+	bestScore := qualityScore(best)
+	for _, t := range group[1:] {
+		s := qualityScore(t)
+		if s > bestScore || (s == bestScore && t.ModTime > best.ModTime) {
+			best = t
+			bestScore = s
+		}
+	}
+	return best
+}
+
+func qualityScore(t *Track) int {
+	score := 0
+	if t.HasCover {
+		score += 3
+	}
+	if t.Title != "" && !isGenericName(t.Title, nil) {
+		score += 1
+	}
+	if t.Artist != "" && !isGenericName(t.Artist, nil) {
+		score += 1
+	}
+	if t.Album != "" && !isGenericName(t.Album, nil) {
+		score += 1
+	}
+	if t.TrackNumber > 0 {
+		score += 2
+	}
+	if t.Year > 0 {
+		score += 1
+	}
+	if t.Genre != "" {
+		score += 1
+	}
+	if t.Duration > 0 {
+		score += 1
+	}
+	return score
+}
+
+func isGenericName(s string, extras []string) bool {
+	lower := strings.ToLower(strings.TrimSpace(s))
+	if lower == "" {
+		return true
+	}
+	generic := []string{"track", "unknown", "untitled", "title"}
+	for _, g := range generic {
+		if lower == g {
+			return true
+		}
+	}
+	for _, e := range extras {
+		if lower == e {
+			return true
+		}
+	}
+	for i := 0; i < 100; i++ {
+		if lower == fmt.Sprintf("track %d", i) || lower == fmt.Sprintf("track%02d", i) || lower == fmt.Sprintf("track %02d", i) {
+			return true
+		}
+	}
+	return false
+}
+
+func isFilenameDerived(t *Track) bool {
+	fileName := filepath.Base(t.FilePath)
+	if strings.Contains(fileName, ":") {
+		parts := strings.SplitN(fileName, ":", 2)
+		fileName = parts[len(parts)-1]
+	}
+	ext := filepath.Ext(fileName)
+	name := strings.TrimSuffix(fileName, ext)
+	name = strings.ReplaceAll(name, "_", " ")
+	name = strings.ReplaceAll(name, "-", " ")
+	name = strings.TrimSpace(name)
+	return strings.EqualFold(name, strings.TrimSpace(t.Title))
+}
+
+// --- Review worker ---
+
+func startReviewScheduler() {
+	for {
+		if !getSettingBool("review_enabled", true) {
+			time.Sleep(5 * time.Minute)
+			continue
+		}
+
+		reviewMu.Lock()
+		if reviewActive {
+			reviewMu.Unlock()
+			time.Sleep(1 * time.Minute)
+			continue
+		}
+		reviewActive = true
+		reviewMu.Unlock()
+
+		worked := runReviewBatch()
+
+		reviewMu.Lock()
+		reviewActive = false
+		reviewMu.Unlock()
+
+		if !worked {
+			hours := getSettingInt("review_recheck_hours", 24)
+			if hours < 1 {
+				hours = 24
+			}
+			log.Printf("[review] All tracks checked, sleeping %d hours (or until woken)", hours)
+			select {
+			case <-reviewWake:
+				log.Printf("[review] Woken up — new tracks to check")
+			case <-time.After(time.Duration(hours) * time.Hour):
+			}
+		} else {
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+func wakeReviewWorker() {
+	select {
+	case reviewWake <- struct{}{}:
+	default:
+	}
+}
+
+func runReviewBatch() bool {
+	batch := dbGetTracksByReviewStatus("unchecked", 20)
+	if len(batch) == 0 {
+		return false
+	}
+
+	log.Printf("[review] Checking batch of %d tracks", len(batch))
+
+	reviewLog.Lock()
+	reviewLog.Entries = append(reviewLog.Entries, fmt.Sprintf("--- Scan started %s ---", time.Now().Format("2006-01-02 15:04:05")))
+	reviewLog.Unlock()
+
+	mu.RLock()
+	var toCheck []*Track
+	for _, id := range batch {
+		if t, ok := tracks[id]; ok {
+			toCheck = append(toCheck, t)
+		}
+	}
+	mu.RUnlock()
+
+	for _, t := range toCheck {
+		reviewProgress.Lock()
+		reviewProgress.CurrentTrack = t.Title + " — " + t.Artist
+		reviewProgress.CurrentID = t.ID
+		reviewProgress.Checked++
+		reviewProgress.Total = len(toCheck)
+		reviewProgress.Active = true
+		reviewProgress.Unlock()
+
+		var allFlags []string
+
+		if getSettingBool("review_check_naming", true) {
+			allFlags = append(allFlags, checkMetadataCompleteness(t)...)
+			allFlags = append(allFlags, checkSuspiciousNaming(t)...)
+		}
+
+		if getSettingBool("review_check_duration", true) {
+			allFlags = append(allFlags, checkDuration(t, allFlags)...)
+		}
+
+		allFlags = uniqueFlags(allFlags)
+
+		if len(allFlags) > 0 {
+			flagsJSON, _ := json.Marshal(allFlags)
+			dbSetReviewStatus(t.ID, "needs_review", string(flagsJSON), "worker")
+			reviewLog.Lock()
+			reviewLog.Entries = append(reviewLog.Entries, fmt.Sprintf("⚠ %s — %s [%s] → needs_review", t.Artist, t.Title, strings.Join(allFlags, ", ")))
+			reviewLog.Unlock()
+		} else {
+			dbSetReviewStatus(t.ID, "reviewed_ok", "[]", "worker")
+			reviewLog.Lock()
+			reviewLog.Entries = append(reviewLog.Entries, fmt.Sprintf("✓ %s — %s → ok", t.Artist, t.Title))
+			reviewLog.Unlock()
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if getSettingBool("review_check_duplicates", true) {
+		reviewLog.Lock()
+		reviewLog.Entries = append(reviewLog.Entries, "--- Checking duplicates ---")
+		reviewLog.Unlock()
+		checkAllDuplicates()
+	}
+
+	counts := dbGetReviewCounts()
+	reviewLog.Lock()
+	reviewLog.Entries = append(reviewLog.Entries, fmt.Sprintf("--- Scan complete: %d unchecked, %d needs_review, %d reviewed_ok ---", counts["unchecked"], counts["needs_review"], counts["reviewed_ok"]))
+	reviewLog.Unlock()
+
+	reviewProgress.Lock()
+	reviewProgress.CurrentTrack = ""
+	reviewProgress.CurrentID = ""
+	reviewProgress.Checked = 0
+	reviewProgress.Total = 0
+	reviewProgress.Active = false
+	reviewProgress.Unlock()
+
+	return true
+}
+
+func uniqueFlags(flags []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, f := range flags {
+		if !seen[f] {
+			seen[f] = true
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// --- Review API handlers ---
+
+func reviewTracksHandler(w http.ResponseWriter, r *http.Request) {
+	tracks := dbGetReviewTracks()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tracks)
+}
+
+func reviewCountsHandler(w http.ResponseWriter, r *http.Request) {
+	counts := dbGetReviewCounts()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(counts)
+}
+
+func reviewMarkOkHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TrackID string `json:"trackId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TrackID == "" {
+		http.Error(w, "Track ID required", http.StatusBadRequest)
+		return
+	}
+	dbSetReviewStatus(body.TrackID, "reviewed_ok", "[]", "manual")
+
+	mu.Lock()
+	if t, ok := tracks[body.TrackID]; ok {
+		t.ReviewStatus = "reviewed_ok"
+		t.ReviewFlags = nil
+	}
+	mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+func reviewEditMetaHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TrackID string                 `json:"trackId"`
+		Fields  map[string]interface{} `json:"fields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TrackID == "" {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	dbUpdateTrackMeta(body.TrackID, body.Fields)
+
+	mu.Lock()
+	if t, ok := tracks[body.TrackID]; ok {
+		t.ReviewStatus = "reviewed_ok"
+		t.ReviewFlags = nil
+	}
+	mu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"updated": true})
+}
+
+func reviewDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TrackID string `json:"trackId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TrackID == "" {
+		http.Error(w, "Track ID required", http.StatusBadRequest)
+		return
+	}
+	if err := reviewDeleteTrack(body.TrackID); err != nil {
+		http.Error(w, "Could not delete file", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+}
+
+func reviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
+	dbResetAllReviews()
+	reviewLog.Lock()
+	reviewLog.Entries = nil
+	reviewLog.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"reset": true})
+
+	go func() {
+		reviewMu.Lock()
+		if !reviewActive {
+			reviewActive = true
+			reviewMu.Unlock()
+			runReviewBatch()
+			reviewMu.Lock()
+			reviewActive = false
+			reviewMu.Unlock()
+		} else {
+			reviewMu.Unlock()
+		}
+	}()
+}
+
+func reviewProgressHandler(w http.ResponseWriter, r *http.Request) {
+	reviewProgress.RLock()
+	resp := map[string]interface{}{
+		"active":       reviewProgress.Active,
+		"currentTrack": reviewProgress.CurrentTrack,
+		"currentID":    reviewProgress.CurrentID,
+		"checked":      reviewProgress.Checked,
+		"total":        reviewProgress.Total,
+	}
+	reviewProgress.RUnlock()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func reviewLogHandler(w http.ResponseWriter, r *http.Request) {
+	reviewLog.RLock()
+	logText := strings.Join(reviewLog.Entries, "\n")
+	reviewLog.RUnlock()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte(logText))
+}

@@ -2143,3 +2143,171 @@ func downloadsEnableAllHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
+
+func ripperV2Handler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "ripperv2.html")
+}
+
+func resolveURLHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+		http.Error(w, `{"error":"url required"}`, http.StatusBadRequest)
+		return
+	}
+
+	ytdlpPath := findYtDlp()
+	if ytdlpPath == "" {
+		http.Error(w, `{"error":"yt-dlp not found"}`, http.StatusInternalServerError)
+		return
+	}
+
+	cmd := exec.Command(ytdlpPath,
+		"--dump-json",
+		"--flat-playlist",
+		"--no-warnings",
+		req.URL,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		cmd := exec.Command(ytdlpPath,
+			"--dump-json",
+			"--no-warnings",
+			"--no-download",
+			req.URL,
+		)
+		output, err = cmd.Output()
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"yt-dlp failed: %s"}`, strings.ReplaceAll(string(output), `"`, `\"`)), http.StatusBadRequest)
+			return
+		}
+	}
+
+	var info struct {
+		Title      string `json:"title"`
+		Artist     string `json:"artist"`
+		Album      string `json:"album"`
+		Track      string `json:"track"`
+		Year       string `json:"upload_date"`
+		Genre      string `json:"genre"`
+		Channel    string `json:"channel"`
+		WebpageURL string `json:"webpage_url"`
+		Thumbnail  string `json:"thumbnail"`
+		Duration   float64 `json:"duration"`
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	lastLine := lines[len(lines)-1]
+	if err := json.Unmarshal([]byte(lastLine), &info); err != nil {
+		http.Error(w, `{"error":"could not parse video info"}`, http.StatusInternalServerError)
+		return
+	}
+
+	artist := info.Artist
+	if artist == "" {
+		artist = info.Channel
+	}
+
+	title := info.Title
+	artist, title = parseVideoTitle(title, artist)
+
+	response := map[string]interface{}{
+		"title":   title,
+		"artist":  artist,
+		"album":   info.Album,
+		"year":    info.Year,
+		"genre":   info.Genre,
+		"source":  "youtube",
+		"url":     req.URL,
+		"coverUrl": info.Thumbnail,
+		"confidence": 0,
+	}
+
+	if title != "" && artist != "" {
+		go func() {
+			results, err := mbSearchRecordings(artist, title, 5)
+			if err == nil && len(results) > 0 {
+				best := results[0]
+				score := scoreMatchV2(best.Title, best.Artist, artist, title)
+				if score > 60 {
+					log.Printf("[v2-resolve] MusicBrainz match: %s - %s (score %.0f)", best.Artist, best.Title, score)
+				}
+			}
+		}()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func parseVideoTitle(title, channel string) (string, string) {
+	original := title
+
+	replacements := []string{
+		"(Official Music Video)", "(Official Video)", "(Official Audio)",
+		"(Official HD Video)", "(Official)", "[Official Video]", "[Official Audio]",
+		"(Music Video)", "[Music Video]", "(HD)", "[HD]", "(HQ)", "[HQ]",
+		"(Lyric Video)", "(Lyrics)", "[Lyrics]", "(Audio)", "[Audio]",
+		"(Visualizer)", "[Visualizer]", "(Animated Video)",
+		" - Official Music Video", " - Official Video", " - Official Audio",
+		" | Official Music Video", " | Official Video",
+	}
+
+	for _, suffix := range replacements {
+		re := strings.NewReplacer(
+			suffix, "",
+			strings.ToLower(suffix), "",
+			strings.ToUpper(suffix), "",
+		)
+		title = re.Replace(title)
+	}
+
+	title = strings.ReplaceAll(title, "  ", " ")
+	title = strings.TrimSpace(title)
+
+	if strings.Contains(original, " - ") {
+		parts := strings.SplitN(original, " - ", 2)
+		if len(parts) == 2 {
+			left := strings.TrimSpace(parts[0])
+			right := strings.TrimSpace(parts[1])
+			for _, suffix := range replacements {
+				right = strings.ReplaceAll(right, suffix, "")
+			}
+			right = strings.TrimSpace(right)
+			if left != "" && right != "" {
+				return left, right
+			}
+		}
+	}
+
+	return channel, title
+}
+
+func scoreMatchV2(mbTitle, mbArtist, expectedArtist, expectedTitle string) float64 {
+	score := 0.0
+	mbt := strings.ToLower(mbTitle)
+	mba := strings.ToLower(mbArtist)
+	a := strings.ToLower(expectedArtist)
+	t := strings.ToLower(expectedTitle)
+
+	if a != "" && strings.Contains(mba, a) {
+		score += 60
+	}
+	if t != "" && strings.Contains(mbt, t) {
+		score += 50
+	}
+	if a != "" && levenshteinContains(mbt, a) {
+		score += 30
+	}
+	if t != "" && levenshteinContains(mba, t) {
+		score += 20
+	}
+
+	return score
+}

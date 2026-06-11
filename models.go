@@ -17,6 +17,8 @@ type Track struct {
 	MBID             string `json:"mbid,omitempty"`
 	HasMetadata      bool   `json:"hasMetadata"`
 	DownloadEnabled  bool   `json:"downloadEnabled"`
+	ReviewStatus     string   `json:"reviewStatus,omitempty"`
+	ReviewFlags      []string `json:"reviewFlags,omitempty"`
 }
 
 type Album struct {

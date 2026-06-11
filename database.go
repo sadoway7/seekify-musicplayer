@@ -121,6 +121,7 @@ func initDB(path string) {
 	initDownloadTables()
 	initSettingsTable()
 	initWatchedTables()
+	initReviewTables()
 
 	migrateFromJSON()
 }

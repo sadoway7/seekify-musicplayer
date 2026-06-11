@@ -25,15 +25,21 @@
   gap: 6px;
   font-size: var(--fs-caption);
   font-weight: 600;
-  color: #fff;
+  color: #0A0A0A;
   padding: 6px var(--sp-3);
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.85);
   transition: background 0.15s ease;
+  animation: shuffle-glow 3s ease-in-out infinite;
 }
 
 .shuffle-all-btn:active {
-  background: rgba(255, 255, 255, 0.18);
+  background: #fff;
+}
+
+@keyframes shuffle-glow {
+  0%, 100% { background: rgba(255, 255, 255, 0.85); }
+  50% { background: rgba(255, 255, 255, 0.6); }
 }
 
 .shuffle-all-btn svg {
@@ -218,10 +224,50 @@
   color: var(--text-primary);
 }
 
+.quick-play-card-all .quick-play-card-icon-text {
+  font-size: 42px;
+  font-weight: 900;
+  opacity: 0.3;
+  letter-spacing: 0.02em;
+}
+
+.quick-play-card-all {
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+
+.quick-play-card-all:active {
+  transform: scale(0.91);
+}
+
 .quick-play-card-shuffle .quick-play-title {
-  font-size: var(--fs-body);
-  font-weight: 800;
+  font-size: 17px !important;
+  font-weight: 900 !important;
   color: #0A0A0A;
+  background: none;
+  padding: 46px 10px 4px !important;
+  letter-spacing: 0.04em;
+}
+
+@keyframes shuffle-card-glow {
+  0%, 100% { background: linear-gradient(135deg, #fff, #f5f5f5); }
+  50% { background: linear-gradient(135deg, #f2f2f2, #e8e8e8); }
+}
+
+.quick-play-card-shuffle .quick-play-art {
+  transition: background 1.5s ease;
+  animation: shuffle-card-glow 6s ease-in-out infinite;
+}
+
+.quick-play-card-shuffle {
+  transform: rotate(-2deg) scale(0.95);
+  transition: transform 0.2s ease;
+  box-shadow: 4px 6px 0 rgba(255, 255, 255, 0.15);
+}
+
+.quick-play-card-shuffle:active {
+  transform: rotate(0deg) scale(0.91);
+  box-shadow: 2px 3px 0 rgba(255, 255, 255, 0.1);
 }
 
 .quick-play-card-inline {

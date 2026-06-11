@@ -19,6 +19,11 @@ func initSettingsTable() {
 	migrateSetting("download_min_bitrate", "0")
 	migrateSetting("downloads_enabled", "true")
 	migrateSetting("waveform_style", "rounded")
+	migrateSetting("review_enabled", "true")
+	migrateSetting("review_check_naming", "true")
+	migrateSetting("review_check_duplicates", "true")
+	migrateSetting("review_check_duration", "true")
+	migrateSetting("review_recheck_hours", "24")
 }
 
 func migrateSetting(key, defaultVal string) {

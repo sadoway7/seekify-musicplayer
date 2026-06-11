@@ -9,6 +9,7 @@ const Store = {
   loading: false,
   downloadsEnabled: true,
   waveformStyle: 'rounded',
+  reviewCounts: { unchecked: 0, needs_review: 0, reviewed_ok: 0 },
 
   async init() {
     this.loading = true;
@@ -27,6 +28,9 @@ const Store = {
         const settings = await Api.getSettings();
         this.downloadsEnabled = settings.downloads_enabled !== 'false';
         this.waveformStyle = settings.waveform_style || 'rounded';
+      } catch(e) {}
+      try {
+        this.reviewCounts = await Api.getReviewCounts();
       } catch(e) {}
     } catch (err) {
       UI.showToast('Failed to load library');

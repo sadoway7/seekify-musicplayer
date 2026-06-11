@@ -469,5 +469,73 @@ const Api = {
     const res = await fetch('/api/shared-queue/' + id);
     if (!res.ok) throw new Error('Failed to load shared queue');
     return res.json();
+  },
+
+  async getReviewTracks() {
+    try {
+      const res = await fetch('/api/review/tracks');
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
+  },
+
+  async getReviewCounts() {
+    try {
+      const res = await fetch('/api/review/counts');
+      if (!res.ok) return { unchecked: 0, needs_review: 0, reviewed_ok: 0 };
+      return res.json();
+    } catch { return { unchecked: 0, needs_review: 0, reviewed_ok: 0 }; }
+  },
+
+  async reviewMarkOk(trackId) {
+    const res = await fetch('/api/review/mark-ok', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackId })
+    });
+    if (!res.ok) throw new Error('Failed to mark ok');
+    return res.json();
+  },
+
+  async reviewEditMeta(trackId, fields) {
+    const res = await fetch('/api/review/edit-meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackId, fields })
+    });
+    if (!res.ok) throw new Error('Failed to edit metadata');
+    return res.json();
+  },
+
+  async reviewDelete(trackId) {
+    const res = await fetch('/api/review/delete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackId })
+    });
+    if (!res.ok) throw new Error('Failed to delete');
+    return res.json();
+  },
+
+  async reviewRecheckAll() {
+    const res = await fetch('/api/review/recheck-all', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to recheck');
+    return res.json();
+  },
+
+  async getReviewProgress() {
+    try {
+      const res = await fetch('/api/review/progress');
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
+  },
+
+  async getReviewLog() {
+    try {
+      const res = await fetch('/api/review/log');
+      if (!res.ok) return '';
+      return res.text();
+    } catch { return ''; }
   }
 };

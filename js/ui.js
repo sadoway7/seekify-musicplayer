@@ -864,11 +864,20 @@ const UI = {
         return;
       }
 
- const tmore = e.target.closest('.track-more');
+      const tmore = e.target.closest('.track-more');
         if (tmore) {
           const row = tmore.closest('.track-row');
         if (row) {
           this._showTrackContextMenu(row.dataset.trackId, tmore);
+        }
+        return;
+      }
+
+      const rmore = e.target.closest('.track-review-more');
+      if (rmore) {
+        const trackId = rmore.dataset.reviewTrackId;
+        if (trackId) {
+          this._showReviewTrackMenu(trackId, rmore);
         }
         return;
       }
@@ -1082,6 +1091,10 @@ const UI = {
           this.navigateTo('all-music');
           return;
         }
+        if (plrow.dataset.action === 'needs-review') {
+          this.navigateTo('needs-review');
+          return;
+        }
         const type = plrow.dataset.type;
         const id = plrow.dataset.id;
         if (type === 'album') this.navigateTo('album', { albumId: id });
@@ -1152,6 +1165,7 @@ const UI = {
       case 'playlist': this.renderPlaylist(Store.viewData.playlistId); break;
       case 'favorites': this.renderFavorites(); break;
       case 'all-music': this.renderAllMusic(); break;
+      case 'needs-review': this.renderNeedsReview(); break;
       case 'finder': this.renderFinder(); break;
       case 'finder-artist': this.renderFinderArtist(Store.viewData); break;
       case 'finder-release': this.renderFinderRelease(Store.viewData); break;
@@ -1202,16 +1216,16 @@ const UI = {
 
       // Spot 1: Shuffle
       html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
-        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--accent), #a8c830);display:flex;align-items:center;justify-content:center">'
-        + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
-        + '<circle cx="28" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="72" cy="28" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="50" cy="50" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="28" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
-        + '<circle cx="72" cy="72" r="9" fill="#0A0A0A" opacity="0.6"/>'
+        + '<div class="quick-play-art" style="background:linear-gradient(135deg, #fff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
+        + '<svg viewBox="0 0 100 100" width="100%" height="100%"><defs><filter id="dot-glow"><feDropShadow dx="0" dy="1" stdDeviation="2.5" flood-color="rgba(180,220,50,0.6)"/></filter></defs>'
+        + '<circle cx="28" cy="28" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
+        + '<circle cx="72" cy="28" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
+        + '<circle cx="50" cy="50" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
+        + '<circle cx="28" cy="72" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
+        + '<circle cx="72" cy="72" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
         + '</svg>'
         + '</div>'
-        + '<div class="quick-play-title">Shuffle</div>'
+        + '<div class="quick-play-title" style="padding-top:46px;padding-bottom:4px;font-size:17px;font-weight:900;letter-spacing:0.04em;position:relative;z-index:2">Shuffle</div>'
         + '</div>';
 
       // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows
@@ -1233,11 +1247,14 @@ const UI = {
           + '</div>';
       });
 
-      // Last spot: All Music
-      html += '<div class="quick-play-card quick-play-card-all" data-navigate="all-music">'
-        + '<div class="quick-play-art" style="background:linear-gradient(135deg, var(--l3), var(--l2))">'
-        + '<div class="quick-play-card-icon-text">ALL</div></div>'
-        + '<div class="quick-play-title">All Music</div>'
+      // Last spot: Last 100 Added
+      html += '<div class="quick-play-card quick-play-card-all" data-action="shuffle-recent">'
+        + '<div class="quick-play-art" style="background:#0d0d0d;display:flex;align-items:center;justify-content:center">'
+        + '<div style="position:absolute;bottom:0;left:0;right:0;height:55%;background:linear-gradient(175deg, rgba(220,50,80,0.35), rgba(50,100,220,0.25));pointer-events:none"></div>'
+        + '<div style="position:absolute;top:-4px;right:-10px;width:40px;height:40px;background:rgba(220,50,80,0.6);border-radius:50%;pointer-events:none"></div>'
+        + '<div style="position:absolute;bottom:28px;left:-6px;width:24px;height:24px;background:rgba(50,140,220,0.5);pointer-events:none"></div>'
+        + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Impact,Haettenschweiler,Arial Black,sans-serif;font-size:100px;font-weight:900;color:rgba(255,255,255,0.35);transform:rotate(-10deg);line-height:0.85;letter-spacing:-0.04em;display:block;margin-top:-8px;-webkit-text-stroke:1px rgba(255,255,255,0.08)">100</span></div></div>'
+        + '<div class="quick-play-title" style="background:none;padding-top:36px;font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.85);line-height:1.3;white-space:normal">Recently<br>Added</div>'
         + '</div>';
 
       html += '</div>';
@@ -1316,6 +1333,18 @@ const UI = {
           + '<div class="list-item-subtitle">' + pTracks.length + ' tracks</div>'
           + '</div></div>';
       });
+    }
+
+    const reviewCount = Store.reviewCounts.needs_review || 0;
+    if (reviewCount > 0) {
+      html += '<div class="mega-title"><span>Needs Review</span></div>';
+      html += '<div class="list-item" data-action="needs-review" style="cursor:pointer">'
+        + '<div class="list-item-art" style="background:rgba(255,107,107,.1);display:flex;align-items:center;justify-content:center;color:#ff6b6b">'
+        + Icons.warning() + '</div>'
+        + '<div class="list-item-info">'
+        + '<div class="list-item-title" style="color:#ff6b6b">Needs Review</div>'
+        + '<div class="list-item-subtitle">' + reviewCount + ' tracks flagged</div>'
+        + '</div></div>';
     }
 
     const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
@@ -1490,7 +1519,7 @@ const UI = {
       + '</div>'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input lib-search-input" type="text" placeholder="Search your library...">'
+      + '<input class="search-input lib-search-input" type="text" placeholder="Filter...">'
       + '</div>'
       + '<div class="filter-chips">'
       + '<button class="chip' + (this.libFilter === 'playlists' ? ' active' : '') + '" data-filter="playlists">Playlists</button>'
@@ -1571,6 +1600,13 @@ const UI = {
       + Icons.music() + '</div>'
       + '<div class="list-item-info"><div class="list-item-title">All Music</div>'
       + '<div class="list-item-subtitle">' + Store.library.tracks.length + ' songs</div></div></div>';
+
+    const reviewCount = Store.reviewCounts.needs_review || 0;
+    html += '<div class="list-item" data-action="needs-review" style="cursor:pointer">'
+      + '<div class="list-item-art" style="background:rgba(255,107,107,.1);display:flex;align-items:center;justify-content:center;color:#ff6b6b">'
+      + Icons.warning() + '</div>'
+      + '<div class="list-item-info"><div class="list-item-title" style="color:#ff6b6b">Needs Review</div>'
+      + '<div class="list-item-subtitle">' + reviewCount + ' tracks flagged</div></div></div>';
 
     html += '<div class="list-item" data-action="create-playlist" style="cursor:pointer">'
       + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
@@ -1880,6 +1916,74 @@ const UI = {
     this.els.content.innerHTML = html;
   },
 
+  async renderNeedsReview() {
+    this._viewTrackList = [];
+    this.els.content.innerHTML = '<div class="loading-spinner"></div>';
+
+    let reviewTracks = [];
+    try {
+      reviewTracks = await Api.getReviewTracks();
+    } catch (e) {}
+    this._viewTrackList = reviewTracks;
+
+    let html = '<div class="review-page-header">'
+      + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+      + '<div class="review-page-title">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;color:#ff6b6b;flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      + '<h1>Needs Review</h1>'
+      + '</div>'
+      + '<div class="review-page-meta">' + reviewTracks.length + ' tracks flagged</div>'
+      + '<div class="detail-actions">'
+      + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+      + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '</div>'
+      + '</div>';
+
+    if (reviewTracks.length === 0) {
+      html += this._emptyState('All clear', 'No tracks need review right now', Icons.checkCircle());
+    } else {
+      html += this._renderReviewTrackList(reviewTracks);
+    }
+
+    this.els.content.innerHTML = html;
+  },
+
+  _renderReviewTrackList(reviewTracks) {
+    let html = '<div class="track-list">';
+    reviewTracks.forEach(t => {
+      const artStyle = t.albumID
+        ? 'background-image:url(' + Api.coverUrl(t.albumID) + ');background-size:cover;background-position:center'
+        : 'background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)';
+      const isCurrent = Player.getCurrentTrack() && Player.getCurrentTrack().id === t.id;
+      const flags = (t.reviewFlags || []).map(f =>
+        '<span class="review-flag-badge">' + this._esc(ReviewUI.flagLabel(f)) + '</span>'
+      ).join('');
+      html += '<div class="track-row" data-track-id="' + t.id + '">'
+        + '<div class="track-art" style="' + artStyle + '"></div>'
+        + '<div class="track-info">'
+        + '<div class="track-title' + (isCurrent ? ' on' : '') + '">' + this._esc(t.title || 'Unknown') + '</div>'
+        + '<div class="track-artist">' + this._esc(t.artist || 'Unknown') + ' - ' + this._esc(t.album || 'Unknown') + '</div>'
+        + (flags ? '<div class="track-review-flags">' + flags + '</div>' : '')
+        + '</div>'
+        + '<div class="track-duration">' + this._formatTime(t.duration) + '</div>'
+        + '<button class="track-review-more" data-review-track-id="' + t.id + '">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;color:#ff6b6b"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+        + '</button>'
+        + '</div>';
+    });
+    html += '</div>';
+    return html;
+  },
+
+  _showReviewTrackMenu(trackId, triggerEl) {
+    const options = [
+      { label: 'Edit Metadata', icon: Icons.edit(), action: () => ReviewUI.showEditMetaModal(trackId) },
+      { label: 'Delete File', icon: Icons.trash(), action: () => ReviewUI.deleteTrack(trackId), danger: true },
+      { label: 'Does Not Need Review', icon: Icons.check(), action: () => { ReviewUI.markOk(trackId).then(() => this.renderNeedsReview()); } }
+    ];
+    this.showContextMenu(options, triggerEl);
+  },
+
   renderFinder() {
     this._viewTrackList = [];
     if (!this._finderType) this._finderType = 'artist';
@@ -1930,7 +2034,6 @@ const UI = {
         this._finderHistory.slice(0, 5).forEach(h => {
           html += '<button class="finder-history-chip" data-history="' + this._esc(h) + '">' + this._esc(h) + '</button>';
         });
-        html += '</div>';
       }
 
       html += '<div id="finder-results"></div>';
@@ -2900,6 +3003,45 @@ const UI = {
       + '<button class="settings-btn" id="btn-meta-history">' + Icons.search() + '<span>Match History</span></button>'
       + '</div></div>';
 
+    const rc = Store.reviewCounts || {};
+    const total = (rc.unchecked || 0) + (rc.needs_review || 0) + (rc.reviewed_ok || 0);
+    const reviewedPct = total > 0 ? Math.round(((rc.reviewed_ok || 0) / total) * 100) : 0;
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title" style="color:#ff6b6b">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      + ' Track Review</div>'
+      + '<div class="settings-section-desc">Automatically detect tracks with missing data, duplicates, and suspicious files.</div>'
+      + '<div class="review-settings-status">'
+      + '<span style="color:rgba(255,255,255,.4)">Unchecked: <strong style="color:#fff">' + (rc.unchecked || 0) + '</strong></span>'
+      + '<span style="color:#ff6b6b">Needs Review: <strong>' + (rc.needs_review || 0) + '</strong></span>'
+      + '<span style="color:rgba(255,255,255,.4)">Reviewed: <strong style="color:#fff">' + (rc.reviewed_ok || 0) + '</strong></span>'
+      + '</div>'
+      + '<div class="review-progress-bar-container">'
+      + '<div class="review-progress-bar" id="review-progress-bar" style="width:' + reviewedPct + '%"></div>'
+      + '</div>'
+      + '<div id="review-progress-text" class="review-progress-text"></div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Enable Review Worker</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-enabled">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Check Suspicious Naming</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-check-naming">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Check for Duplicates</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-check-duplicates">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Check Duration Anomalies</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-check-duration">'
+      + '</div>'
+      + '<div class="settings-actions">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-review-recheck">' + Icons.refresh() + '<span>Recheck All Tracks</span></button>'
+      + '<button class="settings-btn" id="btn-review-copy-log">' + Icons.share() + '<span>Copy Log</span></button>'
+      + '</div>'
+      + '</div>';
+
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.settings() + ' About</div>'
       + '<div class="settings-about">'
@@ -2978,6 +3120,88 @@ const UI = {
       Store.downloadsEnabled = settings.downloads_enabled !== 'false';
       this._updateQualityVisibility();
       if (fmt) fmt.addEventListener('change', () => this._updateQualityVisibility());
+
+      const revEnabled = document.getElementById('setting-review-enabled');
+      const revNaming = document.getElementById('setting-review-check-naming');
+      const revDupes = document.getElementById('setting-review-check-duplicates');
+      const revDur = document.getElementById('setting-review-check-duration');
+      if (revEnabled) revEnabled.checked = settings.review_enabled !== 'false';
+      if (revNaming) revNaming.checked = settings.review_check_naming !== 'false';
+      if (revDupes) revDupes.checked = settings.review_check_duplicates !== 'false';
+      if (revDur) revDur.checked = settings.review_check_duration !== 'false';
+      if (revEnabled) revEnabled.addEventListener('change', () => this._saveReviewSettings());
+      if (revNaming) revNaming.addEventListener('change', () => this._saveReviewSettings());
+      if (revDupes) revDupes.addEventListener('change', () => this._saveReviewSettings());
+      if (revDur) revDur.addEventListener('change', () => this._saveReviewSettings());
+
+      const recheckBtn = document.getElementById('btn-review-recheck');
+      if (recheckBtn) recheckBtn.addEventListener('click', async () => {
+        recheckBtn.disabled = true;
+        recheckBtn.querySelector('span').textContent = 'Rechecking...';
+        try {
+          await Api.reviewRecheckAll();
+          this._showToast('Recheck started');
+        } catch (e) {
+          this._showToast('Failed to recheck');
+          recheckBtn.disabled = false;
+          recheckBtn.querySelector('span').textContent = 'Recheck All Tracks';
+        }
+      });
+
+      const copyLogBtn = document.getElementById('btn-review-copy-log');
+      if (copyLogBtn) copyLogBtn.addEventListener('click', async () => {
+        try {
+          const log = await Api.getReviewLog();
+          if (!log) { this._showToast('No log yet'); return; }
+          await navigator.clipboard.writeText(log);
+          this._showToast('Log copied');
+        } catch (e) {
+          this._showToast('Failed to copy log');
+        }
+      });
+
+      this._startReviewProgressPoll();
+    } catch (e) {}
+  },
+
+  _startReviewProgressPoll() {
+    if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
+    this._reviewPollTimer = setInterval(() => this._pollReviewProgress(), 2000);
+    this._pollReviewProgress();
+  },
+
+  async _pollReviewProgress() {
+    const textEl = document.getElementById('review-progress-text');
+    const barEl = document.getElementById('review-progress-bar');
+    if (!textEl) {
+      if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
+      return;
+    }
+
+    try {
+      const p = await Api.getReviewProgress();
+      if (!p) return;
+
+      if (p.active && p.total > 0) {
+        const pct = Math.round((p.checked / p.total) * 100);
+        textEl.textContent = 'Checking: ' + (p.currentTrack || '...') + ' (' + p.checked + '/' + p.total + ')';
+        if (barEl) barEl.style.width = pct + '%';
+      } else if (p.active) {
+        textEl.textContent = 'Checking tracks...';
+      } else {
+        textEl.textContent = '';
+        if (this._reviewPollTimer) {
+          clearInterval(this._reviewPollTimer);
+          this._reviewPollTimer = null;
+          const counts = await Api.getReviewCounts();
+          Store.reviewCounts = counts;
+          const total = (counts.unchecked || 0) + (counts.needs_review || 0) + (counts.reviewed_ok || 0);
+          const pct = total > 0 ? Math.round(((counts.reviewed_ok || 0) / total) * 100) : 0;
+          if (barEl) barEl.style.width = pct + '%';
+          const recheckBtn = document.getElementById('btn-review-recheck');
+          if (recheckBtn) { recheckBtn.disabled = false; recheckBtn.querySelector('span').textContent = 'Recheck All Tracks'; }
+        }
+      }
     } catch (e) {}
   },
 
@@ -3016,6 +3240,24 @@ const UI = {
       this._showToast('Settings saved');
     } catch (e) {
       this._showToast('Failed to save settings');
+    }
+  },
+
+  async _saveReviewSettings() {
+    const revEnabled = document.getElementById('setting-review-enabled');
+    const revNaming = document.getElementById('setting-review-check-naming');
+    const revDupes = document.getElementById('setting-review-check-duplicates');
+    const revDur = document.getElementById('setting-review-check-duration');
+    try {
+      await Api.saveSettings({
+        review_enabled: revEnabled ? String(revEnabled.checked) : 'true',
+        review_check_naming: revNaming ? String(revNaming.checked) : 'true',
+        review_check_duplicates: revDupes ? String(revDupes.checked) : 'true',
+        review_check_duration: revDur ? String(revDur.checked) : 'true'
+      });
+      this._showToast('Review settings saved');
+    } catch (e) {
+      this._showToast('Failed to save review settings');
     }
   },
 
@@ -4285,6 +4527,10 @@ const UI = {
       this._currentWaveformTrackId = track.id;
       this._loadWaveform(track);
     }
+
+    if (typeof ReviewUI !== 'undefined') {
+      ReviewUI.updateForTrack(track);
+    }
   },
 
   _checkTitleOverflow() {
@@ -5170,6 +5416,16 @@ const UI = {
           ? { type: 'all', name: 'All Music' }
           : this._getViewSource();
         Player.play(capped[0], capped, source);
+        this.showNowPlaying();
+      }
+      return;
+    }
+    if (action === 'shuffle-recent') {
+      const sorted = Store.library.tracks.slice().sort((a, b) => (b.modTime || 0) - (a.modTime || 0));
+      const recent = sorted.slice(0, 100);
+      if (recent.length > 0) {
+        const shuffled = recent.sort(() => Math.random() - 0.5);
+        Player.play(shuffled[0], shuffled, { type: 'recent', name: 'Last 100 Added' });
         this.showNowPlaying();
       }
       return;

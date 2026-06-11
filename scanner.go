@@ -250,6 +250,10 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 	for _, t := range newTracks {
 		dbUpsertTrack(t)
 	}
+	dbInsertUncheckedReviews(newTracks)
+	if len(newTracks) > 0 {
+		wakeReviewWorker()
+	}
 	for _, a := range newAlbums {
 		dbUpsertAlbum(a)
 	}
