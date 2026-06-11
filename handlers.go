@@ -42,9 +42,16 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 	mu.RLock()
 	defer mu.RUnlock()
 
+	reviewStatuses := dbLoadAllReviewStatuses()
+
 	trackList := make([]Track, 0, len(tracks))
 	for _, t := range tracks {
-		trackList = append(trackList, *t)
+		copy := *t
+		if rs, ok := reviewStatuses[t.ID]; ok {
+			copy.ReviewStatus = rs.Status
+			copy.ReviewFlags = rs.Flags
+		}
+		trackList = append(trackList, copy)
 	}
 	sort.Slice(trackList, func(i, j int) bool {
 		return trackList[i].Title < trackList[j].Title
@@ -1012,7 +1019,7 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 		searchTitle = titleFromFilename(track.FilePath)
 	}
 
-	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 20)
+	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 50)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]interface{}{})
@@ -1056,6 +1063,53 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+func metadataSearchHandler(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	parts := strings.SplitN(q, " - ", 2)
+	searchArtist := ""
+	searchTitle := q
+	if len(parts) == 2 {
+		searchArtist = strings.TrimSpace(parts[0])
+		searchTitle = strings.TrimSpace(parts[1])
+	}
+
+	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 50)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	type rescanCandidate struct {
+		Title   string  `json:"title"`
+		Artist  string  `json:"artist"`
+		Album   string  `json:"album"`
+		AlbumID string  `json:"albumId"`
+		Score   float64 `json:"score"`
+	}
+
+	var results []rescanCandidate
+	for _, cand := range candidates {
+		score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
+		results = append(results, rescanCandidate{
+			Title:   cand.Title,
+			Artist:  cand.Artist,
+			Album:   cand.Album,
+			AlbumID: cand.AlbumID,
+			Score:   score,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
 func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	trackID := strings.TrimPrefix(r.URL.Path, "/api/metadata/update-track/")
 	if trackID == "" {
@@ -1068,6 +1122,7 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 		Artist      string `json:"artist"`
 		Album       string `json:"album"`
 		AlbumArtist string `json:"albumArtist"`
+		AlbumID     string `json:"albumId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -1081,6 +1136,9 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
+
+	oldAlbumID := track.AlbumID
+	oldHasCover := track.HasCover
 
 	if body.Title != "" {
 		track.Title = body.Title
@@ -1102,9 +1160,73 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	track.HasMetadata = true
 
+	coverDir := filepath.Join(musicDir, "images")
+	os.MkdirAll(coverDir, 0755)
+
+	if track.AlbumID != "" {
+		newPath := filepath.Join(coverDir, track.AlbumID+".jpg")
+		if _, err := os.Stat(newPath); os.IsNotExist(err) {
+			var data []byte
+			if oldAlbumID != "" {
+				if d, err := os.ReadFile(filepath.Join(coverDir, oldAlbumID+".jpg")); err == nil {
+					data = d
+				}
+			}
+			if len(data) == 0 {
+				coverMu.RLock()
+				if d, ok := coverCache[oldAlbumID]; ok {
+					data = d
+				}
+				coverMu.RUnlock()
+			}
+			if oldHasCover && len(data) > 0 {
+				os.WriteFile(newPath, data, 0644)
+				coverMu.Lock()
+				coverCache[track.AlbumID] = data
+				coverMu.Unlock()
+			}
+		}
+	}
+
 	dbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
+	track.HasCover = false
 	rebuildAlbumsFromTracks()
 	mu.Unlock()
+
+	albumIDForCover := body.AlbumID
+	if albumIDForCover == "" {
+		albumIDForCover = track.AlbumID
+	}
+	if albumIDForCover != "" {
+		coverDir := filepath.Join(musicDir, "images")
+		os.MkdirAll(coverDir, 0755)
+
+		if body.AlbumID != "" {
+			log.Printf("[metadata] Fetching cover from Cover Art Archive for MBID %s", body.AlbumID)
+			data, _, err := mbFetchCoverArt(body.AlbumID)
+			if err == nil && len(data) > 0 {
+				coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
+				os.WriteFile(coverPath, data, 0644)
+				coverMu.Lock()
+				coverCache[track.AlbumID] = data
+				coverMu.Unlock()
+				mu.Lock()
+				track.HasCover = true
+				if a, ok := albums[track.AlbumID]; ok {
+					a.HasCover = true
+				}
+				mu.Unlock()
+				log.Printf("[metadata] Cover fetched and cached for %s", track.AlbumID)
+			} else {
+				log.Printf("[metadata] Cover Art Archive failed for MBID %s: %v, trying search fallback", body.AlbumID, err)
+				fetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
+			}
+		} else {
+			fetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
+		}
+	}
+
+	dbSetReviewStatus(trackID, "reviewed_ok", "[]", "rescrape")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"updated": true})
@@ -1521,14 +1643,20 @@ func downloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Query      string `json:"query"`
-		Artist     string `json:"artist"`
-		Title      string `json:"title"`
-		Album      string `json:"album"`
-		AlbumMBID  string `json:"albumMbid"`
-		TrackNum   int    `json:"trackNumber"`
-		TrackTotal int    `json:"trackTotal"`
+		Query       string `json:"query"`
+		Artist      string `json:"artist"`
+		Title       string `json:"title"`
+		Album       string `json:"album"`
+		AlbumMBID   string `json:"albumMbid"`
+		TrackNum    int    `json:"trackNumber"`
+		TrackTotal  int    `json:"trackTotal"`
 		OverrideDir string `json:"overrideDir"`
+		Pipeline    string `json:"pipeline"`
+		RecordingID string `json:"recordingId"`
+		ReleaseID   string `json:"releaseId"`
+		ArtistID    string `json:"artistId"`
+		Genre       string `json:"genre"`
+		Year        string `json:"year"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
@@ -1548,6 +1676,16 @@ func downloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
+	}
+
+	if req.Pipeline == "v2" {
+		job.Pipeline = "v2"
+		job.RecordingID = req.RecordingID
+		job.ReleaseID = req.ReleaseID
+		job.ArtistID = req.ArtistID
+		job.Genre = req.Genre
+		job.Year = req.Year
+		dbUpdateJob(job)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1666,6 +1804,46 @@ func downloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+func downloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/queue/")
+	id = strings.TrimSuffix(id, "/select")
+	if id == "" {
+		http.Error(w, `{"error":"missing job id"}`, http.StatusBadRequest)
+		return
+	}
+
+	job, err := dbGetJob(id)
+	if err != nil || job.Status != "needs_selection" {
+		http.Error(w, `{"error":"job not found or not awaiting selection"}`, http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		VideoID string `json:"videoId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.VideoID == "" {
+		http.Error(w, `{"error":"missing videoId"}`, http.StatusBadRequest)
+		return
+	}
+
+	job.VideoID = req.VideoID
+	job.Status = "queued"
+	job.CandidatesJSON = ""
+	job.ProgressStage = ""
+	job.Error = ""
+	dbUpdateJob(job)
+
+	go processDownloadQueue()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(job)
 }
 
 func queueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
@@ -2310,4 +2488,168 @@ func scoreMatchV2(mbTitle, mbArtist, expectedArtist, expectedTitle string) float
 	}
 
 	return score
+}
+
+func findPython3() string {
+	for _, p := range []string{"python3", "/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"} {
+		if path, err := exec.LookPath(p); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
+func enrichWithPython(audioFile string, job *DownloadJob) {
+	pythonPath := findPython3()
+	if pythonPath == "" {
+		log.Printf("[v2-enrich] python3 not found, skipping enrichment")
+		tagAudioFile(audioFile, job.Artist, job.Title, job.Album, job.TrackNumber, job.TrackTotal)
+		return
+	}
+
+	scriptPath := "scripts/enrich.py"
+	if _, err := os.Stat(scriptPath); err != nil {
+		candidates := []string{}
+		if exe, _ := os.Executable(); exe != "" {
+			candidates = append(candidates, filepath.Join(filepath.Dir(exe), "scripts", "enrich.py"))
+		}
+		found := false
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				scriptPath = p
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Printf("[v2-enrich] scripts/enrich.py not found, falling back to ffmpeg tagging")
+			tagAudioFile(audioFile, job.Artist, job.Title, job.Album, job.TrackNumber, job.TrackTotal)
+			return
+		}
+	}
+
+	meta := map[string]string{
+		"artist":      job.Artist,
+		"title":       job.Title,
+		"album":       job.Album,
+		"album_artist": job.Artist,
+	}
+	if job.Year != "" {
+		meta["year"] = job.Year
+	}
+	if job.TrackNumber > 0 {
+		meta["track_number"] = fmt.Sprintf("%d", job.TrackNumber)
+	}
+	if job.Genre != "" {
+		meta["genre"] = job.Genre
+	}
+	if job.RecordingID != "" {
+		meta["recording_id"] = job.RecordingID
+	}
+	if job.ArtistID != "" {
+		meta["artist_id"] = job.ArtistID
+	}
+	if job.ReleaseID != "" {
+		meta["release_id"] = job.ReleaseID
+	}
+
+	metaJSON, _ := json.Marshal(meta)
+
+	cmd := exec.Command(pythonPath, scriptPath, "enrich", audioFile, string(metaJSON))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("[v2-enrich] Python enrich failed: %v — %s", err, string(output))
+		tagAudioFile(audioFile, job.Artist, job.Title, job.Album, job.TrackNumber, job.TrackTotal)
+		return
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(output, &result); err == nil {
+		log.Printf("[v2-enrich] Enrichment result: %s", string(output))
+	} else {
+		log.Printf("[v2-enrich] Could not parse enrich output: %s", string(output))
+	}
+}
+
+func v2SearchHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Artist string `json:"artist"`
+		Title  string `json:"title"`
+		Raw    string `json:"raw"`
+		Limit  int    `json:"limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	pythonPath := findPython3()
+	if pythonPath == "" {
+		http.Error(w, `{"error":"python3 not found"}`, http.StatusInternalServerError)
+		return
+	}
+
+	scriptPath := "scripts/enrich.py"
+	if _, err := os.Stat(scriptPath); err != nil {
+		http.Error(w, `{"error":"enrich.py not found"}`, http.StatusInternalServerError)
+		return
+	}
+
+	var cmd *exec.Cmd
+	if req.Raw != "" {
+		cmd = exec.Command(pythonPath, scriptPath, "search", req.Raw)
+	} else if req.Artist != "" && req.Title != "" {
+		limit := req.Limit
+		if limit <= 0 {
+			limit = 5
+		}
+		cmd = exec.Command(pythonPath, scriptPath, "search-mb", req.Artist, req.Title, fmt.Sprintf("%d", limit))
+	} else {
+		http.Error(w, `{"error":"raw or artist+title required"}`, http.StatusBadRequest)
+		return
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		errMsg := err.Error()
+		if ok {
+			errMsg = string(exitErr.Stderr)
+		}
+		http.Error(w, fmt.Sprintf(`{"error":"search failed: %s"}`, strings.ReplaceAll(errMsg, `"`, `\"`)), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(output)
+}
+
+func v2LyricsHandler(w http.ResponseWriter, r *http.Request) {
+	artist := r.URL.Query().Get("artist")
+	title := r.URL.Query().Get("title")
+	if artist == "" || title == "" {
+		http.Error(w, `{"error":"artist and title required"}`, http.StatusBadRequest)
+		return
+	}
+
+	pythonPath := findPython3()
+	if pythonPath == "" {
+		http.Error(w, `{"error":"python3 not found"}`, http.StatusInternalServerError)
+		return
+	}
+
+	cmd := exec.Command(pythonPath, "scripts/enrich.py", "lyrics", artist, title)
+	output, err := cmd.Output()
+	if err != nil {
+		http.Error(w, `{"found":false}`, http.StatusOK)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(output)
 }

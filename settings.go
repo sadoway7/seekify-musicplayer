@@ -24,6 +24,15 @@ func initSettingsTable() {
 	migrateSetting("review_check_duplicates", "true")
 	migrateSetting("review_check_duration", "true")
 	migrateSetting("review_recheck_hours", "24")
+	migrateSetting("review_flag_missing_title", "true")
+	migrateSetting("review_flag_missing_artist", "true")
+	migrateSetting("review_flag_missing_album", "true")
+	migrateSetting("review_flag_missing_genre", "true")
+	migrateSetting("review_flag_no_cover", "true")
+	migrateSetting("review_flag_filename_derived", "true")
+	migrateSetting("review_flag_suspicious", "true")
+	migrateSetting("review_flag_duration", "true")
+	migrateSetting("review_flag_duplicates", "true")
 }
 
 func migrateSetting(key, defaultVal string) {

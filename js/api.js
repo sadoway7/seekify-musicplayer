@@ -213,6 +213,12 @@ const Api = {
     } catch { return []; }
   },
 
+  async metadataSearch(query) {
+    const res = await fetch('/api/metadata/search?q=' + encodeURIComponent(query));
+    if (!res.ok) return [];
+    return res.json();
+  },
+
   async metadataUpdateTrack(trackId, data) {
     try {
       const res = await fetch('/api/metadata/update-track/' + trackId, {
@@ -352,6 +358,16 @@ const Api = {
   async deleteJob(id) {
     const res = await fetch('/api/queue/' + id + '/delete', { method: 'POST' });
     if (!res.ok) throw new Error('Failed to delete job');
+    return res.json();
+  },
+
+  async selectVideo(jobId, videoId) {
+    const res = await fetch('/api/queue/' + jobId + '/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId })
+    });
+    if (!res.ok) throw new Error('Failed to select video');
     return res.json();
   },
 

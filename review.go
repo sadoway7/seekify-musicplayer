@@ -56,16 +56,21 @@ func dbSetReviewStatus(trackID, status, flags, reviewer string) {
 
 func dbGetReviewCounts() map[string]int {
 	counts := map[string]int{"unchecked": 0, "needs_review": 0, "reviewed_ok": 0}
-	rows, err := db.Query("SELECT status, COUNT(*) FROM track_reviews GROUP BY status")
+	rows, err := db.Query("SELECT track_id, status FROM track_reviews")
 	if err != nil {
 		return counts
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var status string
-		var count int
-		rows.Scan(&status, &count)
-		counts[status] = count
+		var trackID, status string
+		rows.Scan(&trackID, &status)
+		mu.RLock()
+		_, exists := tracks[trackID]
+		mu.RUnlock()
+		if !exists {
+			continue
+		}
+		counts[status]++
 	}
 	return counts
 }
@@ -158,6 +163,68 @@ func dbResetAllReviews() {
 
 func dbDeleteReview(trackID string) {
 	db.Exec("DELETE FROM track_reviews WHERE track_id = ?", trackID)
+}
+
+func seedMissingReviewTracks() {
+	mu.RLock()
+	trackIDs := make([]string, 0, len(tracks))
+	for id := range tracks {
+		trackIDs = append(trackIDs, id)
+	}
+	mu.RUnlock()
+
+	count := 0
+	for _, id := range trackIDs {
+		var exists int
+		db.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE track_id = ?", id).Scan(&exists)
+		if exists == 0 {
+			dbSetReviewStatus(id, "unchecked", "[]", "")
+			count++
+		}
+	}
+	if count > 0 {
+		log.Printf("[review] Seeded %d existing tracks for review", count)
+	}
+}
+
+func cleanupOldReviewFlags() {
+	rows, err := db.Query("SELECT track_id, flags FROM track_reviews WHERE flags LIKE '%missing_track_number%' OR flags LIKE '%missing_year%'")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	type item struct {
+		id    string
+		flags string
+	}
+	var items []item
+	for rows.Next() {
+		var i item
+		rows.Scan(&i.id, &i.flags)
+		items = append(items, i)
+	}
+	for _, i := range items {
+		var flags []string
+		json.Unmarshal([]byte(i.flags), &flags)
+		var cleaned []string
+		for _, f := range flags {
+			if f != "missing_track_number" && f != "missing_year" {
+				cleaned = append(cleaned, f)
+			}
+		}
+		if len(cleaned) == 0 {
+			cleaned = []string{}
+		}
+		flagsJSON, _ := json.Marshal(cleaned)
+		status := "needs_review"
+		if len(cleaned) == 0 {
+			status = "reviewed_ok"
+		}
+		dbSetReviewStatus(i.id, status, string(flagsJSON), "cleanup")
+	}
+	if len(items) > 0 {
+		log.Printf("[review] Cleaned up %d tracks with removed flags", len(items))
+	}
 }
 
 func dbInsertUncheckedReviews(newTracks map[string]*Track) {
@@ -268,26 +335,30 @@ func checkMetadataCompleteness(t *Track) []string {
 	artist := strings.TrimSpace(t.Artist)
 	album := strings.TrimSpace(t.Album)
 
-	if title == "" || isGenericName(title, []string{"unknown title", "untitled", "title"}) {
-		flags = append(flags, "missing_title")
+	if getSettingBool("review_flag_missing_title", true) {
+		if title == "" || isGenericName(title, []string{"unknown title", "untitled", "title"}) {
+			flags = append(flags, "missing_title")
+		}
 	}
-	if artist == "" || isGenericName(artist, []string{"unknown artist", "unknown"}) {
-		flags = append(flags, "missing_artist")
+	if getSettingBool("review_flag_missing_artist", true) {
+		if artist == "" || isGenericName(artist, []string{"unknown artist", "unknown"}) {
+			flags = append(flags, "missing_artist")
+		}
 	}
-	if album == "" || isGenericName(album, []string{"unknown album"}) {
-		flags = append(flags, "missing_album")
+	if getSettingBool("review_flag_missing_album", true) {
+		if album == "" || isGenericName(album, []string{"unknown album"}) {
+			flags = append(flags, "missing_album")
+		}
 	}
-	if t.TrackNumber == 0 {
-		flags = append(flags, "missing_track_number")
+	if getSettingBool("review_flag_missing_genre", true) {
+		if t.Genre == "" {
+			flags = append(flags, "missing_genre")
+		}
 	}
-	if t.Year == 0 {
-		flags = append(flags, "missing_year")
-	}
-	if t.Genre == "" {
-		flags = append(flags, "missing_genre")
-	}
-	if !t.HasCover {
-		flags = append(flags, "no_cover")
+	if getSettingBool("review_flag_no_cover", true) {
+		if !t.HasCover {
+			flags = append(flags, "no_cover")
+		}
 	}
 	return flags
 }
@@ -299,7 +370,8 @@ func checkSuspiciousNaming(t *Track) []string {
 	combined := titleLower + " " + artistLower
 
 	suspiciousWords := []string{"episode", "podcast", "audiobook", "chapter", "interview",
-		"commentary", "copy of", "draft", "final mix", "untitled"}
+		"commentary", "copy of", "draft", "final mix", "untitled", "recorded",
+		"official", "video"}
 	for _, word := range suspiciousWords {
 		if strings.Contains(combined, word) {
 			flags = append(flags, "suspicious_title")
@@ -337,8 +409,10 @@ func checkSuspiciousNaming(t *Track) []string {
 		flags = append(flags, "very_long_title")
 	}
 
-	if isFilenameDerived(t) {
-		flags = append(flags, "filename_derived")
+	if getSettingBool("review_flag_filename_derived", true) {
+		if isFilenameDerived(t) {
+			flags = append(flags, "filename_derived")
+		}
 	}
 
 	return flags
@@ -580,7 +654,7 @@ func wakeReviewWorker() {
 }
 
 func runReviewBatch() bool {
-	batch := dbGetTracksByReviewStatus("unchecked", 20)
+	batch := dbGetTracksByReviewStatus("unchecked", 0)
 	if len(batch) == 0 {
 		return false
 	}
@@ -588,6 +662,7 @@ func runReviewBatch() bool {
 	log.Printf("[review] Checking batch of %d tracks", len(batch))
 
 	reviewLog.Lock()
+	reviewLog.Entries = nil
 	reviewLog.Entries = append(reviewLog.Entries, fmt.Sprintf("--- Scan started %s ---", time.Now().Format("2006-01-02 15:04:05")))
 	reviewLog.Unlock()
 
@@ -610,14 +685,38 @@ func runReviewBatch() bool {
 		reviewProgress.Unlock()
 
 		var allFlags []string
+		var details []string
 
-		if getSettingBool("review_check_naming", true) {
-			allFlags = append(allFlags, checkMetadataCompleteness(t)...)
-			allFlags = append(allFlags, checkSuspiciousNaming(t)...)
+		hasMetaFlag := getSettingBool("review_flag_missing_title", true) ||
+			getSettingBool("review_flag_missing_artist", true) ||
+			getSettingBool("review_flag_missing_album", true) ||
+			getSettingBool("review_flag_missing_genre", true) ||
+			getSettingBool("review_flag_no_cover", true)
+		if hasMetaFlag {
+			metaFlags := checkMetadataCompleteness(t)
+			if len(metaFlags) > 0 {
+				allFlags = append(allFlags, metaFlags...)
+				details = append(details, fmt.Sprintf("  metadata: title=%q artist=%q album=%q genre=%q cover=%v → %v",
+					t.Title, t.Artist, t.Album, t.Genre, t.HasCover, metaFlags))
+			}
 		}
 
-		if getSettingBool("review_check_duration", true) {
-			allFlags = append(allFlags, checkDuration(t, allFlags)...)
+		if getSettingBool("review_flag_suspicious", true) {
+			nameFlags := checkSuspiciousNaming(t)
+			if len(nameFlags) > 0 {
+				allFlags = append(allFlags, nameFlags...)
+				details = append(details, fmt.Sprintf("  naming: title=%q artist=%q file=%q → %v",
+					t.Title, t.Artist, t.FilePath, nameFlags))
+			}
+		}
+
+		if getSettingBool("review_flag_duration", true) {
+			durFlags := checkDuration(t, allFlags)
+			if len(durFlags) > 0 {
+				allFlags = append(allFlags, durFlags...)
+				details = append(details, fmt.Sprintf("  duration: %ds (%.1fmin) with other flags=%v → %v",
+					t.Duration, float64(t.Duration)/60.0, allFlags, durFlags))
+			}
 		}
 
 		allFlags = uniqueFlags(allFlags)
@@ -635,7 +734,6 @@ func runReviewBatch() bool {
 			reviewLog.Unlock()
 		}
 
-		time.Sleep(500 * time.Millisecond)
 	}
 
 	if getSettingBool("review_check_duplicates", true) {

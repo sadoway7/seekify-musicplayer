@@ -679,6 +679,10 @@
   padding: 10px 0;
 }
 
+.queue-job-clickable {
+  cursor: pointer;
+}
+
 .queue-job-status {
   width: 32px;
   height: 32px;

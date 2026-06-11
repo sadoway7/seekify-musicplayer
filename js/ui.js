@@ -302,6 +302,7 @@ const UI = {
     };
 
     const onStart = (e) => {
+      this._waveformHoverX = -1;
       this.seeking = true;
       const f = getFraction(e);
       this._waveformProgress = f;
@@ -318,6 +319,7 @@ const UI = {
     const onEnd = (e) => {
       if (!this.seeking) return;
       this.seeking = false;
+      this._waveformHoverX = -1;
       const rect = canvas.getBoundingClientRect();
       let clientX;
       if (e.changedTouches) {
@@ -1188,6 +1190,10 @@ const UI = {
     Store.refreshRecent().then(() => {
       if (Store.currentView === 'home') this._renderHomeContent();
     });
+    Api.getReviewCounts().then(counts => {
+      Store.reviewCounts = counts;
+      if (Store.currentView === 'home') this._renderHomeContent();
+    }).catch(() => {});
   },
 
   _renderHomeContent() {
@@ -1217,15 +1223,15 @@ const UI = {
 
       // Spot 1: Shuffle
       html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
-        + '<div class="quick-play-art" style="background:linear-gradient(135deg, #fff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
-        + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:85px;font-weight:900;color:rgba(212,240,64,0.75);transform:rotate(-6deg);line-height:0.8;letter-spacing:-0.04em;display:block;white-space:nowrap">SHUFFLE</span></div>'
-        + '<svg viewBox="0 0 100 100" width="100%" height="100%"><defs><filter id="dot-glow"><feDropShadow dx="0" dy="1" stdDeviation="2.5" flood-color="rgba(180,220,50,0.6)"/></filter></defs>'
-        + '<circle cx="28" cy="28" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
-        + '<circle cx="72" cy="28" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
-        + '<circle cx="50" cy="50" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
-        + '<circle cx="28" cy="72" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
-        + '<circle cx="72" cy="72" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
+        + '<div class="quick-play-art" style="background:linear-gradient(135deg, #ffffff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
+        + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
+        + '<circle cx="25" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
+        + '<circle cx="75" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
+        + '<circle cx="50" cy="50" r="9" fill="rgba(168,200,48,0.85)"/>'
+        + '<circle cx="25" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
+        + '<circle cx="75" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
         + '</svg>'
+        + '<div style="position:absolute;top:14px;left:16px;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:clamp(14px, 4vw, 28px);font-weight:900;color:rgba(0,0,0,0.9);letter-spacing:-0.06em;display:block;white-space:nowrap;filter:drop-shadow(0 0 4px rgba(255,255,255,1)) drop-shadow(0 0 10px rgba(255,255,255,0.9)) drop-shadow(0 0 20px rgba(255,255,255,0.7)) drop-shadow(0 0 40px rgba(255,255,255,0.5)) drop-shadow(0 0 60px rgba(255,255,255,0.3))">SHUFFLE</span></div>'
         + '</div>'
         + '</div>';
 
@@ -1995,11 +2001,12 @@ const UI = {
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
     let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Ripper Search</span></div>'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Ripper Search</span>'
+      + '<button class="chip finder-chip' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads" style="margin-left:auto;background:#3B82F6;color:#fff;border-color:#3B82F6">Downloads</button>'
+      + '</div>'
       + '<div class="filter-chips finder-type-chips">'
       + '<button class="chip finder-chip' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Search</button>'
       + '<button class="chip finder-chip' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">Import</button>'
-      + '<button class="chip finder-chip' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
       + '</div>';
 
     if (this._finderTab === 'downloads') {
@@ -2221,11 +2228,13 @@ const UI = {
       const failedCount = counts.failed || 0;
       let html = '';
 
-      if (activeCount > 0 || counts.completed > 0 || counts.failed > 0) {
+      const needsSel = counts.needs_selection || 0;
+      if (activeCount > 0 || counts.completed > 0 || counts.failed > 0 || needsSel > 0) {
         html += '<div class="queue-stats">'
           + '<div class="queue-stats-badges">'
           + (counts.queued > 0 ? '<span class="stat-badge stat-queued">' + counts.queued + ' queued</span>' : '')
           + (activeCount > 0 && counts.queued <= 0 ? '<span class="stat-badge stat-active">' + activeCount + ' active</span>' : '')
+          + (needsSel > 0 ? '<span class="stat-badge stat-failed">' + needsSel + ' needs pick</span>' : '')
           + (counts.completed > 0 ? '<span class="stat-badge stat-completed">' + counts.completed + ' done</span>' : '')
           + (counts.failed > 0 ? '<span class="stat-badge stat-failed">' + counts.failed + ' failed</span>' : '')
           + '</div>'
@@ -2244,6 +2253,7 @@ const UI = {
         const isQueued = j.status === 'queued';
         const failed = j.status === 'failed';
         const completed = j.status === 'completed';
+        const needsSelection = j.status === 'needs_selection';
 
         let elapsed = '';
         if (active || isQueued) {
@@ -2260,7 +2270,10 @@ const UI = {
           queuePos = '<span class="queue-pos">#' + queuedIndex + ' in line</span>';
         }
 
-        html += '<div class="queue-job-card' + (active ? ' queue-active' : isQueued ? ' queue-waiting' : '') + '">'
+        const clickable = completed && j.filePath;
+        const cardClass = active ? ' queue-active' : isQueued ? ' queue-waiting' : needsSelection ? ' queue-needs-selection' : '';
+        html += '<div class="queue-job-card' + cardClass + (clickable ? ' queue-job-clickable' : '') + '"'
+          + (clickable ? ' data-artist="' + this._esc(j.artist || '') + '" data-title="' + this._esc(j.title || '') + '"' : '') + '>'
           + '<div class="queue-job-status ' + (active ? 'job-active' : isQueued ? 'job-queued' : failed ? 'job-failed' : 'job-done') + '">'
           + (active ? '<div class="queue-spinner"></div>' : isQueued ? '<div class="queue-status-dot dot-waiting"></div>' : (failed ? '<div class="queue-status-dot dot-failed"></div>' : '<div class="queue-status-dot dot-done"></div>'))
           + '</div>'
@@ -2275,6 +2288,7 @@ const UI = {
       + '</div>'
           + '</div>'
       + '<div class="queue-job-actions">'
+      + (needsSelection ? '<button class="queue-item-select" data-job-id="' + this._esc(j.id) + '" title="Pick a source">&#x2699;</button>' : '')
       + (completed && j.filePath ? '<a class="queue-item-download" href="' + Api.downloadJobUrl(j.id) + '" title="Download file" download>' + Icons.download() + '</a>' : '')
       + (failed ? '<button class="queue-item-retry" data-job-id="' + this._esc(j.id) + '" title="Retry">&#x21bb;</button>' : '')
       + '<button class="queue-item-delete" data-job-id="' + this._esc(j.id) + '" title="Remove">&times;</button>'
@@ -2294,6 +2308,43 @@ const UI = {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           Api.deleteJob(btn.dataset.jobId).then(() => this._loadDownloads());
+        });
+      });
+
+      container.querySelectorAll('.queue-item-select').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const job = jobs.find(j => j.id === btn.dataset.jobId);
+          if (job && job.candidates) {
+            this._showCandidateModal(job);
+          }
+        });
+      });
+
+      container.querySelectorAll('.queue-job-clickable').forEach(card => {
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.queue-job-actions')) return;
+          const artist = card.dataset.artist;
+          const title = card.dataset.title;
+          const find = () => Store.library.tracks.find(t =>
+            t.artist && t.title &&
+            t.artist.toLowerCase() === artist.toLowerCase() &&
+            t.title.toLowerCase() === title.toLowerCase()
+          );
+          const track = find();
+          if (track && track.albumID) {
+            this.navigateTo('album', { albumId: track.albumID });
+          } else {
+            this.showToast('Refreshing library...');
+            Store.refreshLibrary().then(() => {
+              const t = find();
+              if (t && t.albumID) {
+                this.navigateTo('album', { albumId: t.albumID });
+              } else {
+                this.showToast('Track not yet in library — try scanning first');
+              }
+            });
+          }
         });
       });
 
@@ -2330,6 +2381,63 @@ const UI = {
     } catch (e) {
       container.innerHTML = '<div class="empty-state-text">Failed to load downloads</div>';
     }
+  },
+
+  _showCandidateModal(job) {
+    let candidates;
+    try { candidates = typeof job.candidates === 'string' ? JSON.parse(job.candidates) : job.candidates; } catch { return; }
+    if (!candidates || !candidates.length) return;
+
+    const existing = document.querySelector('.candidate-modal-overlay');
+    if (existing) existing.remove();
+
+    let listHtml = '';
+    candidates.forEach(c => {
+      const dur = c.duration > 0 ? Math.floor(c.duration / 60) + ':' + String(c.duration % 60).padStart(2, '0') : '';
+      const scoreLabel = c.score >= 60 ? 'Good' : c.score >= 30 ? 'Fair' : 'Weak';
+      const scoreClass = c.score >= 60 ? 'score-good' : c.score >= 30 ? 'score-fair' : 'score-weak';
+      listHtml += '<div class="candidate-item" data-video-id="' + this._esc(c.videoId) + '">'
+        + '<div class="candidate-item-art"><img src="https://i.ytimg.com/vi/' + this._esc(c.videoId) + '/default.jpg" alt="" onerror="this.style.display=\'none\'"></div>'
+        + '<div class="candidate-item-info">'
+        + '<div class="candidate-item-title">' + this._esc(c.title) + '</div>'
+        + '<div class="candidate-item-subtitle">' + this._esc(c.channel) + (dur ? ' &middot; ' + dur : '') + '</div>'
+        + '</div>'
+        + '<span class="candidate-score ' + scoreClass + '">' + scoreLabel + '</span>'
+        + '</div>';
+    });
+
+    const overlay = document.createElement('div');
+    overlay.className = 'candidate-modal-overlay';
+    overlay.innerHTML = '<div class="candidate-modal">'
+      + '<div class="candidate-modal-header">'
+      + '<div class="candidate-modal-title">Pick a source for<br><strong>' + this._esc(job.artist || '') + (job.artist && job.title ? ' - ' : '') + this._esc(job.title || '') + '</strong></div>'
+      + '<button class="candidate-modal-close">&times;</button>'
+      + '</div>'
+      + '<div class="candidate-modal-list">' + listHtml + '</div>'
+      + '</div>';
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+
+    overlay.querySelector('.candidate-modal-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelectorAll('.candidate-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const videoId = item.dataset.videoId;
+        item.style.opacity = '0.5';
+        item.style.pointerEvents = 'none';
+        Api.selectVideo(job.id, videoId).then(() => {
+          overlay.remove();
+          this._showToast('Download resumed with selected source');
+          this._loadDownloads();
+        }).catch(() => {
+          this._showToast('Failed to select');
+          item.style.opacity = '';
+          item.style.pointerEvents = '';
+        });
+      });
+    });
   },
 
   _updateDownloadBadge(counts) {
@@ -2417,7 +2525,7 @@ const UI = {
         } else if (this._isQueued(r.artist, r.title)) {
           statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
         } else {
-          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
+          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" data-album="' + this._esc(r.album || '') + '" data-album-mbid="' + this._esc(r.albumId || '') + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
         }
         html += '<div class="finder-item">'
           + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
@@ -2518,7 +2626,9 @@ const UI = {
         dlBtn.replaceWith(badge);
         this._addToQueue({
           artist: dlBtn.dataset.artist,
-          title: dlBtn.dataset.title
+          title: dlBtn.dataset.title,
+          album: dlBtn.dataset.album || '',
+          albumMbid: dlBtn.dataset.albumMbid || ''
         });
         return;
       }
@@ -2600,6 +2710,7 @@ const UI = {
       + '<div class="filter-chips finder-type-chips">'
       + '<button class="chip finder-chip' + (this._artistView === 'tracklist' ? ' active' : '') + '" data-artist-tab="tracklist">Tracklist</button>'
       + '<button class="chip finder-chip' + (this._artistView === 'albums' ? ' active' : '') + '" data-artist-tab="albums">Albums</button>'
+      + '<button class="chip finder-chip" data-artist-tab="downloads" style="margin-left:auto;background:#3B82F6;color:#fff;border-color:#3B82F6">Downloads</button>'
       + '</div>'
       + '<div id="finder-artist-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
 
@@ -2607,6 +2718,11 @@ const UI = {
 
     this.els.content.querySelectorAll('[data-artist-tab]').forEach(chip => {
       chip.addEventListener('click', () => {
+        if (chip.dataset.artistTab === 'downloads') {
+          this._finderTab = 'downloads';
+          this.navigateTo('finder');
+          return;
+        }
         this._artistView = chip.dataset.artistTab;
         if (this._artistReleases) {
           const container = document.getElementById('finder-artist-content');
@@ -3021,21 +3137,48 @@ const UI = {
       + '<div class="review-progress-bar" id="review-progress-bar" style="width:' + reviewedPct + '%"></div>'
       + '</div>'
       + '<div id="review-progress-text" class="review-progress-text"></div>'
+      + '<div id="review-live-log" class="review-live-log"></div>'
       + '<div class="settings-field settings-field-toggle">'
       + '<label>Enable Review Worker</label>'
       + '<input type="checkbox" class="settings-toggle" id="setting-review-enabled">'
       + '</div>'
+      + '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.4);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.05em">Metadata Checks</div>'
       + '<div class="settings-field settings-field-toggle">'
-      + '<label>Check Suspicious Naming</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-check-naming">'
+      + '<label>Missing Title</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-title">'
       + '</div>'
       + '<div class="settings-field settings-field-toggle">'
-      + '<label>Check for Duplicates</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-check-duplicates">'
+      + '<label>Missing Artist</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-artist">'
       + '</div>'
       + '<div class="settings-field settings-field-toggle">'
-      + '<label>Check Duration Anomalies</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-check-duration">'
+      + '<label>Missing Album</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-album">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Missing Genre</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-genre">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Missing Cover Art</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-no-cover">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Filename as Title</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-filename-derived">'
+      + '</div>'
+      + '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.4);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.05em">Quality Checks</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Suspicious Naming / Keywords</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-suspicious">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Duration Anomalies</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duration">'
+      + '</div>'
+      + '<div class="settings-field settings-field-toggle">'
+      + '<label>Potential Duplicates</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duplicates">'
       + '</div>'
       + '<div class="settings-actions">'
       + '<button class="settings-btn settings-btn-primary" id="btn-review-recheck">' + Icons.refresh() + '<span>Recheck All Tracks</span></button>'
@@ -3135,6 +3278,15 @@ const UI = {
       if (revDupes) revDupes.addEventListener('change', () => this._saveReviewSettings());
       if (revDur) revDur.addEventListener('change', () => this._saveReviewSettings());
 
+      const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
+      flagKeys.forEach(key => {
+        const el = document.getElementById('setting-review-flag-' + key);
+        if (el) {
+          el.checked = settings['review_flag_' + key.replace(/-/g, '_')] !== 'false';
+          el.addEventListener('change', () => this._saveReviewSettings());
+        }
+      });
+
       const recheckBtn = document.getElementById('btn-review-recheck');
       if (recheckBtn) recheckBtn.addEventListener('click', async () => {
         recheckBtn.disabled = true;
@@ -3167,40 +3319,117 @@ const UI = {
 
   _startReviewProgressPoll() {
     if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
-    this._reviewPollTimer = setInterval(() => this._pollReviewProgress(), 2000);
+    this._loadInitialReviewLog();
+    this._reviewPollTimer = setInterval(() => this._pollReviewProgress(), 300);
     this._pollReviewProgress();
+  },
+
+  async _loadInitialReviewLog() {
+    const logEl = document.getElementById('review-live-log');
+    if (!logEl) return;
+    try {
+      const logText = await Api.getReviewLog();
+      if (!logText) return;
+      const lines = logText.trim().split('\n').filter(Boolean);
+      const recent = lines.slice(-30);
+      let logHtml = '';
+      recent.forEach(line => {
+        const isFlagged = line.includes('⚠');
+        const isOk = line.includes('✓');
+        const isDivider = line.startsWith('---');
+        const cls = isFlagged ? ' log-flagged' : isOk ? ' log-ok' : isDivider ? ' log-divider' : '';
+        logHtml += '<div class="review-log-line' + cls + '">' + this._esc(line) + '</div>';
+      });
+      logEl.innerHTML = logHtml;
+      logEl.scrollTop = logEl.scrollHeight;
+    } catch (e) {}
   },
 
   async _pollReviewProgress() {
     const textEl = document.getElementById('review-progress-text');
     const barEl = document.getElementById('review-progress-bar');
+    const logEl = document.getElementById('review-live-log');
     if (!textEl) {
       if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
       return;
     }
 
     try {
-      const p = await Api.getReviewProgress();
+      const [p, logText] = await Promise.all([Api.getReviewProgress(), Api.getReviewLog()]);
+
+      if (logEl && logText) {
+        const lines = logText.trim().split('\n').filter(Boolean);
+        const recent = lines.slice(-30);
+        const active = p && p.active;
+        let logHtml = '';
+        if (active) {
+          logHtml += '<div class="review-log-spinner-row"><div class="queue-spinner" style="width:14px;height:14px;border-width:2px"></div><span class="review-log-active">Worker active</span></div>';
+        }
+        recent.forEach(line => {
+          const isFlagged = line.includes('⚠');
+          const isOk = line.includes('✓');
+          const isDivider = line.startsWith('---');
+          const cls = isFlagged ? ' log-flagged' : isOk ? ' log-ok' : isDivider ? ' log-divider' : '';
+          logHtml += '<div class="review-log-line' + cls + '">' + this._esc(line) + '</div>';
+        });
+        logEl.innerHTML = logHtml;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
       if (!p) return;
 
       if (p.active && p.total > 0) {
         const pct = Math.round((p.checked / p.total) * 100);
         textEl.textContent = 'Checking: ' + (p.currentTrack || '...') + ' (' + p.checked + '/' + p.total + ')';
-        if (barEl) barEl.style.width = pct + '%';
+        if (barEl) {
+          barEl.style.width = pct + '%';
+          barEl.style.background = '#ff6b6b';
+        }
       } else if (p.active) {
         textEl.textContent = 'Checking tracks...';
+        if (barEl) {
+          barEl.style.width = '100%';
+          barEl.style.background = '#ff6b6b';
+          barEl.style.animation = 'review-pulse 1s ease-in-out infinite';
+        }
       } else {
         textEl.textContent = '';
+        if (barEl) {
+          barEl.style.animation = '';
+          barEl.style.background = '';
+        }
         if (this._reviewPollTimer) {
           clearInterval(this._reviewPollTimer);
           this._reviewPollTimer = null;
-          const counts = await Api.getReviewCounts();
-          Store.reviewCounts = counts;
-          const total = (counts.unchecked || 0) + (counts.needs_review || 0) + (counts.reviewed_ok || 0);
-          const pct = total > 0 ? Math.round(((counts.reviewed_ok || 0) / total) * 100) : 0;
-          if (barEl) barEl.style.width = pct + '%';
-          const recheckBtn = document.getElementById('btn-review-recheck');
-          if (recheckBtn) { recheckBtn.disabled = false; recheckBtn.querySelector('span').textContent = 'Recheck All Tracks'; }
+        }
+        const counts = await Api.getReviewCounts();
+        Store.reviewCounts = counts;
+        const total = (counts.unchecked || 0) + (counts.needs_review || 0) + (counts.reviewed_ok || 0);
+        const pct = total > 0 ? Math.round(((counts.reviewed_ok || 0) / total) * 100) : 0;
+        if (barEl) barEl.style.width = pct + '%';
+        const recheckBtn = document.getElementById('btn-review-recheck');
+        if (recheckBtn) { recheckBtn.disabled = false; recheckBtn.querySelector('span').textContent = 'Recheck All Tracks'; }
+        const statusEl = document.querySelector('.review-settings-status');
+        if (statusEl) {
+          statusEl.innerHTML = '<span style="color:rgba(255,255,255,.4)">Unchecked: <strong style="color:#fff">' + (counts.unchecked || 0) + '</strong></span>'
+            + '<span style="color:#ff6b6b">Needs Review: <strong>' + (counts.needs_review || 0) + '</strong></span>'
+            + '<span style="color:rgba(255,255,255,.4)">Reviewed: <strong style="color:#fff">' + (counts.reviewed_ok || 0) + '</strong></span>';
+        }
+        if (logEl) {
+          const logTextFinal = await Api.getReviewLog();
+          if (logTextFinal) {
+            const lines = logTextFinal.trim().split('\n').filter(Boolean);
+            const recent = lines.slice(-30);
+            let logHtml = '';
+            recent.forEach(line => {
+              const isFlagged = line.includes('⚠');
+              const isOk = line.includes('✓');
+              const isDivider = line.startsWith('---');
+              const cls = isFlagged ? ' log-flagged' : isOk ? ' log-ok' : isDivider ? ' log-divider' : '';
+              logHtml += '<div class="review-log-line' + cls + '">' + this._esc(line) + '</div>';
+            });
+            logEl.innerHTML = logHtml;
+          }
         }
       }
     } catch (e) {}
@@ -3249,13 +3478,19 @@ const UI = {
     const revNaming = document.getElementById('setting-review-check-naming');
     const revDupes = document.getElementById('setting-review-check-duplicates');
     const revDur = document.getElementById('setting-review-check-duration');
+    const data = {
+      review_enabled: revEnabled ? String(revEnabled.checked) : 'true',
+      review_check_naming: revNaming ? String(revNaming.checked) : 'true',
+      review_check_duplicates: revDupes ? String(revDupes.checked) : 'true',
+      review_check_duration: revDur ? String(revDur.checked) : 'true'
+    };
+    const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
+    flagKeys.forEach(key => {
+      const el = document.getElementById('setting-review-flag-' + key);
+      data['review_flag_' + key.replace(/-/g, '_')] = el ? String(el.checked) : 'true';
+    });
     try {
-      await Api.saveSettings({
-        review_enabled: revEnabled ? String(revEnabled.checked) : 'true',
-        review_check_naming: revNaming ? String(revNaming.checked) : 'true',
-        review_check_duplicates: revDupes ? String(revDupes.checked) : 'true',
-        review_check_duration: revDur ? String(revDur.checked) : 'true'
-      });
+      await Api.saveSettings(data);
       this._showToast('Review settings saved');
     } catch (e) {
       this._showToast('Failed to save review settings');
@@ -4565,6 +4800,7 @@ const UI = {
     if (!track) return;
 
     const isFirstLoad = !this._waveformData || this._waveformData.length === 0;
+    this._waveformProgress = 0;
     this._realWaveform = false;
     this._waveformRawPeaks = null;
     this._currentWaveformTrackId = track.id;
@@ -5211,6 +5447,10 @@ const UI = {
         this.hideContextMenu();
         this._showRescanModal(trackId);
       }},
+      { label: 'Edit Metadata', icon: Icons.edit(), action: () => {
+        this.hideContextMenu();
+        ReviewUI.showEditMetaModal(trackId);
+      }},
       { type: 'divider' },
       { label: 'Go to Album', icon: Icons.library(), action: () => {
         this.hideContextMenu();
@@ -5336,20 +5576,18 @@ const UI = {
     const modal = document.getElementById('rescan-modal');
     const list = document.getElementById('rescan-modal-list');
     const title = document.getElementById('rescan-modal-title');
+    const searchInput = document.getElementById('rescan-search-input');
+    const searchBtn = document.getElementById('rescan-search-btn');
 
-    title.textContent = 'Scanning...';
-    list.innerHTML = '<div class="loading-spinner" style="margin:24px auto"></div>';
-    modal.classList.remove('hidden');
+    const initialQuery = [track.artist, track.title].filter(Boolean).join(' - ');
+    searchInput.value = initialQuery;
+    title.textContent = this._esc(track.title);
 
-    try {
-      const candidates = await Api.metadataRescanSync(trackId);
+    const renderCandidates = (candidates) => {
       if (!candidates || candidates.length === 0) {
-        title.textContent = this._esc(track.title);
-        list.innerHTML = this._emptyState('No matches found', 'Could not find this track on MusicBrainz', Icons.search());
+        list.innerHTML = this._emptyState('No matches found', 'Try a different search', Icons.search());
         return;
       }
-
-      title.textContent = this._esc(track.title);
 
       let html = '<div class="rescan-your-track">'
         + '<div class="rescan-label">Your Track</div>'
@@ -5360,7 +5598,9 @@ const UI = {
       candidates.forEach(c => {
         const pct = Math.round(c.score * 100);
         const cls = pct >= 80 ? 'score-high' : pct >= 50 ? 'score-mid' : 'score-low';
-        html += '<div class="rescan-candidate" data-title="' + this._esc(c.title) + '" data-artist="' + this._esc(c.artist) + '" data-album="' + this._esc(c.album) + '">'
+        const art = c.albumId ? '<img src="/api/finder/cover/' + c.albumId + '" alt="" onerror="this.style.display=\'none\'">' : '';
+        html += '<div class="rescan-candidate" data-title="' + this._esc(c.title) + '" data-artist="' + this._esc(c.artist) + '" data-album="' + this._esc(c.album) + '" data-album-id="' + (c.albumId || '') + '">'
+          + (art ? '<div class="rescan-candidate-art">' + art + '</div>' : '')
           + '<div class="rescan-candidate-info">'
           + '<div class="rescan-candidate-title">' + this._esc(c.title) + '</div>'
           + '<div class="rescan-candidate-artist">' + this._esc(c.artist) + '</div>'
@@ -5377,12 +5617,14 @@ const UI = {
           const newTitle = el.dataset.title;
           const newArtist = el.dataset.artist;
           const newAlbum = el.dataset.album;
+          const newAlbumId = el.dataset.albumId;
 
           const result = await Api.metadataUpdateTrack(trackId, {
             title: newTitle,
             artist: newArtist,
             album: newAlbum,
-            albumArtist: newArtist
+            albumArtist: newArtist,
+            albumId: newAlbumId
           });
 
           if (!result) {
@@ -5394,13 +5636,37 @@ const UI = {
           modal.classList.add('hidden');
           this.showToast('Metadata updated');
           this.renderPage();
+          if (Player.getCurrentTrack() && Player.getCurrentTrack().id === trackId) {
+            const fresh = Store.getTrack(trackId);
+            if (fresh) {
+              Object.assign(Player.getCurrentTrack(), fresh);
+              this.updateNowPlaying();
+            }
+          }
+          ReviewUI.updateForTrack(trackId);
         });
       });
+    };
 
-    } catch (err) {
-      title.textContent = this._esc(track.title);
-      list.innerHTML = this._emptyState('Scan failed', 'Could not reach MusicBrainz', Icons.xCircle());
-    }
+    const doSearch = async (query) => {
+      if (!query.trim()) return;
+      title.textContent = 'Searching...';
+      list.innerHTML = '<div class="loading-spinner" style="margin:24px auto"></div>';
+      try {
+        const candidates = await Api.metadataSearch(query);
+        title.textContent = this._esc(track.title);
+        renderCandidates(candidates);
+      } catch (err) {
+        title.textContent = this._esc(track.title);
+        list.innerHTML = this._emptyState('Search failed', 'Could not reach MusicBrainz', Icons.xCircle());
+      }
+    };
+
+    searchBtn.onclick = () => doSearch(searchInput.value);
+    searchInput.onkeydown = (e) => { if (e.key === 'Enter') doSearch(searchInput.value); };
+
+    modal.classList.remove('hidden');
+    doSearch(initialQuery);
   },
 
   _handleAction(action) {

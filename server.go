@@ -157,6 +157,8 @@ func main() {
 	go startWatcher()
 	go startWatchScheduler()
 	go downloadWatchdog()
+	seedMissingReviewTracks()
+	cleanupOldReviewFlags()
 	go startReviewScheduler()
 
 	mux := http.NewServeMux()
@@ -176,6 +178,8 @@ func main() {
 	mux.HandleFunc("/api/recent/", recentAddHandler)
 	mux.HandleFunc("/admin", adminHandler)
 	mux.HandleFunc("/api/v2/resolve-url", resolveURLHandler)
+	mux.HandleFunc("/api/v2/search", v2SearchHandler)
+	mux.HandleFunc("/api/v2/lyrics", v2LyricsHandler)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		ytdlp := findYtDlp()
 		ffmpeg := findFfmpeg()
@@ -204,6 +208,7 @@ func main() {
 	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
 	mux.HandleFunc("/api/metadata/rescan/", metadataRescanHandler)
 	mux.HandleFunc("/api/metadata/rescan-sync/", metadataRescanSyncHandler)
+	mux.HandleFunc("/api/metadata/search", metadataSearchHandler)
 	mux.HandleFunc("/api/metadata/update-track/", metadataUpdateTrackHandler)
 	mux.HandleFunc("/api/metadata/scan-progress", metadataScanProgressHandler)
 	mux.HandleFunc("/api/metadata/pending", metadataPendingHandler)
@@ -234,6 +239,8 @@ func main() {
 			downloadJobRetryHandler(w, r)
 		} else if strings.HasSuffix(path, "/delete") {
 			downloadJobDeleteHandler(w, r)
+		} else if strings.HasSuffix(path, "/select") {
+			downloadJobSelectHandler(w, r)
 		} else {
 			downloadJobStatusHandler(w, r)
 		}

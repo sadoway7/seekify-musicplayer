@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +40,13 @@ type DownloadJob struct {
 	VideoID        string `json:"videoId,omitempty"`
 	CreatedAt      string `json:"createdAt"`
 	CompletedAt    string `json:"completedAt,omitempty"`
+	Pipeline       string `json:"pipeline,omitempty"`
+	RecordingID    string `json:"recordingId,omitempty"`
+	ReleaseID      string `json:"releaseId,omitempty"`
+	ArtistID       string `json:"artistId,omitempty"`
+	Genre          string `json:"genre,omitempty"`
+	Year           string `json:"year,omitempty"`
+	CandidatesJSON string `json:"candidates,omitempty"`
 }
 
 var (
@@ -140,6 +148,13 @@ func initDownloadTables() {
 		`ALTER TABLE download_jobs ADD COLUMN completed_at TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE download_jobs ADD COLUMN playlist_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE download_jobs ADD COLUMN video_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN pipeline TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN recording_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN release_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN artist_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN genre TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN year TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN candidates TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m)
@@ -162,10 +177,14 @@ func dbCreateJob(job *DownloadJob) error {
 func dbUpdateJob(job *DownloadJob) error {
 	_, err := db.Exec(`UPDATE download_jobs SET
 		status = ?, error = ?, source = ?, audio_quality = ?,
-		file_path = ?, file_deleted = ?, progress_stage = ?, completed_at = ?
+		file_path = ?, file_deleted = ?, progress_stage = ?, completed_at = ?,
+		pipeline = ?, recording_id = ?, release_id = ?, artist_id = ?, genre = ?, year = ?,
+		candidates = ?, video_id = ?
 		WHERE id = ?`,
 		job.Status, job.Error, job.Source, job.AudioQuality,
 		job.FilePath, boolToInt(job.FileDeleted), job.ProgressStage, job.CompletedAt,
+		job.Pipeline, job.RecordingID, job.ReleaseID, job.ArtistID, job.Genre, job.Year,
+		job.CandidatesJSON, job.VideoID,
 		job.ID)
 	return err
 }
@@ -174,7 +193,8 @@ func dbGetJob(id string) (*DownloadJob, error) {
 	row := db.QueryRow(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
+		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates
 		FROM download_jobs WHERE id = ?`, id)
 	return scanJob(row)
 }
@@ -186,15 +206,17 @@ func dbGetJobs(limit int) ([]DownloadJob, error) {
 	rows, err := db.Query(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
+		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates
 		FROM download_jobs ORDER BY
 			CASE status
 				WHEN 'searching' THEN 0
 				WHEN 'downloading' THEN 1
 				WHEN 'tagging' THEN 2
-				WHEN 'completed' THEN 3
-				WHEN 'queued' THEN 4
-				ELSE 5
+				WHEN 'needs_selection' THEN 3
+				WHEN 'completed' THEN 4
+				WHEN 'queued' THEN 5
+				ELSE 6
 			END,
 			completed_at DESC,
 			created_at DESC
@@ -210,7 +232,8 @@ func dbGetQueuedJobs() ([]DownloadJob, error) {
 	rows, err := db.Query(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at
+		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates
 		FROM download_jobs WHERE status = 'queued' ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -220,7 +243,7 @@ func dbGetQueuedJobs() ([]DownloadJob, error) {
 }
 
 func dbGetJobCounts() map[string]int {
-	counts := map[string]int{"queued": 0, "searching": 0, "downloading": 0, "tagging": 0, "completed": 0, "failed": 0}
+	counts := map[string]int{"queued": 0, "searching": 0, "downloading": 0, "tagging": 0, "completed": 0, "failed": 0, "needs_selection": 0}
 	rows, err := db.Query("SELECT status, COUNT(*) FROM download_jobs GROUP BY status")
 	if err != nil {
 		return counts
@@ -244,7 +267,8 @@ func scanJob(row *sql.Row) (*DownloadJob, error) {
 		&j.Status, &j.Error, &j.Source, &j.AudioQuality,
 		&j.FilePath, &fileDeleted, &j.ProgressStage,
 		&j.OverrideDir, &j.SearchQuery, &convertFlac,
-		&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt)
+		&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt,
+		&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +287,8 @@ func scanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 			&j.Status, &j.Error, &j.Source, &j.AudioQuality,
 			&j.FilePath, &fileDeleted, &j.ProgressStage,
 			&j.OverrideDir, &j.SearchQuery, &convertFlac,
-			&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt)
+			&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt,
+			&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON)
 		if err != nil {
 			continue
 		}
@@ -284,6 +309,9 @@ func createDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 		}
 		if title != "" {
 			parts = append(parts, title)
+		}
+		if album != "" {
+			parts = append(parts, album)
 		}
 		searchQuery = strings.Join(parts, " - ")
 	}
@@ -378,20 +406,45 @@ func processSingleDownload(job *DownloadJob) {
 	dbUpdateJob(job)
 
 	var videoID string
-	var searchErr error
 	if job.VideoID != "" {
 		videoID = job.VideoID
 		log.Printf("[download] Using direct video ID %s for %q", videoID, job.SearchQuery)
 	} else {
-		videoID, searchErr = searchYouTubeWithTimeout(job.SearchQuery, job.Artist, job.Title, searchTimeout)
-		if searchErr != nil {
+		candidates, serr := searchYouTubeWithTimeout(job.SearchQuery, job.Artist, job.Title, searchTimeout)
+		if serr != nil {
 			job.Status = "failed"
-			job.Error = fmt.Sprintf("Search failed: %v", searchErr)
+			job.Error = fmt.Sprintf("Search failed: %v", serr)
 			job.CompletedAt = time.Now().Format(time.RFC3339)
 			dbUpdateJob(job)
-			log.Printf("[download] Search failed for %q: %v", job.SearchQuery, searchErr)
+			log.Printf("[download] Search failed for %q: %v", job.SearchQuery, serr)
 			return
 		}
+		if len(candidates) == 0 {
+			job.Status = "failed"
+			job.Error = "No results found on YouTube"
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			dbUpdateJob(job)
+			return
+		}
+
+		const minConfidence = 40.0
+		if candidates[0].Score < minConfidence {
+			max := len(candidates)
+			if max > 8 {
+				max = 8
+			}
+			toSave := candidates[:max]
+			candJSON, _ := json.Marshal(toSave)
+			job.CandidatesJSON = string(candJSON)
+			job.Status = "needs_selection"
+			job.ProgressStage = "Awaiting user selection"
+			dbUpdateJob(job)
+			log.Printf("[download] Low confidence (%.1f) for %q, waiting for user selection", candidates[0].Score, job.SearchQuery)
+			return
+		}
+
+		videoID = candidates[0].VideoID
+		log.Printf("[download] Auto-selected %s (score %.1f) for %q", videoID, candidates[0].Score, job.SearchQuery)
 	}
 
 	destDir := musicDir
@@ -543,7 +596,13 @@ func processSingleDownload(job *DownloadJob) {
 	job.ProgressStage = "Tagging file"
 	dbUpdateJob(job)
 
-	tagAudioFile(audioFile, job.Artist, job.Title, job.Album, job.TrackNumber, job.TrackTotal)
+	if job.Pipeline == "v2" {
+		job.ProgressStage = "Enriching metadata"
+		dbUpdateJob(job)
+		enrichWithPython(audioFile, job)
+	} else {
+		tagAudioFile(audioFile, job.Artist, job.Title, job.Album, job.TrackNumber, job.TrackTotal)
+	}
 
 	quality = probeAudioQuality(audioFile)
 
@@ -574,28 +633,36 @@ func processSingleDownload(job *DownloadJob) {
 	}()
 }
 
-func searchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration) (string, error) {
+func searchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration) ([]YTSearchCandidate, error) {
 	type result struct {
-		videoID string
-		err     error
+		candidates []YTSearchCandidate
+		err        error
 	}
 	ch := make(chan result, 1)
 	go func() {
-		id, err := searchYouTube(query, expectedArtist, expectedTitle)
-		ch <- result{id, err}
+		c, err := searchYouTubeScored(query, expectedArtist, expectedTitle)
+		ch <- result{c, err}
 	}()
 	select {
 	case r := <-ch:
-		return r.videoID, r.err
+		return r.candidates, r.err
 	case <-time.After(timeout):
-		return "", fmt.Errorf("search timed out after %v", timeout)
+		return nil, fmt.Errorf("search timed out after %v", timeout)
 	}
 }
 
-func searchYouTube(query, expectedArtist, expectedTitle string) (string, error) {
+type YTSearchCandidate struct {
+	VideoID  string `json:"videoId"`
+	Title    string `json:"title"`
+	Channel  string `json:"channel"`
+	Duration int    `json:"duration"`
+	Score    float64 `json:"score"`
+}
+
+func searchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearchCandidate, error) {
 	ytdlpPath := findYtDlp()
 	if ytdlpPath == "" {
-		return "", fmt.Errorf("yt-dlp not found")
+		return nil, fmt.Errorf("yt-dlp not found")
 	}
 
 	cmd := exec.Command(ytdlpPath,
@@ -606,47 +673,60 @@ func searchYouTube(query, expectedArtist, expectedTitle string) (string, error) 
 	)
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("yt-dlp search failed: %w", err)
+		return nil, fmt.Errorf("yt-dlp search failed: %w", err)
 	}
 
-	type SearchResult struct {
-		ID       string  `json:"id"`
-		Title    string  `json:"title"`
-		Channel  string  `json:"channel"`
-		Duration float64 `json:"duration"`
-		ViewCount int    `json:"view_count"`
+	type rawResult struct {
+		ID        string  `json:"id"`
+		Title     string  `json:"title"`
+		Channel   string  `json:"channel"`
+		Duration  float64 `json:"duration"`
+		ViewCount int     `json:"view_count"`
 	}
 
-	var results []SearchResult
+	var raw []rawResult
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		var r SearchResult
+		var r rawResult
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			continue
 		}
 		if r.ID != "" && r.Duration > 15 {
-			results = append(results, r)
+			raw = append(raw, r)
 		}
 	}
 
-	if len(results) == 0 {
-		return "", fmt.Errorf("no results found on YouTube")
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("no results found on YouTube")
 	}
 
-	best := results[0]
-	bestScore := scoreSearchResult(best.Title, best.Channel, expectedArtist, expectedTitle, best.Duration)
-	for _, r := range results[1:] {
+	candidates := make([]YTSearchCandidate, len(raw))
+	for i, r := range raw {
 		s := scoreSearchResult(r.Title, r.Channel, expectedArtist, expectedTitle, r.Duration)
-		if s > bestScore {
-			best = r
-			bestScore = s
+		candidates[i] = YTSearchCandidate{
+			VideoID:  r.ID,
+			Title:    r.Title,
+			Channel:  r.Channel,
+			Duration: int(r.Duration),
+			Score:    s,
 		}
 	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
+	})
 
-	return best.ID, nil
+	return candidates, nil
+}
+
+func searchYouTube(query, expectedArtist, expectedTitle string) (string, error) {
+	candidates, err := searchYouTubeScored(query, expectedArtist, expectedTitle)
+	if err != nil {
+		return "", err
+	}
+	return candidates[0].VideoID, nil
 }
 
 func scoreSearchResult(title, channel, expectedArtist, expectedTitle string, duration float64) float64 {

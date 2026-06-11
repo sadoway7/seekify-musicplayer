@@ -472,6 +472,7 @@
   padding: 0 var(--sp-4) 0 44px;
   height: 44px;
   font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
   outline: none;
 }
@@ -479,6 +480,7 @@
 .search-input::placeholder {
   color: var(--text-primary);
   opacity: 0.5;
+  font-weight: 600;
 }
 
 .page-header + .search-container {

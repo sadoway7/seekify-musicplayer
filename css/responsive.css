@@ -331,7 +331,8 @@
     align-items: center !important;
     justify-content: center !important;
     pointer-events: auto !important;
-    z-index: 3 !important;
+    z-index: 10 !important;
+    overflow: visible !important;
   }
 
   .np-float-tray {
