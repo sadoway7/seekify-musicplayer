@@ -41,6 +41,8 @@ const App = {
     const path = window.location.pathname;
     if (path === '/settings' || path === '/settings/') {
       Store.currentView = 'settings';
+    } else if (path === '/ripperv2' || path === '/ripperv2/') {
+      Store.currentView = 'ripper2';
     }
 
     UI.renderPage();

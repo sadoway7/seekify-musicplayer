@@ -1169,6 +1169,7 @@ const UI = {
       case 'finder': this.renderFinder(); break;
       case 'finder-artist': this.renderFinderArtist(Store.viewData); break;
       case 'finder-release': this.renderFinderRelease(Store.viewData); break;
+      case 'ripper2': RipperV2.render(this.els.content); break;
       case 'downloads': this.renderSettings(); break;
       case 'settings': this.renderSettings(); break;
       case 'metadata-review': this.renderMetadataReview(); break;
@@ -1225,7 +1226,7 @@ const UI = {
         + '<circle cx="72" cy="72" r="9" fill="rgba(160,200,40,0.75)" filter="url(#dot-glow)"/>'
         + '</svg>'
         + '</div>'
-        + '<div class="quick-play-title" style="padding-top:46px;padding-bottom:4px;font-size:17px;font-weight:900;letter-spacing:0.04em;position:relative;z-index:2">Shuffle</div>'
+        + '<div class="quick-play-title" style="padding-top:46px;padding-bottom:4px;display:flex;align-items:center;justify-content:center;gap:4px">' + Icons.shuffle() + '</div>'
         + '</div>';
 
       // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows

@@ -251,12 +251,10 @@
 
 @keyframes shuffle-card-glow {
   0%, 100% { background: linear-gradient(135deg, #fff, #f5f5f5); }
-  50% { background: linear-gradient(135deg, #f2f2f2, #e8e8e8); }
+  50% { background: linear-gradient(135deg, #f0f0f0, #e6e6e6); }
 }
 
 .quick-play-card-shuffle .quick-play-art {
-  transition: background 1.5s ease;
-  animation: shuffle-card-glow 6s ease-in-out infinite;
 }
 
 .quick-play-card-shuffle {
@@ -358,6 +356,7 @@
   left: var(--page-margin);
   white-space: nowrap;
   pointer-events: none;
+  transform: rotate(-1deg);
 }
 
 .quick-play-grid {
