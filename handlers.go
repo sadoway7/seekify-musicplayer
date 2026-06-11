@@ -1063,6 +1063,76 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+func cleanRescanTitle(title string) string {
+	title = strings.TrimSpace(title)
+	re := strings.NewReplacer(
+		"[Official Music Video]", "",
+		"[Official Video]", "",
+		"[Official Visualizer]", "",
+		"[Official Lyric Video]", "",
+		"[Official Lyric Visualizer]", "",
+		"[Official Audio]", "",
+		"[Official Visualiser]", "",
+		"[Official]", "",
+		"[OFFICIAL]", "",
+		"[HD]", "",
+		"[HD UPGRADE]", "",
+		"[4K Upgrade]", "",
+		"[4K]", "",
+		"(Official Music Video)", "",
+		"(Official Video)", "",
+		"(Official Visualizer)", "",
+		"(Official Lyric Video)", "",
+		"(Official Lyric Visualizer)", "",
+		"(Official Audio)", "",
+		"(Official Visualiser)", "",
+		"(Official)", "",
+		"(OFFICIAL)", "",
+		"(Music Video)", "",
+		"(Lyric Video)", "",
+		"(Visualizer)", "",
+		"(Visualiser)", "",
+		"(Audio)", "",
+		"(HD)", "",
+		"(4K)", "",
+		"(Lyric Visualizer)", "",
+		"(Official HD Video)", "",
+		"(Official 4K Music Video)", "",
+		"(Official HD Music Video)", "",
+		"(Official 4K Video)", "",
+		"(Official Remastered HD Video)", "",
+		"(Official HD Remastered Video)", "",
+	)
+	title = re.Replace(title)
+	for {
+		start := strings.Index(title, "[")
+		end := strings.Index(title, "]")
+		if start == -1 || end == -1 || end <= start {
+			break
+		}
+		bracket := title[start : end+1]
+		lower := strings.ToLower(bracket)
+		if strings.Contains(lower, "official") || strings.Contains(lower, "video") || strings.Contains(lower, "visualiz") || strings.Contains(lower, "lyric") || strings.Contains(lower, "audio") || strings.Contains(lower, "hd") || strings.Contains(lower, "4k") || strings.Contains(lower, "upgrade") || strings.Contains(lower, "remaster") {
+			title = strings.TrimSpace(title[:start] + title[end+1:])
+			continue
+		}
+		break
+	}
+	title = strings.TrimSpace(title)
+	return title
+}
+
+func cleanRescanArtist(artist string) string {
+	artist = strings.TrimSpace(artist)
+	artist = strings.TrimSuffix(artist, " - Topic")
+	artist = strings.TrimSuffix(artist, "VEVO")
+	artist = strings.TrimSuffix(artist, "Official")
+	artist = strings.TrimSuffix(artist, "OfficialMusic")
+	artist = strings.TrimSuffix(artist, "TV")
+	artist = strings.TrimSpace(artist)
+	return artist
+}
+
 func metadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
@@ -1078,6 +1148,9 @@ func metadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 		searchArtist = strings.TrimSpace(parts[0])
 		searchTitle = strings.TrimSpace(parts[1])
 	}
+
+	searchTitle = cleanRescanTitle(searchTitle)
+	searchArtist = cleanRescanArtist(searchArtist)
 
 	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 50)
 	if err != nil {

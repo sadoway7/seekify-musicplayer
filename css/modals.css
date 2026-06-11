@@ -503,7 +503,7 @@
 .rescan-search-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  margin: 0 16px 12px;
 }
 .rescan-search-input {
   flex: 1;

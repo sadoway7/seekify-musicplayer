@@ -15,27 +15,49 @@
   gap: 8px;
 }
 
+.np-review-btn-row .np-review-quick-btn {
+  opacity: 0;
+  transition: opacity 0.25s, background 0.2s, transform 0.25s;
+}
+
+.np-review-btn-row .np-review-quick-btn:first-child {
+  transform: translateX(32px);
+}
+
+.np-review-btn-row .np-review-quick-btn:last-child {
+  transform: translateX(-32px);
+}
+
+.np-review-btn-row:hover .np-review-quick-btn {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.np-review-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .np-review-btn {
-  background: rgba(220, 40, 40, 0.4);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: none;
   border-radius: 999px;
-  padding: 16px 40px;
+  padding: 16px;
+  width: 56px;
+  height: 56px;
   color: #fff;
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
   transition: background 0.2s;
 }
 
 .np-review-btn:hover {
-  background: rgba(220, 40, 40, 0.6);
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .np-review-btn svg {
@@ -65,33 +87,39 @@
   display: block;
 }
 
-.np-review-dropdown-header {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 12px 0;
-}
-
-.review-dropdown-delete-btn {
-  background: none;
+.np-review-quick-btn {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: none;
+  border-radius: 999px;
+  padding: 16px;
+  width: 56px;
+  height: 56px;
+  color: #fff;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.3);
-  transition: color 0.15s, background 0.15s;
+  transition: background 0.2s;
+  background: rgba(34, 197, 94, 0.4);
+  box-sizing: border-box;
 }
 
-.review-dropdown-delete-btn:hover {
-  color: #ff6b6b;
-  background: rgba(255, 80, 80, 0.1);
+.np-review-quick-btn:hover {
+  background: rgba(34, 197, 94, 0.6);
 }
 
-.review-dropdown-delete-btn svg {
-  width: 18px;
-  height: 18px;
+.np-review-quick-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.np-review-delete-btn {
+  background: rgba(220, 40, 40, 0.4);
+}
+
+.np-review-delete-btn:hover {
+  background: rgba(220, 40, 40, 0.6);
 }
 
 .np-review-flags {

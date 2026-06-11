@@ -105,6 +105,7 @@ const ReviewUI = {
         track.reviewFlags = [];
       }
       UI.showToast('Marked as reviewed');
+      Player.next();
     } catch (e) {
       UI.showToast('Failed to mark as reviewed');
     }
@@ -163,6 +164,7 @@ const ReviewUI = {
         this.currentTrackId = null;
       }
       UI.showToast('Metadata updated');
+      Player.next();
     } catch (e) {
       UI.showToast('Failed to update metadata');
     }
@@ -202,6 +204,7 @@ const ReviewUI = {
         await Store.refreshLibrary();
         el.remove();
         UI.showToast('File deleted');
+        Player.next();
       } catch (e) {
         el.remove();
         UI.showToast('Failed to delete file');
