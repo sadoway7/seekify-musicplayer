@@ -63,7 +63,8 @@
   --radius-full: 999px;
 
   /* ── Layout anchors ── */
-  --tab-bar-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  --tab-bar-height: 56px;
+  --tab-bar-height-safe: calc(56px + env(safe-area-inset-bottom, 0px));
   --mini-player-height: 66px;
 
   /* ── Page margin ── */
