@@ -1443,6 +1443,89 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 		path = "/index.html"
 	}
 
+	q := r.URL.Query()
+	playlistID := q.Get("playlist")
+	trackID := q.Get("play")
+	albumID := q.Get("album")
+	artistName := q.Get("artist")
+
+	if playlistID != "" || trackID != "" || albumID != "" || artistName != "" {
+		indexPath := filepath.Join(".", "index.html")
+		html, err := os.ReadFile(indexPath)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		var ogTitle, ogDesc, ogImage string
+		host := "http://" + r.Host
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			host = "https://" + r.Host
+		}
+		ogURL := host + r.URL.RequestURI()
+
+		if playlistID != "" {
+			p := dbFindPlaylistByID(playlistID)
+			if p != nil {
+				ogTitle = p.Name + " — Music Playlist"
+				ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", len(p.TrackIDs))
+			} else {
+				ogTitle = "Music Playlist"
+				ogDesc = "Private Music Library."
+			}
+		} else if trackID != "" {
+			mu.RLock()
+			if t, ok := tracks[trackID]; ok {
+				ogTitle = t.Artist + " — " + t.Title
+				ogDesc = "Private Music Library."
+				if t.AlbumID != "" {
+					ogImage = host + "/api/cover/" + t.AlbumID + "?size=300"
+				}
+			}
+			mu.RUnlock()
+			if ogTitle == "" {
+				ogTitle = "Music"
+				ogDesc = "Private Music Library."
+			}
+		} else if albumID != "" {
+			mu.RLock()
+			if a, ok := albums[albumID]; ok {
+				ogTitle = a.Artist + " — " + a.Name
+				ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", a.TrackCount)
+				ogImage = host + "/api/cover/" + albumID + "?size=300"
+			}
+			mu.RUnlock()
+			if ogTitle == "" {
+				ogTitle = "Music"
+				ogDesc = "Private Music Library."
+			}
+		} else if artistName != "" {
+			ogTitle = artistName + " — Music"
+			ogDesc = "Private Music Library."
+		}
+
+		ogTags := "\n<meta property=\"og:title\" content=\"" + ogTitle + "\">"
+		ogTags += "\n<meta property=\"og:description\" content=\"" + ogDesc + "\">"
+		ogTags += "\n<meta property=\"og:url\" content=\"" + ogURL + "\">"
+		ogTags += "\n<meta property=\"og:type\" content=\"music.playlist\">"
+		if ogImage != "" {
+			ogTags += "\n<meta property=\"og:image\" content=\"" + ogImage + "\">"
+		}
+		ogTags += "\n<meta name=\"twitter:card\" content=\"summary\">"
+		ogTags += "\n<meta name=\"twitter:title\" content=\"" + ogTitle + "\">"
+		ogTags += "\n<meta name=\"twitter:description\" content=\"" + ogDesc + "\">"
+		if ogImage != "" {
+			ogTags += "\n<meta name=\"twitter:image\" content=\"" + ogImage + "\">"
+		}
+
+		htmlStr := string(html)
+		htmlStr = strings.Replace(htmlStr, "</title>", "</title>"+ogTags, 1)
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(htmlStr))
+		return
+	}
+
 	fullPath := filepath.Join(".", path)
 	info, err := os.Stat(fullPath)
 	if err == nil && !info.IsDir() {
@@ -1456,88 +1539,6 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 
 	indexPath := filepath.Join(".", "index.html")
 	if _, err := os.Stat(indexPath); err == nil {
-		q := r.URL.Query()
-		playlistID := q.Get("playlist")
-		trackID := q.Get("play")
-		albumID := q.Get("album")
-		artistName := q.Get("artist")
-
-		if playlistID != "" || trackID != "" || albumID != "" || artistName != "" {
-			html, err := os.ReadFile(indexPath)
-			if err != nil {
-				http.NotFound(w, r)
-				return
-			}
-
-			var ogTitle, ogDesc, ogImage string
-			host := "http://" + r.Host
-			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-				host = "https://" + r.Host
-			}
-			ogURL := host + r.URL.RequestURI()
-
-			if playlistID != "" {
-				p := dbFindPlaylistByID(playlistID)
-				if p != nil {
-					ogTitle = p.Name + " — Music Playlist"
-					ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", len(p.TrackIDs))
-				} else {
-					ogTitle = "Music Playlist"
-					ogDesc = "Private Music Library."
-				}
-			} else if trackID != "" {
-				mu.RLock()
-				if t, ok := tracks[trackID]; ok {
-					ogTitle = t.Artist + " — " + t.Title
-					ogDesc = "Private Music Library."
-					if t.AlbumID != "" {
-						ogImage = host + "/api/cover/" + t.AlbumID + "?size=300"
-					}
-				}
-				mu.RUnlock()
-				if ogTitle == "" {
-					ogTitle = "Music"
-					ogDesc = "Private Music Library."
-				}
-			} else if albumID != "" {
-				mu.RLock()
-				if a, ok := albums[albumID]; ok {
-					ogTitle = a.Artist + " — " + a.Name
-					ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", a.TrackCount)
-					ogImage = host + "/api/cover/" + albumID + "?size=300"
-				}
-				mu.RUnlock()
-				if ogTitle == "" {
-					ogTitle = "Music"
-					ogDesc = "Private Music Library."
-				}
-			} else if artistName != "" {
-				ogTitle = artistName + " — Music"
-				ogDesc = "Private Music Library."
-			}
-
-			ogTags := "\n<meta property=\"og:title\" content=\"" + ogTitle + "\">"
-			ogTags += "\n<meta property=\"og:description\" content=\"" + ogDesc + "\">"
-			ogTags += "\n<meta property=\"og:url\" content=\"" + ogURL + "\">"
-			ogTags += "\n<meta property=\"og:type\" content=\"music.playlist\">"
-			if ogImage != "" {
-				ogTags += "\n<meta property=\"og:image\" content=\"" + ogImage + "\">"
-			}
-			ogTags += "\n<meta name=\"twitter:card\" content=\"summary\">"
-			ogTags += "\n<meta name=\"twitter:title\" content=\"" + ogTitle + "\">"
-			ogTags += "\n<meta name=\"twitter:description\" content=\"" + ogDesc + "\">"
-			if ogImage != "" {
-				ogTags += "\n<meta name=\"twitter:image\" content=\"" + ogImage + "\">"
-			}
-
-			htmlStr := string(html)
-			htmlStr = strings.Replace(htmlStr, "</title>", "</title>"+ogTags, 1)
-
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(htmlStr))
-			return
-		}
-
 		http.ServeFile(w, r, indexPath)
 		return
 	}
