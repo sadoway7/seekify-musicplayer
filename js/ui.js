@@ -5187,9 +5187,9 @@ const UI = {
 
   _getWaveformBarSizes() {
     const w = window.innerWidth;
-    if (w < 480) return { pw: 4, pg: 3 };
-    if (w < 768) return { pw: 3, pg: 3 };
-    return { pw: 3, pg: 2 };
+    if (w < 480) return { pw: 1, pg: 1 };
+    if (w < 768) return { pw: 2, pg: 1 };
+    return { pw: 3, pg: 1 };
   },
 
   _scaleWaveformData() {
