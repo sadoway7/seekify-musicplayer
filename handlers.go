@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/dhowden/tag"
 	"io"
 	"log"
 	"mime"
@@ -1252,17 +1254,25 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				coverMu.RUnlock()
 			}
-			if oldHasCover && len(data) > 0 {
+			if oldHasCover && len(data) == 0 {
+				if picData, err := extractCoverFromFile(track.FilePath); err == nil && len(picData) > 0 {
+					data = picData
+				}
+			}
+			if len(data) > 0 {
 				os.WriteFile(newPath, data, 0644)
 				coverMu.Lock()
 				coverCache[track.AlbumID] = data
 				coverMu.Unlock()
+				track.HasCover = true
 			}
 		}
 	}
 
 	dbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
-	track.HasCover = false
+	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
+		track.HasCover = false
+	}
 	rebuildAlbumsFromTracks()
 	mu.Unlock()
 
