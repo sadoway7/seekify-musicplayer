@@ -1,4 +1,4 @@
-package main
+package musicbrainz
 
 import (
 	"encoding/json"
@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-func scoreMatch(localArtist, localTitle, mbArtist, mbTitle, mbAlbum string) float64 {
+func ScoreMatch(localArtist, localTitle, mbArtist, mbTitle, mbAlbum string) float64 {
 	score := 0.0
 
 	la := strings.ToLower(strings.TrimSpace(localArtist))
@@ -38,49 +38,49 @@ func scoreMatch(localArtist, localTitle, mbArtist, mbTitle, mbAlbum string) floa
 	}
 
 	// Penalize compilation releases
-	if mbAlbum != "" && isCompilationTitle(mbAlbum) {
+	if mbAlbum != "" && IsCompilationTitle(mbAlbum) {
 		score -= 0.2
 	}
 
 	return score
 }
 
-type scanProgress struct {
-	Running    bool   `json:"running"`
-	Total      int    `json:"total"`
-	Scanned    int    `json:"scanned"`
-	Matched    int    `json:"matched"`
-	Failed     int    `json:"failed"`
-	Current    string `json:"current"`
-	Done       bool   `json:"done"`
-	Result     *models.MetadataScanResult `json:"result,omitempty"`
+type ScanProgress struct {
+	Running bool   `json:"running"`
+	Total   int    `json:"total"`
+	Scanned int    `json:"scanned"`
+	Matched int    `json:"matched"`
+	Failed  int    `json:"failed"`
+	Current string `json:"current"`
+	Done    bool   `json:"done"`
+	Result  *models.MetadataScanResult `json:"result,omitempty"`
 }
 
 var (
-	metaScan     scanProgress
-	metaScanLock sync.Mutex
+	MetaScan     ScanProgress
+	MetaScanLock sync.Mutex
 )
 
-func getScanProgress() scanProgress {
-	metaScanLock.Lock()
-	defer metaScanLock.Unlock()
-	return metaScan
+func GetScanProgress() ScanProgress {
+	MetaScanLock.Lock()
+	defer MetaScanLock.Unlock()
+	return MetaScan
 }
 
-func scanMetadataForTracks() models.MetadataScanResult {
-	metaScanLock.Lock()
-	if metaScan.Running {
-		metaScanLock.Unlock()
+func ScanMetadataForTracks() models.MetadataScanResult {
+	MetaScanLock.Lock()
+	if MetaScan.Running {
+		MetaScanLock.Unlock()
 		return models.MetadataScanResult{}
 	}
-	metaScan = scanProgress{Running: true}
-	metaScanLock.Unlock()
+	MetaScan = ScanProgress{Running: true}
+	MetaScanLock.Unlock()
 
 	defer func() {
-		metaScanLock.Lock()
-		metaScan.Running = false
-		metaScan.Done = true
-		metaScanLock.Unlock()
+		MetaScanLock.Lock()
+		MetaScan.Running = false
+		MetaScan.Done = true
+		MetaScanLock.Unlock()
 	}()
 
 	store.Mu.RLock()
@@ -148,9 +148,9 @@ func scanMetadataForTracks() models.MetadataScanResult {
 	var result models.MetadataScanResult
 	var resultMu sync.Mutex
 
-	metaScanLock.Lock()
-	metaScan.Total = len(unmatched)
-	metaScanLock.Unlock()
+	MetaScanLock.Lock()
+	MetaScan.Total = len(unmatched)
+	MetaScanLock.Unlock()
 
 	if skipped > 0 {
 		log.Printf("[metadata] Skipped %d tracks with complete tags", skipped)
@@ -158,9 +158,9 @@ func scanMetadataForTracks() models.MetadataScanResult {
 	log.Printf("[metadata] Starting parallel scan of %d tracks (3 workers)...", len(unmatched))
 
 	if len(unmatched) == 0 {
-		metaScanLock.Lock()
-		metaScan.Result = &result
-		metaScanLock.Unlock()
+		MetaScanLock.Lock()
+		MetaScan.Result = &result
+		MetaScanLock.Unlock()
 		return result
 	}
 
@@ -177,27 +177,27 @@ func scanMetadataForTracks() models.MetadataScanResult {
 	worker := func() {
 		defer wg.Done()
 		for info := range trackCh {
-			metaScanLock.Lock()
-			metaScan.Scanned++
-			s := metaScan.Scanned
-			metaScan.Current = info.artist + " - " + info.title
-			metaScanLock.Unlock()
+			MetaScanLock.Lock()
+			MetaScan.Scanned++
+			s := MetaScan.Scanned
+			MetaScan.Current = info.artist + " - " + info.title
+			MetaScanLock.Unlock()
 
 			_ = s
 
-			candidates, err := mbSearchRecordings(info.artist, info.title, 3)
+			candidates, err := MbSearchRecordings(info.artist, info.title, 3)
 			if err != nil {
 				if strings.Contains(err.Error(), "503") {
 					log.Printf("[metadata] Rate limited, waiting 5s before retry...")
 					time.Sleep(5 * time.Second)
-					candidates, err = mbSearchRecordings(info.artist, info.title, 3)
+					candidates, err = MbSearchRecordings(info.artist, info.title, 3)
 					if err != nil {
 						log.Printf("[metadata] Retry failed for %q - %q: %v", info.artist, info.title, err)
 						resultMu.Lock()
 						result.Failed++
-						metaScanLock.Lock()
-						metaScan.Failed = result.Failed
-						metaScanLock.Unlock()
+						MetaScanLock.Lock()
+						MetaScan.Failed = result.Failed
+						MetaScanLock.Unlock()
 						resultMu.Unlock()
 						time.Sleep(1200 * time.Millisecond)
 						continue
@@ -206,9 +206,9 @@ func scanMetadataForTracks() models.MetadataScanResult {
 					log.Printf("[metadata] No results for %q - %q: %v", info.artist, info.title, err)
 					resultMu.Lock()
 					result.Failed++
-					metaScanLock.Lock()
-					metaScan.Failed = result.Failed
-					metaScanLock.Unlock()
+					MetaScanLock.Lock()
+					MetaScan.Failed = result.Failed
+					MetaScanLock.Unlock()
 					resultMu.Unlock()
 					time.Sleep(600 * time.Millisecond)
 					continue
@@ -218,16 +218,16 @@ func scanMetadataForTracks() models.MetadataScanResult {
 			if len(candidates) == 0 {
 				resultMu.Lock()
 				result.Failed++
-				metaScanLock.Lock()
-				metaScan.Failed = result.Failed
-				metaScanLock.Unlock()
+				MetaScanLock.Lock()
+				MetaScan.Failed = result.Failed
+				MetaScanLock.Unlock()
 				resultMu.Unlock()
 				time.Sleep(600 * time.Millisecond)
 				continue
 			}
 
 			for _, cand := range candidates {
-				score := scoreMatch(info.artist, info.title, cand.Artist, cand.Title, cand.Album)
+				score := ScoreMatch(info.artist, info.title, cand.Artist, cand.Title, cand.Album)
 
 				if score < 0.5 {
 					continue
@@ -268,9 +268,9 @@ func scanMetadataForTracks() models.MetadataScanResult {
 					result.Conflicts++
 				}
 				result.Pending++
-				metaScanLock.Lock()
-				metaScan.Matched = result.Pending
-				metaScanLock.Unlock()
+				MetaScanLock.Lock()
+				MetaScan.Matched = result.Pending
+				MetaScanLock.Unlock()
 				resultMu.Unlock()
 			}
 
@@ -284,7 +284,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 	}
 	wg.Wait()
 
-	result.Failed = metaScan.Failed
+	result.Failed = MetaScan.Failed
 
 	// Auto-approve high-confidence matches (score >= 0.8)
 	autoApproved := store.DbApproveAllMatches()
@@ -294,23 +294,23 @@ func scanMetadataForTracks() models.MetadataScanResult {
 		result.Pending = 0
 	}
 
-	metaScanLock.Lock()
-	metaScan.Result = &result
-	metaScanLock.Unlock()
+	MetaScanLock.Lock()
+	MetaScan.Result = &result
+	MetaScanLock.Unlock()
 
 	log.Printf("[metadata] Scan complete: %d matched, %d auto-approved, %d pending review, %d conflicts, %d failed",
 		result.Matched, autoApproved, result.Pending, result.Conflicts, result.Failed)
 
 	// Apply auto-approved matches to tracks
 	if autoApproved > 0 {
-		applied := applyApprovedMatches()
+		applied := ApplyApprovedMatches()
 		log.Printf("[metadata] Applied %d auto-approved metadata updates", applied)
 	}
 
 	return result
 }
 
-func applyApprovedMatches() int {
+func ApplyApprovedMatches() int {
 	matches := store.DbGetAllMatches()
 	applied := 0
 
@@ -395,7 +395,7 @@ func applyApprovedMatches() int {
 	}
 
 	if applied > 0 {
-		rebuildAlbumsFromTracks()
+		RebuildAlbumsFromTracks()
 	}
 	store.Mu.Unlock()
 
@@ -426,11 +426,11 @@ func applyApprovedMatches() int {
 
 			mbid := job.mbAlbumID
 			if mbid != "" {
-				coverURL := fmt.Sprintf("%s/release/%s/front-500", coverArtBaseURL, mbid)
+				coverURL := fmt.Sprintf("%s/release/%s/front-500", CoverArtBaseURL, mbid)
 				req, err := http.NewRequest("GET", coverURL, nil)
 				if err == nil {
 					req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-					resp, err := mbClient.Do(req)
+					resp, err := MbClient.Do(req)
 					if err == nil && resp.StatusCode == 200 {
 						data, _ := io.ReadAll(resp.Body)
 						resp.Body.Close()
@@ -455,7 +455,7 @@ func applyApprovedMatches() int {
 				}
 			}
 
-			fetchAndCacheCover(job.trackAlbumID, job.artist, job.album)
+			FetchAndCacheCover(job.trackAlbumID, job.artist, job.album)
 			time.Sleep(800 * time.Millisecond)
 		}
 	}()
@@ -463,7 +463,7 @@ func applyApprovedMatches() int {
 	return applied
 }
 
-func rebuildAlbumsFromTracks() {
+func RebuildAlbumsFromTracks() {
 	newAlbums := make(map[string]*models.Album)
 	coverDir := filepath.Join(store.MusicDir, "images")
 	for _, t := range store.Tracks {
@@ -502,15 +502,15 @@ func rebuildAlbumsFromTracks() {
 	}
 }
 
-func mbLookupRelease(mbid string) (string, string, string, error) {
-	reqURL := fmt.Sprintf("%s/release/%s?fmt=json&inc=artist-credits", mbBaseURL, mbid)
+func MbLookupRelease(mbid string) (string, string, string, error) {
+	reqURL := fmt.Sprintf("%s/release/%s?fmt=json&inc=artist-credits", MbBaseURL, mbid)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return "", "", "", err
 	}
 
-	var lookup mbLookupResponse
+	var lookup MbLookupResponse
 	if err := json.Unmarshal(body, &lookup); err != nil {
 		return "", "", "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
@@ -528,24 +528,24 @@ func mbLookupRelease(mbid string) (string, string, string, error) {
 	return lookup.Title, artistName, year, nil
 }
 
-func fetchMetadataForTrack(artist, title string) (string, string, string, error) {
+func FetchMetadataForTrack(artist, title string) (string, string, string, error) {
 	if artist == "" {
 		artist = title
 	}
 
 	query := fmt.Sprintf("artist:%s AND recording:%s", url.QueryEscape(artist), url.QueryEscape(title))
-	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=1", mbBaseURL, query)
+	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=1", MbBaseURL, query)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return "", "", "", err
 	}
 
 	var result struct {
 		Recordings []struct {
-			Title  string `json:"title"`
-			ArtistCredit []mbArtistCredit `json:"artist-credit"`
-			Releases []struct {
+			Title        string          `json:"title"`
+			ArtistCredit []MbArtistCredit `json:"artist-credit"`
+			Releases     []struct {
 				ID    string `json:"id"`
 				Title string `json:"title"`
 			} `json:"releases"`
@@ -577,8 +577,8 @@ func fetchMetadataForTrack(artist, title string) (string, string, string, error)
 	return rec.Title, mbArtist, mbAlbum, nil
 }
 
-// releaseTypePriority ranks release-group types: Album is best, Compilation worst.
-func releaseTypePriority(rgType string) int {
+// ReleaseTypePriority ranks release-group types: Album is best, Compilation worst.
+func ReleaseTypePriority(rgType string) int {
 	switch strings.ToLower(rgType) {
 	case "album":
 		return 5
@@ -599,12 +599,12 @@ func releaseTypePriority(rgType string) int {
 	}
 }
 
-// mbLookupBestRelease looks up a recording by MBID and returns the best release
+// MbLookupBestRelease looks up a recording by MBID and returns the best release
 // (real album preferred over compilation).
-func mbLookupBestRelease(recordingID string) (string, string) {
-	reqURL := fmt.Sprintf("%s/recording/%s?inc=releases+release-groups&fmt=json", mbBaseURL, recordingID)
+func MbLookupBestRelease(recordingID string) (string, string) {
+	reqURL := fmt.Sprintf("%s/recording/%s?inc=releases+release-groups&fmt=json", MbBaseURL, recordingID)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return "", ""
 	}
@@ -629,7 +629,7 @@ func mbLookupBestRelease(recordingID string) (string, string) {
 	bestPriority := -1
 
 	for _, r := range lookupResp.Releases {
-		p := releaseTypePriority(r.ReleaseGroup.Type)
+		p := ReleaseTypePriority(r.ReleaseGroup.Type)
 		if p > bestPriority {
 			bestPriority = p
 			bestTitle = r.Title
@@ -640,21 +640,21 @@ func mbLookupBestRelease(recordingID string) (string, string) {
 	return bestTitle, bestID
 }
 
-func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, error) {
-	var results []mbRecordingResult
+func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, error) {
+	var results []MbRecordingResult
 
 	var query string
 	if artist != "" && title != "" {
-		query = fmt.Sprintf(`artist:"%s" AND recording:"%s"`, escapeLucene(artist), escapeLucene(title))
+		query = fmt.Sprintf(`artist:"%s" AND recording:"%s"`, EscapeLucene(artist), EscapeLucene(title))
 	} else if title != "" {
-		query = fmt.Sprintf(`recording:"%s"`, escapeLucene(title))
+		query = fmt.Sprintf(`recording:"%s"`, EscapeLucene(title))
 	} else {
 		return results, fmt.Errorf("no search terms")
 	}
 
-	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d", mbBaseURL, url.QueryEscape(query), limit)
+	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d", MbBaseURL, url.QueryEscape(query), limit)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return results, err
 	}
@@ -663,7 +663,7 @@ func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, e
 		Recordings []struct {
 			ID           string          `json:"id"`
 			Title        string          `json:"title"`
-			ArtistCredit []mbArtistCredit `json:"artist-credit"`
+			ArtistCredit []MbArtistCredit `json:"artist-credit"`
 			Releases     []struct {
 				ID    string `json:"id"`
 				Title string `json:"title"`
@@ -685,7 +685,7 @@ func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, e
 		albumName := ""
 		albumID := ""
 		if rec.ID != "" {
-			albumName, albumID = mbLookupBestRelease(rec.ID)
+			albumName, albumID = MbLookupBestRelease(rec.ID)
 		}
 
 		// Fallback to the search results if lookup failed
@@ -694,7 +694,7 @@ func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, e
 			albumID = rec.Releases[0].ID
 		}
 
-		results = append(results, mbRecordingResult{
+		results = append(results, MbRecordingResult{
 			RecordingID: rec.ID,
 			Title:       rec.Title,
 			Artist:      artistName,

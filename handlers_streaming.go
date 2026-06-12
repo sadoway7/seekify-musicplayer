@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
@@ -155,9 +156,9 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 
 	key := strings.ToLower(strings.TrimSpace(artistName))
 
-	artistArtMu.RLock()
-	data, exists := artistArtCache[key]
-	artistArtMu.RUnlock()
+	musicbrainz.ArtistArtMu.RLock()
+	data, exists := musicbrainz.ArtistArtCache[key]
+	musicbrainz.ArtistArtMu.RUnlock()
 
 	if exists {
 		contentType := http.DetectContentType(data)
@@ -173,9 +174,9 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 	artDir := filepath.Join(store.MusicDir, "images", "artists")
 	artFile := filepath.Join(artDir, key+".jpg")
 	if diskData, err := os.ReadFile(artFile); err == nil {
-		artistArtMu.Lock()
-		artistArtCache[key] = diskData
-		artistArtMu.Unlock()
+		musicbrainz.ArtistArtMu.Lock()
+		musicbrainz.ArtistArtCache[key] = diskData
+		musicbrainz.ArtistArtMu.Unlock()
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		w.Write(diskData)
@@ -220,7 +221,7 @@ func artistArtFetchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fetched := fetchArtistImage(artistName)
+	fetched := musicbrainz.FetchArtistImage(artistName)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"fetched": fetched})

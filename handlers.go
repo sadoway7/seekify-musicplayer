@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"mime"
+	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
@@ -29,13 +30,13 @@ func scanHandler(w http.ResponseWriter, r *http.Request) {
 		stats.Removed += mediaStats.Removed
 	}
 
-	applyApprovedMatches()
+	musicbrainz.ApplyApprovedMatches()
 	scanner.AutoSortMusic()
 	scanner.ExtractEmbeddedCovers()
 	log.Printf("Scan complete: %d scanned, %d added, %d removed", stats.Scanned, stats.Added, stats.Removed)
 
-	go fetchMissingCovers()
-	go fetchMissingArtistArt()
+	go musicbrainz.FetchMissingCovers()
+	go musicbrainz.FetchMissingArtistArt()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/musicbrainz"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -335,7 +336,7 @@ func dbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 		store.DB.Exec("UPDATE tracks SET genre = ? WHERE id = ?", g, track.ID)
 	}
 
-	rebuildAlbumsFromTracks()
+	musicbrainz.RebuildAlbumsFromTracks()
 	store.Mu.Unlock()
 
 	dbSetReviewStatus(trackID, "reviewed_ok", "[]", "manual")
@@ -371,7 +372,7 @@ func reviewDeleteTrack(trackID string) error {
 	delete(store.Tracks, trackID)
 	store.DbDeleteTrack(trackID)
 	dbDeleteReview(trackID)
-	rebuildAlbumsFromTracks()
+	musicbrainz.RebuildAlbumsFromTracks()
 	store.Mu.Unlock()
 
 	return nil

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"musicapp/internal/musicbrainz"
 	"net/http"
 	"os"
 	"os/exec"
@@ -98,7 +99,7 @@ func resolveURLHandler(w http.ResponseWriter, r *http.Request) {
 
 	if title != "" && artist != "" {
 		go func() {
-			results, err := mbSearchRecordings(artist, title, 5)
+			results, err := musicbrainz.MbSearchRecordings(artist, title, 5)
 			if err == nil && len(results) > 0 {
 				best := results[0]
 				score := scoreMatchV2(best.Title, best.Artist, artist, title)

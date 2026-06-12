@@ -1,4 +1,4 @@
-package main
+package musicbrainz
 
 import (
 	"encoding/json"
@@ -73,14 +73,14 @@ type ArtistTrack struct {
 	InLibrary bool   `json:"inLibrary"`
 }
 
-func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) {
+func FinderSearchRecordings(query string, limit int) ([]FinderRecording, error) {
 	var results []FinderRecording
 
-	luceneQuery := buildRecordingQuery(query)
+	luceneQuery := BuildRecordingQuery(query)
 	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d",
-		mbBaseURL, url.QueryEscape(luceneQuery), limit)
+		MbBaseURL, url.QueryEscape(luceneQuery), limit)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return nil, err
 	}
@@ -99,9 +99,9 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 			} `json:"artist-credit"`
 			FirstReleaseDate string `json:"first-release-date"`
 			Releases         []struct {
-				ID     string `json:"id"`
-				Title  string `json:"title"`
-				Date   string `json:"date"`
+				ID      string `json:"id"`
+				Title   string `json:"title"`
+				Date    string `json:"date"`
 				Country string `json:"country"`
 				ReleaseGroup struct {
 					Type string `json:"primary-type"`
@@ -142,8 +142,8 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 
 		bestScore := -999
 		for _, rel := range rec.Releases {
-			s := releaseTypePriority(rel.ReleaseGroup.Type)
-			if isCompilationTitle(rel.Title) {
+			s := ReleaseTypePriority(rel.ReleaseGroup.Type)
+			if IsCompilationTitle(rel.Title) {
 				s -= 5
 			}
 			if s > bestScore {
@@ -199,22 +199,22 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 	return results, nil
 }
 
-func buildRecordingQuery(raw string) string {
+func BuildRecordingQuery(raw string) string {
 	parts := strings.SplitN(raw, " - ", 2)
 	if len(parts) == 2 {
 		artist := strings.TrimSpace(parts[0])
 		title := strings.TrimSpace(parts[1])
-		return fmt.Sprintf(`artistname:"%s" AND recording:"%s"`, escapeLucene(artist), escapeLucene(title))
+		return fmt.Sprintf(`artistname:"%s" AND recording:"%s"`, EscapeLucene(artist), EscapeLucene(title))
 	}
 	return raw
 }
 
-func finderSearchArtists(query string, limit int) ([]FinderArtist, error) {
+func FinderSearchArtists(query string, limit int) ([]FinderArtist, error) {
 	var results []FinderArtist
 
-	reqURL := fmt.Sprintf("%s/artist/?query=%s&fmt=json&limit=%d", mbBaseURL, url.QueryEscape(query), limit)
+	reqURL := fmt.Sprintf("%s/artist/?query=%s&fmt=json&limit=%d", MbBaseURL, url.QueryEscape(query), limit)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return nil, err
 	}
@@ -262,14 +262,14 @@ func finderSearchArtists(query string, limit int) ([]FinderArtist, error) {
 	return results, nil
 }
 
-func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
+func FinderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 	var results []FinderRelease
 
-	luceneQuery := buildReleaseQuery(query)
+	luceneQuery := BuildReleaseQuery(query)
 	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=%d",
-		mbBaseURL, url.QueryEscape(luceneQuery), limit)
+		MbBaseURL, url.QueryEscape(luceneQuery), limit)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return nil, err
 	}
@@ -365,26 +365,26 @@ func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 	return results, nil
 }
 
-func buildReleaseQuery(raw string) string {
+func BuildReleaseQuery(raw string) string {
 	parts := strings.SplitN(raw, " - ", 2)
 	if len(parts) == 2 {
 		artist := strings.TrimSpace(parts[0])
 		album := strings.TrimSpace(parts[1])
-		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, escapeLucene(artist), escapeLucene(album))
+		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, EscapeLucene(artist), EscapeLucene(album))
 	}
 	return raw
 }
 
-func finderArtistReleases(mbid string) ([]FinderRelease, error) {
+func FinderArtistReleases(mbid string) ([]FinderRelease, error) {
 	var results []FinderRelease
 
 	var artistName string
 	offset := 0
 	for {
 		reqURL := fmt.Sprintf("%s/release-group?artist=%s&fmt=json&limit=25&offset=%d&type=album",
-			mbBaseURL, mbid, offset)
+			MbBaseURL, mbid, offset)
 
-		body, err := mbDoRequest(reqURL)
+		body, err := MbDoRequest(reqURL)
 		if err != nil {
 			return nil, err
 		}
@@ -448,17 +448,17 @@ func finderArtistReleases(mbid string) ([]FinderRelease, error) {
 	return results, nil
 }
 
-func finderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
+func FinderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
 	var tracks []FinderReleaseTrack
 
-	releaseID := resolveToReleaseID(idOrRGID)
+	releaseID := ResolveToReleaseID(idOrRGID)
 	if releaseID == "" {
 		return nil, fmt.Errorf("could not resolve release for %s", idOrRGID)
 	}
 
-	reqURL := fmt.Sprintf("%s/release/%s?inc=recordings+artist-credits&fmt=json", mbBaseURL, releaseID)
+	reqURL := fmt.Sprintf("%s/release/%s?inc=recordings+artist-credits&fmt=json", MbBaseURL, releaseID)
 
-	body, err := mbDoRequest(reqURL)
+	body, err := MbDoRequest(reqURL)
 	if err != nil {
 		return nil, err
 	}
@@ -506,9 +506,9 @@ func finderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
 	return tracks, nil
 }
 
-func resolveToReleaseID(id string) string {
-	reqURL := fmt.Sprintf("%s/release/%s?fmt=json", mbBaseURL, id)
-	body, err := mbDoRequest(reqURL)
+func ResolveToReleaseID(id string) string {
+	reqURL := fmt.Sprintf("%s/release/%s?fmt=json", MbBaseURL, id)
+	body, err := MbDoRequest(reqURL)
 	if err == nil {
 		var check struct {
 			ID string `json:"id"`
@@ -518,11 +518,11 @@ func resolveToReleaseID(id string) string {
 		}
 	}
 
-	reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1&status=official", mbBaseURL, id)
-	body, err = mbDoRequest(reqURL)
+	reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1&status=official", MbBaseURL, id)
+	body, err = MbDoRequest(reqURL)
 	if err != nil {
-		reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1", mbBaseURL, id)
-		body, err = mbDoRequest(reqURL)
+		reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1", MbBaseURL, id)
+		body, err = MbDoRequest(reqURL)
 		if err != nil {
 			return ""
 		}
@@ -538,14 +538,14 @@ func resolveToReleaseID(id string) string {
 	return resp.Releases[0].ID
 }
 
-func finderArtistTracks(mbid, artistName string) []ArtistTrack {
+func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 	seen := map[string]*ArtistTrack{}
 	libLookup := buildLibraryLookup()
 
 	offset := 0
 	for {
 		reqURL := fmt.Sprintf("%s/recording?artist=%s&inc=artist-credits&fmt=json&limit=100&offset=%d",
-			mbBaseURL, mbid, offset)
+			MbBaseURL, mbid, offset)
 
 		var body []byte
 		var lastErr error
@@ -553,7 +553,7 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 			if retry > 0 {
 				time.Sleep(time.Duration(retry) * 1100 * time.Millisecond)
 			}
-			body, lastErr = mbDoRequest(reqURL)
+			body, lastErr = MbDoRequest(reqURL)
 			if lastErr == nil {
 				break
 			}
@@ -572,11 +572,11 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 
 		for _, raw := range resp.Recordings {
 			var rec struct {
-				Title        string `json:"title"`
-				Length       int    `json:"length"`
-				Video        bool   `json:"video"`
+				Title          string `json:"title"`
+				Length         int    `json:"length"`
+				Video          bool   `json:"video"`
 				Disambiguation string `json:"disambiguation"`
-				ArtistCredit []struct {
+				ArtistCredit   []struct {
 					Name string `json:"name"`
 				} `json:"artist-credit"`
 			}
@@ -587,7 +587,7 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 				continue
 			}
 
-			title := cleanTrackTitle(rec.Title)
+			title := CleanTrackTitle(rec.Title)
 			if title == "" || strings.HasPrefix(title, "[") {
 				continue
 			}
@@ -598,7 +598,7 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 			if len(rec.ArtistCredit) > 0 && rec.ArtistCredit[0].Name != "" {
 				artist = rec.ArtistCredit[0].Name
 			}
-			artist = cleanChannelName(artist)
+			artist = CleanChannelName(artist)
 
 			if existing, ok := seen[key]; ok {
 				existing.Count++
@@ -606,13 +606,13 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 					existing.Length = length
 				}
 			} else {
-		seen[key] = &ArtistTrack{
-				Title:     title,
-				Artist:    artist,
-				Length:    length,
-				Count:     1,
-				InLibrary: isInLibrary(libLookup, artist, title),
-			}
+				seen[key] = &ArtistTrack{
+					Title:     title,
+					Artist:    artist,
+					Length:    length,
+					Count:     1,
+					InLibrary: isInLibrary(libLookup, artist, title),
+				}
 			}
 		}
 
@@ -635,7 +635,7 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 	return result
 }
 
-func cleanChannelName(name string) string {
+func CleanChannelName(name string) string {
 	name = strings.TrimSpace(name)
 	name = strings.TrimSuffix(name, " - Topic")
 	name = strings.TrimSuffix(name, " Topic")
@@ -643,7 +643,7 @@ func cleanChannelName(name string) string {
 	return strings.TrimSpace(name)
 }
 
-func cleanTrackTitle(title string) string {
+func CleanTrackTitle(title string) string {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return ""
@@ -682,4 +682,37 @@ func cleanTrackTitle(title string) string {
 
 	title = strings.TrimSpace(title)
 	return title
+}
+
+// buildLibraryLookup creates a lookup map of "artist|title" keys for library tracks.
+func buildLibraryLookup() map[string]bool {
+	store.Mu.RLock()
+	defer store.Mu.RUnlock()
+	m := make(map[string]bool, len(store.Tracks)*2)
+	for _, t := range store.Tracks {
+		if t.Artist != "" && t.Title != "" {
+			m[strings.ToLower(t.Artist+"|"+t.Title)] = true
+		}
+	}
+	return m
+}
+
+// buildAlbumLookup creates a lookup map of "artist|album" keys for library albums.
+func buildAlbumLookup() map[string]bool {
+	store.Mu.RLock()
+	defer store.Mu.RUnlock()
+	m := make(map[string]bool, len(store.Albums)*2)
+	for _, a := range store.Albums {
+		if a.Artist != "" && a.Name != "" {
+			m[strings.ToLower(a.Artist+"|"+a.Name)] = true
+		}
+	}
+	return m
+}
+
+func isInLibrary(lookup map[string]bool, artist, title string) bool {
+	if artist == "" || title == "" {
+		return false
+	}
+	return lookup[strings.ToLower(artist+"|"+title)]
 }

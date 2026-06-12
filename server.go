@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
@@ -157,7 +158,7 @@ func main() {
 		log.Printf("File counts match DB, skipping full scan")
 	}
 
-	applied := applyApprovedMatches()
+	applied := musicbrainz.ApplyApprovedMatches()
 	if applied > 0 {
 		log.Printf("Applied %d metadata overrides from database", applied)
 	}
@@ -165,8 +166,8 @@ func main() {
 	scanner.ExtractEmbeddedCovers()
 	syncWatchedPlaylistsToLibrary()
 	recoverStalledDownloads()
-	go fetchMissingCovers()
-	go fetchMissingArtistArt()
+	go musicbrainz.FetchMissingCovers()
+	go musicbrainz.FetchMissingArtistArt()
 	go scanner.StartWatcher()
 	go startWatchScheduler()
 	go downloadWatchdog()

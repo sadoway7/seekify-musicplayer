@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"musicapp/internal/musicbrainz"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -33,38 +34,38 @@ func finderSearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch searchType {
 	case "recording":
-		results, err := finderSearchRecordings(q, limit)
+		results, err := musicbrainz.FinderSearchRecordings(q, limit)
 		if err != nil {
 			log.Printf("[finder] Recording search error: %v", err)
 			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 			return
 		}
 		if results == nil {
-			results = []FinderRecording{}
+			results = []musicbrainz.FinderRecording{}
 		}
 		json.NewEncoder(w).Encode(results)
 
 	case "artist":
-		results, err := finderSearchArtists(q, limit)
+		results, err := musicbrainz.FinderSearchArtists(q, limit)
 		if err != nil {
 			log.Printf("[finder] Artist search error: %v", err)
 			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 			return
 		}
 		if results == nil {
-			results = []FinderArtist{}
+			results = []musicbrainz.FinderArtist{}
 		}
 		json.NewEncoder(w).Encode(results)
 
 	case "release":
-		results, err := finderSearchReleases(q, limit)
+		results, err := musicbrainz.FinderSearchReleases(q, limit)
 		if err != nil {
 			log.Printf("[finder] Release search error: %v", err)
 			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 			return
 		}
 		if results == nil {
-			results = []FinderRelease{}
+			results = []musicbrainz.FinderRelease{}
 		}
 		json.NewEncoder(w).Encode(results)
 
@@ -79,9 +80,9 @@ func finderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(path, "/tracks") {
 		mbid := strings.TrimSuffix(path, "/tracks")
 		artistName := r.URL.Query().Get("artist")
-		tracks := finderArtistTracks(mbid, artistName)
+		tracks := musicbrainz.FinderArtistTracks(mbid, artistName)
 		if tracks == nil {
-			tracks = []ArtistTrack{}
+			tracks = []musicbrainz.ArtistTrack{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(tracks)
@@ -94,14 +95,14 @@ func finderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results, err := finderArtistReleases(mbid)
+	results, err := musicbrainz.FinderArtistReleases(mbid)
 	if err != nil {
 		log.Printf("[finder] Artist releases error: %v", err)
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 	if results == nil {
-		results = []FinderRelease{}
+		results = []musicbrainz.FinderRelease{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -117,14 +118,14 @@ func finderReleaseTracksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results, err := finderReleaseTracks(mbid)
+	results, err := musicbrainz.FinderReleaseTracks(mbid)
 	if err != nil {
 		log.Printf("[finder] Release tracks error: %v", err)
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
 	if results == nil {
-		results = []FinderReleaseTrack{}
+		results = []musicbrainz.FinderReleaseTrack{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -149,7 +150,7 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	coverURL := fmt.Sprintf("%s/release-group/%s/front-250", coverArtBaseURL, mbid)
+	coverURL := fmt.Sprintf("%s/release-group/%s/front-250", musicbrainz.CoverArtBaseURL, mbid)
 	req, err := http.NewRequest("GET", coverURL, nil)
 	if err != nil {
 		http.Error(w, "failed", http.StatusInternalServerError)
@@ -157,12 +158,12 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
 
-	resp, err := mbClient.Do(req)
+	resp, err := musicbrainz.MbClient.Do(req)
 	if err != nil || resp.StatusCode != 200 {
-		coverURL = fmt.Sprintf("%s/release/%s/front-250", coverArtBaseURL, mbid)
+		coverURL = fmt.Sprintf("%s/release/%s/front-250", musicbrainz.CoverArtBaseURL, mbid)
 		req, _ = http.NewRequest("GET", coverURL, nil)
 		req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-		resp, err = mbClient.Do(req)
+		resp, err = musicbrainz.MbClient.Do(req)
 		if err != nil || resp.StatusCode != 200 {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -193,37 +194,6 @@ func checkDuplicateInLibrary(artist, title string) bool {
 		}
 	}
 	return false
-}
-
-func buildLibraryLookup() map[string]bool {
-	store.Mu.RLock()
-	defer store.Mu.RUnlock()
-	m := make(map[string]bool, len(store.Tracks)*2)
-	for _, t := range store.Tracks {
-		if t.Artist != "" && t.Title != "" {
-			m[strings.ToLower(t.Artist+"|"+t.Title)] = true
-		}
-	}
-	return m
-}
-
-func buildAlbumLookup() map[string]bool {
-	store.Mu.RLock()
-	defer store.Mu.RUnlock()
-	m := make(map[string]bool, len(store.Albums)*2)
-	for _, a := range store.Albums {
-		if a.Artist != "" && a.Name != "" {
-			m[strings.ToLower(a.Artist+"|"+a.Name)] = true
-		}
-	}
-	return m
-}
-
-func isInLibrary(lookup map[string]bool, artist, title string) bool {
-	if artist == "" || title == "" {
-		return false
-	}
-	return lookup[strings.ToLower(artist+"|"+title)]
 }
 
 type youtubeSearchResult struct {

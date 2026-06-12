@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
@@ -13,15 +14,15 @@ import (
 )
 
 func metadataScanHandler(w http.ResponseWriter, r *http.Request) {
-	metaScanLock.Lock()
-	if metaScan.Running {
-		metaScanLock.Unlock()
+	musicbrainz.MetaScanLock.Lock()
+	if musicbrainz.MetaScan.Running {
+		musicbrainz.MetaScanLock.Unlock()
 		http.Error(w, "Scan already in progress", http.StatusConflict)
 		return
 	}
-	metaScanLock.Unlock()
+	musicbrainz.MetaScanLock.Unlock()
 
-	go scanMetadataForTracks()
+	go musicbrainz.ScanMetadataForTracks()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -54,7 +55,7 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[metadata] Rescanning single track: %s - %s", searchArtist, searchTitle)
 
-		candidates, err := mbSearchRecordings(searchArtist, searchTitle, 10)
+		candidates, err := musicbrainz.MbSearchRecordings(searchArtist, searchTitle, 10)
 		if err != nil {
 			log.Printf("[metadata] Rescan failed for %q - %q: %v", searchArtist, searchTitle, err)
 			return
@@ -62,7 +63,7 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 
 		inserted := 0
 		for _, cand := range candidates {
-			score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
+			score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 			if score < 0.5 {
 				continue
 			}
@@ -124,7 +125,7 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 		searchTitle = scanner.TitleFromFilename(track.FilePath)
 	}
 
-	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 50)
+	candidates, err := musicbrainz.MbSearchRecordings(searchArtist, searchTitle, 50)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]interface{}{})
@@ -142,7 +143,7 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	var results []rescanCandidate
 	for _, cand := range candidates {
-		score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
+		score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 
 		store.Mu.RLock()
 		hasCover := false
@@ -257,7 +258,7 @@ func metadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 	searchTitle = cleanRescanTitle(searchTitle)
 	searchArtist = cleanRescanArtist(searchArtist)
 
-	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 50)
+	candidates, err := musicbrainz.MbSearchRecordings(searchArtist, searchTitle, 50)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]interface{}{})
@@ -274,7 +275,7 @@ func metadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	var results []rescanCandidate
 	for _, cand := range candidates {
-		score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
+		score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 		results = append(results, rescanCandidate{
 			Title:   cand.Title,
 			Artist:  cand.Artist,
@@ -376,7 +377,7 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
 		track.HasCover = false
 	}
-	rebuildAlbumsFromTracks()
+	musicbrainz.RebuildAlbumsFromTracks()
 	store.Mu.Unlock()
 
 	albumIDForCover := body.AlbumID
@@ -389,7 +390,7 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 
 		if body.AlbumID != "" {
 			log.Printf("[metadata] Fetching cover from Cover Art Archive for MBID %s", body.AlbumID)
-			data, _, err := mbFetchCoverArt(body.AlbumID)
+			data, _, err := musicbrainz.MbFetchCoverArt(body.AlbumID)
 			if err == nil && len(data) > 0 {
 				coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
 				os.WriteFile(coverPath, data, 0644)
@@ -405,10 +406,10 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 				log.Printf("[metadata] Cover fetched and cached for %s", track.AlbumID)
 			} else {
 				log.Printf("[metadata] Cover Art Archive failed for MBID %s: %v, trying search fallback", body.AlbumID, err)
-				fetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
+				musicbrainz.FetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
 			}
 		} else {
-			fetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
+			musicbrainz.FetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
 		}
 	}
 
@@ -419,7 +420,7 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func metadataScanProgressHandler(w http.ResponseWriter, r *http.Request) {
-	p := getScanProgress()
+	p := musicbrainz.GetScanProgress()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(p)
 }
@@ -476,7 +477,7 @@ func metadataApproveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	applied := applyApprovedMatches()
+	applied := musicbrainz.ApplyApprovedMatches()
 	scanner.AutoSortMusic()
 	scanner.ExtractEmbeddedCovers()
 	w.Header().Set("Content-Type", "application/json")
@@ -504,7 +505,7 @@ func metadataRejectHandler(w http.ResponseWriter, r *http.Request) {
 
 func metadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
 	count := store.DbApproveAllMatches()
-	applied := applyApprovedMatches()
+	applied := musicbrainz.ApplyApprovedMatches()
 	scanner.ExtractEmbeddedCovers()
 
 	w.Header().Set("Content-Type", "application/json")
