@@ -1006,7 +1006,7 @@ const UI = {
         return;
       }
 
-      const actionBtn = e.target.closest('.detail-action-btn, .home-review-card, [data-action].list-item');
+      const actionBtn = e.target.closest('.detail-action-btn, .home-review-card');
       if (actionBtn) {
         this._handleAction(actionBtn.dataset.action);
         return;
@@ -1765,15 +1765,25 @@ const UI = {
     return this.renderTrackList(tracks, { showArt: true, filterable: true });
   },
 
-  _buildMosaic() {
-    const albums = Store.library.albums
-      .filter(a => a.hasCover && a.name && a.name !== 'Unknown')
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 12);
-    if (albums.length === 0) return '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>';
-    let html = '';
-    albums.forEach(a => {
-      html += '<div class="mosaic-cell"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>';
+  _buildMosaic(tracks) {
+    var coverIds = [];
+    if (tracks) {
+      tracks.forEach(function(t) {
+        if (t.albumID && coverIds.indexOf(t.albumID) === -1) coverIds.push(t.albumID);
+      });
+    }
+    if (coverIds.length === 0) {
+      coverIds = Store.library.albums
+        .filter(function(a) { return a.hasCover && a.name && a.name !== 'Unknown'; })
+        .map(function(a) { return a.id; })
+        .sort(function() { return Math.random() - 0.5; })
+        .slice(0, 12);
+    }
+    coverIds = coverIds.slice(0, 16);
+    if (coverIds.length === 0) return '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>';
+    var html = '';
+    coverIds.forEach(function(id) {
+      html += '<div class="mosaic-cell"><img src="' + Api.coverUrl(id) + '" alt="" onerror="this.parentElement.style.display=\'none\'"></div>';
     });
     return html;
   },
@@ -1970,17 +1980,15 @@ const UI = {
     const tracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
     this._viewTrackList = tracks;
 
-    // Use first track's album cover as banner if available
-    const firstTrack = tracks.length > 0 ? tracks[0] : null;
-    const bgHtml = firstTrack && firstTrack.albumID
-      ? '<div class="detail-hero-bg" style="background-image:url(' + Api.coverUrl(firstTrack.albumID) + ')"></div>'
-      : '';
+    let bgHtml = '';
+    if (tracks.length > 0) {
+      bgHtml = '<div class="mosaic-banner">' + this._buildMosaic(tracks.slice(0, 16)) + '</div>';
+    }
 
     let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<button class="hero-action-btn" data-hero-action="more">' + Icons.more() + '</button>'
       + bgHtml
-      + '<div class="detail-hero-fallback-icon">' + Icons.heartFilled() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
       + '<div class="detail-hero-text">'
@@ -5972,6 +5980,19 @@ const UI = {
 
   _handleAction(action) {
     if (!action) return;
+    if (action === 'favorites') {
+      this.navigateTo('favorites');
+      return;
+    }
+    if (action === 'all-music') {
+      this.navigateTo('all-music');
+      return;
+    }
+    if (action === 'create-playlist') {
+      const row = document.querySelector('.list-item[data-action="create-playlist"]');
+      if (row) this._showCreatePlaylistInline(row);
+      return;
+    }
     if (action === 'needs-review') {
       this.navigateTo('needs-review');
       return;
