@@ -3,6 +3,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 COPY vendor/ vendor/
 COPY *.go ./
+COPY internal/ internal/
 RUN go build -mod=vendor -o server .
 
 FROM alpine:latest
