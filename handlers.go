@@ -1447,6 +1447,24 @@ func metadataUndoHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"undone": true})
 }
 
+func extractCoverFromFile(filePath string) ([]byte, error) {
+	fullPath := resolveFilePath(filePath)
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	tagReader, err := tag.ReadFrom(f)
+	if err != nil || tagReader == nil {
+		return nil, fmt.Errorf("no tags")
+	}
+	pic := tagReader.Picture()
+	if pic == nil || len(pic.Data) == 0 {
+		return nil, fmt.Errorf("no picture")
+	}
+	return pic.Data, nil
+}
+
 func spaHandler(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Clean(r.URL.Path)
 	if path == "/" {
