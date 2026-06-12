@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"musicapp/internal/models"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -74,8 +75,8 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			mu.RUnlock()
 
-			match := &MetadataMatch{
-				ID:          generateUUID(),
+			match := &models.MetadataMatch{
+				ID:          models.GenerateUUID(),
 				TrackID:     trackID,
 				TrackTitle:  searchTitle,
 				TrackArtist: searchArtist,
@@ -331,7 +332,7 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 		track.AlbumArtist = track.Artist
 	}
 	if track.Album != "" {
-		track.AlbumID = generateAlbumID(track.AlbumArtist, track.Album)
+		track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
 	}
 	track.HasMetadata = true
 
@@ -424,7 +425,7 @@ func metadataScanProgressHandler(w http.ResponseWriter, r *http.Request) {
 func metadataPendingHandler(w http.ResponseWriter, r *http.Request) {
 	matches := dbGetPendingMatches()
 
-	enriched := make([]MetadataMatch, 0, len(matches))
+	enriched := make([]models.MetadataMatch, 0, len(matches))
 	for _, m := range matches {
 		mu.RLock()
 		if t, ok := tracks[m.TrackID]; ok {

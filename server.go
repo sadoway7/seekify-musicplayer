@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"musicapp/internal/models"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,8 +60,8 @@ func main() {
 		log.Printf("Media music directory: %s", absMedia)
 	}
 
-	tracks = make(map[string]*Track)
-	albums = make(map[string]*Album)
+	tracks = make(map[string]*models.Track)
+	albums = make(map[string]*models.Album)
 	coverCache = make(map[string][]byte)
 
 	initDB(filepath.Join("data", "music.db"))

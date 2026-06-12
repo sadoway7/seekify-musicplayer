@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"musicapp/internal/models"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -102,13 +103,13 @@ func dbGetTracksByReviewStatus(status string, limit int) []string {
 	return ids
 }
 
-func dbGetReviewTracks() []Track {
+func dbGetReviewTracks() []models.Track {
 	rows, err := db.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review'")
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
-	var result []Track
+	var result []models.Track
 	for rows.Next() {
 		var trackID, flagsJSON string
 		rows.Scan(&trackID, &flagsJSON)
@@ -259,7 +260,7 @@ func cleanupOrphanedReviews() {
 	}
 }
 
-func dbInsertUncheckedReviews(newTracks map[string]*Track) {
+func dbInsertUncheckedReviews(newTracks map[string]*models.Track) {
 	if len(newTracks) == 0 {
 		return
 	}
@@ -317,7 +318,7 @@ func dbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 		track.AlbumArtist = track.Artist
 	}
 	if track.Album != "" {
-		track.AlbumID = generateAlbumID(track.AlbumArtist, track.Album)
+		track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
 	}
 	track.HasMetadata = true
 
@@ -339,7 +340,7 @@ func dbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 	dbSetReviewStatus(trackID, "reviewed_ok", "[]", "manual")
 }
 
-func resolveTrackFilePath(track *Track) string {
+func resolveTrackFilePath(track *models.Track) string {
 	if strings.Contains(track.FilePath, ":") {
 		parts := strings.SplitN(track.FilePath, ":", 2)
 		prefix := parts[0]
@@ -377,7 +378,7 @@ func reviewDeleteTrack(trackID string) error {
 
 // --- Review check functions ---
 
-func checkMetadataCompleteness(t *Track) []string {
+func checkMetadataCompleteness(t *models.Track) []string {
 	var flags []string
 	title := strings.TrimSpace(t.Title)
 	artist := strings.TrimSpace(t.Artist)
@@ -411,7 +412,7 @@ func checkMetadataCompleteness(t *Track) []string {
 	return flags
 }
 
-func checkSuspiciousNaming(t *Track) []string {
+func checkSuspiciousNaming(t *models.Track) []string {
 	var flags []string
 	titleLower := strings.ToLower(t.Title)
 	artistLower := strings.ToLower(t.Artist)
@@ -466,7 +467,7 @@ func checkSuspiciousNaming(t *Track) []string {
 	return flags
 }
 
-func checkDuration(t *Track, otherFlags []string) []string {
+func checkDuration(t *models.Track, otherFlags []string) []string {
 	var flags []string
 	if t.Duration > 0 && t.Duration < 30 {
 		flags = append(flags, "short_duration")
@@ -479,7 +480,7 @@ func checkDuration(t *Track, otherFlags []string) []string {
 
 func checkAllDuplicates() {
 	mu.RLock()
-	byArtist := make(map[string][]*Track)
+	byArtist := make(map[string][]*models.Track)
 	for _, t := range tracks {
 		artistKey := strings.ToLower(strings.TrimSpace(t.Artist))
 		if artistKey == "" || artistKey == "unknown artist" {
@@ -498,7 +499,7 @@ func checkAllDuplicates() {
 			if checked[a.ID] {
 				continue
 			}
-			var group []*Track
+			var group []*models.Track
 			for j, b := range artistTracks {
 				if i == j || checked[b.ID] {
 					continue
@@ -573,7 +574,7 @@ func normalizeForCompare(s string) string {
 	return strings.Join(fields, " ")
 }
 
-func pickBestQuality(group []*Track) *Track {
+func pickBestQuality(group []*models.Track) *models.Track {
 	best := group[0]
 	bestScore := qualityScore(best)
 	for _, t := range group[1:] {
@@ -586,7 +587,7 @@ func pickBestQuality(group []*Track) *Track {
 	return best
 }
 
-func qualityScore(t *Track) int {
+func qualityScore(t *models.Track) int {
 	score := 0
 	if t.HasCover {
 		score += 3
@@ -639,7 +640,7 @@ func isGenericName(s string, extras []string) bool {
 	return false
 }
 
-func isFilenameDerived(t *Track) bool {
+func isFilenameDerived(t *models.Track) bool {
 	fileName := filepath.Base(t.FilePath)
 	if strings.Contains(fileName, ":") {
 		parts := strings.SplitN(fileName, ":", 2)
@@ -715,7 +716,7 @@ func runReviewBatch() bool {
 	reviewLog.Unlock()
 
 	mu.RLock()
-	var toCheck []*Track
+	var toCheck []*models.Track
 	for _, id := range batch {
 		if t, ok := tracks[id]; ok {
 			toCheck = append(toCheck, t)

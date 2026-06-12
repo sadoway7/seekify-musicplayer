@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"musicapp/internal/models"
+	"testing"
+)
 
 func TestNormalizeForCompare(t *testing.T) {
 	tests := []struct {
@@ -87,7 +90,7 @@ func TestIsFilenameDerived(t *testing.T) {
 		{"media:Artist/Album/Song.mp3", "Song", true},
 	}
 	for _, tt := range tests {
-		track := &Track{Title: tt.title, FilePath: tt.filePath}
+		track := &models.Track{Title: tt.title, FilePath: tt.filePath}
 		got := isFilenameDerived(track)
 		if got != tt.want {
 			t.Errorf("isFilenameDerived(%q, %q) = %v, want %v", tt.filePath, tt.title, got, tt.want)
@@ -96,8 +99,8 @@ func TestIsFilenameDerived(t *testing.T) {
 }
 
 func TestQualityScore(t *testing.T) {
-	full := &Track{Title: "Title", Artist: "Artist", Album: "Album", HasCover: true, TrackNumber: 1, Year: 2020, Genre: "Rock", Duration: 200}
-	empty := &Track{Title: "", Artist: "", Album: "", HasCover: false}
+	full := &models.Track{Title: "Title", Artist: "Artist", Album: "Album", HasCover: true, TrackNumber: 1, Year: 2020, Genre: "Rock", Duration: 200}
+	empty := &models.Track{Title: "", Artist: "", Album: "", HasCover: false}
 	fullScore := qualityScore(full)
 	emptyScore := qualityScore(empty)
 	if fullScore <= emptyScore {
@@ -106,7 +109,7 @@ func TestQualityScore(t *testing.T) {
 }
 
 func TestPickBestQuality(t *testing.T) {
-	tracks := []*Track{
+	tracks := []*models.Track{
 		{Title: "A", HasCover: false, FilePath: "a.mp3"},
 		{Title: "B", HasCover: true, FilePath: "b.mp3"},
 	}

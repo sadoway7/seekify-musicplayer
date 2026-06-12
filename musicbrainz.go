@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"musicapp/internal/models"
 	"net/http"
 	"net/url"
 	"os"
@@ -50,7 +51,7 @@ type scanProgress struct {
 	Failed     int    `json:"failed"`
 	Current    string `json:"current"`
 	Done       bool   `json:"done"`
-	Result     *MetadataScanResult `json:"result,omitempty"`
+	Result     *models.MetadataScanResult `json:"result,omitempty"`
 }
 
 var (
@@ -64,11 +65,11 @@ func getScanProgress() scanProgress {
 	return metaScan
 }
 
-func scanMetadataForTracks() MetadataScanResult {
+func scanMetadataForTracks() models.MetadataScanResult {
 	metaScanLock.Lock()
 	if metaScan.Running {
 		metaScanLock.Unlock()
-		return MetadataScanResult{}
+		return models.MetadataScanResult{}
 	}
 	metaScan = scanProgress{Running: true}
 	metaScanLock.Unlock()
@@ -142,7 +143,7 @@ func scanMetadataForTracks() MetadataScanResult {
 	}
 	mu.RUnlock()
 
-	var result MetadataScanResult
+	var result models.MetadataScanResult
 	var resultMu sync.Mutex
 
 	metaScanLock.Lock()
@@ -241,8 +242,8 @@ func scanMetadataForTracks() MetadataScanResult {
 				}
 				mu.RUnlock()
 
-				match := &MetadataMatch{
-					ID:          generateUUID(),
+				match := &models.MetadataMatch{
+					ID:          models.GenerateUUID(),
 					TrackID:     info.id,
 					TrackTitle:  info.title,
 					TrackArtist: info.artist,
@@ -319,7 +320,7 @@ func applyApprovedMatches() int {
 	}
 	var coverJobs []coverJob
 
-	bestPerTrack := map[string]*MetadataMatch{}
+	bestPerTrack := map[string]*models.MetadataMatch{}
 	for i := range matches {
 		m := &matches[i]
 		if m.Status != "approved" {
@@ -361,7 +362,7 @@ func applyApprovedMatches() int {
 
 		if changed {
 			if track.Album != "" {
-				track.AlbumID = generateAlbumID(track.AlbumArtist, track.Album)
+				track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
 			}
 			track.HasMetadata = true
 			applied++
@@ -461,12 +462,12 @@ func applyApprovedMatches() int {
 }
 
 func rebuildAlbumsFromTracks() {
-	newAlbums := make(map[string]*Album)
+	newAlbums := make(map[string]*models.Album)
 	coverDir := filepath.Join(musicDir, "images")
 	for _, t := range tracks {
 		if t.Album != "" {
 			if _, exists := newAlbums[t.AlbumID]; !exists {
-				newAlbums[t.AlbumID] = &Album{
+				newAlbums[t.AlbumID] = &models.Album{
 					ID:     t.AlbumID,
 					Name:   t.Album,
 					Artist: t.AlbumArtist,

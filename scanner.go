@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"musicapp/internal/models"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,8 +25,8 @@ var (
 		".wma":  "audio/x-ms-wma",
 	}
 
-	tracks     map[string]*Track
-	albums     map[string]*Album
+	tracks     map[string]*models.Track
+	albums     map[string]*models.Album
 	mu         sync.RWMutex
 	coverCache map[string][]byte
 	coverMu    sync.RWMutex
@@ -77,21 +78,21 @@ func titleFromFilename(path string) string {
 	return strings.TrimSuffix(name, ext)
 }
 
-func scanMusicDir(dir string) ScanStats {
+func scanMusicDir(dir string) models.ScanStats {
 	return scanMusicDirWithPrefix(dir, "")
 }
 
-func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
+func scanMusicDirWithPrefix(dir string, prefix string) models.ScanStats {
 	scanMu.Lock()
 	defer scanMu.Unlock()
 	return scanMusicDirWithPrefixLocked(dir, prefix)
 }
 
-func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
-	var stats ScanStats
+func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
+	var stats models.ScanStats
 
-	newTracks := make(map[string]*Track)
-	newAlbums := make(map[string]*Album)
+	newTracks := make(map[string]*models.Track)
+	newAlbums := make(map[string]*models.Album)
 	newCovers := make(map[string][]byte)
 	changedTracks := make(map[string]bool)
 
@@ -128,7 +129,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
 			storedPath = prefix + ":" + relPath
 		}
 
-		trackID := generateID(storedPath)
+		trackID := models.GenerateID(storedPath)
 
 		// Skip unchanged files (ModTime optimization)
 		fileInfo, err := os.Stat(fpath)
@@ -143,7 +144,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
 			newTracks[trackID] = existing
 			if existing.Album != "" {
 				if _, exists := newAlbums[existing.AlbumID]; !exists {
-					newAlbums[existing.AlbumID] = &Album{
+					newAlbums[existing.AlbumID] = &models.Album{
 						ID:         existing.AlbumID,
 						Name:       existing.Album,
 						Artist:     existing.AlbumArtist,
@@ -177,7 +178,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
 		tagReader, err := tag.ReadFrom(file)
 		file.Close()
 
-		track := &Track{
+		track := &models.Track{
 			ID:       trackID,
 			FilePath: storedPath,
 			Duration: 0,
@@ -231,9 +232,9 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
 
 		var albumID string
 		if track.Album != "" {
-			albumID = generateAlbumID(track.AlbumArtist, track.Album)
+			albumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
 		} else {
-			albumID = generateID("single:" + trackID)
+			albumID = models.GenerateID("single:" + trackID)
 		}
 		track.AlbumID = albumID
 
@@ -242,7 +243,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
 
 		if track.Album != "" {
 			if _, exists := newAlbums[albumID]; !exists {
-				newAlbums[albumID] = &Album{
+				newAlbums[albumID] = &models.Album{
 					ID:     albumID,
 					Name:   track.Album,
 					Artist: track.AlbumArtist,
@@ -262,7 +263,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
 					if pic != nil && albumID != "" {
 						newCovers[albumID] = pic.Data
 						if newAlbums[albumID] == nil {
-							newAlbums[albumID] = &Album{
+							newAlbums[albumID] = &models.Album{
 								ID:   albumID,
 								Name: track.Album,
 							}
@@ -479,7 +480,7 @@ func scanSingleFile(filePath string) {
 		relPath = filepath.Base(fpath)
 	}
 
-	trackID := generateID(relPath)
+	trackID := models.GenerateID(relPath)
 
 	fileInfo, err := os.Stat(fpath)
 	if err != nil {
@@ -503,7 +504,7 @@ func scanSingleFile(filePath string) {
 	tagReader, err := tag.ReadFrom(file)
 	file.Close()
 
-	track := &Track{
+	track := &models.Track{
 		ID:       trackID,
 		FilePath: relPath,
 		Duration: 0,
@@ -552,9 +553,9 @@ func scanSingleFile(filePath string) {
 
 	var albumID string
 	if track.Album != "" {
-		albumID = generateAlbumID(track.AlbumArtist, track.Album)
+		albumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
 	} else {
-		albumID = generateID("single:" + trackID)
+		albumID = models.GenerateID("single:" + trackID)
 	}
 	track.AlbumID = albumID
 
@@ -584,7 +585,7 @@ func scanSingleFile(filePath string) {
 	tracks[trackID] = track
 	if track.Album != "" {
 		if _, exists := albums[albumID]; !exists {
-			albums[albumID] = &Album{
+			albums[albumID] = &models.Album{
 				ID:         albumID,
 				Name:       track.Album,
 				Artist:     track.AlbumArtist,

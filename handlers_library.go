@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"musicapp/internal/models"
 	"net/http"
 	"sort"
 	"sync/atomic"
@@ -31,7 +32,7 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 
 	reviewStatuses := dbLoadAllReviewStatuses()
 
-	trackList := make([]Track, 0, len(tracks))
+	trackList := make([]models.Track, 0, len(tracks))
 	for _, t := range tracks {
 		copy := *t
 		if rs, ok := reviewStatuses[t.ID]; ok {
@@ -44,7 +45,7 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 		return trackList[i].Title < trackList[j].Title
 	})
 
-	albumList := make([]Album, 0, len(albums))
+	albumList := make([]models.Album, 0, len(albums))
 	for _, a := range albums {
 		albumList = append(albumList, *a)
 	}
@@ -52,11 +53,11 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 		return albumList[i].Name < albumList[j].Name
 	})
 
-	artistMap := make(map[string]*Artist)
+	artistMap := make(map[string]*models.Artist)
 	for _, t := range tracks {
 		name := t.Artist
 		if _, exists := artistMap[name]; !exists {
-			artistMap[name] = &Artist{Name: name}
+			artistMap[name] = &models.Artist{Name: name}
 		}
 		artistMap[name].TrackCount++
 	}
@@ -67,7 +68,7 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	artistList := make([]Artist, 0, len(artistMap))
+	artistList := make([]models.Artist, 0, len(artistMap))
 	for _, a := range artistMap {
 		artistList = append(artistList, *a)
 	}
@@ -75,7 +76,7 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 		return artistList[i].Name < artistList[j].Name
 	})
 
-	resp := LibraryResponse{
+	resp := models.LibraryResponse{
 		Tracks:  trackList,
 		Albums:  albumList,
 		Artists: artistList,

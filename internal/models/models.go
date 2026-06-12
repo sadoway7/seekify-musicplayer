@@ -1,4 +1,4 @@
-package main
+package models
 
 type Track struct {
 	ID               string `json:"id"`
@@ -62,18 +62,18 @@ type ScanStats struct {
 }
 
 type MetadataMatch struct {
-	ID           string  `json:"id"`
-	TrackID      string  `json:"trackId"`
-	TrackTitle   string  `json:"trackTitle"`
-	TrackArtist  string  `json:"trackArtist"`
-	MBTitle      string  `json:"mbTitle"`
-	MBArtist     string  `json:"mbArtist"`
-	MBAlbum      string  `json:"mbAlbum"`
-	MBAlbumID    string  `json:"mbAlbumId"`
-	MBScore      float64 `json:"mbScore"`
-	Status       string  `json:"status"`
-	HasCover     bool    `json:"hasCover"`
-	FilePath     string  `json:"filePath"`
+	ID          string  `json:"id"`
+	TrackID     string  `json:"trackId"`
+	TrackTitle  string  `json:"trackTitle"`
+	TrackArtist string  `json:"trackArtist"`
+	MBTitle     string  `json:"mbTitle"`
+	MBArtist    string  `json:"mbArtist"`
+	MBAlbum     string  `json:"mbAlbum"`
+	MBAlbumID   string  `json:"mbAlbumId"`
+	MBScore     float64 `json:"mbScore"`
+	Status      string  `json:"status"`
+	HasCover    bool    `json:"hasCover"`
+	FilePath    string  `json:"filePath"`
 }
 
 type MetadataScanResult struct {

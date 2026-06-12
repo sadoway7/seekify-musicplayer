@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"musicapp/internal/models"
 	"os"
 	"path/filepath"
 	"time"
@@ -133,7 +134,7 @@ func migrateFromJSON() {
 		return
 	}
 
-	var old AppState
+	var old models.AppState
 	if err := json.Unmarshal(data, &old); err != nil {
 		return
 	}
@@ -230,22 +231,22 @@ func dbAddRecent(trackID string) {
 	}
 }
 
-func dbGetPlaylists() []Playlist {
+func dbGetPlaylists() []models.Playlist {
 	rows, err := db.Query("SELECT id, name, created_at FROM playlists ORDER BY rowid")
 	if err != nil {
-		return []Playlist{}
+		return []models.Playlist{}
 	}
 	defer rows.Close()
 
-	var pls []Playlist
+	var pls []models.Playlist
 	for rows.Next() {
-		var p Playlist
+		var p models.Playlist
 		rows.Scan(&p.ID, &p.Name, &p.CreatedAt)
 		p.TrackIDs = dbGetPlaylistTracks(p.ID)
 		pls = append(pls, p)
 	}
 	if pls == nil {
-		pls = []Playlist{}
+		pls = []models.Playlist{}
 	}
 	return pls
 }
@@ -268,11 +269,11 @@ func dbGetPlaylistTracks(playlistID string) []string {
 	return ids
 }
 
-func dbCreatePlaylist(name string) Playlist {
-	id := generateUUID()
-	now := timeNow()
+func dbCreatePlaylist(name string) models.Playlist {
+	id := models.GenerateUUID()
+	now := models.TimeNow()
 	db.Exec("INSERT INTO playlists (id, name, created_at) VALUES (?, ?, ?)", id, name, now)
-	return Playlist{ID: id, Name: name, CreatedAt: now, TrackIDs: []string{}}
+	return models.Playlist{ID: id, Name: name, CreatedAt: now, TrackIDs: []string{}}
 }
 
 func dbUpdatePlaylist(id string, name string, trackIDs []string) {
@@ -294,9 +295,9 @@ func dbAddTrackToPlaylist(playlistID, trackID string) {
 	db.Exec("INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)", playlistID, trackID, maxPos+1)
 }
 
-func dbFindPlaylistByName(name string) *Playlist {
+func dbFindPlaylistByName(name string) *models.Playlist {
 	row := db.QueryRow("SELECT id, name, created_at FROM playlists WHERE name = ? LIMIT 1", name)
-	var p Playlist
+	var p models.Playlist
 	if err := row.Scan(&p.ID, &p.Name, &p.CreatedAt); err != nil {
 		return nil
 	}
@@ -304,9 +305,9 @@ func dbFindPlaylistByName(name string) *Playlist {
 	return &p
 }
 
-func dbFindPlaylistByID(id string) *Playlist {
+func dbFindPlaylistByID(id string) *models.Playlist {
 	row := db.QueryRow("SELECT id, name, created_at FROM playlists WHERE id = ? LIMIT 1", id)
-	var p Playlist
+	var p models.Playlist
 	if err := row.Scan(&p.ID, &p.Name, &p.CreatedAt); err != nil {
 		return nil
 	}
@@ -330,49 +331,49 @@ func dbDeletePlaylist(id string) bool {
 	return affected > 0
 }
 
-func dbInsertMetadataMatch(m *MetadataMatch) {
+func dbInsertMetadataMatch(m *models.MetadataMatch) {
 	db.Exec(`INSERT OR IGNORE INTO metadata_matches
 		(id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score, status)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.TrackID, m.TrackTitle, m.TrackArtist, m.MBTitle, m.MBArtist, m.MBAlbum, m.MBAlbumID, m.MBScore, m.Status)
 }
 
-func dbGetPendingMatches() []MetadataMatch {
+func dbGetPendingMatches() []models.MetadataMatch {
 	rows, err := db.Query(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score
 		FROM metadata_matches WHERE status = 'pending' ORDER BY mb_score DESC`)
 	if err != nil {
-		return []MetadataMatch{}
+		return []models.MetadataMatch{}
 	}
 	defer rows.Close()
 
-	var matches []MetadataMatch
+	var matches []models.MetadataMatch
 	for rows.Next() {
-		var m MetadataMatch
+		var m models.MetadataMatch
 		rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore)
 		matches = append(matches, m)
 	}
 	if matches == nil {
-		matches = []MetadataMatch{}
+		matches = []models.MetadataMatch{}
 	}
 	return matches
 }
 
-func dbGetAllMatches() []MetadataMatch {
+func dbGetAllMatches() []models.MetadataMatch {
 	rows, err := db.Query(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score, status
 		FROM metadata_matches ORDER BY status, mb_score DESC`)
 	if err != nil {
-		return []MetadataMatch{}
+		return []models.MetadataMatch{}
 	}
 	defer rows.Close()
 
-	var matches []MetadataMatch
+	var matches []models.MetadataMatch
 	for rows.Next() {
-		var m MetadataMatch
+		var m models.MetadataMatch
 		rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore, &m.Status)
 		matches = append(matches, m)
 	}
 	if matches == nil {
-		matches = []MetadataMatch{}
+		matches = []models.MetadataMatch{}
 	}
 	return matches
 }
@@ -474,15 +475,15 @@ type dbExecer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-func dbUpsertTrack(t *Track) {
+func dbUpsertTrack(t *models.Track) {
 	dbUpsertTrackWith(db, t)
 }
 
-func dbUpsertTrackTx(tx *sql.Tx, t *Track) {
+func dbUpsertTrackTx(tx *sql.Tx, t *models.Track) {
 	dbUpsertTrackWith(tx, t)
 }
 
-func dbUpsertTrackWith(e dbExecer, t *Track) {
+func dbUpsertTrackWith(e dbExecer, t *models.Track) {
 	e.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -503,15 +504,15 @@ func dbUpsertTrackWith(e dbExecer, t *Track) {
 		boolToInt(t.HasCover), t.ModTime, boolToInt(t.HasMetadata))
 }
 
-func dbUpsertAlbum(a *Album) {
+func dbUpsertAlbum(a *models.Album) {
 	dbUpsertAlbumWith(db, a)
 }
 
-func dbUpsertAlbumTx(tx *sql.Tx, a *Album) {
+func dbUpsertAlbumTx(tx *sql.Tx, a *models.Album) {
 	dbUpsertAlbumWith(tx, a)
 }
 
-func dbUpsertAlbumWith(e dbExecer, a *Album) {
+func dbUpsertAlbumWith(e dbExecer, a *models.Album) {
 	e.Exec(`INSERT INTO albums (id, name, artist, track_count, year, has_cover)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -523,7 +524,7 @@ func dbUpsertAlbumWith(e dbExecer, a *Album) {
 func dbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
 	albumID := ""
 	if album != "" {
-		albumID = generateAlbumID(albumArtist, album)
+		albumID = models.GenerateAlbumID(albumArtist, album)
 	}
 	db.Exec(`UPDATE tracks SET
 		orig_title = CASE WHEN orig_title = '' AND has_metadata = 0 THEN title ELSE orig_title END,
@@ -535,10 +536,10 @@ func dbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
 		title, artist, album, albumArtist, albumID, trackID)
 }
 
-func dbLoadTracks() map[string]*Track {
+func dbLoadTracks() map[string]*models.Track {
 	rows, err := db.Query(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata FROM tracks`)
 	if err != nil {
-		return map[string]*Track{}
+		return map[string]*models.Track{}
 	}
 	defer rows.Close()
 
@@ -554,9 +555,9 @@ func dbLoadTracks() map[string]*Track {
 		dRows.Close()
 	}
 
-	result := make(map[string]*Track)
+	result := make(map[string]*models.Track)
 	for rows.Next() {
-		t := &Track{}
+		t := &models.Track{}
 		var hasCover, hasMetadata int
 		rows.Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist, &t.AlbumID,
 			&t.TrackNumber, &t.Year, &t.Genre, &t.Duration, &t.FilePath,
@@ -569,16 +570,16 @@ func dbLoadTracks() map[string]*Track {
 	return result
 }
 
-func dbLoadAlbums() map[string]*Album {
+func dbLoadAlbums() map[string]*models.Album {
 	rows, err := db.Query(`SELECT id, name, artist, track_count, year, has_cover FROM albums`)
 	if err != nil {
-		return map[string]*Album{}
+		return map[string]*models.Album{}
 	}
 	defer rows.Close()
 
-	result := make(map[string]*Album)
+	result := make(map[string]*models.Album)
 	for rows.Next() {
-		a := &Album{}
+		a := &models.Album{}
 		var hasCover int
 		rows.Scan(&a.ID, &a.Name, &a.Artist, &a.TrackCount, &a.Year, &hasCover)
 		a.HasCover = hasCover == 1
