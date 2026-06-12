@@ -9,526 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
-
-var mbClient = &http.Client{
-	Timeout: 15 * time.Second,
-	Transport: &http.Transport{
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		ForceAttemptHTTP2:     true,
-	},
-}
-
-const mbBaseURL = "https://musicbrainz.org/ws/2"
-const coverArtBaseURL = "https://coverartarchive.org"
-
-type mbSearchResponse struct {
-	Releases []mbRelease `json:"releases"`
-}
-
-type mbRelease struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Artist  []mbArtistCredit
-	Date    string `json:"date"`
-	TrackCount int `json:"track-count"`
-}
-
-type mbArtistCredit struct {
-	Name string `json:"name"`
-}
-
-func mbDoRequest(reqURL string) ([]byte, error) {
-	return mbDoRequestWithRetry(reqURL, 2)
-}
-
-func mbDoRequestWithRetry(reqURL string, retries int) ([]byte, error) {
-	req, err := http.NewRequest("GET", reqURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-
-	resp, err := mbClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode == 503 && retries > 0 {
-		time.Sleep(1100 * time.Millisecond)
-		return mbDoRequestWithRetry(reqURL, retries-1)
-	}
-	if resp.StatusCode == 503 {
-		return nil, fmt.Errorf("rate limited by MusicBrainz (503)")
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("MusicBrainz returned HTTP %d", resp.StatusCode)
-	}
-
-	return body, nil
-}
-
-func escapeLucene(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, `+`, `\+`)
-	s = strings.ReplaceAll(s, `-`, `\-`)
-	s = strings.ReplaceAll(s, `&&`, `\&&`)
-	s = strings.ReplaceAll(s, `||`, `\||`)
-	s = strings.ReplaceAll(s, `!`, `\!`)
-	s = strings.ReplaceAll(s, `(`, `\(`)
-	s = strings.ReplaceAll(s, `)`, `\)`)
-	s = strings.ReplaceAll(s, `{`, `\{`)
-	s = strings.ReplaceAll(s, `}`, `\}`)
-	s = strings.ReplaceAll(s, `[`, `\[`)
-	s = strings.ReplaceAll(s, `]`, `\]`)
-	s = strings.ReplaceAll(s, `^`, `\^`)
-	s = strings.ReplaceAll(s, `~`, `\~`)
-	s = strings.ReplaceAll(s, `*`, `\*`)
-	s = strings.ReplaceAll(s, `?`, `\?`)
-	s = strings.ReplaceAll(s, `:`, `\:`)
-	s = strings.ReplaceAll(s, `/`, `\/`)
-	return s
-}
-
-func mbSearchRelease(artist, album string) (string, error) {
-	query := fmt.Sprintf(`artist:"%s" AND release:"%s"`, escapeLucene(artist), escapeLucene(album))
-	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=1", mbBaseURL, url.QueryEscape(query))
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return "", err
-	}
-
-	var searchResp mbSearchResponse
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
-	}
-
-	if len(searchResp.Releases) == 0 {
-		return "", fmt.Errorf("no release found")
-	}
-
-	return searchResp.Releases[0].ID, nil
-}
-
-func mbFetchCoverArt(mbid string) ([]byte, string, error) {
-	reqURL := fmt.Sprintf("%s/release/%s/front-500", coverArtBaseURL, mbid)
-
-	req, err := http.NewRequest("GET", reqURL, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-
-	resp, err := mbClient.Do(req)
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, "", fmt.Errorf("cover art not found: %d", resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", err
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	return data, contentType, nil
-}
-
-func fetchAndCacheCover(albumID, artist, album string) bool {
-	if album == "" || artist == "" {
-		return false
-	}
-
-	coverDir := filepath.Join(musicDir, "images")
-	os.MkdirAll(coverDir, 0755)
-
-	coverPath := filepath.Join(coverDir, albumID+".jpg")
-	if _, err := os.Stat(coverPath); err == nil {
-		data, err := os.ReadFile(coverPath)
-		if err == nil {
-			coverMu.Lock()
-			coverCache[albumID] = data
-			coverMu.Unlock()
-			return true
-		}
-	}
-
-	mbid, err := mbSearchRelease(artist, album)
-	if err != nil {
-		log.Printf("MusicBrainz: no release found for %s - %s: %v", artist, album, err)
-		return false
-	}
-
-	data, _, err := mbFetchCoverArt(mbid)
-	if err != nil {
-		log.Printf("Cover Art Archive: no cover for MBID %s: %v", mbid, err)
-		return false
-	}
-
-	os.WriteFile(coverPath, data, 0644)
-
-	coverMu.Lock()
-	coverCache[albumID] = data
-	coverMu.Unlock()
-
-	mu.Lock()
-	if a, ok := albums[albumID]; ok {
-		a.HasCover = true
-	}
-	mu.Unlock()
-
-	log.Printf("MusicBrainz: fetched cover for %s - %s", artist, album)
-	return true
-}
-
-var (
-	coverFetchMu  sync.Mutex
-	coverFetching bool
-)
-
-func fetchMissingCovers() {
-	if !getSettingBool("cover_fetch_enabled", true) {
-		return
-	}
-	coverFetchMu.Lock()
-	if coverFetching {
-		coverFetchMu.Unlock()
-		return
-	}
-	coverFetching = true
-	coverFetchMu.Unlock()
-	defer func() {
-		coverFetchMu.Lock()
-		coverFetching = false
-		coverFetchMu.Unlock()
-	}()
-
-	mu.RLock()
-	type albumInfo struct {
-		id     string
-		artist string
-		name   string
-	}
-	var missing []albumInfo
-	for _, a := range albums {
-		if !a.HasCover && a.Name != "" && a.Artist != "" {
-			missing = append(missing, albumInfo{a.ID, a.Artist, a.Name})
-		}
-	}
-	mu.RUnlock()
-
-	log.Printf("Fetching missing covers for %d albums from MusicBrainz...", len(missing))
-
-	for _, info := range missing {
-		fetchAndCacheCover(info.id, info.artist, info.name)
-		time.Sleep(800 * time.Millisecond)
-	}
-}
-
-type mbLookupResponse struct {
-	Title       string `json:"title"`
-	ArtistCredit []mbArtistCredit `json:"artist-credit"`
-	Date        string `json:"date"`
-}
-
-func mbLookupRelease(mbid string) (string, string, string, error) {
-	reqURL := fmt.Sprintf("%s/release/%s?fmt=json&inc=artist-credits", mbBaseURL, mbid)
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return "", "", "", err
-	}
-
-	var lookup mbLookupResponse
-	if err := json.Unmarshal(body, &lookup); err != nil {
-		return "", "", "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
-	}
-
-	artistName := ""
-	if len(lookup.ArtistCredit) > 0 {
-		artistName = lookup.ArtistCredit[0].Name
-	}
-
-	year := ""
-	if len(lookup.Date) >= 4 {
-		year = lookup.Date[:4]
-	}
-
-	return lookup.Title, artistName, year, nil
-}
-
-func fetchMetadataForTrack(artist, title string) (string, string, string, error) {
-	if artist == "" {
-		artist = title
-	}
-
-	query := fmt.Sprintf("artist:%s AND recording:%s", url.QueryEscape(artist), url.QueryEscape(title))
-	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=1", mbBaseURL, query)
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return "", "", "", err
-	}
-
-	var result struct {
-		Recordings []struct {
-			Title  string `json:"title"`
-			ArtistCredit []mbArtistCredit `json:"artist-credit"`
-			Releases []struct {
-				ID    string `json:"id"`
-				Title string `json:"title"`
-			} `json:"releases"`
-		} `json:"recordings"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", "", "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
-	}
-
-	if len(result.Recordings) == 0 {
-		return "", "", "", fmt.Errorf("no recording found")
-	}
-
-	rec := result.Recordings[0]
-	mbArtist := ""
-	if len(rec.ArtistCredit) > 0 {
-		mbArtist = rec.ArtistCredit[0].Name
-	}
-
-	mbAlbum := ""
-	mbAlbumID := ""
-	if len(rec.Releases) > 0 {
-		mbAlbum = rec.Releases[0].Title
-		mbAlbumID = rec.Releases[0].ID
-	}
-
-	_ = mbAlbumID
-	return rec.Title, mbArtist, mbAlbum, nil
-}
-
-// releaseTypePriority ranks release-group types: Album is best, Compilation worst.
-func releaseTypePriority(rgType string) int {
-	switch strings.ToLower(rgType) {
-	case "album":
-		return 5
-	case "ep":
-		return 4
-	case "single":
-		return 3
-	case "soundtrack":
-		return 2
-	case "live":
-		return 2
-	case "remix":
-		return 1
-	case "compilation":
-		return 0
-	default:
-		return 1
-	}
-}
-
-// mbLookupBestRelease looks up a recording by MBID and returns the best release
-// (real album preferred over compilation).
-func mbLookupBestRelease(recordingID string) (string, string) {
-	reqURL := fmt.Sprintf("%s/recording/%s?inc=releases+release-groups&fmt=json", mbBaseURL, recordingID)
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return "", ""
-	}
-
-	var lookupResp struct {
-		Releases []struct {
-			ID    string `json:"id"`
-			Title string `json:"title"`
-			ReleaseGroup struct {
-				Type  string `json:"type"`
-				Title string `json:"title"`
-			} `json:"release-group"`
-		} `json:"releases"`
-	}
-
-	if err := json.Unmarshal(body, &lookupResp); err != nil {
-		return "", ""
-	}
-
-	bestTitle := ""
-	bestID := ""
-	bestPriority := -1
-
-	for _, r := range lookupResp.Releases {
-		p := releaseTypePriority(r.ReleaseGroup.Type)
-		if p > bestPriority {
-			bestPriority = p
-			bestTitle = r.Title
-			bestID = r.ID
-		}
-	}
-
-	return bestTitle, bestID
-}
-
-func isCompilationTitle(title string) bool {
-	t := strings.ToLower(title)
-	keywords := []string{
-		"best of", "greatest hits", "compilation", "collection",
-		"anthology", "essential", "ultimate", "various artists",
-		"now that's what i call", "gold - greatest", "very best of",
-		"definitive collection", "number ones", "top hits",
-		"cream of", "classic hits", "100 hits",
-	}
-	for _, kw := range keywords {
-		if strings.Contains(t, kw) {
-			return true
-		}
-	}
-	return false
-}
-
-func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, error) {
-	var results []mbRecordingResult
-
-	var query string
-	if artist != "" && title != "" {
-		query = fmt.Sprintf(`artist:"%s" AND recording:"%s"`, escapeLucene(artist), escapeLucene(title))
-	} else if title != "" {
-		query = fmt.Sprintf(`recording:"%s"`, escapeLucene(title))
-	} else {
-		return results, fmt.Errorf("no search terms")
-	}
-
-	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d", mbBaseURL, url.QueryEscape(query), limit)
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return results, err
-	}
-
-	var searchResp struct {
-		Recordings []struct {
-			ID           string          `json:"id"`
-			Title        string          `json:"title"`
-			ArtistCredit []mbArtistCredit `json:"artist-credit"`
-			Releases     []struct {
-				ID    string `json:"id"`
-				Title string `json:"title"`
-			} `json:"releases"`
-		} `json:"recordings"`
-	}
-
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return results, fmt.Errorf("invalid response from MusicBrainz: %v", err)
-	}
-
-	for _, rec := range searchResp.Recordings {
-		artistName := ""
-		if len(rec.ArtistCredit) > 0 {
-			artistName = rec.ArtistCredit[0].Name
-		}
-
-		// Use the full release list via lookup to find the real album
-		albumName := ""
-		albumID := ""
-		if rec.ID != "" {
-			albumName, albumID = mbLookupBestRelease(rec.ID)
-		}
-
-		// Fallback to the search results if lookup failed
-		if albumName == "" && len(rec.Releases) > 0 {
-			albumName = rec.Releases[0].Title
-			albumID = rec.Releases[0].ID
-		}
-
-		results = append(results, mbRecordingResult{
-			RecordingID: rec.ID,
-			Title:       rec.Title,
-			Artist:      artistName,
-			Album:       albumName,
-			AlbumID:     albumID,
-		})
-	}
-
-	return results, nil
-}
-
-type mbRecordingResult struct {
-	RecordingID string
-	Title       string
-	Artist      string
-	Album       string
-	AlbumID     string
-}
-
-type FinderRecording struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Artist       string   `json:"artist"`
-	ArtistID     string   `json:"artistId,omitempty"`
-	Album        string   `json:"album,omitempty"`
-	AlbumID      string   `json:"albumId,omitempty"`
-	Year         string   `json:"year,omitempty"`
-	Country      string   `json:"country,omitempty"`
-	Length       int      `json:"length,omitempty"`
-	TrackCount   int      `json:"trackCount,omitempty"`
-	Score        int      `json:"score"`
-	Tags         []string `json:"tags,omitempty"`
-	InLibrary    bool     `json:"inLibrary"`
-}
-
-type FinderArtist struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	SortName       string `json:"sortName,omitempty"`
-	Disambiguation string `json:"disambiguation,omitempty"`
-	Country        string `json:"country,omitempty"`
-	Type           string `json:"type,omitempty"`
-	Score          int    `json:"score"`
-	ReleaseCount   int    `json:"releaseCount,omitempty"`
-	InLibrary      bool   `json:"inLibrary"`
-}
-
-type FinderRelease struct {
-	ID             string   `json:"id"`
-	Title          string   `json:"title"`
-	Artist         string   `json:"artist"`
-	ArtistID       string   `json:"artistId,omitempty"`
-	Year           string   `json:"year,omitempty"`
-	Country        string   `json:"country,omitempty"`
-	TrackCount     int      `json:"trackCount,omitempty"`
-	Format         string   `json:"format,omitempty"`
-	Type           string   `json:"type,omitempty"`
-	Score          int      `json:"score"`
-	InLibrary      bool     `json:"inLibrary"`
-}
-
-type FinderReleaseTrack struct {
-	Position  int    `json:"position"`
-	Title     string `json:"title"`
-	Length    int    `json:"length,omitempty"`
-	Artist    string `json:"artist,omitempty"`
-	Recording string `json:"recordingId,omitempty"`
-	InLibrary bool   `json:"inLibrary"`
-}
 
 func scoreMatch(localArtist, localTitle, mbArtist, mbTitle, mbAlbum string) float64 {
 	score := 0.0
@@ -1015,800 +499,206 @@ func rebuildAlbumsFromTracks() {
 	}
 }
 
-// ── Artist art ──
-
-var (
-	artistArtCache map[string][]byte
-	artistArtMu    sync.RWMutex
-)
-
-func init() {
-	artistArtCache = make(map[string][]byte)
-}
-
-func artistArtKey(name string) string {
-	return strings.ToLower(strings.TrimSpace(name))
-}
-
-func artistArtPath(name string) string {
-	return filepath.Join(musicDir, "images", "artists", artistArtKey(name)+".jpg")
-}
-
-func fetchArtistImage(artistName string) bool {
-	if artistName == "" {
-		return false
-	}
-
-	key := artistArtKey(artistName)
-
-	artistArtMu.RLock()
-	_, cached := artistArtCache[key]
-	artistArtMu.RUnlock()
-	if cached {
-		return true
-	}
-
-	artDir := filepath.Join(musicDir, "images", "artists")
-	os.MkdirAll(artDir, 0755)
-
-	artFile := filepath.Join(artDir, key+".jpg")
-	if data, err := os.ReadFile(artFile); err == nil {
-		if len(data) > 0 {
-			artistArtMu.Lock()
-			artistArtCache[key] = data
-			artistArtMu.Unlock()
-			return true
-		}
-		return false
-	}
-
-	// Search Deezer for artist image (free, no API key)
-	searchURL := fmt.Sprintf("https://api.deezer.com/search/artist?q=%s&limit=1", url.QueryEscape(artistName))
-
-	req, err := http.NewRequest("GET", searchURL, nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-
-	resp, err := mbClient.Do(req)
-	if err != nil {
-		log.Printf("[artist-art] Deezer search failed for %q: %v", artistName, err)
-		return false
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
-
-	var deezerResp struct {
-		Data []struct {
-			PictureBig string `json:"picture_big"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &deezerResp); err != nil {
-		return false
-	}
-
-	if len(deezerResp.Data) == 0 || deezerResp.Data[0].PictureBig == "" {
-		os.WriteFile(artFile, []byte{}, 0644)
-		return false
-	}
-
-	imgURL := deezerResp.Data[0].PictureBig
-	imgReq, err := http.NewRequest("GET", imgURL, nil)
-	if err != nil {
-		return false
-	}
-	imgReq.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
-
-	imgResp, err := mbClient.Do(imgReq)
-	if err != nil {
-		return false
-	}
-	defer imgResp.Body.Close()
-
-	if imgResp.StatusCode != 200 {
-		return false
-	}
-
-	imgData, err := io.ReadAll(imgResp.Body)
-	if err != nil || len(imgData) == 0 {
-		return false
-	}
-
-	os.WriteFile(artFile, imgData, 0644)
-
-	artistArtMu.Lock()
-	artistArtCache[key] = imgData
-	artistArtMu.Unlock()
-
-	log.Printf("[artist-art] Fetched image for %q", artistName)
-	return true
-}
-
-var (
-	artFetchMu  sync.Mutex
-	artFetching bool
-)
-
-func fetchMissingArtistArt() {
-	if !getSettingBool("artist_art_fetch_enabled", true) {
-		return
-	}
-	artFetchMu.Lock()
-	if artFetching {
-		artFetchMu.Unlock()
-		return
-	}
-	artFetching = true
-	artFetchMu.Unlock()
-	defer func() {
-		artFetchMu.Lock()
-		artFetching = false
-		artFetchMu.Unlock()
-	}()
-
-	mu.RLock()
-	type artistInfo struct {
-		name string
-	}
-	var artists []artistInfo
-	seen := map[string]bool{}
-	for _, t := range tracks {
-		n := t.Artist
-		if n == "" || seen[n] {
-			continue
-		}
-		seen[n] = true
-		artists = append(artists, artistInfo{name: n})
-	}
-	mu.RUnlock()
-
-	log.Printf("[artist-art] Fetching images for %d artists...", len(artists))
-
-	for _, a := range artists {
-		fetchArtistImage(a.name)
-		time.Sleep(400 * time.Millisecond)
-	}
-}
-
-func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) {
-	var results []FinderRecording
-
-	luceneQuery := buildRecordingQuery(query)
-	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d",
-		mbBaseURL, url.QueryEscape(luceneQuery), limit)
+func mbLookupRelease(mbid string) (string, string, string, error) {
+	reqURL := fmt.Sprintf("%s/release/%s?fmt=json&inc=artist-credits", mbBaseURL, mbid)
 
 	body, err := mbDoRequest(reqURL)
 	if err != nil {
-		return nil, err
+		return "", "", "", err
+	}
+
+	var lookup mbLookupResponse
+	if err := json.Unmarshal(body, &lookup); err != nil {
+		return "", "", "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
+	}
+
+	artistName := ""
+	if len(lookup.ArtistCredit) > 0 {
+		artistName = lookup.ArtistCredit[0].Name
+	}
+
+	year := ""
+	if len(lookup.Date) >= 4 {
+		year = lookup.Date[:4]
+	}
+
+	return lookup.Title, artistName, year, nil
+}
+
+func fetchMetadataForTrack(artist, title string) (string, string, string, error) {
+	if artist == "" {
+		artist = title
+	}
+
+	query := fmt.Sprintf("artist:%s AND recording:%s", url.QueryEscape(artist), url.QueryEscape(title))
+	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=1", mbBaseURL, query)
+
+	body, err := mbDoRequest(reqURL)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	var result struct {
+		Recordings []struct {
+			Title  string `json:"title"`
+			ArtistCredit []mbArtistCredit `json:"artist-credit"`
+			Releases []struct {
+				ID    string `json:"id"`
+				Title string `json:"title"`
+			} `json:"releases"`
+		} `json:"recordings"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", "", "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
+	}
+
+	if len(result.Recordings) == 0 {
+		return "", "", "", fmt.Errorf("no recording found")
+	}
+
+	rec := result.Recordings[0]
+	mbArtist := ""
+	if len(rec.ArtistCredit) > 0 {
+		mbArtist = rec.ArtistCredit[0].Name
+	}
+
+	mbAlbum := ""
+	mbAlbumID := ""
+	if len(rec.Releases) > 0 {
+		mbAlbum = rec.Releases[0].Title
+		mbAlbumID = rec.Releases[0].ID
+	}
+
+	_ = mbAlbumID
+	return rec.Title, mbArtist, mbAlbum, nil
+}
+
+// releaseTypePriority ranks release-group types: Album is best, Compilation worst.
+func releaseTypePriority(rgType string) int {
+	switch strings.ToLower(rgType) {
+	case "album":
+		return 5
+	case "ep":
+		return 4
+	case "single":
+		return 3
+	case "soundtrack":
+		return 2
+	case "live":
+		return 2
+	case "remix":
+		return 1
+	case "compilation":
+		return 0
+	default:
+		return 1
+	}
+}
+
+// mbLookupBestRelease looks up a recording by MBID and returns the best release
+// (real album preferred over compilation).
+func mbLookupBestRelease(recordingID string) (string, string) {
+	reqURL := fmt.Sprintf("%s/recording/%s?inc=releases+release-groups&fmt=json", mbBaseURL, recordingID)
+
+	body, err := mbDoRequest(reqURL)
+	if err != nil {
+		return "", ""
+	}
+
+	var lookupResp struct {
+		Releases []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+			ReleaseGroup struct {
+				Type  string `json:"type"`
+				Title string `json:"title"`
+			} `json:"release-group"`
+		} `json:"releases"`
+	}
+
+	if err := json.Unmarshal(body, &lookupResp); err != nil {
+		return "", ""
+	}
+
+	bestTitle := ""
+	bestID := ""
+	bestPriority := -1
+
+	for _, r := range lookupResp.Releases {
+		p := releaseTypePriority(r.ReleaseGroup.Type)
+		if p > bestPriority {
+			bestPriority = p
+			bestTitle = r.Title
+			bestID = r.ID
+		}
+	}
+
+	return bestTitle, bestID
+}
+
+func mbSearchRecordings(artist, title string, limit int) ([]mbRecordingResult, error) {
+	var results []mbRecordingResult
+
+	var query string
+	if artist != "" && title != "" {
+		query = fmt.Sprintf(`artist:"%s" AND recording:"%s"`, escapeLucene(artist), escapeLucene(title))
+	} else if title != "" {
+		query = fmt.Sprintf(`recording:"%s"`, escapeLucene(title))
+	} else {
+		return results, fmt.Errorf("no search terms")
+	}
+
+	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d", mbBaseURL, url.QueryEscape(query), limit)
+
+	body, err := mbDoRequest(reqURL)
+	if err != nil {
+		return results, err
 	}
 
 	var searchResp struct {
 		Recordings []struct {
-			ID           string `json:"id"`
-			Title        string `json:"title"`
-			Score        int    `json:"score"`
-			Length       int    `json:"length"`
-			ArtistCredit []struct {
-				Name   string `json:"name"`
-				Artist struct {
-					ID string `json:"id"`
-				} `json:"artist"`
-			} `json:"artist-credit"`
-			FirstReleaseDate string `json:"first-release-date"`
-			Releases         []struct {
-				ID     string `json:"id"`
-				Title  string `json:"title"`
-				Date   string `json:"date"`
-				Country string `json:"country"`
-				ReleaseGroup struct {
-					Type string `json:"primary-type"`
-				} `json:"release-group"`
+			ID           string          `json:"id"`
+			Title        string          `json:"title"`
+			ArtistCredit []mbArtistCredit `json:"artist-credit"`
+			Releases     []struct {
+				ID    string `json:"id"`
+				Title string `json:"title"`
 			} `json:"releases"`
 		} `json:"recordings"`
 	}
 
 	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
+		return results, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
-	libLookup := buildLibraryLookup()
-
-	seen := map[string]bool{}
 	for _, rec := range searchResp.Recordings {
-		if rec.Score < 80 {
-			continue
-		}
-
 		artistName := ""
-		artistID := ""
 		if len(rec.ArtistCredit) > 0 {
 			artistName = rec.ArtistCredit[0].Name
-			artistID = rec.ArtistCredit[0].Artist.ID
 		}
 
-		dedupKey := strings.ToLower(artistName + "|" + rec.Title)
-		if seen[dedupKey] {
-			continue
-		}
-		seen[dedupKey] = true
-
+		// Use the full release list via lookup to find the real album
 		albumName := ""
 		albumID := ""
-		year := ""
-		rgType := ""
-
-		bestScore := -999
-		for _, rel := range rec.Releases {
-			s := releaseTypePriority(rel.ReleaseGroup.Type)
-			if isCompilationTitle(rel.Title) {
-				s -= 5
-			}
-			if s > bestScore {
-				bestScore = s
-				albumName = rel.Title
-				albumID = rel.ID
-				rgType = rel.ReleaseGroup.Type
-				if len(rel.Date) >= 4 {
-					year = rel.Date[:4]
-				}
-			}
+		if rec.ID != "" {
+			albumName, albumID = mbLookupBestRelease(rec.ID)
 		}
 
-		if year == "" && len(rec.FirstReleaseDate) >= 4 {
-			year = rec.FirstReleaseDate[:4]
+		// Fallback to the search results if lookup failed
+		if albumName == "" && len(rec.Releases) > 0 {
+			albumName = rec.Releases[0].Title
+			albumID = rec.Releases[0].ID
 		}
 
-		if rgType == "Compilation" || rgType == "Soundtrack" {
-			if len(rec.Releases) > 0 {
-				found := false
-				for _, rel := range rec.Releases {
-					if rel.ReleaseGroup.Type != "Compilation" && rel.ReleaseGroup.Type != "Soundtrack" {
-						found = true
-						break
-					}
-				}
-				if !found {
-					continue
-				}
-			}
-		}
-
-		inLibrary := isInLibrary(libLookup, artistName, rec.Title)
-
-		results = append(results, FinderRecording{
-			ID:        rec.ID,
-			Title:     rec.Title,
-			Artist:    artistName,
-			ArtistID:  artistID,
-			Album:     albumName,
-			AlbumID:   albumID,
-			Year:      year,
-			Length:    rec.Length / 1000,
-			Score:     rec.Score,
-			InLibrary: inLibrary,
-		})
-	}
-
-	if len(results) > limit {
-		results = results[:limit]
-	}
-
-	return results, nil
-}
-
-func buildRecordingQuery(raw string) string {
-	parts := strings.SplitN(raw, " - ", 2)
-	if len(parts) == 2 {
-		artist := strings.TrimSpace(parts[0])
-		title := strings.TrimSpace(parts[1])
-		return fmt.Sprintf(`artistname:"%s" AND recording:"%s"`, escapeLucene(artist), escapeLucene(title))
-	}
-	return raw
-}
-
-func finderSearchArtists(query string, limit int) ([]FinderArtist, error) {
-	var results []FinderArtist
-
-	reqURL := fmt.Sprintf("%s/artist/?query=%s&fmt=json&limit=%d", mbBaseURL, url.QueryEscape(query), limit)
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return nil, err
-	}
-
-	var searchResp struct {
-		Artists []struct {
-			ID             string `json:"id"`
-			Name           string `json:"name"`
-			SortName       string `json:"sort-name"`
-			Disambiguation string `json:"disambiguation"`
-			Country        string `json:"country"`
-			Type           string `json:"type"`
-			Score          int    `json:"score"`
-		} `json:"artists"`
-	}
-
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
-	}
-
-	mu.RLock()
-	libraryArtists := map[string]bool{}
-	for _, t := range tracks {
-		if t.Artist != "" {
-			libraryArtists[strings.ToLower(t.Artist)] = true
-		}
-	}
-	mu.RUnlock()
-
-	for _, a := range searchResp.Artists {
-		inLibrary := libraryArtists[strings.ToLower(a.Name)]
-
-		results = append(results, FinderArtist{
-			ID:             a.ID,
-			Name:           a.Name,
-			SortName:       a.SortName,
-			Disambiguation: a.Disambiguation,
-			Country:        a.Country,
-			Type:           a.Type,
-			Score:          a.Score,
-			InLibrary:      inLibrary,
+		results = append(results, mbRecordingResult{
+			RecordingID: rec.ID,
+			Title:       rec.Title,
+			Artist:      artistName,
+			Album:       albumName,
+			AlbumID:     albumID,
 		})
 	}
 
 	return results, nil
-}
-
-func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
-	var results []FinderRelease
-
-	luceneQuery := buildReleaseQuery(query)
-	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=%d",
-		mbBaseURL, url.QueryEscape(luceneQuery), limit)
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return nil, err
-	}
-
-	var searchResp struct {
-		Releases []struct {
-			ID     string `json:"id"`
-			Title  string `json:"title"`
-			Score  int    `json:"score"`
-			Date   string `json:"date"`
-			Country string `json:"country"`
-			TrackCount int `json:"track-count"`
-			ArtistCredit []struct {
-				Name   string `json:"name"`
-				Artist struct {
-					ID string `json:"id"`
-				} `json:"artist"`
-			} `json:"artist-credit"`
-			ReleaseGroup struct {
-				Type string `json:"primary-type"`
-				ID   string `json:"id"`
-			} `json:"release-group"`
-			Media []struct {
-				Format string `json:"format"`
-			} `json:"media"`
-		} `json:"releases"`
-	}
-
-	if err := json.Unmarshal(body, &searchResp); err != nil {
-		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
-	}
-
-	albumLookup := buildAlbumLookup()
-
-	seen := map[string]bool{}
-	for _, rel := range searchResp.Releases {
-		if rel.Score < 80 {
-			continue
-		}
-
-		artistName := ""
-		artistID := ""
-		if len(rel.ArtistCredit) > 0 {
-			artistName = rel.ArtistCredit[0].Name
-			artistID = rel.ArtistCredit[0].Artist.ID
-		}
-
-		if artistName == "" || strings.EqualFold(artistName, "Various Artists") {
-			continue
-		}
-
-		rgType := rel.ReleaseGroup.Type
-		if rgType == "Compilation" {
-			continue
-		}
-
-		dedupKey := strings.ToLower(artistName + "|" + rel.Title)
-		if seen[dedupKey] {
-			continue
-		}
-		seen[dedupKey] = true
-
-		year := ""
-		if len(rel.Date) >= 4 {
-			year = rel.Date[:4]
-		}
-
-		format := ""
-		if len(rel.Media) > 0 {
-			format = rel.Media[0].Format
-		}
-
-		inLibrary := albumLookup[strings.ToLower(artistName+"|"+rel.Title)]
-
-		results = append(results, FinderRelease{
-			ID:         rel.ID,
-			Title:      rel.Title,
-			Artist:     artistName,
-			ArtistID:   artistID,
-			Year:       year,
-			TrackCount: rel.TrackCount,
-			Format:     format,
-			Type:       rgType,
-			Score:      rel.Score,
-			InLibrary:  inLibrary,
-		})
-	}
-
-	if len(results) > limit {
-		results = results[:limit]
-	}
-
-	return results, nil
-}
-
-func buildReleaseQuery(raw string) string {
-	parts := strings.SplitN(raw, " - ", 2)
-	if len(parts) == 2 {
-		artist := strings.TrimSpace(parts[0])
-		album := strings.TrimSpace(parts[1])
-		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, escapeLucene(artist), escapeLucene(album))
-	}
-	return raw
-}
-
-func finderArtistReleases(mbid string) ([]FinderRelease, error) {
-	var results []FinderRelease
-
-	var artistName string
-	offset := 0
-	for {
-		reqURL := fmt.Sprintf("%s/release-group?artist=%s&fmt=json&limit=25&offset=%d&type=album",
-			mbBaseURL, mbid, offset)
-
-		body, err := mbDoRequest(reqURL)
-		if err != nil {
-			return nil, err
-		}
-
-		var resp struct {
-			ReleaseGroups []struct {
-				ID           string `json:"id"`
-				Title        string `json:"title"`
-				PrimaryType  string `json:"primary-type"`
-				FirstRelease string `json:"first-release-date"`
-				ArtistCredit []struct {
-					Name   string `json:"name"`
-					Artist struct {
-						ID string `json:"id"`
-					} `json:"artist"`
-				} `json:"artist-credit"`
-			} `json:"release-groups"`
-			ReleaseGroupCount int `json:"release-group-count"`
-		}
-
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
-		}
-
-		if artistName == "" && len(resp.ReleaseGroups) > 0 && len(resp.ReleaseGroups[0].ArtistCredit) > 0 {
-			artistName = resp.ReleaseGroups[0].ArtistCredit[0].Name
-		}
-
-		for _, rg := range resp.ReleaseGroups {
-			year := ""
-			if len(rg.FirstRelease) >= 4 {
-				year = rg.FirstRelease[:4]
-			}
-
-			results = append(results, FinderRelease{
-				ID:       rg.ID,
-				Title:    rg.Title,
-				Artist:   artistName,
-				ArtistID: mbid,
-				Year:     year,
-				Type:     rg.PrimaryType,
-			})
-		}
-
-		offset += len(resp.ReleaseGroups)
-		if len(results) >= 50 || offset >= resp.ReleaseGroupCount || len(resp.ReleaseGroups) == 0 {
-			break
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		yi, _ := strconv.Atoi(results[i].Year)
-		yj, _ := strconv.Atoi(results[j].Year)
-		if yi != yj {
-			return yj < yi
-		}
-		return results[i].Title < results[j].Title
-	})
-
-	return results, nil
-}
-
-func finderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
-	var tracks []FinderReleaseTrack
-
-	releaseID := resolveToReleaseID(idOrRGID)
-	if releaseID == "" {
-		return nil, fmt.Errorf("could not resolve release for %s", idOrRGID)
-	}
-
-	reqURL := fmt.Sprintf("%s/release/%s?inc=recordings+artist-credits&fmt=json", mbBaseURL, releaseID)
-
-	body, err := mbDoRequest(reqURL)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp struct {
-		Title string `json:"title"`
-		Media []struct {
-			Tracks []struct {
-				Position  int    `json:"position"`
-				Title     string `json:"title"`
-				Length    int    `json:"length"`
-				Recording struct {
-					ID string `json:"id"`
-				} `json:"recording"`
-				ArtistCredit []struct {
-					Name string `json:"name"`
-				} `json:"artist-credit"`
-			} `json:"tracks"`
-		} `json:"media"`
-	}
-
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
-	}
-
-	libLookup := buildLibraryLookup()
-
-	for _, m := range resp.Media {
-		for _, t := range m.Tracks {
-			artist := ""
-			if len(t.ArtistCredit) > 0 {
-				artist = t.ArtistCredit[0].Name
-			}
-			tracks = append(tracks, FinderReleaseTrack{
-				Position:  t.Position,
-				Title:     t.Title,
-				Length:    t.Length / 1000,
-				Artist:    artist,
-				Recording: t.Recording.ID,
-				InLibrary: isInLibrary(libLookup, artist, t.Title),
-			})
-		}
-	}
-
-	return tracks, nil
-}
-
-func resolveToReleaseID(id string) string {
-	reqURL := fmt.Sprintf("%s/release/%s?fmt=json", mbBaseURL, id)
-	body, err := mbDoRequest(reqURL)
-	if err == nil {
-		var check struct {
-			ID string `json:"id"`
-		}
-		if json.Unmarshal(body, &check) == nil && check.ID == id {
-			return id
-		}
-	}
-
-	reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1&status=official", mbBaseURL, id)
-	body, err = mbDoRequest(reqURL)
-	if err != nil {
-		reqURL = fmt.Sprintf("%s/release?release-group=%s&fmt=json&limit=1", mbBaseURL, id)
-		body, err = mbDoRequest(reqURL)
-		if err != nil {
-			return ""
-		}
-	}
-	var resp struct {
-		Releases []struct {
-			ID string `json:"id"`
-		} `json:"releases"`
-	}
-	if json.Unmarshal(body, &resp) != nil || len(resp.Releases) == 0 {
-		return ""
-	}
-	return resp.Releases[0].ID
-}
-
-type ArtistTrack struct {
-	Title     string `json:"title"`
-	Artist    string `json:"artist"`
-	Album     string `json:"album"`
-	AlbumID   string `json:"albumId"`
-	Length    int    `json:"length"`
-	Position  int    `json:"position"`
-	Count     int    `json:"count"`
-	InLibrary bool   `json:"inLibrary"`
-}
-
-type mbRecording struct {
-	Title        string `json:"title"`
-	Length       int    `json:"length"`
-	Video        bool   `json:"video"`
-	ArtistCredit []struct {
-		Name   string `json:"name"`
-		Artist struct {
-			ID string `json:"id"`
-		} `json:"artist"`
-	} `json:"artist-credit"`
-	Releases []struct {
-		Title string `json:"title"`
-		ID    string `json:"id"`
-	} `json:"releases"`
-}
-
-func finderArtistTracks(mbid, artistName string) []ArtistTrack {
-	seen := map[string]*ArtistTrack{}
-	libLookup := buildLibraryLookup()
-
-	offset := 0
-	for {
-		reqURL := fmt.Sprintf("%s/recording?artist=%s&inc=artist-credits&fmt=json&limit=100&offset=%d",
-			mbBaseURL, mbid, offset)
-
-		var body []byte
-		var lastErr error
-		for retry := 0; retry < 3; retry++ {
-			if retry > 0 {
-				time.Sleep(time.Duration(retry) * 1100 * time.Millisecond)
-			}
-			body, lastErr = mbDoRequest(reqURL)
-			if lastErr == nil {
-				break
-			}
-		}
-		if lastErr != nil {
-			break
-		}
-
-		var resp struct {
-			Recordings     []json.RawMessage `json:"recordings"`
-			RecordingCount int               `json:"recording-count"`
-		}
-		if json.Unmarshal(body, &resp) != nil {
-			break
-		}
-
-		for _, raw := range resp.Recordings {
-			var rec struct {
-				Title        string `json:"title"`
-				Length       int    `json:"length"`
-				Video        bool   `json:"video"`
-				Disambiguation string `json:"disambiguation"`
-				ArtistCredit []struct {
-					Name string `json:"name"`
-				} `json:"artist-credit"`
-			}
-			if json.Unmarshal(raw, &rec) != nil {
-				continue
-			}
-			if rec.Video {
-				continue
-			}
-
-			title := cleanTrackTitle(rec.Title)
-			if title == "" || strings.HasPrefix(title, "[") {
-				continue
-			}
-
-			key := strings.ToLower(title)
-			length := rec.Length / 1000
-			artist := artistName
-			if len(rec.ArtistCredit) > 0 && rec.ArtistCredit[0].Name != "" {
-				artist = rec.ArtistCredit[0].Name
-			}
-			artist = cleanChannelName(artist)
-
-			if existing, ok := seen[key]; ok {
-				existing.Count++
-				if length > existing.Length && length > 0 {
-					existing.Length = length
-				}
-			} else {
-		seen[key] = &ArtistTrack{
-				Title:     title,
-				Artist:    artist,
-				Length:    length,
-				Count:     1,
-				InLibrary: isInLibrary(libLookup, artist, title),
-			}
-			}
-		}
-
-		offset += len(resp.Recordings)
-		if offset >= resp.RecordingCount || len(resp.Recordings) == 0 || offset >= 5000 {
-			break
-		}
-		time.Sleep(750 * time.Millisecond)
-	}
-
-	var result []ArtistTrack
-	for _, t := range seen {
-		result = append(result, *t)
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Count > result[j].Count
-	})
-
-	return result
-}
-
-func cleanChannelName(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.TrimSuffix(name, " - Topic")
-	name = strings.TrimSuffix(name, " Topic")
-	name = strings.TrimSuffix(name, "VEVO")
-	return strings.TrimSpace(name)
-}
-
-func cleanTrackTitle(title string) string {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return ""
-	}
-
-	for {
-		rest := title
-		rest = strings.TrimSuffix(rest, " (remix)")
-		rest = strings.TrimSuffix(rest, " (Remix)")
-		rest = strings.TrimSuffix(rest, " (radio edit)")
-		rest = strings.TrimSuffix(rest, " (Radio Edit)")
-		rest = strings.TrimSuffix(rest, " (radio version)")
-		rest = strings.TrimSuffix(rest, " (live)")
-		rest = strings.TrimSuffix(rest, " (Live)")
-		rest = strings.TrimSuffix(rest, " (instrumental)")
-		rest = strings.TrimSuffix(rest, " (Instrumental)")
-		rest = strings.TrimSuffix(rest, " (edit)")
-		rest = strings.TrimSuffix(rest, " (Edit)")
-		rest = strings.TrimSuffix(rest, " (extended)")
-		rest = strings.TrimSuffix(rest, " (Extended)")
-		rest = strings.TrimSuffix(rest, " (dub)")
-		rest = strings.TrimSuffix(rest, " (video)")
-		rest = strings.TrimSuffix(rest, " (clean)")
-		rest = strings.TrimSuffix(rest, " (acoustic)")
-		rest = strings.TrimSuffix(rest, " (demo)")
-		rest = strings.TrimSuffix(rest, " (promo)")
-		rest = strings.TrimSuffix(rest, " (mix)")
-		rest = strings.TrimSuffix(rest, " (single version)")
-		rest = strings.TrimSuffix(rest, " (album version)")
-		rest = strings.TrimSuffix(rest, " (LP version)")
-		if rest == title {
-			break
-		}
-		title = rest
-	}
-
-	title = strings.TrimSpace(title)
-	return title
 }
