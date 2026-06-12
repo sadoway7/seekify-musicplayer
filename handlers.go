@@ -1469,7 +1469,7 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			var ogTitle, ogDesc string
+			var ogTitle, ogDesc, ogImage string
 			host := "http://" + r.Host
 			if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 				host = "https://" + r.Host
@@ -1480,16 +1480,19 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 				p := dbFindPlaylistByID(playlistID)
 				if p != nil {
 					ogTitle = p.Name + " — Music Playlist"
-					ogDesc = fmt.Sprintf("%d tracks. Listen on Music.", len(p.TrackIDs))
+					ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", len(p.TrackIDs))
 				} else {
 					ogTitle = "Music Playlist"
-					ogDesc = "Listen on Music."
+					ogDesc = "Private Music Library."
 				}
 			} else if trackID != "" {
 				mu.RLock()
 				if t, ok := tracks[trackID]; ok {
 					ogTitle = t.Artist + " — " + t.Title
-					ogDesc = "Listen on Music."
+					ogDesc = "Private Music Library."
+					if t.AlbumID != "" {
+						ogImage = host + "/api/cover/" + t.AlbumID + "?size=300"
+					}
 				}
 				mu.RUnlock()
 				if ogTitle == "" {
@@ -1500,25 +1503,32 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 				mu.RLock()
 				if a, ok := albums[albumID]; ok {
 					ogTitle = a.Artist + " — " + a.Name
-					ogDesc = fmt.Sprintf("%d tracks. Listen on Music.", a.TrackCount)
+					ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", a.TrackCount)
+					ogImage = host + "/api/cover/" + albumID + "?size=300"
 				}
 				mu.RUnlock()
 				if ogTitle == "" {
 					ogTitle = "Music"
-					ogDesc = "Listen on Music."
+					ogDesc = "Private Music Library."
 				}
 			} else if artistName != "" {
 				ogTitle = artistName + " — Music"
-				ogDesc = "Listen on Music."
+				ogDesc = "Private Music Library."
 			}
 
 			ogTags := "\n<meta property=\"og:title\" content=\"" + ogTitle + "\">"
 			ogTags += "\n<meta property=\"og:description\" content=\"" + ogDesc + "\">"
 			ogTags += "\n<meta property=\"og:url\" content=\"" + ogURL + "\">"
 			ogTags += "\n<meta property=\"og:type\" content=\"music.playlist\">"
+			if ogImage != "" {
+				ogTags += "\n<meta property=\"og:image\" content=\"" + ogImage + "\">"
+			}
 			ogTags += "\n<meta name=\"twitter:card\" content=\"summary\">"
 			ogTags += "\n<meta name=\"twitter:title\" content=\"" + ogTitle + "\">"
 			ogTags += "\n<meta name=\"twitter:description\" content=\"" + ogDesc + "\">"
+			if ogImage != "" {
+				ogTags += "\n<meta name=\"twitter:image\" content=\"" + ogImage + "\">"
+			}
 
 			htmlStr := string(html)
 			htmlStr = strings.Replace(htmlStr, "</title>", "</title>"+ogTags, 1)
