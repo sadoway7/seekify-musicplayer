@@ -16,6 +16,7 @@ const UI = {
   _navHistory: [],
   _realWaveform: false,
   _waveformRawPeaks: null,
+  _queueDrag: { item: null, spacer: null, dragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 },
 
   rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
@@ -57,7 +58,6 @@ const UI = {
     this._bindMiniPlayer();
     this._bindNowPlaying();
     this._bindSeekBar();
-    this._bindTopProgress();
     this._bindVolumeBar();
     this._bindQueuePanel();
     this._bindModals();
@@ -69,8 +69,8 @@ const UI = {
     this._setupMiniVolume();
     this._bindResize();
     this._bindQueueSwipe();
+    this._bindQueueDrag();
     this._pollDownloadBadge();
-    setInterval(() => this._pollDownloadBadge(), 5000);
   },
 
   _cacheDom() {
@@ -469,6 +469,7 @@ const UI = {
     this.els.miniVolumeFill = wrap.querySelector('.mini-volume-fill');
 
     // Toggle mute
+    let prevVolume = 0.5;
     this.els.miniVolumeBtn.addEventListener('click', () => {
       if (Player.volume > 0) {
         prevVolume = Player.volume;
@@ -620,112 +621,108 @@ const UI = {
 
   _bindQueueDrag() {
     const list = this.els.queueList;
-    let dragItem = null;
-    let spacer = null;
-    let startX = 0;
-    let startY = 0;
-    let dragging = false;
-    let offsetX = 0;
-    let offsetY = 0;
+    const d = this._queueDrag;
+    const self = this;
 
     const startDrag = (item, clientX, clientY) => {
       const rect = item.getBoundingClientRect();
-      offsetX = clientX - rect.left;
-      offsetY = clientY - rect.top;
+      d.offsetX = clientX - rect.left;
+      d.offsetY = clientY - rect.top;
       const itemH = item.offsetHeight;
       const itemW = item.offsetWidth;
 
-      spacer = document.createElement('div');
-      spacer.className = 'queue-drag-spacer';
-      spacer.style.height = itemH + 'px';
-      item.parentNode.insertBefore(spacer, item);
+      d.spacer = document.createElement('div');
+      d.spacer.className = 'queue-drag-spacer';
+      d.spacer.style.height = itemH + 'px';
+      list.insertBefore(d.spacer, item);
 
       item.classList.add('queue-item-dragging');
       item.style.position = 'fixed';
       item.style.left = rect.left + 'px';
-      item.style.top = (clientY - offsetY) + 'px';
+      item.style.top = (clientY - d.offsetY) + 'px';
       item.style.width = itemW + 'px';
       item.style.zIndex = '200';
     };
 
-    const moveDrag = (clientX, clientY) => {
-      dragItem.style.top = (clientY - offsetY) + 'px';
-      const items = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
+    const moveDrag = (clientY) => {
+      d.item.style.top = (clientY - d.offsetY) + 'px';
+      const items = list.querySelectorAll('.queue-item-upnext:not(.queue-item-dragging), .queue-item.active:not(.queue-item-dragging)');
       let inserted = false;
       for (const item of items) {
         const rect = item.getBoundingClientRect();
         const midY = rect.top + rect.height / 2;
         if (clientY < midY) {
-          list.insertBefore(spacer, item);
+          list.insertBefore(d.spacer, item);
           inserted = true;
           break;
         }
       }
       if (!inserted) {
-        list.appendChild(spacer);
+        list.appendChild(d.spacer);
       }
     };
 
     const endDrag = () => {
-      if (!dragItem || !dragging || !spacer) {
-        dragItem = null;
-        dragging = false;
+      if (!d.item || !d.dragging || !d.spacer) {
+        d.item = null;
+        d.dragging = false;
         return;
       }
-      const fromIndex = parseInt(dragItem.dataset.queueIndex);
-      let toIndex = 0;
-      const siblings = list.querySelectorAll('.queue-item:not(.queue-item-dragging)');
-      siblings.forEach(el => {
-        if (el.compareDocumentPosition(spacer) & Node.DOCUMENT_POSITION_FOLLOWING) toIndex++;
+      const fromIndex = parseInt(d.item.dataset.queueIndex);
+      const reorderable = list.querySelectorAll('.queue-item-upnext:not(.queue-item-dragging), .queue-item.active:not(.queue-item-dragging)');
+      let positionAmongReorderable = 0;
+      reorderable.forEach(el => {
+        if (el.compareDocumentPosition(d.spacer) & Node.DOCUMENT_POSITION_FOLLOWING) positionAmongReorderable++;
       });
+      const toIndex = Player.currentIndex + positionAmongReorderable;
 
-      spacer.remove();
-      spacer = null;
+      d.spacer.remove();
+      d.spacer = null;
 
-      dragItem.classList.remove('queue-item-dragging');
-      dragItem.style.position = '';
-      dragItem.style.left = '';
-      dragItem.style.top = '';
-      dragItem.style.width = '';
-      dragItem.style.zIndex = '';
+      d.item.classList.remove('queue-item-dragging');
+      d.item.style.position = '';
+      d.item.style.left = '';
+      d.item.style.top = '';
+      d.item.style.width = '';
+      d.item.style.zIndex = '';
 
       if (fromIndex !== toIndex && !isNaN(fromIndex) && !isNaN(toIndex)) {
         Player.moveInQueue(fromIndex, toIndex);
       } else {
-        this._renderQueue();
+        self._renderQueue();
       }
 
-      dragItem = null;
-      dragging = false;
+      d.item = null;
+      d.dragging = false;
     };
 
     list.addEventListener('touchstart', (e) => {
       const handle = e.target.closest('.queue-item-drag');
       if (!handle) return;
       const item = handle.closest('.queue-item');
-      if (!item) return;
-      dragItem = item;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      dragging = false;
+      if (!item || item.classList.contains('queue-item-history')) return;
+      d.item = item;
+      d.startX = e.touches[0].clientX;
+      d.startY = e.touches[0].clientY;
+      d.dragging = false;
     }, { passive: true });
 
     list.addEventListener('touchmove', (e) => {
-      if (!dragItem) return;
-      const dy = e.touches[0].clientY - startY;
-      if (!dragging) {
+      if (!d.item) return;
+      const dy = e.touches[0].clientY - d.startY;
+      if (!d.dragging) {
         if (Math.abs(dy) < 8) return;
-        dragging = true;
-        startDrag(dragItem, e.touches[0].clientX, e.touches[0].clientY);
+        d.dragging = true;
+        startDrag(d.item, e.touches[0].clientX, e.touches[0].clientY);
       }
-      if (dragging) {
+      if (d.dragging) {
         e.preventDefault();
-        moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+        moveDrag(e.touches[0].clientY);
       }
     }, { passive: false });
 
     list.addEventListener('touchend', () => {
-      if (!dragItem) return;
+      if (!d.item) return;
       endDrag();
     }, { passive: true });
 
@@ -734,21 +731,21 @@ const UI = {
       if (!handle) return;
       e.preventDefault();
       const item = handle.closest('.queue-item');
-      if (!item) return;
-      dragItem = item;
-      startX = e.clientX;
-      startY = e.clientY;
-      dragging = false;
+      if (!item || item.classList.contains('queue-item-history')) return;
+      d.item = item;
+      d.startX = e.clientX;
+      d.startY = e.clientY;
+      d.dragging = false;
 
       const onMouseMove = (e) => {
-        const dy = e.clientY - startY;
-        if (!dragging) {
+        const dy = e.clientY - d.startY;
+        if (!d.dragging) {
           if (Math.abs(dy) < 5) return;
-          dragging = true;
-          startDrag(dragItem, e.clientX, e.clientY);
+          d.dragging = true;
+          startDrag(d.item, e.clientX, e.clientY);
         }
-        if (dragging) {
-          moveDrag(e.clientX, e.clientY);
+        if (d.dragging) {
+          moveDrag(e.clientY);
         }
       };
 
@@ -1063,12 +1060,18 @@ const UI = {
                 }},
                 { label: 'Delete', icon: Icons.trash(), action: async () => {
                   this.hideContextMenu();
+                  if (!confirm('Delete this playlist?')) return;
                   try {
                     await Api.deletePlaylist(id);
                     await Store.refreshPlaylists();
-                    this.renderLibrary();
+                    if (Store.currentView === 'library') {
+                      this.renderLibrary();
+                    } else {
+                      this.navigateBack();
+                    }
                     this.showToast('Playlist deleted');
                   } catch (err) {
+                    console.error('Delete playlist failed:', err);
                     this.showToast('Failed to delete playlist');
                   }
                 }}
@@ -1199,9 +1202,20 @@ const UI = {
   _renderHomeContent() {
     let html = '';
 
-    html += '<div class="home-search-bar" id="home-search-bar">'
+    html += '<div class="home-top-row">'
+      + '<div class="home-search-bar" id="home-search-bar">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input" type="text" placeholder="Search library..." readonly>'
+      + '</div>'
+      + '<div class="home-menu-wrap" id="home-menu-wrap">'
+      + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu"></button>'
+      + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
+      + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Homepage Layout</span></div>'
+      + '<div class="home-menu-divider"></div>'
+      + '<div class="home-menu-item" data-action="rescan">' + Icons.refresh() + '<span>Rescan Library</span></div>'
+      + '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>'
+      + '</div>'
+      + '</div>'
       + '</div>';
 
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
@@ -1377,6 +1391,37 @@ const UI = {
         this.renderSearch();
         const input = this.els.content.querySelector('.search-input');
         if (input) input.focus();
+      });
+    }
+
+    const menuBtn = document.getElementById('home-menu-btn');
+    const menuDropdown = document.getElementById('home-menu-dropdown');
+    if (menuBtn && menuDropdown) {
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menuDropdown.classList.toggle('open');
+      });
+      document.addEventListener('click', () => {
+        menuDropdown.classList.remove('open');
+      });
+      menuDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = e.target.closest('.home-menu-item');
+        if (!item) return;
+        menuDropdown.classList.remove('open');
+        const action = item.dataset.action;
+        if (action === 'rescan') {
+          this._rescanLibrary();
+        } else if (action === 'settings') {
+          Store.currentView = 'settings';
+          Store.viewData = {};
+          document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+          const settingsTab = document.querySelector('[data-tab="settings"]');
+          if (settingsTab) settingsTab.classList.add('active');
+          this.renderSettings();
+        } else if (action === 'homepage-layout') {
+          this._openHomepageLayoutModal();
+        }
       });
     }
   },
@@ -1688,7 +1733,7 @@ const UI = {
 
   _buildMosaic() {
     const albums = Store.library.albums
-      .filter(a => a.HasCover && a.name && a.name !== 'Unknown')
+      .filter(a => a.hasCover && a.name && a.name !== 'Unknown')
       .sort(() => Math.random() - 0.5)
       .slice(0, 12);
     if (albums.length === 0) return '<div class="detail-hero-fallback-icon">' + Icons.music() + '</div>';
@@ -1985,7 +2030,7 @@ const UI = {
   _showReviewTrackMenu(trackId, triggerEl) {
     const options = [
       { label: 'Edit Metadata', icon: Icons.edit(), action: () => ReviewUI.showEditMetaModal(trackId) },
-      { label: 'Delete File', icon: Icons.trash(), action: () => ReviewUI.deleteTrack(trackId), danger: true },
+      { label: 'Delete File', icon: Icons.trash(), action: () => ReviewUI.deleteTrack(trackId, false), danger: true },
       { label: 'Does Not Need Review', icon: Icons.check(), action: () => { ReviewUI.markOk(trackId).then(() => this.renderNeedsReview()); } }
     ];
     this.showContextMenu(options, triggerEl);
@@ -1996,7 +2041,7 @@ const UI = {
     if (!this._finderType) this._finderType = 'artist';
     if (!this._finderQuery) this._finderQuery = '';
     if (!this._finderResults) this._finderResults = null;
-    if (!this._finderHistory) this._finderHistory = [];
+    if (!this._finderHistory) this._finderHistory = JSON.parse(localStorage.getItem('finderHistory') || '[]');
     if (!this._finderTab) this._finderTab = 'search';
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
@@ -2042,6 +2087,7 @@ const UI = {
         this._finderHistory.slice(0, 5).forEach(h => {
           html += '<button class="finder-history-chip" data-history="' + this._esc(h) + '">' + this._esc(h) + '</button>';
         });
+        html += '</div>';
       }
 
       html += '<div id="finder-results"></div>';
@@ -2441,7 +2487,7 @@ const UI = {
   },
 
   _updateDownloadBadge(counts) {
-    const tab = document.querySelector('[data-tab="downloads"]');
+    const tab = document.querySelector('[data-tab="finder"]');
     if (!tab) return;
     const existing = tab.querySelector('.nav-badge');
     const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
@@ -2462,6 +2508,13 @@ const UI = {
   _pollDownloadBadge() {
     Api.getQueueCounts().then(counts => {
       this._updateDownloadBadge(counts);
+      const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
+      if (active > 0 && !this._downloadPollInterval) {
+        this._downloadPollInterval = setInterval(() => this._pollDownloadBadge(), 5000);
+      } else if (active === 0 && this._downloadPollInterval) {
+        clearInterval(this._downloadPollInterval);
+        this._downloadPollInterval = null;
+      }
     }).catch(() => {});
   },
 
@@ -2478,9 +2531,7 @@ const UI = {
     container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
 
     try {
-      if (!this._downloadJobs) {
-        try { this._downloadJobs = await Api.getQueue(); } catch(e) { this._downloadJobs = []; }
-      }
+      try { this._downloadJobs = await Api.getQueue(); } catch(e) { this._downloadJobs = []; }
       let results;
       if (this._finderType === 'youtube') {
         results = await Api.finderYouTubeSearch(this._finderQuery);
@@ -2498,10 +2549,11 @@ const UI = {
 
   _addSearchHistory(q) {
     if (!q) return;
-    if (!this._finderHistory) this._finderHistory = [];
+    if (!this._finderHistory) this._finderHistory = JSON.parse(localStorage.getItem('finderHistory') || '[]');
     this._finderHistory = this._finderHistory.filter(h => h !== q);
     this._finderHistory.unshift(q);
     if (this._finderHistory.length > 20) this._finderHistory = this._finderHistory.slice(0, 20);
+    localStorage.setItem('finderHistory', JSON.stringify(this._finderHistory));
   },
 
   _renderFinderResultsList(container, results) {
@@ -2653,6 +2705,10 @@ const UI = {
   },
 
   async _doPreview(btn) {
+    if (this._previewAudio) {
+      this._previewAudio.pause();
+      this._previewAudio = null;
+    }
     const videoId = btn.dataset.preview;
     const original = btn.textContent;
     btn.textContent = '...';
@@ -2663,6 +2719,7 @@ const UI = {
       if (!streamUrl) { this._showToast('Preview unavailable'); return; }
       const audio = new Audio(streamUrl);
       audio.volume = 0.3;
+      this._previewAudio = audio;
       audio.play().catch(() => this._showToast('Preview failed'));
     } catch (e) {
       this._showToast('Preview failed');
@@ -3017,15 +3074,9 @@ const UI = {
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
 
+    // Section 1: Playback
     html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.music() + ' Library</div>'
-      + '<div class="settings-section-desc">Scan your music directories for new or removed files.</div>'
-      + '<div class="settings-actions">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
-      + '</div></div>';
-
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.waveform() + ' Now Playing</div>'
+      + '<div class="settings-section-title">' + Icons.waveform() + ' Playback</div>'
       + '<div class="settings-section-desc">Customize the waveform style shown during playback.</div>'
       + '<div class="settings-field"><label>Waveform Style</label>'
       + '<select id="setting-waveform-style" class="settings-select">'
@@ -3040,9 +3091,10 @@ const UI = {
       + '<button class="settings-btn settings-btn-primary" id="btn-save-waveform-style">' + Icons.check() + '<span>Save</span></button>'
       + '</div></div>';
 
+    // Section 2: Downloads
     html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.search() + ' Ripper Settings</div>'
-      + '<div class="settings-section-desc">Configure how music is downloaded and saved.</div>'
+      + '<div class="settings-section-title">' + Icons.download() + ' Downloads</div>'
+      + '<div class="settings-section-desc">Configure audio format, quality, and download behaviour.</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
       + '<div class="settings-form-grid">'
       + '<div class="settings-field"><label>Audio Format</label>'
@@ -3070,12 +3122,6 @@ const UI = {
       + '<option value="128k">128kbps</option>'
       + '<option value="96k">96kbps</option>'
       + '</select></div>'
-      + '<div class="settings-field"><label>Max Concurrent Downloads</label>'
-      + '<select id="setting-download-concurrent" class="settings-select">'
-      + '<option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option>'
-      + '</select></div>'
-      + '<div class="settings-field"><label>Album Subdirectory</label>'
-      + '<input type="text" id="setting-download-album-subdir" class="settings-input" placeholder="Albums"></div>'
       + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
       + '<input type="text" id="setting-download-min-bitrate" class="settings-input" placeholder="0 (no minimum)"></div>'
       + '</div>'
@@ -3084,50 +3130,37 @@ const UI = {
       + '<input type="checkbox" id="setting-download-convert-to-flac" class="settings-toggle"></div>'
       + '<div class="settings-field settings-field-toggle"><label>Organise by Artist</label>'
       + '<input type="checkbox" id="setting-download-organise-by-artist" class="settings-toggle"></div>'
-      + '</div>'
-      + '<div class="settings-actions" style="margin-top:12px">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Settings</span></button>'
-      + '</div></div>';
-
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.download() + ' Downloadable Tracks</div>'
-      + '<div class="settings-section-desc">Control which tracks users can download to their device. All tracks are downloadable by default.</div>'
-      + '<div class="settings-toggles-row">'
       + '<div class="settings-field settings-field-toggle"><label>Enable Downloads</label>'
       + '<input type="checkbox" id="setting-downloads-enabled" class="settings-toggle"></div>'
       + '</div>'
-      + '<div class="settings-actions" style="margin-top:8px">'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Settings</span></button>'
       + '<button class="settings-btn" id="btn-toggle-download-list">' + Icons.library() + '<span>Manage Per-Track</span></button>'
       + '</div>'
       + '<div id="download-list"></div>'
-      + '</div>';
-
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.download() + ' Bulk Import</div>'
-      + '<div class="settings-section-desc">Paste a list of tracks (one per line, "Artist - Title") to download.</div>'
-      + '<textarea id="bulk-import-input" class="settings-textarea" rows="6" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion&#10;Tame Impala - Let It Happen"></textarea>'
+      + '<div class="settings-subsection-label" style="margin-top:16px">Bulk Import</div>'
+      + '<div class="settings-section-desc">Paste tracks to download (one per line, "Artist - Title").</div>'
+      + '<textarea id="bulk-import-input" class="settings-textarea" rows="4" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion"></textarea>'
       + '<div class="settings-actions" style="margin-top:8px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-bulk-import">' + Icons.download() + '<span>Import & Download All</span></button>'
       + '</div></div>';
 
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.database() + ' MusicBrainz Metadata</div>'
-      + '<div class="settings-section-desc">Match tracks against MusicBrainz to fix tags and fetch cover art.</div>'
-      + '<div id="metadata-status" class="settings-status"></div>'
-      + '<div class="settings-actions">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
-      + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Pending</span></button>'
-      + '<button class="settings-btn" id="btn-meta-history">' + Icons.search() + '<span>Match History</span></button>'
-      + '</div></div>';
-
+    // Section 3: Library Health (metadata + review combined)
     const rc = Store.reviewCounts || {};
     const total = (rc.unchecked || 0) + (rc.needs_review || 0) + (rc.reviewed_ok || 0);
     const reviewedPct = total > 0 ? Math.round(((rc.reviewed_ok || 0) / total) * 100) : 0;
     html += '<div class="settings-section">'
       + '<div class="settings-section-title" style="color:#ff6b6b">'
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-      + ' Track Review</div>'
-      + '<div class="settings-section-desc">Automatically detect tracks with missing data, duplicates, and suspicious files.</div>'
+      + ' Library Health</div>'
+      + '<div class="settings-section-desc">Scan MusicBrainz for metadata, review flagged tracks, and fix problems.</div>'
+      + '<div class="settings-actions" style="margin-bottom:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
+      + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Pending</span></button>'
+      + '<button class="settings-btn" id="btn-meta-history">' + Icons.search() + '<span>Match History</span></button>'
+      + '</div>'
+      + '<div id="metadata-status" class="settings-status"></div>'
+      + '<div class="settings-subsection-label">Track Review</div>'
       + '<div class="review-settings-status">'
       + '<span style="color:rgba(255,255,255,.4)">Unchecked: <strong style="color:#fff">' + (rc.unchecked || 0) + '</strong></span>'
       + '<span style="color:#ff6b6b">Needs Review: <strong>' + (rc.needs_review || 0) + '</strong></span>'
@@ -3138,54 +3171,65 @@ const UI = {
       + '</div>'
       + '<div id="review-progress-text" class="review-progress-text"></div>'
       + '<div id="review-live-log" class="review-live-log"></div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Enable Review Worker</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-enabled">'
+      + '<div class="settings-toggles-row" style="margin-top:12px">'
+      + '<div class="settings-field settings-field-toggle"><label>Enable Review Worker</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-enabled"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Recheck Interval (hours)</label>'
+      + '<input type="text" id="setting-review-recheck-hours" class="settings-input" style="width:60px;display:inline-block;margin-left:6px" placeholder="24"></div>'
       + '</div>'
-      + '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.4);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.05em">Metadata Checks</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Missing Title</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-title">'
+      + '<div class="settings-subsection-label">Metadata Checks</div>'
+      + '<div class="settings-checks-grid">'
+      + '<div class="settings-field settings-field-toggle"><label>Missing Title</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-title"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Missing Artist</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-artist"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Missing Album</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-album"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Missing Genre</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-genre"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Missing Cover Art</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-no-cover"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Filename as Title</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-filename-derived"></div>'
       + '</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Missing Artist</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-artist">'
+      + '<div class="settings-subsection-label">Quality Checks</div>'
+      + '<div class="settings-checks-grid">'
+      + '<div class="settings-field settings-field-toggle"><label>Suspicious Naming</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-suspicious"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Duration Anomalies</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duration"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Potential Duplicates</label>'
+      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duplicates"></div>'
       + '</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Missing Album</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-album">'
-      + '</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Missing Genre</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-genre">'
-      + '</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Missing Cover Art</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-no-cover">'
-      + '</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Filename as Title</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-filename-derived">'
-      + '</div>'
-      + '<div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.4);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.05em">Quality Checks</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Suspicious Naming / Keywords</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-suspicious">'
-      + '</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Duration Anomalies</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duration">'
-      + '</div>'
-      + '<div class="settings-field settings-field-toggle">'
-      + '<label>Potential Duplicates</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duplicates">'
-      + '</div>'
-      + '<div class="settings-actions">'
+      + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-review-recheck">' + Icons.refresh() + '<span>Recheck All Tracks</span></button>'
       + '<button class="settings-btn" id="btn-review-copy-log">' + Icons.share() + '<span>Copy Log</span></button>'
       + '</div>'
       + '</div>';
 
+    // Section 4: System
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.settings() + ' System</div>'
+      + '<div class="settings-section-desc">Manage library scanning and background workers.</div>'
+      + '<div class="settings-actions" style="margin-bottom:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
+      + '</div>'
+      + '<div class="settings-subsection-label">Background Workers</div>'
+      + '<div class="settings-checks-grid">'
+      + '<div class="settings-field settings-field-toggle"><label>File Watcher</label>'
+      + '<input type="checkbox" id="setting-watcher-enabled" class="settings-toggle"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Cover Art Fetch</label>'
+      + '<input type="checkbox" id="setting-cover-fetch-enabled" class="settings-toggle"></div>'
+      + '<div class="settings-field settings-field-toggle"><label>Artist Art Fetch</label>'
+      + '<input type="checkbox" id="setting-artist-art-fetch-enabled" class="settings-toggle"></div>'
+      + '</div>'
+      + '<div class="settings-field" style="max-width:200px"><label>Watcher Interval (seconds)</label>'
+      + '<input type="text" id="setting-watcher-interval" class="settings-input" placeholder="30"></div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Worker Settings</span></button>'
+      + '</div></div>';
+
+    // Section 5: About
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.settings() + ' About</div>'
       + '<div class="settings-about">'
@@ -3213,6 +3257,11 @@ const UI = {
     const saveSettingsBtn = document.getElementById('btn-save-finder-settings');
     if (saveSettingsBtn) {
       saveSettingsBtn.addEventListener('click', () => this._saveFinderSettings());
+    }
+
+    const saveWorkerBtn = document.getElementById('btn-save-worker-settings');
+    if (saveWorkerBtn) {
+      saveWorkerBtn.addEventListener('click', () => this._saveWorkerSettings());
     }
 
     const bulkImportBtn = document.getElementById('btn-bulk-import');
@@ -3244,18 +3293,14 @@ const UI = {
     try {
       const settings = await Api.getSettings();
       const fmt = document.getElementById('setting-download-format');
-      const conc = document.getElementById('setting-download-concurrent');
       const flac = document.getElementById('setting-download-convert-to-flac');
       const org = document.getElementById('setting-download-organise-by-artist');
-      const subdir = document.getElementById('setting-download-album-subdir');
       const mp3 = document.getElementById('setting-mp3-bitrate');
       const opus = document.getElementById('setting-opus-bitrate');
       const minBr = document.getElementById('setting-download-min-bitrate');
       if (fmt && settings.download_format) fmt.value = settings.download_format;
-      if (conc && settings.download_concurrent) conc.value = settings.download_concurrent;
       if (flac) flac.checked = settings.download_convert_to_flac !== 'false';
       if (org) org.checked = settings.download_organise_by_artist !== 'false';
-      if (subdir && settings.download_album_subdir) subdir.value = settings.download_album_subdir;
       if (mp3 && settings.mp3_bitrate) mp3.value = settings.mp3_bitrate;
       if (opus && settings.opus_bitrate) opus.value = settings.opus_bitrate;
       if (minBr && settings.download_min_bitrate) minBr.value = settings.download_min_bitrate;
@@ -3265,18 +3310,23 @@ const UI = {
       this._updateQualityVisibility();
       if (fmt) fmt.addEventListener('change', () => this._updateQualityVisibility());
 
+      // Worker settings
+      const watcherEnabled = document.getElementById('setting-watcher-enabled');
+      const watcherInterval = document.getElementById('setting-watcher-interval');
+      const coverFetch = document.getElementById('setting-cover-fetch-enabled');
+      const artistArt = document.getElementById('setting-artist-art-fetch-enabled');
+      if (watcherEnabled) watcherEnabled.checked = settings.watcher_enabled !== 'false';
+      if (watcherInterval && settings.watcher_interval) watcherInterval.value = settings.watcher_interval;
+      if (coverFetch) coverFetch.checked = settings.cover_fetch_enabled !== 'false';
+      if (artistArt) artistArt.checked = settings.artist_art_fetch_enabled !== 'false';
+
+      // Review settings
       const revEnabled = document.getElementById('setting-review-enabled');
-      const revNaming = document.getElementById('setting-review-check-naming');
-      const revDupes = document.getElementById('setting-review-check-duplicates');
-      const revDur = document.getElementById('setting-review-check-duration');
+      const revRecheckHours = document.getElementById('setting-review-recheck-hours');
       if (revEnabled) revEnabled.checked = settings.review_enabled !== 'false';
-      if (revNaming) revNaming.checked = settings.review_check_naming !== 'false';
-      if (revDupes) revDupes.checked = settings.review_check_duplicates !== 'false';
-      if (revDur) revDur.checked = settings.review_check_duration !== 'false';
+      if (revRecheckHours && settings.review_recheck_hours) revRecheckHours.value = settings.review_recheck_hours;
       if (revEnabled) revEnabled.addEventListener('change', () => this._saveReviewSettings());
-      if (revNaming) revNaming.addEventListener('change', () => this._saveReviewSettings());
-      if (revDupes) revDupes.addEventListener('change', () => this._saveReviewSettings());
-      if (revDur) revDur.addEventListener('change', () => this._saveReviewSettings());
+      if (revRecheckHours) revRecheckHours.addEventListener('change', () => this._saveReviewSettings());
 
       const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
       flagKeys.forEach(key => {
@@ -3446,10 +3496,8 @@ const UI = {
 
   async _saveFinderSettings() {
     const fmt = document.getElementById('setting-download-format');
-    const conc = document.getElementById('setting-download-concurrent');
     const flac = document.getElementById('setting-download-convert-to-flac');
     const org = document.getElementById('setting-download-organise-by-artist');
-    const subdir = document.getElementById('setting-download-album-subdir');
     const mp3 = document.getElementById('setting-mp3-bitrate');
     const opus = document.getElementById('setting-opus-bitrate');
     const minBr = document.getElementById('setting-download-min-bitrate');
@@ -3457,10 +3505,8 @@ const UI = {
     try {
       await Api.saveSettings({
         download_format: fmt ? fmt.value : 'flac',
-        download_concurrent: conc ? conc.value : '3',
         download_convert_to_flac: flac ? String(flac.checked) : 'true',
         download_organise_by_artist: org ? String(org.checked) : 'true',
-        download_album_subdir: subdir ? subdir.value : 'Albums',
         mp3_bitrate: mp3 ? mp3.value : 'v2',
         opus_bitrate: opus ? opus.value : '320k',
         download_min_bitrate: minBr ? minBr.value : '0',
@@ -3473,16 +3519,30 @@ const UI = {
     }
   },
 
+  async _saveWorkerSettings() {
+    const watcherEnabled = document.getElementById('setting-watcher-enabled');
+    const watcherInterval = document.getElementById('setting-watcher-interval');
+    const coverFetch = document.getElementById('setting-cover-fetch-enabled');
+    const artistArt = document.getElementById('setting-artist-art-fetch-enabled');
+    try {
+      await Api.saveSettings({
+        watcher_enabled: watcherEnabled ? String(watcherEnabled.checked) : 'true',
+        watcher_interval: watcherInterval ? watcherInterval.value : '30',
+        cover_fetch_enabled: coverFetch ? String(coverFetch.checked) : 'true',
+        artist_art_fetch_enabled: artistArt ? String(artistArt.checked) : 'true'
+      });
+      this._showToast('Worker settings saved');
+    } catch (e) {
+      this._showToast('Failed to save worker settings');
+    }
+  },
+
   async _saveReviewSettings() {
     const revEnabled = document.getElementById('setting-review-enabled');
-    const revNaming = document.getElementById('setting-review-check-naming');
-    const revDupes = document.getElementById('setting-review-check-duplicates');
-    const revDur = document.getElementById('setting-review-check-duration');
+    const revRecheckHours = document.getElementById('setting-review-recheck-hours');
     const data = {
       review_enabled: revEnabled ? String(revEnabled.checked) : 'true',
-      review_check_naming: revNaming ? String(revNaming.checked) : 'true',
-      review_check_duplicates: revDupes ? String(revDupes.checked) : 'true',
-      review_check_duration: revDur ? String(revDur.checked) : 'true'
+      review_recheck_hours: revRecheckHours ? revRecheckHours.value : '24'
     };
     const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
     flagKeys.forEach(key => {
@@ -4272,6 +4332,16 @@ const UI = {
     }
   },
 
+  _openHomepageLayoutModal() {
+    const modal = document.getElementById('home-layout-modal');
+    const closeBtn = document.getElementById('home-layout-close');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    const close = () => { modal.classList.add('hidden'); };
+    closeBtn.onclick = close;
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  },
+
   async _rescanLibrary() {
     const btn = document.getElementById('btn-rescan');
     if (!btn) return;
@@ -4786,7 +4856,7 @@ const UI = {
 
   updateSeekBar() {
     const progress = Player.getProgress();
-    if (this.seeking || this.topSeeking) return;
+    if (this.seeking) return;
     const fraction = progress.fraction;
     this._waveformProgress = fraction;
     this._paintWaveform(fraction);
@@ -5142,7 +5212,7 @@ const UI = {
       const isCurrent = i === Player.currentIndex;
       const section = i < Player.currentIndex ? 'history' : 'upnext';
       return '<div class="queue-item queue-item-' + section + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
-        + '<div class="queue-item-drag" aria-label="Drag to reorder">' + Icons.grip() + '</div>'
+        + (section !== 'history' ? '<div class="queue-item-drag" aria-label="Drag to reorder">' + Icons.grip() + '</div>' : '')
         + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
         + '<div class="queue-item-info">'
         + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
@@ -5170,8 +5240,6 @@ const UI = {
         wrapper.classList.toggle('open');
       });
     }
-
-    this._bindQueueDrag();
   },
 
   showContextMenu(options, triggerEl) {
@@ -5278,7 +5346,8 @@ const UI = {
         if (!durationEl) {
           const dur = document.createElement('div');
           dur.className = 'track-duration';
-          dur.textContent = this._formatTime(Store.getTrack(current.id) ? 0 : 0);
+          const track = Store.getTrack(row.dataset.trackId);
+          dur.textContent = this._formatTime(track ? track.duration : 0);
           row.appendChild(dur);
         }
       }
@@ -5419,9 +5488,10 @@ const UI = {
         try {
           await Api.deletePlaylist(playlistId);
           await Store.refreshPlaylists();
-          this.renderLibrary();
+          this.navigateBack();
           this.showToast('Playlist deleted');
         } catch (err) {
+          console.error('Delete playlist failed:', err);
           this.showToast('Failed to delete playlist');
         }
       }}
@@ -5700,18 +5770,18 @@ const UI = {
       const playlistId = Store.viewData.playlistId;
       if (!playlistId) return;
       if (!confirm('Delete this playlist? This cannot be undone.')) return;
-      Api.deletePlaylist(playlistId).then(() => {
-        Store.refreshPlaylists();
+      Api.deletePlaylist(playlistId).then(async () => {
+        await Store.refreshPlaylists();
         this.navigateBack();
         this.showToast('Playlist deleted');
-      }).catch(() => {
+      }).catch((err) => {
+        console.error('Delete playlist failed:', err);
         this.showToast('Failed to delete playlist');
       });
       return;
     }
     if (action === 'share-playlist') {
-      const btn = e.target.closest('[data-playlist-id]');
-      const pid = btn ? btn.dataset.playlistId : (Store.viewData.playlistId || '');
+      const pid = Store.viewData.playlistId || '';
       const playlist = Store.getPlaylist(pid);
       const shareTitle = playlist ? playlist.name : 'Playlist';
       const shareUrl = window.location.origin + '/?playlist=' + encodeURIComponent(pid);

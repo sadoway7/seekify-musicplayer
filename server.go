@@ -159,6 +159,7 @@ func main() {
 	go downloadWatchdog()
 	seedMissingReviewTracks()
 	cleanupOldReviewFlags()
+	cleanupOrphanedReviews()
 	go startReviewScheduler()
 
 	mux := http.NewServeMux()

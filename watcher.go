@@ -34,8 +34,9 @@ func countAudioFiles(dir string) int {
 	return count
 }
 
-// startWatcher polls music directories every 30 seconds.
-// If the file count changes, it triggers a targeted rescan.
+// startWatcher polls music directories for changes.
+// The interval is configurable via the "watcher_interval" setting (default 30s).
+// It can be disabled entirely via the "watcher_enabled" setting.
 func startWatcher() {
 	// Record initial counts after startup scan
 	watcherMu.Lock()
@@ -48,12 +49,18 @@ func startWatcher() {
 	}
 	watcherMu.Unlock()
 
-	log.Printf("[watcher] Monitoring music directories for changes (30s interval)")
+	for {
+		if !getSettingBool("watcher_enabled", true) {
+			time.Sleep(5 * time.Minute)
+			continue
+		}
 
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+		interval := getSettingInt("watcher_interval", 30)
+		if interval < 5 {
+			interval = 5
+		}
+		time.Sleep(time.Duration(interval) * time.Second)
 
-	for range ticker.C {
 		checkAndRescan()
 	}
 }
@@ -83,6 +90,13 @@ func checkAndRescan() {
 		previous := lastFileCounts[d.dir]
 		watcherMu.Unlock()
 
+		if current == previous {
+			continue
+		}
+
+		// Debounce: wait 5s and re-check to filter transient changes
+		time.Sleep(5 * time.Second)
+		current = countAudioFiles(d.dir)
 		if current == previous {
 			continue
 		}

@@ -91,6 +91,12 @@ func dbGetTracksByReviewStatus(status string, limit int) []string {
 	for rows.Next() {
 		var id string
 		rows.Scan(&id)
+		mu.RLock()
+		_, exists := tracks[id]
+		mu.RUnlock()
+		if !exists {
+			continue
+		}
 		ids = append(ids, id)
 	}
 	return ids
@@ -227,14 +233,56 @@ func cleanupOldReviewFlags() {
 	}
 }
 
-func dbInsertUncheckedReviews(newTracks map[string]*Track) {
-	for id := range newTracks {
-		var count int
-		db.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE track_id = ?", id).Scan(&count)
-		if count == 0 {
+func cleanupOrphanedReviews() {
+	mu.RLock()
+	existingIDs := make([]string, 0, len(tracks))
+	for id := range tracks {
+		existingIDs = append(existingIDs, id)
+	}
+	mu.RUnlock()
+
+	count := 0
+	for _, id := range existingIDs {
+		var exists int
+		db.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE track_id = ?", id).Scan(&exists)
+		if exists == 0 {
 			dbSetReviewStatus(id, "unchecked", "[]", "")
+			count++
 		}
 	}
+
+	result, _ := db.Exec("DELETE FROM track_reviews WHERE track_id NOT IN (SELECT id FROM tracks)")
+	orphans, _ := result.RowsAffected()
+
+	if count > 0 || orphans > 0 {
+		log.Printf("[review] Seeded %d new review rows, cleaned up %d orphaned review rows", count, orphans)
+	}
+}
+
+func dbInsertUncheckedReviews(newTracks map[string]*Track) {
+	if len(newTracks) == 0 {
+		return
+	}
+	rows, err := db.Query("SELECT track_id FROM track_reviews")
+	if err != nil {
+		return
+	}
+	existing := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			existing[id] = true
+		}
+	}
+	rows.Close()
+
+	tx, _ := db.Begin()
+	for id := range newTracks {
+		if !existing[id] {
+			tx.Exec(`INSERT OR IGNORE INTO track_reviews (track_id, status, flags, checked_at, reviewer) VALUES (?, 'unchecked', '[]', datetime('now'), '')`, id)
+		}
+	}
+	tx.Commit()
 }
 
 func dbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
@@ -736,7 +784,7 @@ func runReviewBatch() bool {
 
 	}
 
-	if getSettingBool("review_check_duplicates", true) {
+	if getSettingBool("review_flag_duplicates", true) {
 		reviewLog.Lock()
 		reviewLog.Entries = append(reviewLog.Entries, "--- Checking duplicates ---")
 		reviewLog.Unlock()
@@ -756,7 +804,7 @@ func runReviewBatch() bool {
 	reviewProgress.Active = false
 	reviewProgress.Unlock()
 
-	return true
+	return len(toCheck) > 0
 }
 
 func uniqueFlags(flags []string) []string {

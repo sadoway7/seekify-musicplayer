@@ -491,8 +491,38 @@ func dbUpsertTrack(t *Track) {
 		boolToInt(t.HasCover), t.ModTime, boolToInt(t.HasMetadata))
 }
 
+func dbUpsertTrackTx(tx *sql.Tx, t *Track) {
+	tx.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			title=CASE WHEN tracks.has_metadata = 1 THEN tracks.title ELSE excluded.title END,
+			artist=CASE WHEN tracks.has_metadata = 1 THEN tracks.artist ELSE excluded.artist END,
+			album=CASE WHEN tracks.has_metadata = 1 THEN tracks.album ELSE excluded.album END,
+			album_artist=CASE WHEN tracks.has_metadata = 1 THEN tracks.album_artist ELSE excluded.album_artist END,
+			album_id=CASE WHEN tracks.has_metadata = 1 THEN tracks.album_id ELSE excluded.album_id END,
+			track_number=CASE WHEN tracks.has_metadata = 1 THEN tracks.track_number ELSE excluded.track_number END,
+			year=CASE WHEN tracks.has_metadata = 1 THEN tracks.year ELSE excluded.year END,
+			genre=CASE WHEN tracks.has_metadata = 1 THEN tracks.genre ELSE excluded.genre END,
+			duration=CASE WHEN tracks.duration > 0 THEN tracks.duration ELSE excluded.duration END,
+			has_cover=excluded.has_cover,
+			mod_time=excluded.mod_time,
+			has_metadata=CASE WHEN tracks.has_metadata = 1 THEN 1 ELSE excluded.has_metadata END`,
+		t.ID, t.Title, t.Artist, t.Album, t.AlbumArtist, t.AlbumID,
+		t.TrackNumber, t.Year, t.Genre, t.Duration, t.FilePath,
+		boolToInt(t.HasCover), t.ModTime, boolToInt(t.HasMetadata))
+}
+
 func dbUpsertAlbum(a *Album) {
 	db.Exec(`INSERT INTO albums (id, name, artist, track_count, year, has_cover)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name=excluded.name, artist=excluded.artist,
+			track_count=excluded.track_count, year=excluded.year, has_cover=excluded.has_cover`,
+		a.ID, a.Name, a.Artist, a.TrackCount, a.Year, boolToInt(a.HasCover))
+}
+
+func dbUpsertAlbumTx(tx *sql.Tx, a *Album) {
+	tx.Exec(`INSERT INTO albums (id, name, artist, track_count, year, has_cover)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name=excluded.name, artist=excluded.artist,
@@ -522,6 +552,18 @@ func dbLoadTracks() map[string]*Track {
 	}
 	defer rows.Close()
 
+	disabled := map[string]bool{}
+	dRows, err := db.Query("SELECT track_id FROM downloads WHERE disabled = 1")
+	if err == nil {
+		for dRows.Next() {
+			var id string
+			if dRows.Scan(&id) == nil {
+				disabled[id] = true
+			}
+		}
+		dRows.Close()
+	}
+
 	result := make(map[string]*Track)
 	for rows.Next() {
 		t := &Track{}
@@ -531,7 +573,7 @@ func dbLoadTracks() map[string]*Track {
 			&hasCover, &t.ModTime, &hasMetadata)
 		t.HasCover = hasCover == 1
 		t.HasMetadata = hasMetadata == 1
-		t.DownloadEnabled = dbIsDownloadable(t.ID)
+		t.DownloadEnabled = !disabled[t.ID]
 		result[t.ID] = t
 	}
 	return result

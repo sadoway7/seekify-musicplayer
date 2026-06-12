@@ -200,7 +200,28 @@ func fetchAndCacheCover(albumID, artist, album string) bool {
 	return true
 }
 
+var (
+	coverFetchMu  sync.Mutex
+	coverFetching bool
+)
+
 func fetchMissingCovers() {
+	if !getSettingBool("cover_fetch_enabled", true) {
+		return
+	}
+	coverFetchMu.Lock()
+	if coverFetching {
+		coverFetchMu.Unlock()
+		return
+	}
+	coverFetching = true
+	coverFetchMu.Unlock()
+	defer func() {
+		coverFetchMu.Lock()
+		coverFetching = false
+		coverFetchMu.Unlock()
+	}()
+
 	mu.RLock()
 	type albumInfo struct {
 		id     string
@@ -1031,11 +1052,14 @@ func fetchArtistImage(artistName string) bool {
 	os.MkdirAll(artDir, 0755)
 
 	artFile := filepath.Join(artDir, key+".jpg")
-	if data, err := os.ReadFile(artFile); err == nil && len(data) > 0 {
-		artistArtMu.Lock()
-		artistArtCache[key] = data
-		artistArtMu.Unlock()
-		return true
+	if data, err := os.ReadFile(artFile); err == nil {
+		if len(data) > 0 {
+			artistArtMu.Lock()
+			artistArtCache[key] = data
+			artistArtMu.Unlock()
+			return true
+		}
+		return false
 	}
 
 	// Search Deezer for artist image (free, no API key)
@@ -1069,7 +1093,7 @@ func fetchArtistImage(artistName string) bool {
 	}
 
 	if len(deezerResp.Data) == 0 || deezerResp.Data[0].PictureBig == "" {
-		log.Printf("[artist-art] No Deezer result for %q", artistName)
+		os.WriteFile(artFile, []byte{}, 0644)
 		return false
 	}
 
@@ -1105,7 +1129,28 @@ func fetchArtistImage(artistName string) bool {
 	return true
 }
 
+var (
+	artFetchMu  sync.Mutex
+	artFetching bool
+)
+
 func fetchMissingArtistArt() {
+	if !getSettingBool("artist_art_fetch_enabled", true) {
+		return
+	}
+	artFetchMu.Lock()
+	if artFetching {
+		artFetchMu.Unlock()
+		return
+	}
+	artFetching = true
+	artFetchMu.Unlock()
+	defer func() {
+		artFetchMu.Lock()
+		artFetching = false
+		artFetchMu.Unlock()
+	}()
+
 	mu.RLock()
 	type artistInfo struct {
 		name string
@@ -1171,9 +1216,7 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
-	mu.RLock()
-	libraryTracks := tracks
-	mu.RUnlock()
+	libLookup := buildLibraryLookup()
 
 	seen := map[string]bool{}
 	for _, rec := range searchResp.Recordings {
@@ -1235,13 +1278,7 @@ func finderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 			}
 		}
 
-		inLibrary := false
-		for _, t := range libraryTracks {
-			if strings.EqualFold(t.Artist, artistName) && strings.EqualFold(t.Title, rec.Title) {
-				inLibrary = true
-				break
-			}
-		}
+		inLibrary := isInLibrary(libLookup, artistName, rec.Title)
 
 		results = append(results, FinderRecording{
 			ID:        rec.ID,
@@ -1367,9 +1404,7 @@ func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
-	mu.RLock()
-	libraryAlbums := albums
-	mu.RUnlock()
+	albumLookup := buildAlbumLookup()
 
 	seen := map[string]bool{}
 	for _, rel := range searchResp.Releases {
@@ -1409,13 +1444,7 @@ func finderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 			format = rel.Media[0].Format
 		}
 
-		inLibrary := false
-		for _, a := range libraryAlbums {
-			if strings.EqualFold(a.Artist, artistName) && strings.EqualFold(a.Name, rel.Title) {
-				inLibrary = true
-				break
-			}
-		}
+		inLibrary := albumLookup[strings.ToLower(artistName+"|"+rel.Title)]
 
 		results = append(results, FinderRelease{
 			ID:         rel.ID,
@@ -1557,6 +1586,8 @@ func finderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
 		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
+	libLookup := buildLibraryLookup()
+
 	for _, m := range resp.Media {
 		for _, t := range m.Tracks {
 			artist := ""
@@ -1569,7 +1600,7 @@ func finderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
 				Length:    t.Length / 1000,
 				Artist:    artist,
 				Recording: t.Recording.ID,
-				InLibrary: checkDuplicateInLibrary(artist, t.Title),
+				InLibrary: isInLibrary(libLookup, artist, t.Title),
 			})
 		}
 	}
@@ -1638,6 +1669,7 @@ type mbRecording struct {
 
 func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 	seen := map[string]*ArtistTrack{}
+	libLookup := buildLibraryLookup()
 
 	offset := 0
 	for {
@@ -1708,7 +1740,7 @@ func finderArtistTracks(mbid, artistName string) []ArtistTrack {
 				Artist:    artist,
 				Length:    length,
 				Count:     1,
-				InLibrary: checkDuplicateInLibrary(artist, title),
+				InLibrary: isInLibrary(libLookup, artist, title),
 			}
 			}
 		}

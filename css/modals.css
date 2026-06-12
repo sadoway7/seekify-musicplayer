@@ -703,3 +703,57 @@
 .candidate-score.score-good { background: #22c55e22; color: #22c55e; }
 .candidate-score.score-fair { background: #eab30822; color: #eab308; }
 .candidate-score.score-weak { background: #ef444422; color: #ef4444; }
+
+.home-layout-sheet {
+  width: 100%;
+  max-height: 90vh;
+  background: var(--l1);
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: sheetSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.home-layout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px var(--page-margin);
+  flex-shrink: 0;
+}
+
+.home-layout-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text1);
+}
+
+.home-layout-close {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  font-size: 22px;
+  border-radius: 50%;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.home-layout-close:active {
+  background: var(--l3);
+  color: var(--text1);
+}
+
+.home-layout-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  padding: 0 var(--page-margin) var(--sp-6);
+  scrollbar-width: none;
+}
+
+.home-layout-body::-webkit-scrollbar {
+  display: none;
+}

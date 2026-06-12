@@ -31,6 +31,7 @@ var (
 	coverMu    sync.RWMutex
 	musicDir   string
 	statePath  string
+	scanMu     sync.Mutex
 
 	// musicDirs maps a prefix to an absolute directory path.
 	// The primary musicDir has prefix "" (empty string).
@@ -81,11 +82,18 @@ func scanMusicDir(dir string) ScanStats {
 }
 
 func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
+	scanMu.Lock()
+	defer scanMu.Unlock()
+	return scanMusicDirWithPrefixLocked(dir, prefix)
+}
+
+func scanMusicDirWithPrefixLocked(dir string, prefix string) ScanStats {
 	var stats ScanStats
 
 	newTracks := make(map[string]*Track)
 	newAlbums := make(map[string]*Album)
 	newCovers := make(map[string][]byte)
+	changedTracks := make(map[string]bool)
 
 	var files []string
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -105,7 +113,10 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 	stats.Scanned = len(files)
 	log.Printf("Found %d audio files in %s", len(files), dir)
 
-	for _, fpath := range files {
+	for i, fpath := range files {
+		if i%50 == 0 {
+			log.Printf("[scan] Processing file %d/%d...", i+1, len(files))
+		}
 		relPath, err := filepath.Rel(dir, fpath)
 		if err != nil {
 			relPath = fpath
@@ -118,6 +129,35 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 		}
 
 		trackID := generateID(storedPath)
+
+		// Skip unchanged files (ModTime optimization)
+		fileInfo, err := os.Stat(fpath)
+		if err != nil {
+			continue
+		}
+		fileModTime := fileInfo.ModTime().Unix()
+		mu.RLock()
+		if existing, ok := tracks[trackID]; ok && existing.ModTime == fileModTime {
+			mu.RUnlock()
+			// Still include it in the new tracks map so it isn't deleted
+			newTracks[trackID] = existing
+			if existing.Album != "" {
+				if _, exists := newAlbums[existing.AlbumID]; !exists {
+					newAlbums[existing.AlbumID] = &Album{
+						ID:         existing.AlbumID,
+						Name:       existing.Album,
+						Artist:     existing.AlbumArtist,
+						Year:       existing.Year,
+						HasCover:   existing.HasCover,
+						TrackCount: 1,
+					}
+				} else {
+					newAlbums[existing.AlbumID].TrackCount++
+				}
+			}
+			continue
+		}
+		mu.RUnlock()
 
 		parts := strings.Split(relPath, string(filepath.Separator))
 		folderArtist := ""
@@ -132,9 +172,7 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 		}
 
 		var modTime int64
-		if fi, err := file.Stat(); err == nil {
-			modTime = fi.ModTime().Unix()
-		}
+		modTime = fileModTime
 
 		tagReader, err := tag.ReadFrom(file)
 		file.Close()
@@ -200,6 +238,7 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 		track.AlbumID = albumID
 
 		newTracks[trackID] = track
+		changedTracks[trackID] = true
 
 		if track.Album != "" {
 			if _, exists := newAlbums[albumID]; !exists {
@@ -243,37 +282,35 @@ func scanMusicDirWithPrefix(dir string, prefix string) ScanStats {
 		}
 	}
 
+	log.Printf("[scan] Tag reading done, %d changed of %d total, writing to DB...", len(changedTracks), len(newTracks))
+
 	mu.Lock()
 	oldTrackCount := len(tracks)
 
-	// Persist all scanned tracks and albums to DB
+	tx, _ := db.Begin()
 	for _, t := range newTracks {
-		dbUpsertTrack(t)
+		if _, changed := changedTracks[t.ID]; changed {
+			dbUpsertTrackTx(tx, t)
+		}
 	}
+	for _, a := range newAlbums {
+		dbUpsertAlbumTx(tx, a)
+	}
+	tx.Commit()
+
 	dbInsertUncheckedReviews(newTracks)
 	if len(newTracks) > 0 {
 		wakeReviewWorker()
 	}
-	for _, a := range newAlbums {
-		dbUpsertAlbum(a)
-	}
 
 	if prefix == "" {
-		// Primary scan: only cleanup primary-dir tracks (no prefix in FilePath)
 		for oldID, oldTrack := range tracks {
 			if strings.Contains(oldTrack.FilePath, ":") {
 				continue
 			}
 			if _, exists := newTracks[oldID]; !exists {
 				dbDeleteTrack(oldID)
-			}
-		}
-		for dbID, dbTrack := range dbLoadTracks() {
-			if strings.Contains(dbTrack.FilePath, ":") {
-				continue
-			}
-			if _, exists := newTracks[dbID]; !exists {
-				dbDeleteTrack(dbID)
+				dbDeleteReview(oldID)
 			}
 		}
 
@@ -418,9 +455,9 @@ func extractEmbeddedCovers() {
 		coverPath := filepath.Join(coverDir, j.albumID+".jpg")
 		if err := os.WriteFile(coverPath, pic.Data, 0644); err != nil {
 			continue
-		}
+	}
 
-		mu.Lock()
+	mu.Lock()
 		if a, ok := albums[j.albumID]; ok {
 			a.HasCover = true
 		}
@@ -430,4 +467,140 @@ func extractEmbeddedCovers() {
 	}
 
 	log.Printf("Extracted %d covers from file tags", saved)
+}
+
+func scanSingleFile(filePath string) {
+	scanMu.Lock()
+	defer scanMu.Unlock()
+
+	fpath := filePath
+	relPath, err := filepath.Rel(musicDir, fpath)
+	if err != nil {
+		relPath = filepath.Base(fpath)
+	}
+
+	trackID := generateID(relPath)
+
+	fileInfo, err := os.Stat(fpath)
+	if err != nil {
+		log.Printf("[scan] Could not stat %s: %v", fpath, err)
+		return
+	}
+	modTime := fileInfo.ModTime().Unix()
+
+	parts := strings.Split(relPath, string(filepath.Separator))
+	folderArtist := ""
+	if len(parts) >= 3 {
+		folderArtist = parts[0]
+	}
+
+	file, err := os.Open(fpath)
+	if err != nil {
+		log.Printf("[scan] Could not open %s: %v", fpath, err)
+		return
+	}
+
+	tagReader, err := tag.ReadFrom(file)
+	file.Close()
+
+	track := &Track{
+		ID:       trackID,
+		FilePath: relPath,
+		Duration: 0,
+		ModTime:  modTime,
+	}
+
+	hasRealTags := false
+	if err == nil && tagReader != nil {
+		track.Title = tagReader.Title()
+		track.Artist = tagReader.Artist()
+		track.Album = tagReader.Album()
+		track.AlbumArtist = tagReader.AlbumArtist()
+		track.Year = tagReader.Year()
+		track.Genre = tagReader.Genre()
+		trackNum, _ := tagReader.Track()
+		track.TrackNumber = trackNum
+
+		picture := tagReader.Picture()
+		if picture != nil {
+			track.HasCover = true
+		}
+
+		if tagReader.Title() != "" && tagReader.Title() != "Unknown" {
+			hasRealTags = true
+		}
+	}
+
+	if track.Title == "Unknown" || track.Title == "" {
+		track.Title = titleFromFilename(fpath)
+	}
+	if track.Artist == "Unknown" {
+		track.Artist = ""
+	}
+	if track.Album == "Unknown" {
+		track.Album = ""
+	}
+	if track.Artist == "" && folderArtist != "" {
+		track.Artist = folderArtist
+	}
+	if track.AlbumArtist == "" {
+		track.AlbumArtist = track.Artist
+	}
+	if hasRealTags {
+		track.HasMetadata = true
+	}
+
+	var albumID string
+	if track.Album != "" {
+		albumID = generateAlbumID(track.AlbumArtist, track.Album)
+	} else {
+		albumID = generateID("single:" + trackID)
+	}
+	track.AlbumID = albumID
+
+	if track.HasCover {
+		file2, err := os.Open(fpath)
+		if err == nil {
+			tagReader2, err := tag.ReadFrom(file2)
+			file2.Close()
+			if err == nil && tagReader2 != nil {
+				pic := tagReader2.Picture()
+				if pic != nil && albumID != "" {
+					coverDir := filepath.Join(musicDir, "images")
+					os.MkdirAll(coverDir, 0755)
+					coverPath := filepath.Join(coverDir, albumID+".jpg")
+					if _, err := os.Stat(coverPath); os.IsNotExist(err) {
+						os.WriteFile(coverPath, pic.Data, 0644)
+					}
+					coverMu.Lock()
+					coverCache[albumID] = pic.Data
+					coverMu.Unlock()
+				}
+			}
+		}
+	}
+
+	mu.Lock()
+	tracks[trackID] = track
+	if track.Album != "" {
+		if _, exists := albums[albumID]; !exists {
+			albums[albumID] = &Album{
+				ID:         albumID,
+				Name:       track.Album,
+				Artist:     track.AlbumArtist,
+				Year:       track.Year,
+				HasCover:   track.HasCover,
+				TrackCount: 1,
+			}
+		} else {
+			albums[albumID].TrackCount++
+		}
+	}
+	mu.Unlock()
+
+	dbUpsertTrack(track)
+	dbSetReviewStatus(trackID, "unchecked", "[]", "")
+	wakeReviewWorker()
+
+	log.Printf("[scan] Added single file: %s - %s -> %s", track.Artist, track.Title, relPath)
 }

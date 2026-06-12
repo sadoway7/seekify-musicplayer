@@ -85,18 +85,7 @@ const App = {
     const artistName = params.get('artist');
     const albumId = params.get('album');
     const playlistId = params.get('playlist');
-    if (playId) {
-      const track = Store.getTrack(playId);
-      if (track) {
-        Player.queue = [track];
-        Player.currentIndex = 0;
-        Player.audio.src = Api.streamUrl(track.id);
-        Player.playing = false;
-        if (Player.onTrackChange) Player.onTrackChange(track);
-        if (Player.onStateChange) Player.onStateChange();
-        UI.showNowPlaying();
-      }
-    } else if (artistName) {
+    if (artistName) {
       UI.navigateTo('artist', { artistName });
     } else if (albumId) {
       UI.navigateTo('album', { albumId });

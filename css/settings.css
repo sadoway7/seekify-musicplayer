@@ -5,6 +5,36 @@
   padding: 20px;
 }
 
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.settings-toggles-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.settings-checks-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 20px;
+  margin-bottom: 4px;
+}
+
+.settings-subsection-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 10px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .settings-section-title {
   font-size: 16px;
   font-weight: 700;

@@ -617,7 +617,7 @@ func processSingleDownload(job *DownloadJob) {
 
 	go func() {
 		time.Sleep(1 * time.Second)
-		scanMusicDir(musicDir)
+		scanSingleFile(audioFile)
 
 		if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
 			mu.RLock()

@@ -1661,6 +1661,16 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	coverDir := filepath.Join(musicDir, "images", "finder")
+	cachedPath := filepath.Join(coverDir, mbid+".jpg")
+	if data, err := os.ReadFile(cachedPath); err == nil && len(data) > 0 {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write(data)
+		return
+	}
+
 	coverURL := fmt.Sprintf("%s/release-group/%s/front-250", coverArtBaseURL, mbid)
 	req, err := http.NewRequest("GET", coverURL, nil)
 	if err != nil {
@@ -1682,12 +1692,18 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	body, _ := io.ReadAll(resp.Body)
+
+	if len(body) > 0 {
+		os.MkdirAll(coverDir, 0755)
+		os.WriteFile(cachedPath, body, 0644)
+	}
+
 	ct := resp.Header.Get("Content-Type")
 	if ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	io.Copy(w, resp.Body)
+	w.Write(body)
 }
 
 func downloadQueueHandler(w http.ResponseWriter, r *http.Request) {
@@ -2185,6 +2201,37 @@ func checkDuplicateInLibrary(artist, title string) bool {
 		}
 	}
 	return false
+}
+
+func buildLibraryLookup() map[string]bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	m := make(map[string]bool, len(tracks)*2)
+	for _, t := range tracks {
+		if t.Artist != "" && t.Title != "" {
+			m[strings.ToLower(t.Artist+"|"+t.Title)] = true
+		}
+	}
+	return m
+}
+
+func buildAlbumLookup() map[string]bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	m := make(map[string]bool, len(albums)*2)
+	for _, a := range albums {
+		if a.Artist != "" && a.Name != "" {
+			m[strings.ToLower(a.Artist+"|"+a.Name)] = true
+		}
+	}
+	return m
+}
+
+func isInLibrary(lookup map[string]bool, artist, title string) bool {
+	if artist == "" || title == "" {
+		return false
+	}
+	return lookup[strings.ToLower(artist+"|"+title)]
 }
 
 type youtubeSearchResult struct {
