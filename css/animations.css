@@ -105,7 +105,7 @@
   }
 }
 
-@keyframes sheetSlideUp {
+@keyframes sheetSlideOutUp {
   from {
     transform: translateY(0);
   }

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"musicapp/internal/store"
 	"net/http"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ import (
 
 func settingsGetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(getAllSettings())
+	json.NewEncoder(w).Encode(store.GetAllSettings())
 }
 
 func settingsSetHandler(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +29,7 @@ func settingsSetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for k, v := range settings {
-		setSetting(k, v)
+		store.SetSetting(k, v)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -98,7 +99,7 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	libraryPlaylistID := dbGetOrCreatePlaylistByName(name)
+	libraryPlaylistID := store.DbGetOrCreatePlaylistByName(name)
 
 	wp := &WatchedPlaylist{
 		ID:        uuid.New().String()[:8],
@@ -108,7 +109,7 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}
 
-	db.Exec(`INSERT INTO watched_playlists (id, url, name, track_count, last_refresh, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+	store.DB.Exec(`INSERT INTO watched_playlists (id, url, name, track_count, last_refresh, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		wp.ID, wp.URL, wp.Name, wp.TrackCount, wp.CreatedAt, wp.CreatedAt)
 
 	queued := 0
@@ -119,24 +120,24 @@ func playlistImportHandler(w http.ResponseWriter, r *http.Request) {
 		status := "pending"
 		if inLib {
 			status = "completed"
-			mu.RLock()
-			for _, tr := range tracks {
+			store.Mu.RLock()
+			for _, tr := range store.Tracks {
 				if strings.EqualFold(tr.Artist, artist) && strings.EqualFold(tr.Title, title) {
-					dbAddTrackToPlaylist(libraryPlaylistID, tr.ID)
+					store.DbAddTrackToPlaylist(libraryPlaylistID, tr.ID)
 					break
 				}
 			}
-			mu.RUnlock()
+			store.Mu.RUnlock()
 		}
 
-		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, ?)",
+		store.DB.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, ?)",
 			wp.ID, videoID, artist, title, status)
 
 		if !inLib {
 			job, _ := createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
 			if job != nil {
 				job.PlaylistID = libraryPlaylistID
-				db.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
+				store.DB.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
 			}
 			queued++
 			time.Sleep(100 * time.Millisecond)
@@ -175,7 +176,7 @@ func watchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 			Name:      name,
 			CreatedAt: time.Now().Format(time.RFC3339),
 		}
-		db.Exec("INSERT INTO watched_playlists (id, url, name, track_count, last_refresh, created_at) VALUES (?, ?, ?, 0, ?, ?)",
+		store.DB.Exec("INSERT INTO watched_playlists (id, url, name, track_count, last_refresh, created_at) VALUES (?, ?, ?, 0, ?, ?)",
 			wp.ID, wp.URL, wp.Name, wp.CreatedAt, wp.CreatedAt)
 
 		go refreshWatchedPlaylist(wp)
@@ -203,7 +204,7 @@ func watchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 			if req.Watching {
 				watching = 1
 			}
-			db.Exec("UPDATE watched_playlists SET watching = ? WHERE id = ?", watching, id)
+			store.DB.Exec("UPDATE watched_playlists SET watching = ? WHERE id = ?", watching, id)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -216,7 +217,7 @@ func watchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 		if id != "" {
 			var wp WatchedPlaylist
 			var watching int
-			row := db.QueryRow("SELECT id, url, name, track_count, last_refresh, watching, created_at FROM watched_playlists WHERE id = ?", id)
+			row := store.DB.QueryRow("SELECT id, url, name, track_count, last_refresh, watching, created_at FROM watched_playlists WHERE id = ?", id)
 			row.Scan(&wp.ID, &wp.URL, &wp.Name, &wp.TrackCount, &wp.LastRefresh, &watching, &wp.CreatedAt)
 			wp.Watching = watching == 1
 			if wp.ID != "" {
@@ -230,8 +231,8 @@ func watchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "DELETE" {
 		id := strings.TrimPrefix(r.URL.Path, "/api/watch/")
-		db.Exec("DELETE FROM watched_playlist_tracks WHERE playlist_id = ?", id)
-		db.Exec("DELETE FROM watched_playlists WHERE id = ?", id)
+		store.DB.Exec("DELETE FROM watched_playlist_tracks WHERE playlist_id = ?", id)
+		store.DB.Exec("DELETE FROM watched_playlists WHERE id = ?", id)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		return

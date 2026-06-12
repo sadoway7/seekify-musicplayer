@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -111,10 +112,10 @@ func adminLoginHandler(w http.ResponseWriter, r *http.Request) {
 func fileListHandler(w http.ResponseWriter, r *http.Request) {
 	subPath := r.URL.Query().Get("path")
 
-	dirPath := filepath.Join(musicDir, subPath)
+	dirPath := filepath.Join(store.MusicDir, subPath)
 	dirPath = filepath.Clean(dirPath)
 
-	if !strings.HasPrefix(dirPath, musicDir) {
+	if !strings.HasPrefix(dirPath, store.MusicDir) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -154,7 +155,7 @@ func fileListHandler(w http.ResponseWriter, r *http.Request) {
 			})
 		} else {
 			ext := strings.ToLower(filepath.Ext(entry.Name()))
-			if _, ok := audioExtensions[ext]; ok {
+			if _, ok := store.AudioExtensions[ext]; ok {
 				files = append(files, fileInfo{
 					Name:    entry.Name(),
 					Path:    relPath,
@@ -188,10 +189,10 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	subPath := r.FormValue("path")
-	targetDir := filepath.Join(musicDir, subPath)
+	targetDir := filepath.Join(store.MusicDir, subPath)
 	targetDir = filepath.Clean(targetDir)
 
-	if !strings.HasPrefix(targetDir, musicDir) {
+	if !strings.HasPrefix(targetDir, store.MusicDir) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -207,7 +208,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	formFiles := r.MultipartForm.File["files"]
 	for _, fh := range formFiles {
 		ext := strings.ToLower(filepath.Ext(fh.Filename))
-		if _, ok := audioExtensions[ext]; !ok {
+		if _, ok := store.AudioExtensions[ext]; !ok {
 			uploadErrors = append(uploadErrors, fh.Filename+": not an audio file")
 			continue
 		}
@@ -254,10 +255,10 @@ func deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath := filepath.Join(musicDir, subPath)
+	fullPath := filepath.Join(store.MusicDir, subPath)
 	fullPath = filepath.Clean(fullPath)
 
-	if !strings.HasPrefix(fullPath, musicDir) {
+	if !strings.HasPrefix(fullPath, store.MusicDir) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -287,10 +288,10 @@ func createFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetPath := filepath.Join(musicDir, body.Path, body.Name)
+	targetPath := filepath.Join(store.MusicDir, body.Path, body.Name)
 	targetPath = filepath.Clean(targetPath)
 
-	if !strings.HasPrefix(targetPath, musicDir) {
+	if !strings.HasPrefix(targetPath, store.MusicDir) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -334,14 +335,14 @@ func trackDurationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	if t, ok := tracks[trackID]; ok {
+	store.Mu.Lock()
+	if t, ok := store.Tracks[trackID]; ok {
 		if t.Duration == 0 {
 			t.Duration = body.Duration
-			db.Exec("UPDATE tracks SET duration = ? WHERE id = ?", body.Duration, trackID)
+			store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", body.Duration, trackID)
 		}
 	}
-	mu.Unlock()
+	store.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"updated": true})

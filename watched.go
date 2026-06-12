@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"musicapp/internal/store"
 	"os/exec"
 	"strings"
 	"sync"
@@ -22,7 +23,7 @@ type WatchedPlaylist struct {
 }
 
 func initWatchedTables() {
-	db.Exec(`CREATE TABLE IF NOT EXISTS watched_playlists (
+	store.DB.Exec(`CREATE TABLE IF NOT EXISTS watched_playlists (
 		id TEXT PRIMARY KEY,
 		url TEXT NOT NULL,
 		name TEXT NOT NULL DEFAULT '',
@@ -31,7 +32,7 @@ func initWatchedTables() {
 		created_at TEXT NOT NULL
 	)`)
 
-	db.Exec(`CREATE TABLE IF NOT EXISTS watched_playlist_tracks (
+	store.DB.Exec(`CREATE TABLE IF NOT EXISTS watched_playlist_tracks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		playlist_id TEXT NOT NULL,
 		video_id TEXT NOT NULL DEFAULT '',
@@ -41,8 +42,8 @@ func initWatchedTables() {
 		status TEXT NOT NULL DEFAULT 'pending',
 		FOREIGN KEY (playlist_id) REFERENCES watched_playlists(id)
 	)`)
-	db.Exec(`ALTER TABLE watched_playlist_tracks ADD COLUMN video_id TEXT NOT NULL DEFAULT ''`)
-	db.Exec(`ALTER TABLE watched_playlists ADD COLUMN watching INTEGER NOT NULL DEFAULT 1`)
+	store.DB.Exec(`ALTER TABLE watched_playlist_tracks ADD COLUMN video_id TEXT NOT NULL DEFAULT ''`)
+	store.DB.Exec(`ALTER TABLE watched_playlists ADD COLUMN watching INTEGER NOT NULL DEFAULT 1`)
 }
 
 func syncWatchedPlaylistsToLibrary() {
@@ -51,18 +52,18 @@ func syncWatchedPlaylistsToLibrary() {
 		return
 	}
 
-	mu.RLock()
+	store.Mu.RLock()
 	libTracks := make(map[string]string)
-	for _, t := range tracks {
+	for _, t := range store.Tracks {
 		key := strings.ToLower(t.Artist + "|" + t.Title)
 		libTracks[key] = t.ID
 	}
-	mu.RUnlock()
+	store.Mu.RUnlock()
 
 	for _, wp := range playlists {
-		libraryPlaylistID := dbGetOrCreatePlaylistByName(wp.Name)
+		libraryPlaylistID := store.DbGetOrCreatePlaylistByName(wp.Name)
 
-		rows, err := db.Query("SELECT artist, title FROM watched_playlist_tracks WHERE playlist_id = ? AND status = 'completed'", wp.ID)
+		rows, err := store.DB.Query("SELECT artist, title FROM watched_playlist_tracks WHERE playlist_id = ? AND status = 'completed'", wp.ID)
 		if err != nil {
 			continue
 		}
@@ -74,7 +75,7 @@ func syncWatchedPlaylistsToLibrary() {
 			}
 			key := strings.ToLower(artist + "|" + title)
 			if trackID, ok := libTracks[key]; ok {
-				dbAddTrackToPlaylist(libraryPlaylistID, trackID)
+				store.DbAddTrackToPlaylist(libraryPlaylistID, trackID)
 				added++
 			}
 		}
@@ -86,7 +87,7 @@ func syncWatchedPlaylistsToLibrary() {
 }
 
 func dbGetWatchedPlaylists() ([]WatchedPlaylist, error) {
-	rows, err := db.Query(`SELECT id, url, name, track_count, last_refresh, watching, created_at FROM watched_playlists ORDER BY created_at DESC`)
+	rows, err := store.DB.Query(`SELECT id, url, name, track_count, last_refresh, watching, created_at FROM watched_playlists ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -279,11 +280,11 @@ func refreshWatchedPlaylist(p *WatchedPlaylist) error {
 	}
 
 	if name != "" && name != p.Name {
-		db.Exec("UPDATE watched_playlists SET name = ? WHERE id = ?", name, p.ID)
+		store.DB.Exec("UPDATE watched_playlists SET name = ? WHERE id = ?", name, p.ID)
 	}
 
 	existingTracks := map[string]bool{}
-	rows, err := db.Query("SELECT video_id, artist, title FROM watched_playlist_tracks WHERE playlist_id = ?", p.ID)
+	rows, err := store.DB.Query("SELECT video_id, artist, title FROM watched_playlist_tracks WHERE playlist_id = ?", p.ID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -298,7 +299,7 @@ func refreshWatchedPlaylist(p *WatchedPlaylist) error {
 		}
 	}
 
-	libraryPlaylistID := dbGetOrCreatePlaylistByName(p.Name)
+	libraryPlaylistID := store.DbGetOrCreatePlaylistByName(p.Name)
 
 	newCount := 0
 	for _, t := range tracksFromYT {
@@ -311,37 +312,37 @@ func refreshWatchedPlaylist(p *WatchedPlaylist) error {
 			continue
 		}
 
-		mu.RLock()
+		store.Mu.RLock()
 		inLib := false
 		var libTrackID string
-		for _, tr := range tracks {
+		for _, tr := range store.Tracks {
 			if strings.EqualFold(tr.Artist, artist) && strings.EqualFold(tr.Title, title) {
 				inLib = true
 				libTrackID = tr.ID
 				break
 			}
 		}
-		mu.RUnlock()
+		store.Mu.RUnlock()
 		if inLib {
 			if libTrackID != "" {
-				dbAddTrackToPlaylist(libraryPlaylistID, libTrackID)
+				store.DbAddTrackToPlaylist(libraryPlaylistID, libTrackID)
 			}
-			db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'completed')", p.ID, videoID, artist, title)
+			store.DB.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'completed')", p.ID, videoID, artist, title)
 			continue
 		}
 
 		job, _ := createDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
 		if job != nil {
 			job.PlaylistID = libraryPlaylistID
-			db.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
+			store.DB.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
 		}
-		db.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'queued')", p.ID, videoID, artist, title)
+		store.DB.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'queued')", p.ID, videoID, artist, title)
 		newCount++
 	}
 
 	totalCount := len(existingTracks) + newCount
 	now := time.Now().Format(time.RFC3339)
-	db.Exec("UPDATE watched_playlists SET track_count = ?, last_refresh = ? WHERE id = ?", totalCount, now, p.ID)
+	store.DB.Exec("UPDATE watched_playlists SET track_count = ?, last_refresh = ? WHERE id = ?", totalCount, now, p.ID)
 
 	log.Printf("[watched] Playlist %q: %d total, %d new", p.Name, totalCount, newCount)
 	return nil

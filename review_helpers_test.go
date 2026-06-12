@@ -2,6 +2,7 @@ package main
 
 import (
 	"musicapp/internal/models"
+	"musicapp/internal/store"
 	"testing"
 )
 
@@ -120,10 +121,10 @@ func TestPickBestQuality(t *testing.T) {
 }
 
 func TestBoolToInt(t *testing.T) {
-	if boolToInt(true) != 1 {
-		t.Error("boolToInt(true) should be 1")
+	if store.BoolToInt(true) != 1 {
+		t.Error("store.BoolToInt(true) should be 1")
 	}
-	if boolToInt(false) != 0 {
-		t.Error("boolToInt(false) should be 0")
+	if store.BoolToInt(false) != 0 {
+		t.Error("store.BoolToInt(false) should be 0")
 	}
 }

@@ -5,46 +5,19 @@ import (
 	"hash/fnv"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/dhowden/tag"
-)
-
-var (
-	audioExtensions = map[string]string{
-		".mp3":  "audio/mpeg",
-		".flac": "audio/flac",
-		".m4a":  "audio/mp4",
-		".aac":  "audio/aac",
-		".ogg":  "audio/ogg",
-		".wav":  "audio/wav",
-		".opus": "audio/opus",
-		".wma":  "audio/x-ms-wma",
-	}
-
-	tracks     map[string]*models.Track
-	albums     map[string]*models.Album
-	mu         sync.RWMutex
-	coverCache map[string][]byte
-	coverMu    sync.RWMutex
-	musicDir   string
-	statePath  string
-	scanMu     sync.Mutex
-
-	// musicDirs maps a prefix to an absolute directory path.
-	// The primary musicDir has prefix "" (empty string).
-	// Additional directories use prefixes like "media".
-	musicDirs map[string]string
 )
 
 // resolveFilePath expands a prefixed FilePath into an absolute path on disk.
 // If filePath contains a known prefix like "media:", it resolves against that dir.
 // Otherwise it resolves against the primary musicDir.
 func resolveFilePath(filePath string) string {
-	for prefix, dir := range musicDirs {
+	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
@@ -54,13 +27,13 @@ func resolveFilePath(filePath string) string {
 			return filepath.Join(dir, relPath)
 		}
 	}
-	return filepath.Join(musicDir, filePath)
+	return filepath.Join(store.MusicDir, filePath)
 }
 
 // musicDirForPath returns the music directory root for a given FilePath.
 // Used to determine where to write images/covers for a track.
 func musicDirForPath(filePath string) string {
-	for prefix, dir := range musicDirs {
+	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
@@ -69,7 +42,7 @@ func musicDirForPath(filePath string) string {
 			return dir
 		}
 	}
-	return musicDir
+	return store.MusicDir
 }
 
 func titleFromFilename(path string) string {
@@ -83,8 +56,8 @@ func scanMusicDir(dir string) models.ScanStats {
 }
 
 func scanMusicDirWithPrefix(dir string, prefix string) models.ScanStats {
-	scanMu.Lock()
-	defer scanMu.Unlock()
+	store.ScanMu.Lock()
+	defer store.ScanMu.Unlock()
 	return scanMusicDirWithPrefixLocked(dir, prefix)
 }
 
@@ -105,7 +78,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
-		if _, ok := audioExtensions[ext]; ok {
+		if _, ok := store.AudioExtensions[ext]; ok {
 			files = append(files, path)
 		}
 		return nil
@@ -137,9 +110,9 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			continue
 		}
 		fileModTime := fileInfo.ModTime().Unix()
-		mu.RLock()
-		if existing, ok := tracks[trackID]; ok && existing.ModTime == fileModTime {
-			mu.RUnlock()
+		store.Mu.RLock()
+		if existing, ok := store.Tracks[trackID]; ok && existing.ModTime == fileModTime {
+			store.Mu.RUnlock()
 			// Still include it in the new tracks map so it isn't deleted
 			newTracks[trackID] = existing
 			if existing.Album != "" {
@@ -158,7 +131,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			}
 			continue
 		}
-		mu.RUnlock()
+		store.Mu.RUnlock()
 
 		parts := strings.Split(relPath, string(filepath.Separator))
 		folderArtist := ""
@@ -271,7 +244,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 						newAlbums[albumID].HasCover = true
 
 						// Always store covers in the primary musicDir
-						coverDir := filepath.Join(musicDir, "images")
+						coverDir := filepath.Join(store.MusicDir, "images")
 						os.MkdirAll(coverDir, 0755)
 						coverPath := filepath.Join(coverDir, albumID+".jpg")
 						if _, err := os.Stat(coverPath); os.IsNotExist(err) {
@@ -285,17 +258,17 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 
 	log.Printf("[scan] Tag reading done, %d changed of %d total, writing to DB...", len(changedTracks), len(newTracks))
 
-	mu.Lock()
-	oldTrackCount := len(tracks)
+	store.Mu.Lock()
+	oldTrackCount := len(store.Tracks)
 
-	tx, _ := db.Begin()
+	tx, _ := store.DB.Begin()
 	for _, t := range newTracks {
 		if _, changed := changedTracks[t.ID]; changed {
-			dbUpsertTrackTx(tx, t)
+			store.DbUpsertTrackTx(tx, t)
 		}
 	}
 	for _, a := range newAlbums {
-		dbUpsertAlbumTx(tx, a)
+		store.DbUpsertAlbumTx(tx, a)
 	}
 	tx.Commit()
 
@@ -305,51 +278,51 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	}
 
 	if prefix == "" {
-		for oldID, oldTrack := range tracks {
+		for oldID, oldTrack := range store.Tracks {
 			if strings.Contains(oldTrack.FilePath, ":") {
 				continue
 			}
 			if _, exists := newTracks[oldID]; !exists {
-				dbDeleteTrack(oldID)
+				store.DbDeleteTrack(oldID)
 				dbDeleteReview(oldID)
 			}
 		}
 
 		// Primary scan: replace only primary-dir entries in global maps
 		// First remove old primary tracks
-		for id := range tracks {
-			if !strings.Contains(tracks[id].FilePath, ":") {
-				delete(tracks, id)
+		for id := range store.Tracks {
+			if !strings.Contains(store.Tracks[id].FilePath, ":") {
+				delete(store.Tracks, id)
 			}
 		}
-		for id := range albums {
-			if !strings.Contains(albums[id].ID, ":") && !strings.HasPrefix(id, "single:") {
+		for id := range store.Albums {
+			if !strings.Contains(store.Albums[id].ID, ":") && !strings.HasPrefix(id, "single:") {
 				// keep non-primary albums only if they came from a prefixed dir
 			}
 		}
 		// Then merge new primary tracks in
 		for id, t := range newTracks {
-			tracks[id] = t
+			store.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
-			albums[id] = a
+			store.Albums[id] = a
 		}
 	} else {
 		// Additional directory: merge into existing maps
 		for id, t := range newTracks {
-			tracks[id] = t
+			store.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
-			albums[id] = a
+			store.Albums[id] = a
 		}
 	}
-	mu.Unlock()
+	store.Mu.Unlock()
 
-	coverMu.Lock()
+	store.CoverMu.Lock()
 	for id, data := range newCovers {
-		coverCache[id] = data
+		store.CoverCache[id] = data
 	}
-	coverMu.Unlock()
+	store.CoverMu.Unlock()
 
 	stats.Added = len(newTracks)
 	if prefix == "" {
@@ -394,22 +367,22 @@ func generatePlaceholderSVG(name string, id string) string {
 }
 
 func extractEmbeddedCovers() {
-	coverDir := filepath.Join(musicDir, "images")
+	coverDir := filepath.Join(store.MusicDir, "images")
 	os.MkdirAll(coverDir, 0755)
 
-	mu.RLock()
+	store.Mu.RLock()
 	type job struct {
 		filePath string
 		albumID  string
 	}
 	var jobs []job
-	for _, t := range tracks {
+	for _, t := range store.Tracks {
 		if !t.HasCover || t.AlbumID == "" {
 			continue
 		}
-		coverMu.RLock()
-		_, cached := coverCache[t.AlbumID]
-		coverMu.RUnlock()
+		store.CoverMu.RLock()
+		_, cached := store.CoverCache[t.AlbumID]
+		store.CoverMu.RUnlock()
 		if cached {
 			continue
 		}
@@ -417,16 +390,16 @@ func extractEmbeddedCovers() {
 		if _, err := os.Stat(coverPath); err == nil {
 			data, err := os.ReadFile(coverPath)
 			if err == nil {
-				coverMu.Lock()
-				coverCache[t.AlbumID] = data
-				coverMu.Unlock()
+				store.CoverMu.Lock()
+				store.CoverCache[t.AlbumID] = data
+				store.CoverMu.Unlock()
 				cached = true
 				continue
 			}
 		}
 		jobs = append(jobs, job{filePath: t.FilePath, albumID: t.AlbumID})
 	}
-	mu.RUnlock()
+	store.Mu.RUnlock()
 
 	if len(jobs) == 0 {
 		return
@@ -458,11 +431,11 @@ func extractEmbeddedCovers() {
 			continue
 	}
 
-	mu.Lock()
-		if a, ok := albums[j.albumID]; ok {
+	store.Mu.Lock()
+		if a, ok := store.Albums[j.albumID]; ok {
 			a.HasCover = true
 		}
-		mu.Unlock()
+		store.Mu.Unlock()
 
 		saved++
 	}
@@ -471,11 +444,11 @@ func extractEmbeddedCovers() {
 }
 
 func scanSingleFile(filePath string) {
-	scanMu.Lock()
-	defer scanMu.Unlock()
+	store.ScanMu.Lock()
+	defer store.ScanMu.Unlock()
 
 	fpath := filePath
-	relPath, err := filepath.Rel(musicDir, fpath)
+	relPath, err := filepath.Rel(store.MusicDir, fpath)
 	if err != nil {
 		relPath = filepath.Base(fpath)
 	}
@@ -567,25 +540,25 @@ func scanSingleFile(filePath string) {
 			if err == nil && tagReader2 != nil {
 				pic := tagReader2.Picture()
 				if pic != nil && albumID != "" {
-					coverDir := filepath.Join(musicDir, "images")
+					coverDir := filepath.Join(store.MusicDir, "images")
 					os.MkdirAll(coverDir, 0755)
 					coverPath := filepath.Join(coverDir, albumID+".jpg")
 					if _, err := os.Stat(coverPath); os.IsNotExist(err) {
 						os.WriteFile(coverPath, pic.Data, 0644)
 					}
-					coverMu.Lock()
-					coverCache[albumID] = pic.Data
-					coverMu.Unlock()
+					store.CoverMu.Lock()
+					store.CoverCache[albumID] = pic.Data
+					store.CoverMu.Unlock()
 				}
 			}
 		}
 	}
 
-	mu.Lock()
-	tracks[trackID] = track
+	store.Mu.Lock()
+	store.Tracks[trackID] = track
 	if track.Album != "" {
-		if _, exists := albums[albumID]; !exists {
-			albums[albumID] = &models.Album{
+		if _, exists := store.Albums[albumID]; !exists {
+			store.Albums[albumID] = &models.Album{
 				ID:         albumID,
 				Name:       track.Album,
 				Artist:     track.AlbumArtist,
@@ -594,12 +567,12 @@ func scanSingleFile(filePath string) {
 				TrackCount: 1,
 			}
 		} else {
-			albums[albumID].TrackCount++
+			store.Albums[albumID].TrackCount++
 		}
 	}
-	mu.Unlock()
+	store.Mu.Unlock()
 
-	dbUpsertTrack(track)
+	store.DbUpsertTrack(track)
 	dbSetReviewStatus(trackID, "unchecked", "[]", "")
 	wakeReviewWorker()
 

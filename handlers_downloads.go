@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,16 +18,16 @@ import (
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/download/")
 
-	mu.RLock()
-	track, exists := tracks[id]
-	mu.RUnlock()
+	store.Mu.RLock()
+	track, exists := store.Tracks[id]
+	store.Mu.RUnlock()
 
 	if !exists {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
 
-	if !getSettingBool("downloads_enabled", true) {
+	if !store.GetSettingBool("downloads_enabled", true) {
 		http.Error(w, "Downloads are disabled", http.StatusForbidden)
 		return
 	}
@@ -46,7 +47,7 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ext := strings.ToLower(filepath.Ext(fullPath))
-	contentType := audioExtensions[ext]
+	contentType := store.AudioExtensions[ext]
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -64,8 +65,8 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func downloadsListHandler(w http.ResponseWriter, r *http.Request) {
-	mu.RLock()
-	defer mu.RUnlock()
+	store.Mu.RLock()
+	defer store.Mu.RUnlock()
 
 	type downloadTrack struct {
 		ID      string `json:"id"`
@@ -76,7 +77,7 @@ func downloadsListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var result []downloadTrack
-	for _, t := range tracks {
+	for _, t := range store.Tracks {
 		result = append(result, downloadTrack{
 			ID:      t.ID,
 			Title:   t.Title,
@@ -106,22 +107,22 @@ func downloadToggleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.RLock()
-	_, exists := tracks[trackID]
-	mu.RUnlock()
+	store.Mu.RLock()
+	_, exists := store.Tracks[trackID]
+	store.Mu.RUnlock()
 
 	if !exists {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
 
-	enabled := dbToggleDownload(trackID)
+	enabled := store.DbToggleDownload(trackID)
 
-	mu.Lock()
-	if t, ok := tracks[trackID]; ok {
+	store.Mu.Lock()
+	if t, ok := store.Tracks[trackID]; ok {
 		t.DownloadEnabled = enabled
 	}
-	mu.Unlock()
+	store.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"enabled": enabled})
@@ -132,12 +133,12 @@ func downloadsEnableAllHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	dbEnableAllDownloads()
-	mu.Lock()
-	for _, t := range tracks {
+	store.DbEnableAllDownloads()
+	store.Mu.Lock()
+	for _, t := range store.Tracks {
 		t.DownloadEnabled = true
 	}
-	mu.Unlock()
+	store.Mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
@@ -325,7 +326,7 @@ func downloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Exec("DELETE FROM download_jobs WHERE id = ?", id)
+	store.DB.Exec("DELETE FROM download_jobs WHERE id = ?", id)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
@@ -404,7 +405,7 @@ func queueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := db.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading')")
+	result, err := store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading')")
 	cleared := 0
 	if err == nil {
 		affected, _ := result.RowsAffected()

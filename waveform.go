@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"musicapp/internal/store"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,7 +106,7 @@ func generateWaveformPeaks(filePath string) ([]float64, error) {
 }
 
 func waveformDir() string {
-	return filepath.Join(musicDir, "images", "waveforms")
+	return filepath.Join(store.MusicDir, "images", "waveforms")
 }
 
 func waveformPath(trackID string) string {
@@ -127,9 +128,9 @@ func getOrGenerateWaveform(trackID string) ([]float64, error) {
 		}
 	}
 
-	mu.RLock()
-	track, exists := tracks[trackID]
-	mu.RUnlock()
+	store.Mu.RLock()
+	track, exists := store.Tracks[trackID]
+	store.Mu.RUnlock()
 	if !exists {
 		return nil, nil
 	}

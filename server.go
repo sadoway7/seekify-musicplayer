@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,33 +18,33 @@ func main() {
 	dirFlag := flag.String("dir", "", "Path to music directory")
 	flag.Parse()
 
-	musicDir = *dirFlag
-	if musicDir == "" {
-		musicDir = os.Getenv("MUSIC_DIR")
+	store.MusicDir = *dirFlag
+	if store.MusicDir == "" {
+		store.MusicDir = os.Getenv("MUSIC_DIR")
 	}
-	if musicDir == "" {
+	if store.MusicDir == "" {
 		exe, err := os.Executable()
 		if err == nil {
-			musicDir = filepath.Join(filepath.Dir(exe), "music")
+			store.MusicDir = filepath.Join(filepath.Dir(exe), "music")
 		} else {
-			musicDir = "music"
+			store.MusicDir = "music"
 		}
 	}
-	os.MkdirAll(musicDir, 0755)
+	os.MkdirAll(store.MusicDir, 0755)
 
-	absDir, err := filepath.Abs(musicDir)
+	absDir, err := filepath.Abs(store.MusicDir)
 	if err != nil {
 		log.Fatalf("Could not resolve music directory path: %v", err)
 	}
-	musicDir = absDir
+	store.MusicDir = absDir
 
-	info, err := os.Stat(musicDir)
+	info, err := os.Stat(store.MusicDir)
 	if err != nil || !info.IsDir() {
-		log.Fatalf("Music directory does not exist: %s", musicDir)
+		log.Fatalf("Music directory does not exist: %s", store.MusicDir)
 	}
 
 	// Initialize musicDirs with the primary directory
-	musicDirs = map[string]string{"": musicDir}
+	store.MusicDirs = map[string]string{"": store.MusicDir}
 
 	// Check for additional media music directory
 	mediaDir := os.Getenv("MEDIA_MUSIC_DIR")
@@ -56,23 +57,26 @@ func main() {
 		if err != nil || !mediaInfo.IsDir() {
 			log.Fatalf("Media music directory does not exist: %s", absMedia)
 		}
-		musicDirs["media"] = absMedia
+		store.MusicDirs["media"] = absMedia
 		log.Printf("Media music directory: %s", absMedia)
 	}
 
-	tracks = make(map[string]*models.Track)
-	albums = make(map[string]*models.Album)
-	coverCache = make(map[string][]byte)
+	store.Tracks = make(map[string]*models.Track)
+	store.Albums = make(map[string]*models.Album)
+	store.CoverCache = make(map[string][]byte)
 
-	initDB(filepath.Join("data", "music.db"))
+	store.InitDB(filepath.Join("data", "music.db"))
+	initDownloadTables()
+	initWatchedTables()
+	initReviewTables()
 
 	// Try loading from DB first
-	dbTracks := dbLoadTracks()
-	dbAlbums := dbLoadAlbums()
+	dbTracks := store.DbLoadTracks()
+	dbAlbums := store.DbLoadAlbums()
 	if len(dbTracks) > 0 {
-		tracks = dbTracks
-		albums = dbAlbums
-		log.Printf("Loaded %d tracks and %d albums from database", len(tracks), len(albums))
+		store.Tracks = dbTracks
+		store.Albums = dbAlbums
+		log.Printf("Loaded %d tracks and %d albums from database", len(store.Tracks), len(store.Albums))
 	}
 
 	// Covers and artist art are lazy-loaded from disk on first request
@@ -93,7 +97,7 @@ func main() {
 	// Check if file counts match DB — skip full scan if nothing changed
 	needScan := len(dbTracks) == 0
 	if !needScan {
-		for prefix, dir := range musicDirs {
+		for prefix, dir := range store.MusicDirs {
 			if prefix != "" {
 				continue
 			}
@@ -105,13 +109,13 @@ func main() {
 			break
 		}
 		if !needScan {
-			for prefix, dir := range musicDirs {
+			for prefix, dir := range store.MusicDirs {
 				if prefix == "" {
 					continue
 				}
 				count := countAudioFiles(dir)
 				mediaDBCount := 0
-				for _, t := range tracks {
+				for _, t := range store.Tracks {
 					if strings.HasPrefix(t.FilePath, prefix+":") {
 						mediaDBCount++
 					}
@@ -127,18 +131,18 @@ func main() {
 
 	if needScan {
 		// Scan primary music directory
-		log.Printf("Scanning music directory: %s", musicDir)
-		stats := scanMusicDir(musicDir)
-		log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(tracks))
+		log.Printf("Scanning music directory: %s", store.MusicDir)
+		stats := scanMusicDir(store.MusicDir)
+		log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(store.Tracks))
 
 		// Scan additional media directories
-		for prefix, dir := range musicDirs {
+		for prefix, dir := range store.MusicDirs {
 			if prefix == "" {
 				continue
 			}
 			log.Printf("Scanning media directory [%s]: %s", prefix, dir)
 			mediaStats := scanMusicDirWithPrefix(dir, prefix)
-			log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(tracks))
+			log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(store.Tracks))
 		}
 
 	} else {

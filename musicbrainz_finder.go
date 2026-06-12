@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"musicapp/internal/store"
 	"net/url"
 	"sort"
 	"strconv"
@@ -234,14 +235,14 @@ func finderSearchArtists(query string, limit int) ([]FinderArtist, error) {
 		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
-	mu.RLock()
+	store.Mu.RLock()
 	libraryArtists := map[string]bool{}
-	for _, t := range tracks {
+	for _, t := range store.Tracks {
 		if t.Artist != "" {
 			libraryArtists[strings.ToLower(t.Artist)] = true
 		}
 	}
-	mu.RUnlock()
+	store.Mu.RUnlock()
 
 	for _, a := range searchResp.Artists {
 		inLibrary := libraryArtists[strings.ToLower(a.Name)]

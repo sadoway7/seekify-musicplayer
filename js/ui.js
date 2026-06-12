@@ -1214,10 +1214,6 @@ const UI = {
     let html = '';
 
     html += '<div class="home-top-row">'
-      + '<div class="home-search-bar" id="home-search-bar">'
-      + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input" type="text" placeholder="Search library..." readonly>'
-      + '</div>'
       + '<div class="home-menu-wrap" id="home-menu-wrap">'
       + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu"><span class="hm-icon"><span class="hm-bar"></span><span class="hm-bar"></span><span class="hm-bar"></span></span></button>'
       + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
@@ -1226,6 +1222,10 @@ const UI = {
       + '<div class="home-menu-divider"></div>'
       + '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>'
       + '</div>'
+      + '</div>'
+      + '<div class="home-search-bar" id="home-search-bar">'
+      + '<span class="search-icon">' + Icons.search() + '</span>'
+      + '<input class="search-input" type="text" placeholder="" readonly>'
       + '</div>'
       + '</div>';
 
@@ -4406,7 +4406,7 @@ const UI = {
 
     const close = () => {
       const sheet = modal.querySelector('.home-layout-sheet');
-      if (sheet) sheet.style.animation = 'sheetSlideUp 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
+      if (sheet) sheet.style.animation = 'sheetSlideOutUp 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
       modal.style.animation = 'modalFadeOut 0.25s ease forwards';
       setTimeout(() => {
         modal.classList.add('hidden');
@@ -5507,13 +5507,24 @@ const UI = {
       const vpW = window.innerWidth;
       const vpH = window.innerHeight;
       const menuW = 240;
+      sheet.offsetHeight;
+      const menuH = sheet.scrollHeight;
+      const pad = 8;
 
       let top = rect.bottom + 4;
       let left = rect.right - menuW;
 
-      if (left < 8) left = rect.left;
-      if (left + menuW > vpW - 8) left = vpW - menuW - 8;
-      if (top + 20 > vpH) top = Math.max(8, vpH - 20);
+      if (left < pad) left = rect.left;
+      if (left + menuW > vpW - pad) left = vpW - menuW - pad;
+
+      if (top + menuH > vpH - pad) {
+        const aboveTop = rect.top - menuH - 4;
+        if (aboveTop >= pad) {
+          top = aboveTop;
+        } else {
+          top = Math.max(pad, vpH - menuH - pad);
+        }
+      }
 
       sheet.style.top = top + 'px';
       sheet.style.left = left + 'px';

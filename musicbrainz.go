@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/store"
 	"net/http"
 	"net/url"
 	"os"
@@ -81,7 +82,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 		metaScanLock.Unlock()
 	}()
 
-	mu.RLock()
+	store.Mu.RLock()
 	type trackInfo struct {
 		id       string
 		title    string
@@ -90,7 +91,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 	}
 
 	existingMatches := map[string]bool{}
-	rows, _ := db.Query(`SELECT DISTINCT track_id FROM metadata_matches`)
+	rows, _ := store.DB.Query(`SELECT DISTINCT track_id FROM metadata_matches`)
 	if rows != nil {
 		for rows.Next() {
 			var tid string
@@ -102,7 +103,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 
 	var unmatched []trackInfo
 	var skipped int
-	for _, t := range tracks {
+	for _, t := range store.Tracks {
 		if existingMatches[t.ID] {
 			continue
 		}
@@ -141,7 +142,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 			filePath: t.FilePath,
 		})
 	}
-	mu.RUnlock()
+	store.Mu.RUnlock()
 
 	var result models.MetadataScanResult
 	var resultMu sync.Mutex
@@ -231,16 +232,16 @@ func scanMetadataForTracks() models.MetadataScanResult {
 					continue
 				}
 
-				mu.RLock()
+				store.Mu.RLock()
 				hasCover := false
 				if cand.AlbumID != "" {
-					coverDir := filepath.Join(musicDir, "images")
+					coverDir := filepath.Join(store.MusicDir, "images")
 					coverPath := filepath.Join(coverDir, cand.AlbumID+".jpg")
 					if _, err := os.Stat(coverPath); err == nil {
 						hasCover = true
 					}
 				}
-				mu.RUnlock()
+				store.Mu.RUnlock()
 
 				match := &models.MetadataMatch{
 					ID:          models.GenerateUUID(),
@@ -257,7 +258,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 					FilePath:    info.filePath,
 				}
 
-				dbInsertMetadataMatch(match)
+				store.DbInsertMetadataMatch(match)
 
 				resultMu.Lock()
 				if score >= 0.8 {
@@ -285,7 +286,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 	result.Failed = metaScan.Failed
 
 	// Auto-approve high-confidence matches (score >= 0.8)
-	autoApproved := dbApproveAllMatches()
+	autoApproved := store.DbApproveAllMatches()
 	result.AutoApproved = autoApproved
 	result.Pending -= autoApproved
 	if result.Pending < 0 {
@@ -309,7 +310,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 }
 
 func applyApprovedMatches() int {
-	matches := dbGetAllMatches()
+	matches := store.DbGetAllMatches()
 	applied := 0
 
 	type coverJob struct {
@@ -332,10 +333,10 @@ func applyApprovedMatches() int {
 		}
 	}
 
-	mu.Lock()
-	coverDir := filepath.Join(musicDir, "images")
+	store.Mu.Lock()
+	coverDir := filepath.Join(store.MusicDir, "images")
 	for _, m := range bestPerTrack {
-		track, exists := tracks[m.TrackID]
+		track, exists := store.Tracks[m.TrackID]
 		if !exists {
 			continue
 		}
@@ -366,7 +367,7 @@ func applyApprovedMatches() int {
 			}
 			track.HasMetadata = true
 			applied++
-			dbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
+			store.DbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
 
 			if oldAlbumID != track.AlbumID {
 				oldPath := filepath.Join(coverDir, oldAlbumID+".jpg")
@@ -374,9 +375,9 @@ func applyApprovedMatches() int {
 				if _, err := os.Stat(newPath); os.IsNotExist(err) {
 					if data, ferr := os.ReadFile(oldPath); ferr == nil {
 						os.WriteFile(newPath, data, 0644)
-						coverMu.Lock()
-						coverCache[track.AlbumID] = data
-						coverMu.Unlock()
+						store.CoverMu.Lock()
+						store.CoverCache[track.AlbumID] = data
+						store.CoverMu.Unlock()
 					}
 				}
 			}
@@ -395,30 +396,30 @@ func applyApprovedMatches() int {
 	if applied > 0 {
 		rebuildAlbumsFromTracks()
 	}
-	mu.Unlock()
+	store.Mu.Unlock()
 
 	go func() {
 		for _, job := range coverJobs {
-			coverMu.RLock()
-			_, exists := coverCache[job.trackAlbumID]
-			coverMu.RUnlock()
+			store.CoverMu.RLock()
+			_, exists := store.CoverCache[job.trackAlbumID]
+			store.CoverMu.RUnlock()
 			if exists {
 				continue
 			}
 
-			coverDir := filepath.Join(musicDir, "images")
+			coverDir := filepath.Join(store.MusicDir, "images")
 			os.MkdirAll(coverDir, 0755)
 			coverPath := filepath.Join(coverDir, job.trackAlbumID+".jpg")
 
 			if diskData, err := os.ReadFile(coverPath); err == nil && len(diskData) > 0 {
-				coverMu.Lock()
-				coverCache[job.trackAlbumID] = diskData
-				coverMu.Unlock()
-				mu.Lock()
-				if a, ok := albums[job.trackAlbumID]; ok {
+				store.CoverMu.Lock()
+				store.CoverCache[job.trackAlbumID] = diskData
+				store.CoverMu.Unlock()
+				store.Mu.Lock()
+				if a, ok := store.Albums[job.trackAlbumID]; ok {
 					a.HasCover = true
 				}
-				mu.Unlock()
+				store.Mu.Unlock()
 				continue
 			}
 
@@ -434,14 +435,14 @@ func applyApprovedMatches() int {
 						resp.Body.Close()
 						if len(data) > 0 {
 							os.WriteFile(coverPath, data, 0644)
-							coverMu.Lock()
-							coverCache[job.trackAlbumID] = data
-							coverMu.Unlock()
-							mu.Lock()
-							if a, ok := albums[job.trackAlbumID]; ok {
+							store.CoverMu.Lock()
+							store.CoverCache[job.trackAlbumID] = data
+							store.CoverMu.Unlock()
+							store.Mu.Lock()
+							if a, ok := store.Albums[job.trackAlbumID]; ok {
 								a.HasCover = true
 							}
-							mu.Unlock()
+							store.Mu.Unlock()
 							log.Printf("[cover] Fetched cover for %s - %s", job.artist, job.album)
 							time.Sleep(800 * time.Millisecond)
 							continue
@@ -463,8 +464,8 @@ func applyApprovedMatches() int {
 
 func rebuildAlbumsFromTracks() {
 	newAlbums := make(map[string]*models.Album)
-	coverDir := filepath.Join(musicDir, "images")
-	for _, t := range tracks {
+	coverDir := filepath.Join(store.MusicDir, "images")
+	for _, t := range store.Tracks {
 		if t.Album != "" {
 			if _, exists := newAlbums[t.AlbumID]; !exists {
 				newAlbums[t.AlbumID] = &models.Album{
@@ -476,11 +477,11 @@ func rebuildAlbumsFromTracks() {
 			}
 			newAlbums[t.AlbumID].TrackCount++
 
-			coverMu.RLock()
-			if _, hasCover := coverCache[t.AlbumID]; hasCover {
+			store.CoverMu.RLock()
+			if _, hasCover := store.CoverCache[t.AlbumID]; hasCover {
 				newAlbums[t.AlbumID].HasCover = true
 			}
-			coverMu.RUnlock()
+			store.CoverMu.RUnlock()
 
 			if !newAlbums[t.AlbumID].HasCover {
 				coverPath := filepath.Join(coverDir, t.AlbumID+".jpg")
@@ -494,9 +495,9 @@ func rebuildAlbumsFromTracks() {
 			}
 		}
 	}
-	albums = newAlbums
-	for _, a := range albums {
-		dbUpsertAlbum(a)
+	store.Albums = newAlbums
+	for _, a := range store.Albums {
+		store.DbUpsertAlbum(a)
 	}
 }
 

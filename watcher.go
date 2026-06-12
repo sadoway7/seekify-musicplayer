@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"musicapp/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,7 @@ func countAudioFiles(dir string) int {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
-		if _, ok := audioExtensions[ext]; ok {
+		if _, ok := store.AudioExtensions[ext]; ok {
 			count++
 		}
 		return nil
@@ -40,8 +41,8 @@ func countAudioFiles(dir string) int {
 func startWatcher() {
 	// Record initial counts after startup scan
 	watcherMu.Lock()
-	lastFileCounts[musicDir] = countAudioFiles(musicDir)
-	for prefix, dir := range musicDirs {
+	lastFileCounts[store.MusicDir] = countAudioFiles(store.MusicDir)
+	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
@@ -50,12 +51,12 @@ func startWatcher() {
 	watcherMu.Unlock()
 
 	for {
-		if !getSettingBool("watcher_enabled", true) {
+		if !store.GetSettingBool("watcher_enabled", true) {
 			time.Sleep(5 * time.Minute)
 			continue
 		}
 
-		interval := getSettingInt("watcher_interval", 30)
+		interval := store.GetSettingInt("watcher_interval", 30)
 		if interval < 5 {
 			interval = 5
 		}
@@ -70,10 +71,10 @@ func checkAndRescan() {
 		dir    string
 		prefix string
 	}{
-		{musicDir, ""},
+		{store.MusicDir, ""},
 	}
 
-	for prefix, dir := range musicDirs {
+	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
@@ -114,16 +115,16 @@ func checkAndRescan() {
 
 		// Rescan the changed directory
 		if d.prefix == "" {
-			stats := scanMusicDir(musicDir)
-			mu.RLock()
-			trackCount := len(tracks)
-			mu.RUnlock()
+			stats := scanMusicDir(store.MusicDir)
+			store.Mu.RLock()
+			trackCount := len(store.Tracks)
+			store.Mu.RUnlock()
 			log.Printf("[watcher] Primary rescan: %d scanned, %d total tracks", stats.Scanned, trackCount)
 		} else {
 			stats := scanMusicDirWithPrefix(d.dir, d.prefix)
-			mu.RLock()
-			trackCount := len(tracks)
-			mu.RUnlock()
+			store.Mu.RLock()
+			trackCount := len(store.Tracks)
+			store.Mu.RUnlock()
 			log.Printf("[watcher] Media rescan [%s]: %d scanned, %d total tracks", d.prefix, stats.Scanned, trackCount)
 		}
 

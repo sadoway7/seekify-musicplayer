@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,15 +35,15 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.RLock()
-	track, exists := tracks[trackID]
-	mu.RUnlock()
+	store.Mu.RLock()
+	track, exists := store.Tracks[trackID]
+	store.Mu.RUnlock()
 	if !exists {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
 
-	db.Exec("DELETE FROM metadata_matches WHERE track_id = ?", trackID)
+	store.DB.Exec("DELETE FROM metadata_matches WHERE track_id = ?", trackID)
 
 	go func() {
 		searchTitle := track.Title
@@ -65,15 +66,15 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			mu.RLock()
+			store.Mu.RLock()
 			hasCover := false
 			if cand.AlbumID != "" {
-				coverPath := filepath.Join(musicDir, "images", cand.AlbumID+".jpg")
+				coverPath := filepath.Join(store.MusicDir, "images", cand.AlbumID+".jpg")
 				if _, err := os.Stat(coverPath); err == nil {
 					hasCover = true
 				}
 			}
-			mu.RUnlock()
+			store.Mu.RUnlock()
 
 			match := &models.MetadataMatch{
 				ID:          models.GenerateUUID(),
@@ -89,7 +90,7 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 				HasCover:    hasCover,
 				FilePath:    track.FilePath,
 			}
-			dbInsertMetadataMatch(match)
+			store.DbInsertMetadataMatch(match)
 			inserted++
 		}
 		log.Printf("[metadata] Rescan complete: %d candidates found for %s - %s", inserted, searchArtist, searchTitle)
@@ -108,9 +109,9 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.RLock()
-	track, exists := tracks[trackID]
-	mu.RUnlock()
+	store.Mu.RLock()
+	track, exists := store.Tracks[trackID]
+	store.Mu.RUnlock()
 	if !exists {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
@@ -142,15 +143,15 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 	for _, cand := range candidates {
 		score := scoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 
-		mu.RLock()
+		store.Mu.RLock()
 		hasCover := false
 		if cand.AlbumID != "" {
-			coverPath := filepath.Join(musicDir, "images", cand.AlbumID+".jpg")
+			coverPath := filepath.Join(store.MusicDir, "images", cand.AlbumID+".jpg")
 			if _, err := os.Stat(coverPath); err == nil {
 				hasCover = true
 			}
 		}
-		mu.RUnlock()
+		store.Mu.RUnlock()
 
 		results = append(results, rescanCandidate{
 			Title:    cand.Title,
@@ -305,10 +306,10 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	track, exists := tracks[trackID]
+	store.Mu.Lock()
+	track, exists := store.Tracks[trackID]
 	if !exists {
-		mu.Unlock()
+		store.Mu.Unlock()
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
@@ -336,7 +337,7 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	track.HasMetadata = true
 
-	coverDir := filepath.Join(musicDir, "images")
+	coverDir := filepath.Join(store.MusicDir, "images")
 	os.MkdirAll(coverDir, 0755)
 
 	if track.AlbumID != "" {
@@ -349,11 +350,11 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if len(data) == 0 {
-				coverMu.RLock()
-				if d, ok := coverCache[oldAlbumID]; ok {
+				store.CoverMu.RLock()
+				if d, ok := store.CoverCache[oldAlbumID]; ok {
 					data = d
 				}
-				coverMu.RUnlock()
+				store.CoverMu.RUnlock()
 			}
 			if oldHasCover && len(data) == 0 {
 				if picData, err := extractCoverFromFile(track.FilePath); err == nil && len(picData) > 0 {
@@ -362,27 +363,27 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			if len(data) > 0 {
 				os.WriteFile(newPath, data, 0644)
-				coverMu.Lock()
-				coverCache[track.AlbumID] = data
-				coverMu.Unlock()
+				store.CoverMu.Lock()
+				store.CoverCache[track.AlbumID] = data
+				store.CoverMu.Unlock()
 				track.HasCover = true
 			}
 		}
 	}
 
-	dbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
+	store.DbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
 	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
 		track.HasCover = false
 	}
 	rebuildAlbumsFromTracks()
-	mu.Unlock()
+	store.Mu.Unlock()
 
 	albumIDForCover := body.AlbumID
 	if albumIDForCover == "" {
 		albumIDForCover = track.AlbumID
 	}
 	if albumIDForCover != "" {
-		coverDir := filepath.Join(musicDir, "images")
+		coverDir := filepath.Join(store.MusicDir, "images")
 		os.MkdirAll(coverDir, 0755)
 
 		if body.AlbumID != "" {
@@ -391,15 +392,15 @@ func metadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 			if err == nil && len(data) > 0 {
 				coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
 				os.WriteFile(coverPath, data, 0644)
-				coverMu.Lock()
-				coverCache[track.AlbumID] = data
-				coverMu.Unlock()
-				mu.Lock()
+				store.CoverMu.Lock()
+				store.CoverCache[track.AlbumID] = data
+				store.CoverMu.Unlock()
+				store.Mu.Lock()
 				track.HasCover = true
-				if a, ok := albums[track.AlbumID]; ok {
+				if a, ok := store.Albums[track.AlbumID]; ok {
 					a.HasCover = true
 				}
-				mu.Unlock()
+				store.Mu.Unlock()
 				log.Printf("[metadata] Cover fetched and cached for %s", track.AlbumID)
 			} else {
 				log.Printf("[metadata] Cover Art Archive failed for MBID %s: %v, trying search fallback", body.AlbumID, err)
@@ -423,26 +424,26 @@ func metadataScanProgressHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func metadataPendingHandler(w http.ResponseWriter, r *http.Request) {
-	matches := dbGetPendingMatches()
+	matches := store.DbGetPendingMatches()
 
 	enriched := make([]models.MetadataMatch, 0, len(matches))
 	for _, m := range matches {
-		mu.RLock()
-		if t, ok := tracks[m.TrackID]; ok {
+		store.Mu.RLock()
+		if t, ok := store.Tracks[m.TrackID]; ok {
 			m.FilePath = t.FilePath
 			if _, hasCover := func() ([]byte, bool) {
-				coverMu.RLock()
-				defer coverMu.RUnlock()
-				d, e := coverCache[t.AlbumID]
+				store.CoverMu.RLock()
+				defer store.CoverMu.RUnlock()
+				d, e := store.CoverCache[t.AlbumID]
 				return d, e
 			}(); hasCover {
 				m.HasCover = true
 			}
 		}
-		mu.RUnlock()
+		store.Mu.RUnlock()
 
 		if m.MBAlbumID != "" {
-			coverDir := filepath.Join(musicDir, "images")
+			coverDir := filepath.Join(store.MusicDir, "images")
 			coverPath := filepath.Join(coverDir, m.MBAlbumID+".jpg")
 			if _, err := os.Stat(coverPath); err == nil {
 				m.HasCover = true
@@ -457,7 +458,7 @@ func metadataPendingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func metadataAllHandler(w http.ResponseWriter, r *http.Request) {
-	matches := dbGetAllMatches()
+	matches := store.DbGetAllMatches()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(matches)
 }
@@ -469,7 +470,7 @@ func metadataApproveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !dbApproveMatch(id) {
+	if !store.DbApproveMatch(id) {
 		http.Error(w, "Match not found or not pending", http.StatusNotFound)
 		return
 	}
@@ -491,7 +492,7 @@ func metadataRejectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !dbRejectMatch(id) {
+	if !store.DbRejectMatch(id) {
 		http.Error(w, "Match not found", http.StatusNotFound)
 		return
 	}
@@ -501,7 +502,7 @@ func metadataRejectHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func metadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
-	count := dbApproveAllMatches()
+	count := store.DbApproveAllMatches()
 	applied := applyApprovedMatches()
 	extractEmbeddedCovers()
 
@@ -513,13 +514,13 @@ func metadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func metadataClearHandler(w http.ResponseWriter, r *http.Request) {
-	dbClearMatches()
+	store.DbClearMatches()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"cleared": true})
 }
 
 func metadataCountsHandler(w http.ResponseWriter, r *http.Request) {
-	counts := dbGetMatchCount()
+	counts := store.DbGetMatchCount()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(counts)
 }
@@ -531,18 +532,18 @@ func metadataUndoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trackID, ok := dbUndoMatch(id)
+	trackID, ok := store.DbUndoMatch(id)
 	if !ok {
 		http.Error(w, "Match not found or not approved", http.StatusNotFound)
 		return
 	}
 
 	// Restore track from file tags on next scan
-	mu.Lock()
-	if t, exists := tracks[trackID]; exists {
+	store.Mu.Lock()
+	if t, exists := store.Tracks[trackID]; exists {
 		t.HasMetadata = false
 	}
-	mu.Unlock()
+	store.Mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"undone": true})

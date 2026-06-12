@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"musicapp/internal/store"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -109,7 +110,7 @@ func findFfprobe() string {
 }
 
 func initDownloadTables() {
-	db.Exec(`CREATE TABLE IF NOT EXISTS download_jobs (
+	store.DB.Exec(`CREATE TABLE IF NOT EXISTS download_jobs (
 		id TEXT PRIMARY KEY,
 		query TEXT NOT NULL DEFAULT '',
 		artist TEXT NOT NULL DEFAULT '',
@@ -157,32 +158,32 @@ func initDownloadTables() {
 		`ALTER TABLE download_jobs ADD COLUMN candidates TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
-		db.Exec(m)
+		store.DB.Exec(m)
 	}
 }
 
 func dbCreateJob(job *DownloadJob) error {
-	_, err := db.Exec(`INSERT INTO download_jobs
+	_, err := store.DB.Exec(`INSERT INTO download_jobs
 		(id, query, artist, title, album, album_mbid, track_number, track_total,
 		 status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		 override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		job.ID, job.Query, job.Artist, job.Title, job.Album, job.AlbumMBID,
 		job.TrackNumber, job.TrackTotal, job.Status, job.Error, job.Source,
-		job.AudioQuality, job.FilePath, boolToInt(job.FileDeleted), job.ProgressStage,
-		job.OverrideDir, job.SearchQuery, boolToInt(job.ConvertToFlac), job.PlaylistID, job.VideoID, job.CreatedAt, job.CompletedAt)
+		job.AudioQuality, job.FilePath, store.BoolToInt(job.FileDeleted), job.ProgressStage,
+		job.OverrideDir, job.SearchQuery, store.BoolToInt(job.ConvertToFlac), job.PlaylistID, job.VideoID, job.CreatedAt, job.CompletedAt)
 	return err
 }
 
 func dbUpdateJob(job *DownloadJob) error {
-	_, err := db.Exec(`UPDATE download_jobs SET
+	_, err := store.DB.Exec(`UPDATE download_jobs SET
 		status = ?, error = ?, source = ?, audio_quality = ?,
 		file_path = ?, file_deleted = ?, progress_stage = ?, completed_at = ?,
 		pipeline = ?, recording_id = ?, release_id = ?, artist_id = ?, genre = ?, year = ?,
 		candidates = ?, video_id = ?
 		WHERE id = ?`,
 		job.Status, job.Error, job.Source, job.AudioQuality,
-		job.FilePath, boolToInt(job.FileDeleted), job.ProgressStage, job.CompletedAt,
+		job.FilePath, store.BoolToInt(job.FileDeleted), job.ProgressStage, job.CompletedAt,
 		job.Pipeline, job.RecordingID, job.ReleaseID, job.ArtistID, job.Genre, job.Year,
 		job.CandidatesJSON, job.VideoID,
 		job.ID)
@@ -190,7 +191,7 @@ func dbUpdateJob(job *DownloadJob) error {
 }
 
 func dbGetJob(id string) (*DownloadJob, error) {
-	row := db.QueryRow(`SELECT
+	row := store.DB.QueryRow(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
@@ -203,7 +204,7 @@ func dbGetJobs(limit int) ([]DownloadJob, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := db.Query(`SELECT
+	rows, err := store.DB.Query(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
@@ -229,7 +230,7 @@ func dbGetJobs(limit int) ([]DownloadJob, error) {
 }
 
 func dbGetQueuedJobs() ([]DownloadJob, error) {
-	rows, err := db.Query(`SELECT
+	rows, err := store.DB.Query(`SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
@@ -244,7 +245,7 @@ func dbGetQueuedJobs() ([]DownloadJob, error) {
 
 func dbGetJobCounts() map[string]int {
 	counts := map[string]int{"queued": 0, "searching": 0, "downloading": 0, "tagging": 0, "completed": 0, "failed": 0, "needs_selection": 0}
-	rows, err := db.Query("SELECT status, COUNT(*) FROM download_jobs GROUP BY status")
+	rows, err := store.DB.Query("SELECT status, COUNT(*) FROM download_jobs GROUP BY status")
 	if err != nil {
 		return counts
 	}
@@ -316,9 +317,9 @@ func createDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 		searchQuery = strings.Join(parts, " - ")
 	}
 
-	mu.RLock()
-	existing := tracks
-	mu.RUnlock()
+	store.Mu.RLock()
+	existing := store.Tracks
+	store.Mu.RUnlock()
 	if artist != "" && title != "" {
 		for _, t := range existing {
 			if strings.EqualFold(t.Artist, artist) && strings.EqualFold(t.Title, title) {
@@ -447,9 +448,9 @@ func processSingleDownload(job *DownloadJob) {
 		log.Printf("[download] Auto-selected %s (score %.1f) for %q", videoID, candidates[0].Score, job.SearchQuery)
 	}
 
-	destDir := musicDir
-	organise := getSettingBool("download_organise_by_artist", true)
-	albumSubdir := getSetting("download_album_subdir", "Albums")
+	destDir := store.MusicDir
+	organise := store.GetSettingBool("download_organise_by_artist", true)
+	albumSubdir := store.GetSetting("download_album_subdir", "Albums")
 	if albumSubdir == "" {
 		albumSubdir = "Albums"
 	}
@@ -457,11 +458,11 @@ func processSingleDownload(job *DownloadJob) {
 	if job.OverrideDir != "" {
 		destDir = job.OverrideDir
 	} else if job.Album != "" && job.Artist != "" {
-		destDir = filepath.Join(musicDir, sanitizeFilename(job.Artist), sanitizeFilename(job.Album))
+		destDir = filepath.Join(store.MusicDir, sanitizeFilename(job.Artist), sanitizeFilename(job.Album))
 	} else if job.Artist != "" && organise {
-		destDir = filepath.Join(musicDir, sanitizeFilename(job.Artist))
+		destDir = filepath.Join(store.MusicDir, sanitizeFilename(job.Artist))
 	} else {
-		destDir = musicDir
+		destDir = store.MusicDir
 	}
 	os.MkdirAll(destDir, 0755)
 
@@ -481,13 +482,13 @@ func processSingleDownload(job *DownloadJob) {
 
 	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
 
-	audioFormat := getSetting("download_format", "flac")
+	audioFormat := store.GetSetting("download_format", "flac")
 	audioQuality := "0"
 	switch audioFormat {
 	case "mp3":
-		audioQuality = getSetting("mp3_bitrate", "v2")
+		audioQuality = store.GetSetting("mp3_bitrate", "v2")
 	case "opus":
-		audioQuality = getSetting("opus_bitrate", "320k")
+		audioQuality = store.GetSetting("opus_bitrate", "320k")
 	case "best", "m4a":
 		audioFormat = "best"
 		audioQuality = "0"
@@ -495,7 +496,7 @@ func processSingleDownload(job *DownloadJob) {
 		audioFormat = "flac"
 	}
 
-	if !getSettingBool("download_convert_to_flac", true) {
+	if !store.GetSettingBool("download_convert_to_flac", true) {
 		audioFormat = "best"
 	}
 
@@ -512,7 +513,7 @@ func processSingleDownload(job *DownloadJob) {
 		url,
 	}
 
-	minBr := getSettingInt("download_min_bitrate", 0)
+	minBr := store.GetSettingInt("download_min_bitrate", 0)
 
 	cmd := exec.Command(ytdlpPath, ytArgs...)
 
@@ -620,15 +621,15 @@ func processSingleDownload(job *DownloadJob) {
 		scanSingleFile(audioFile)
 
 		if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
-			mu.RLock()
-			for _, tr := range tracks {
+			store.Mu.RLock()
+			for _, tr := range store.Tracks {
 				if strings.EqualFold(tr.Artist, job.Artist) && strings.EqualFold(tr.Title, job.Title) {
-					dbAddTrackToPlaylist(job.PlaylistID, tr.ID)
+					store.DbAddTrackToPlaylist(job.PlaylistID, tr.ID)
 					log.Printf("[download] Added %s - %s to playlist %s", tr.Artist, tr.Title, job.PlaylistID)
 					break
 				}
 			}
-			mu.RUnlock()
+			store.Mu.RUnlock()
 		}
 	}()
 }
@@ -1023,7 +1024,7 @@ func extractBitrateFromQuality(quality string) int {
 func recoverStalledDownloads() {
 	stalled := []string{"searching", "downloading", "tagging"}
 	for _, status := range stalled {
-		result, _ := db.Exec("UPDATE download_jobs SET status = 'queued', progress_stage = '', error = '' WHERE status = ?", status)
+		result, _ := store.DB.Exec("UPDATE download_jobs SET status = 'queued', progress_stage = '', error = '' WHERE status = ?", status)
 		if affected, _ := result.RowsAffected(); affected > 0 {
 			log.Printf("[download] Recovered %d stalled %s jobs back to queued", affected, status)
 		}

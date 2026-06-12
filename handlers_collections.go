@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"musicapp/internal/store"
 	"net/http"
 	"strings"
 )
@@ -9,7 +10,7 @@ import (
 func playlistsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		playlists := dbGetPlaylists()
+		playlists := store.DbGetPlaylists()
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(playlists)
@@ -28,7 +29,7 @@ func playlistsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		playlist := dbCreatePlaylist(body.Name)
+		playlist := store.DbCreatePlaylist(body.Name)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(playlist)
@@ -52,10 +53,10 @@ func playlistHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		dbUpdatePlaylist(id, body.Name, body.TrackIDs)
+		store.DbUpdatePlaylist(id, body.Name, body.TrackIDs)
 
 		w.Header().Set("Content-Type", "application/json")
-		playlists := dbGetPlaylists()
+		playlists := store.DbGetPlaylists()
 		for _, p := range playlists {
 			if p.ID == id {
 				json.NewEncoder(w).Encode(p)
@@ -65,7 +66,7 @@ func playlistHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Playlist not found", http.StatusNotFound)
 
 	case http.MethodDelete:
-		if !dbDeletePlaylist(id) {
+		if !store.DbDeletePlaylist(id) {
 			http.Error(w, "Playlist not found", http.StatusNotFound)
 			return
 		}
@@ -79,7 +80,7 @@ func playlistHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func favoritesHandler(w http.ResponseWriter, r *http.Request) {
-	favorites := dbGetFavorites()
+	favorites := store.DbGetFavorites()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(favorites)
@@ -95,14 +96,14 @@ func favoriteToggleHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing track id", http.StatusBadRequest)
 		return
 	}
-	added := dbToggleFavorite(trackID)
+	added := store.DbToggleFavorite(trackID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"added": added})
 }
 
 func recentHandler(w http.ResponseWriter, r *http.Request) {
-	recent := dbGetRecent()
+	recent := store.DbGetRecent()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(recent)
@@ -110,7 +111,7 @@ func recentHandler(w http.ResponseWriter, r *http.Request) {
 
 func recentAddHandler(w http.ResponseWriter, r *http.Request) {
 	trackID := strings.TrimPrefix(r.URL.Path, "/api/recent/")
-	dbAddRecent(trackID)
+	store.DbAddRecent(trackID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"added": true})
@@ -129,7 +130,7 @@ func sharedQueueCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	trackJSON, _ := json.Marshal(body.TrackIDs)
-	id := dbSaveSharedQueue(string(trackJSON))
+	id := store.DbSaveSharedQueue(string(trackJSON))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"id": id})
 }
@@ -140,7 +141,7 @@ func sharedQueueGetHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing queue id", http.StatusBadRequest)
 		return
 	}
-	ids, err := dbGetSharedQueue(id)
+	ids, err := store.DbGetSharedQueue(id)
 	if err != nil {
 		http.Error(w, "Queue not found", http.StatusNotFound)
 		return

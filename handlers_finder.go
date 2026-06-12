@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"os/exec"
@@ -140,7 +141,7 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 
-	coverDir := filepath.Join(musicDir, "images", "finder")
+	coverDir := filepath.Join(store.MusicDir, "images", "finder")
 	cachedPath := filepath.Join(coverDir, mbid+".jpg")
 	if data, err := os.ReadFile(cachedPath); err == nil && len(data) > 0 {
 		w.Header().Set("Content-Type", "image/jpeg")
@@ -184,9 +185,9 @@ func finderCoverHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkDuplicateInLibrary(artist, title string) bool {
-	mu.RLock()
-	defer mu.RUnlock()
-	for _, t := range tracks {
+	store.Mu.RLock()
+	defer store.Mu.RUnlock()
+	for _, t := range store.Tracks {
 		if strings.EqualFold(t.Artist, artist) && strings.EqualFold(t.Title, title) {
 			return true
 		}
@@ -195,10 +196,10 @@ func checkDuplicateInLibrary(artist, title string) bool {
 }
 
 func buildLibraryLookup() map[string]bool {
-	mu.RLock()
-	defer mu.RUnlock()
-	m := make(map[string]bool, len(tracks)*2)
-	for _, t := range tracks {
+	store.Mu.RLock()
+	defer store.Mu.RUnlock()
+	m := make(map[string]bool, len(store.Tracks)*2)
+	for _, t := range store.Tracks {
 		if t.Artist != "" && t.Title != "" {
 			m[strings.ToLower(t.Artist+"|"+t.Title)] = true
 		}
@@ -207,10 +208,10 @@ func buildLibraryLookup() map[string]bool {
 }
 
 func buildAlbumLookup() map[string]bool {
-	mu.RLock()
-	defer mu.RUnlock()
-	m := make(map[string]bool, len(albums)*2)
-	for _, a := range albums {
+	store.Mu.RLock()
+	defer store.Mu.RUnlock()
+	m := make(map[string]bool, len(store.Albums)*2)
+	for _, a := range store.Albums {
 		if a.Artist != "" && a.Name != "" {
 			m[strings.ToLower(a.Artist+"|"+a.Name)] = true
 		}

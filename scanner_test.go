@@ -1,6 +1,7 @@
 package main
 
 import (
+	"musicapp/internal/store"
 	"testing"
 )
 
@@ -56,8 +57,8 @@ func TestGeneratePlaceholderSVG_differentIDs(t *testing.T) {
 }
 
 func TestResolveFilePath_primary(t *testing.T) {
-	musicDir = "/music"
-	musicDirs = map[string]string{"": "/music"}
+	store.MusicDir = "/music"
+	store.MusicDirs = map[string]string{"": "/music"}
 	got := resolveFilePath("Artist/Album/track.mp3")
 	want := "/music/Artist/Album/track.mp3"
 	if got != want {
@@ -66,8 +67,8 @@ func TestResolveFilePath_primary(t *testing.T) {
 }
 
 func TestResolveFilePath_mediaPrefix(t *testing.T) {
-	musicDir = "/music"
-	musicDirs = map[string]string{"": "/music", "media": "/media"}
+	store.MusicDir = "/music"
+	store.MusicDirs = map[string]string{"": "/music", "media": "/media"}
 	got := resolveFilePath("media:Artist/Album/track.mp3")
 	want := "/media/Artist/Album/track.mp3"
 	if got != want {
@@ -76,8 +77,8 @@ func TestResolveFilePath_mediaPrefix(t *testing.T) {
 }
 
 func TestResolveFilePath_noPrefix(t *testing.T) {
-	musicDir = "/music"
-	musicDirs = map[string]string{"": "/music"}
+	store.MusicDir = "/music"
+	store.MusicDirs = map[string]string{"": "/music"}
 	got := resolveFilePath("track.mp3")
 	want := "/music/track.mp3"
 	if got != want {
@@ -86,8 +87,8 @@ func TestResolveFilePath_noPrefix(t *testing.T) {
 }
 
 func TestMusicDirForPath_primary(t *testing.T) {
-	musicDir = "/music"
-	musicDirs = map[string]string{"": "/music", "media": "/media"}
+	store.MusicDir = "/music"
+	store.MusicDirs = map[string]string{"": "/music", "media": "/media"}
 	got := musicDirForPath("track.mp3")
 	if got != "/music" {
 		t.Errorf("musicDirForPath(%q) = %q, want /music", "track.mp3", got)
@@ -95,8 +96,8 @@ func TestMusicDirForPath_primary(t *testing.T) {
 }
 
 func TestMusicDirForPath_media(t *testing.T) {
-	musicDir = "/music"
-	musicDirs = map[string]string{"": "/music", "media": "/media"}
+	store.MusicDir = "/music"
+	store.MusicDirs = map[string]string{"": "/music", "media": "/media"}
 	got := musicDirForPath("media:track.mp3")
 	if got != "/media" {
 		t.Errorf("musicDirForPath(%q) = %q, want /media", "media:track.mp3", got)

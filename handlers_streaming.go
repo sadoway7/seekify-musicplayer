@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,9 +17,9 @@ import (
 func streamHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/stream/")
 
-	mu.RLock()
-	track, exists := tracks[id]
-	mu.RUnlock()
+	store.Mu.RLock()
+	track, exists := store.Tracks[id]
+	store.Mu.RUnlock()
 
 	if !exists {
 		http.Error(w, "Track not found", http.StatusNotFound)
@@ -41,7 +42,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 
 	fileSize := stat.Size()
 	ext := strings.ToLower(filepath.Ext(fullPath))
-	contentType := audioExtensions[ext]
+	contentType := store.AudioExtensions[ext]
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -102,9 +103,9 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 func coverHandler(w http.ResponseWriter, r *http.Request) {
 	albumID := strings.TrimPrefix(r.URL.Path, "/api/cover/")
 
-	coverMu.RLock()
-	data, exists := coverCache[albumID]
-	coverMu.RUnlock()
+	store.CoverMu.RLock()
+	data, exists := store.CoverCache[albumID]
+	store.CoverMu.RUnlock()
 
 	if exists {
 		contentType := http.DetectContentType(data)
@@ -117,26 +118,26 @@ func coverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	coverPath := filepath.Join(musicDir, "images", albumID+".jpg")
+	coverPath := filepath.Join(store.MusicDir, "images", albumID+".jpg")
 	if diskData, err := os.ReadFile(coverPath); err == nil {
-		coverMu.Lock()
-		coverCache[albumID] = diskData
-		coverMu.Unlock()
+		store.CoverMu.Lock()
+		store.CoverCache[albumID] = diskData
+		store.CoverMu.Unlock()
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		w.Write(diskData)
 		return
 	}
 
-	mu.RLock()
+	store.Mu.RLock()
 	var albumName string
-	for _, a := range albums {
+	for _, a := range store.Albums {
 		if a.ID == albumID {
 			albumName = a.Name
 			break
 		}
 	}
-	mu.RUnlock()
+	store.Mu.RUnlock()
 
 	svg := generatePlaceholderSVG(albumName, albumID)
 	w.Header().Set("Content-Type", "image/svg+xml")
@@ -168,7 +169,7 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	artDir := filepath.Join(musicDir, "images", "artists")
+	artDir := filepath.Join(store.MusicDir, "images", "artists")
 	artFile := filepath.Join(artDir, key+".jpg")
 	if diskData, err := os.ReadFile(artFile); err == nil {
 		artistArtMu.Lock()
@@ -181,24 +182,24 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fallback: use first album cover for this artist
-	mu.RLock()
-	for _, a := range albums {
+	store.Mu.RLock()
+	for _, a := range store.Albums {
 		if a.Artist == "" || strings.ToLower(strings.TrimSpace(a.Artist)) != key {
 			continue
 		}
 		if !a.HasCover {
 			continue
 		}
-		coverPath := filepath.Join(musicDir, "images", a.ID+".jpg")
+		coverPath := filepath.Join(store.MusicDir, "images", a.ID+".jpg")
 		if coverData, err := os.ReadFile(coverPath); err == nil {
-			mu.RUnlock()
+			store.Mu.RUnlock()
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Header().Set("Cache-Control", "public, max-age=86400")
 			w.Write(coverData)
 			return
 		}
 	}
-	mu.RUnlock()
+	store.Mu.RUnlock()
 
 	svg := generatePlaceholderSVG(artistName, artistName)
 	w.Header().Set("Content-Type", "image/svg+xml")

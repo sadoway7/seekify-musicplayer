@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"mime"
+	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"os/exec"
@@ -14,10 +15,10 @@ import (
 )
 
 func scanHandler(w http.ResponseWriter, r *http.Request) {
-	stats := scanMusicDir(musicDir)
+	stats := scanMusicDir(store.MusicDir)
 
 	// Scan additional media directories
-	for prefix, dir := range musicDirs {
+	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
@@ -80,7 +81,7 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 		ogURL := host + r.URL.RequestURI()
 
 		if playlistID != "" {
-			p := dbFindPlaylistByID(playlistID)
+			p := store.DbFindPlaylistByID(playlistID)
 			if p != nil {
 				ogTitle = p.Name + " — Music Playlist"
 				ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", len(p.TrackIDs))
@@ -89,27 +90,27 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 				ogDesc = "Private Music Library."
 			}
 		} else if trackID != "" {
-			mu.RLock()
-			if t, ok := tracks[trackID]; ok {
+			store.Mu.RLock()
+			if t, ok := store.Tracks[trackID]; ok {
 				ogTitle = t.Artist + " — " + t.Title
 				ogDesc = "Private Music Library."
 				if t.AlbumID != "" {
 					ogImage = host + "/api/cover/" + t.AlbumID + "?size=300"
 				}
 			}
-			mu.RUnlock()
+			store.Mu.RUnlock()
 			if ogTitle == "" {
 				ogTitle = "Music"
 				ogDesc = "Private Music Library."
 			}
 		} else if albumID != "" {
-			mu.RLock()
-			if a, ok := albums[albumID]; ok {
+			store.Mu.RLock()
+			if a, ok := store.Albums[albumID]; ok {
 				ogTitle = a.Artist + " — " + a.Name
 				ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", a.TrackCount)
 				ogImage = host + "/api/cover/" + albumID + "?size=300"
 			}
-			mu.RUnlock()
+			store.Mu.RUnlock()
 			if ogTitle == "" {
 				ogTitle = "Music"
 				ogDesc = "Private Music Library."

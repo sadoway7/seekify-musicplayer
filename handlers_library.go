@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"musicapp/internal/models"
+	"musicapp/internal/store"
 	"net/http"
 	"sort"
 	"sync/atomic"
@@ -12,10 +13,10 @@ import (
 var libraryVersion atomic.Int64
 
 func statsHandler(w http.ResponseWriter, r *http.Request) {
-	mu.RLock()
-	trackCount := len(tracks)
-	albumCount := len(albums)
-	mu.RUnlock()
+	store.Mu.RLock()
+	trackCount := len(store.Tracks)
+	albumCount := len(store.Albums)
+	store.Mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -27,13 +28,13 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func libraryHandler(w http.ResponseWriter, r *http.Request) {
-	mu.RLock()
-	defer mu.RUnlock()
+	store.Mu.RLock()
+	defer store.Mu.RUnlock()
 
 	reviewStatuses := dbLoadAllReviewStatuses()
 
-	trackList := make([]models.Track, 0, len(tracks))
-	for _, t := range tracks {
+	trackList := make([]models.Track, 0, len(store.Tracks))
+	for _, t := range store.Tracks {
 		copy := *t
 		if rs, ok := reviewStatuses[t.ID]; ok {
 			copy.ReviewStatus = rs.Status
@@ -45,8 +46,8 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 		return trackList[i].Title < trackList[j].Title
 	})
 
-	albumList := make([]models.Album, 0, len(albums))
-	for _, a := range albums {
+	albumList := make([]models.Album, 0, len(store.Albums))
+	for _, a := range store.Albums {
 		albumList = append(albumList, *a)
 	}
 	sort.Slice(albumList, func(i, j int) bool {
@@ -54,14 +55,14 @@ func libraryHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	artistMap := make(map[string]*models.Artist)
-	for _, t := range tracks {
+	for _, t := range store.Tracks {
 		name := t.Artist
 		if _, exists := artistMap[name]; !exists {
 			artistMap[name] = &models.Artist{Name: name}
 		}
 		artistMap[name].TrackCount++
 	}
-	for _, a := range albums {
+	for _, a := range store.Albums {
 		name := a.Artist
 		if _, exists := artistMap[name]; exists {
 			artistMap[name].AlbumCount++
