@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
 	"net/url"
@@ -118,7 +119,7 @@ func scanMetadataForTracks() models.MetadataScanResult {
 		searchArtist := t.Artist
 
 		if searchTitle == "" || searchArtist == "" {
-			filename := titleFromFilename(t.FilePath)
+			filename := scanner.TitleFromFilename(t.FilePath)
 			if searchTitle == "" && searchArtist == "" {
 				if sepIdx := strings.Index(filename, " - "); sepIdx != -1 {
 					searchArtist = strings.TrimSpace(filename[:sepIdx])

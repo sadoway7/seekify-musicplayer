@@ -1,4 +1,4 @@
-package main
+package scanner
 
 import (
 	"log"
@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func autoSortMusic() {
+func AutoSortMusic() {
 	store.Mu.RLock()
 	type moveJob struct {
 		src string
@@ -23,13 +23,13 @@ func autoSortMusic() {
 
 		// Only auto-sort files in the primary musicDir
 		// (media dir is read-only, no prefix in FilePath means primary dir)
-		if musicDirForPath(t.FilePath) != store.MusicDir {
+		if MusicDirForPath(t.FilePath) != store.MusicDir {
 			continue
 		}
 
-		expectedDir := filepath.Join(store.MusicDir, sanitizePath(t.Artist))
+		expectedDir := filepath.Join(store.MusicDir, SanitizePath(t.Artist))
 		if t.Album != "" {
-			expectedDir = filepath.Join(expectedDir, sanitizePath(t.Album))
+			expectedDir = filepath.Join(expectedDir, SanitizePath(t.Album))
 		}
 		expectedPath := filepath.Join(expectedDir, filepath.Base(t.FilePath))
 		currentPath := filepath.Join(store.MusicDir, t.FilePath)
@@ -68,11 +68,11 @@ func autoSortMusic() {
 
 	if moved > 0 {
 		log.Printf("Auto-sorted %d files. Re-scanning...", moved)
-		scanMusicDir(store.MusicDir)
+		ScanMusicDir(store.MusicDir)
 	}
 }
 
-func sanitizePath(name string) string {
+func SanitizePath(name string) string {
 	name = strings.TrimSpace(name)
 	replacer := strings.NewReplacer(
 		"/", "-",

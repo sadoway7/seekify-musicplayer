@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -48,8 +49,8 @@ func metadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		searchTitle := track.Title
 		searchArtist := track.Artist
-		if searchTitle == "" || strings.ToLower(searchTitle) == strings.ToLower(titleFromFilename(track.FilePath)) {
-			searchTitle = titleFromFilename(track.FilePath)
+		if searchTitle == "" || strings.ToLower(searchTitle) == strings.ToLower(scanner.TitleFromFilename(track.FilePath)) {
+			searchTitle = scanner.TitleFromFilename(track.FilePath)
 		}
 		log.Printf("[metadata] Rescanning single track: %s - %s", searchArtist, searchTitle)
 
@@ -119,8 +120,8 @@ func metadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	searchTitle := track.Title
 	searchArtist := track.Artist
-	if searchTitle == "" || strings.ToLower(searchTitle) == strings.ToLower(titleFromFilename(track.FilePath)) {
-		searchTitle = titleFromFilename(track.FilePath)
+	if searchTitle == "" || strings.ToLower(searchTitle) == strings.ToLower(scanner.TitleFromFilename(track.FilePath)) {
+		searchTitle = scanner.TitleFromFilename(track.FilePath)
 	}
 
 	candidates, err := mbSearchRecordings(searchArtist, searchTitle, 50)
@@ -476,8 +477,8 @@ func metadataApproveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	applied := applyApprovedMatches()
-	autoSortMusic()
-	extractEmbeddedCovers()
+	scanner.AutoSortMusic()
+	scanner.ExtractEmbeddedCovers()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"approved": true,
@@ -504,7 +505,7 @@ func metadataRejectHandler(w http.ResponseWriter, r *http.Request) {
 func metadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
 	count := store.DbApproveAllMatches()
 	applied := applyApprovedMatches()
-	extractEmbeddedCovers()
+	scanner.ExtractEmbeddedCovers()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

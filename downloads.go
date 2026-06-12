@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"os"
 	"os/exec"
@@ -618,7 +619,7 @@ func processSingleDownload(job *DownloadJob) {
 
 	go func() {
 		time.Sleep(1 * time.Second)
-		scanSingleFile(audioFile)
+		scanner.ScanSingleFile(audioFile)
 
 		if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
 			store.Mu.RLock()

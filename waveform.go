@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"os"
 	"os/exec"
@@ -135,7 +136,7 @@ func getOrGenerateWaveform(trackID string) ([]float64, error) {
 		return nil, nil
 	}
 
-	fullPath := resolveFilePath(track.FilePath)
+	fullPath := scanner.ResolveFilePath(track.FilePath)
 	peaks, err := generateWaveformPeaks(fullPath)
 	if err != nil {
 		log.Printf("[waveform] Failed to generate for %s: %v", trackID, err)

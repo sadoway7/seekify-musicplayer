@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"mime"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -15,22 +16,22 @@ import (
 )
 
 func scanHandler(w http.ResponseWriter, r *http.Request) {
-	stats := scanMusicDir(store.MusicDir)
+	stats := scanner.ScanMusicDir(store.MusicDir)
 
 	// Scan additional media directories
 	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
-		mediaStats := scanMusicDirWithPrefix(dir, prefix)
+		mediaStats := scanner.ScanMusicDirWithPrefix(dir, prefix)
 		stats.Scanned += mediaStats.Scanned
 		stats.Added += mediaStats.Added
 		stats.Removed += mediaStats.Removed
 	}
 
 	applyApprovedMatches()
-	autoSortMusic()
-	extractEmbeddedCovers()
+	scanner.AutoSortMusic()
+	scanner.ExtractEmbeddedCovers()
 	log.Printf("Scan complete: %d scanned, %d added, %d removed", stats.Scanned, stats.Added, stats.Removed)
 
 	go fetchMissingCovers()

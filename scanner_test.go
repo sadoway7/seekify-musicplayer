@@ -1,6 +1,7 @@
 package main
 
 import (
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"testing"
 )
@@ -16,15 +17,15 @@ func TestTitleFromFilename(t *testing.T) {
 		{"music/Artist Name.ogg", "Artist Name"},
 	}
 	for _, tt := range tests {
-		got := titleFromFilename(tt.input)
+		got := scanner.TitleFromFilename(tt.input)
 		if got != tt.want {
-			t.Errorf("titleFromFilename(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("TitleFromFilename(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
 
 func TestGeneratePlaceholderSVG(t *testing.T) {
-	svg := generatePlaceholderSVG("Test", "abc123")
+	svg := scanner.GeneratePlaceholderSVG("Test", "abc123")
 	if !contains(svg, "<svg") {
 		t.Error("placeholder missing <svg tag")
 	}
@@ -34,23 +35,23 @@ func TestGeneratePlaceholderSVG(t *testing.T) {
 }
 
 func TestGeneratePlaceholderSVG_emptyName(t *testing.T) {
-	svg := generatePlaceholderSVG("", "abc123")
+	svg := scanner.GeneratePlaceholderSVG("", "abc123")
 	if !contains(svg, "?") {
 		t.Error("empty name should show ?")
 	}
 }
 
 func TestGeneratePlaceholderSVG_deterministicColor(t *testing.T) {
-	svg1 := generatePlaceholderSVG("Test", "id1")
-	svg2 := generatePlaceholderSVG("Test", "id1")
+	svg1 := scanner.GeneratePlaceholderSVG("Test", "id1")
+	svg2 := scanner.GeneratePlaceholderSVG("Test", "id1")
 	if svg1 != svg2 {
 		t.Error("same inputs should produce same SVG")
 	}
 }
 
 func TestGeneratePlaceholderSVG_differentIDs(t *testing.T) {
-	svg1 := generatePlaceholderSVG("Test", "id1")
-	svg2 := generatePlaceholderSVG("Test", "id2")
+	svg1 := scanner.GeneratePlaceholderSVG("Test", "id1")
+	svg2 := scanner.GeneratePlaceholderSVG("Test", "id2")
 	if svg1 == svg2 {
 		t.Error("different IDs should produce different SVGs")
 	}
@@ -59,48 +60,48 @@ func TestGeneratePlaceholderSVG_differentIDs(t *testing.T) {
 func TestResolveFilePath_primary(t *testing.T) {
 	store.MusicDir = "/music"
 	store.MusicDirs = map[string]string{"": "/music"}
-	got := resolveFilePath("Artist/Album/track.mp3")
+	got := scanner.ResolveFilePath("Artist/Album/track.mp3")
 	want := "/music/Artist/Album/track.mp3"
 	if got != want {
-		t.Errorf("resolveFilePath(%q) = %q, want %q", "Artist/Album/track.mp3", got, want)
+		t.Errorf("ResolveFilePath(%q) = %q, want %q", "Artist/Album/track.mp3", got, want)
 	}
 }
 
 func TestResolveFilePath_mediaPrefix(t *testing.T) {
 	store.MusicDir = "/music"
 	store.MusicDirs = map[string]string{"": "/music", "media": "/media"}
-	got := resolveFilePath("media:Artist/Album/track.mp3")
+	got := scanner.ResolveFilePath("media:Artist/Album/track.mp3")
 	want := "/media/Artist/Album/track.mp3"
 	if got != want {
-		t.Errorf("resolveFilePath(%q) = %q, want %q", "media:Artist/Album/track.mp3", got, want)
+		t.Errorf("ResolveFilePath(%q) = %q, want %q", "media:Artist/Album/track.mp3", got, want)
 	}
 }
 
 func TestResolveFilePath_noPrefix(t *testing.T) {
 	store.MusicDir = "/music"
 	store.MusicDirs = map[string]string{"": "/music"}
-	got := resolveFilePath("track.mp3")
+	got := scanner.ResolveFilePath("track.mp3")
 	want := "/music/track.mp3"
 	if got != want {
-		t.Errorf("resolveFilePath(%q) = %q, want %q", "track.mp3", got, want)
+		t.Errorf("ResolveFilePath(%q) = %q, want %q", "track.mp3", got, want)
 	}
 }
 
 func TestMusicDirForPath_primary(t *testing.T) {
 	store.MusicDir = "/music"
 	store.MusicDirs = map[string]string{"": "/music", "media": "/media"}
-	got := musicDirForPath("track.mp3")
+	got := scanner.MusicDirForPath("track.mp3")
 	if got != "/music" {
-		t.Errorf("musicDirForPath(%q) = %q, want /music", "track.mp3", got)
+		t.Errorf("MusicDirForPath(%q) = %q, want /music", "track.mp3", got)
 	}
 }
 
 func TestMusicDirForPath_media(t *testing.T) {
 	store.MusicDir = "/music"
 	store.MusicDirs = map[string]string{"": "/music", "media": "/media"}
-	got := musicDirForPath("media:track.mp3")
+	got := scanner.MusicDirForPath("media:track.mp3")
 	if got != "/media" {
-		t.Errorf("musicDirForPath(%q) = %q, want /media", "media:track.mp3", got)
+		t.Errorf("MusicDirForPath(%q) = %q, want /media", "media:track.mp3", got)
 	}
 }
 

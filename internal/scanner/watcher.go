@@ -1,4 +1,4 @@
-package main
+package scanner
 
 import (
 	"log"
@@ -19,8 +19,8 @@ func init() {
 	lastFileCounts = make(map[string]int)
 }
 
-// countAudioFiles counts audio files in a directory tree.
-func countAudioFiles(dir string) int {
+// CountAudioFiles counts audio files in a directory tree.
+func CountAudioFiles(dir string) int {
 	count := 0
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
@@ -35,18 +35,18 @@ func countAudioFiles(dir string) int {
 	return count
 }
 
-// startWatcher polls music directories for changes.
+// StartWatcher polls music directories for changes.
 // The interval is configurable via the "watcher_interval" setting (default 30s).
 // It can be disabled entirely via the "watcher_enabled" setting.
-func startWatcher() {
+func StartWatcher() {
 	// Record initial counts after startup scan
 	watcherMu.Lock()
-	lastFileCounts[store.MusicDir] = countAudioFiles(store.MusicDir)
+	lastFileCounts[store.MusicDir] = CountAudioFiles(store.MusicDir)
 	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
-		lastFileCounts[dir] = countAudioFiles(dir)
+		lastFileCounts[dir] = CountAudioFiles(dir)
 	}
 	watcherMu.Unlock()
 
@@ -62,11 +62,11 @@ func startWatcher() {
 		}
 		time.Sleep(time.Duration(interval) * time.Second)
 
-		checkAndRescan()
+		CheckAndRescan()
 	}
 }
 
-func checkAndRescan() {
+func CheckAndRescan() {
 	dirs := []struct {
 		dir    string
 		prefix string
@@ -85,7 +85,7 @@ func checkAndRescan() {
 	}
 
 	for _, d := range dirs {
-		current := countAudioFiles(d.dir)
+		current := CountAudioFiles(d.dir)
 
 		watcherMu.Lock()
 		previous := lastFileCounts[d.dir]
@@ -97,7 +97,7 @@ func checkAndRescan() {
 
 		// Debounce: wait 5s and re-check to filter transient changes
 		time.Sleep(5 * time.Second)
-		current = countAudioFiles(d.dir)
+		current = CountAudioFiles(d.dir)
 		if current == previous {
 			continue
 		}
@@ -115,13 +115,13 @@ func checkAndRescan() {
 
 		// Rescan the changed directory
 		if d.prefix == "" {
-			stats := scanMusicDir(store.MusicDir)
+			stats := ScanMusicDir(store.MusicDir)
 			store.Mu.RLock()
 			trackCount := len(store.Tracks)
 			store.Mu.RUnlock()
 			log.Printf("[watcher] Primary rescan: %d scanned, %d total tracks", stats.Scanned, trackCount)
 		} else {
-			stats := scanMusicDirWithPrefix(d.dir, d.prefix)
+			stats := ScanMusicDirWithPrefix(d.dir, d.prefix)
 			store.Mu.RLock()
 			trackCount := len(store.Tracks)
 			store.Mu.RUnlock()
@@ -129,13 +129,13 @@ func checkAndRescan() {
 		}
 
 		// Extract covers for any new files
-		extractEmbeddedCovers()
+		ExtractEmbeddedCovers()
 
 		watcherMu.Lock()
 		lastFileCounts[d.dir] = current
 		watcherMu.Unlock()
 
 		// Notify frontend that library changed
-		libraryVersion.Add(1)
+		LibraryVersionAdd(1)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"musicapp/internal/models"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -70,6 +71,13 @@ func main() {
 	initWatchedTables()
 	initReviewTables()
 
+	// Wire scanner callbacks (avoid circular import from scanner -> main)
+	scanner.WakeReviewWorker = wakeReviewWorker
+	scanner.InsertUncheckedReviews = dbInsertUncheckedReviews
+	scanner.LibraryVersionAdd = func(delta int64) { libraryVersion.Add(delta) }
+	scanner.DeleteReview = dbDeleteReview
+	scanner.SetReviewStatus = dbSetReviewStatus
+
 	// Try loading from DB first
 	dbTracks := store.DbLoadTracks()
 	dbAlbums := store.DbLoadAlbums()
@@ -101,7 +109,7 @@ func main() {
 			if prefix != "" {
 				continue
 			}
-			count := countAudioFiles(dir)
+			count := scanner.CountAudioFiles(dir)
 			if count != len(dbTracks) {
 				log.Printf("Primary dir file count changed (%d in DB vs %d on disk), rescanning", len(dbTracks), count)
 				needScan = true
@@ -113,7 +121,7 @@ func main() {
 				if prefix == "" {
 					continue
 				}
-				count := countAudioFiles(dir)
+				count := scanner.CountAudioFiles(dir)
 				mediaDBCount := 0
 				for _, t := range store.Tracks {
 					if strings.HasPrefix(t.FilePath, prefix+":") {
@@ -132,7 +140,7 @@ func main() {
 	if needScan {
 		// Scan primary music directory
 		log.Printf("Scanning music directory: %s", store.MusicDir)
-		stats := scanMusicDir(store.MusicDir)
+		stats := scanner.ScanMusicDir(store.MusicDir)
 		log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(store.Tracks))
 
 		// Scan additional media directories
@@ -141,7 +149,7 @@ func main() {
 				continue
 			}
 			log.Printf("Scanning media directory [%s]: %s", prefix, dir)
-			mediaStats := scanMusicDirWithPrefix(dir, prefix)
+			mediaStats := scanner.ScanMusicDirWithPrefix(dir, prefix)
 			log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(store.Tracks))
 		}
 
@@ -154,12 +162,12 @@ func main() {
 		log.Printf("Applied %d metadata overrides from database", applied)
 	}
 
-	extractEmbeddedCovers()
+	scanner.ExtractEmbeddedCovers()
 	syncWatchedPlaylistsToLibrary()
 	recoverStalledDownloads()
 	go fetchMissingCovers()
 	go fetchMissingArtistArt()
-	go startWatcher()
+	go scanner.StartWatcher()
 	go startWatchScheduler()
 	go downloadWatchdog()
 	seedMissingReviewTracks()

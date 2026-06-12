@@ -1,4 +1,4 @@
-package main
+package scanner
 
 import (
 	"fmt"
@@ -13,10 +13,19 @@ import (
 	"github.com/dhowden/tag"
 )
 
-// resolveFilePath expands a prefixed FilePath into an absolute path on disk.
+// Callbacks set by main to avoid circular imports
+var (
+	WakeReviewWorker       func()
+	InsertUncheckedReviews func(newTracks map[string]*models.Track)
+	LibraryVersionAdd      func(delta int64)
+	DeleteReview           func(trackID string)
+	SetReviewStatus        func(trackID, status, flags, reviewer string)
+)
+
+// ResolveFilePath expands a prefixed FilePath into an absolute path on disk.
 // If filePath contains a known prefix like "media:", it resolves against that dir.
 // Otherwise it resolves against the primary musicDir.
-func resolveFilePath(filePath string) string {
+func ResolveFilePath(filePath string) string {
 	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
@@ -30,9 +39,9 @@ func resolveFilePath(filePath string) string {
 	return filepath.Join(store.MusicDir, filePath)
 }
 
-// musicDirForPath returns the music directory root for a given FilePath.
+// MusicDirForPath returns the music directory root for a given FilePath.
 // Used to determine where to write images/covers for a track.
-func musicDirForPath(filePath string) string {
+func MusicDirForPath(filePath string) string {
 	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
@@ -45,23 +54,23 @@ func musicDirForPath(filePath string) string {
 	return store.MusicDir
 }
 
-func titleFromFilename(path string) string {
+func TitleFromFilename(path string) string {
 	name := filepath.Base(path)
 	ext := filepath.Ext(name)
 	return strings.TrimSuffix(name, ext)
 }
 
-func scanMusicDir(dir string) models.ScanStats {
-	return scanMusicDirWithPrefix(dir, "")
+func ScanMusicDir(dir string) models.ScanStats {
+	return ScanMusicDirWithPrefix(dir, "")
 }
 
-func scanMusicDirWithPrefix(dir string, prefix string) models.ScanStats {
+func ScanMusicDirWithPrefix(dir string, prefix string) models.ScanStats {
 	store.ScanMu.Lock()
 	defer store.ScanMu.Unlock()
-	return scanMusicDirWithPrefixLocked(dir, prefix)
+	return ScanMusicDirWithPrefixLocked(dir, prefix)
 }
 
-func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
+func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	var stats models.ScanStats
 
 	newTracks := make(map[string]*models.Track)
@@ -182,7 +191,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		}
 
 		if track.Title == "Unknown" || track.Title == "" {
-			track.Title = titleFromFilename(fpath)
+			track.Title = TitleFromFilename(fpath)
 		}
 		if track.Artist == "Unknown" {
 			track.Artist = ""
@@ -272,9 +281,9 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	}
 	tx.Commit()
 
-	dbInsertUncheckedReviews(newTracks)
+	InsertUncheckedReviews(newTracks)
 	if len(newTracks) > 0 {
-		wakeReviewWorker()
+		WakeReviewWorker()
 	}
 
 	if prefix == "" {
@@ -284,7 +293,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			}
 			if _, exists := newTracks[oldID]; !exists {
 				store.DbDeleteTrack(oldID)
-				dbDeleteReview(oldID)
+				DeleteReview(oldID)
 			}
 		}
 
@@ -338,7 +347,7 @@ func scanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	return stats
 }
 
-func generatePlaceholderSVG(name string, id string) string {
+func GeneratePlaceholderSVG(name string, id string) string {
 	initial := "?"
 	if len(name) > 0 {
 		initial = strings.ToUpper(string(name[0]))
@@ -366,7 +375,7 @@ func generatePlaceholderSVG(name string, id string) string {
 </svg>`, hue, (hue+30)%360, hue, initial)
 }
 
-func extractEmbeddedCovers() {
+func ExtractEmbeddedCovers() {
 	coverDir := filepath.Join(store.MusicDir, "images")
 	os.MkdirAll(coverDir, 0755)
 
@@ -409,7 +418,7 @@ func extractEmbeddedCovers() {
 
 	saved := 0
 	for _, j := range jobs {
-		fullPath := resolveFilePath(j.filePath)
+		fullPath := ResolveFilePath(j.filePath)
 		f, err := os.Open(fullPath)
 		if err != nil {
 			continue
@@ -443,7 +452,7 @@ func extractEmbeddedCovers() {
 	log.Printf("Extracted %d covers from file tags", saved)
 }
 
-func scanSingleFile(filePath string) {
+func ScanSingleFile(filePath string) {
 	store.ScanMu.Lock()
 	defer store.ScanMu.Unlock()
 
@@ -506,7 +515,7 @@ func scanSingleFile(filePath string) {
 	}
 
 	if track.Title == "Unknown" || track.Title == "" {
-		track.Title = titleFromFilename(fpath)
+		track.Title = TitleFromFilename(fpath)
 	}
 	if track.Artist == "Unknown" {
 		track.Artist = ""
@@ -573,8 +582,8 @@ func scanSingleFile(filePath string) {
 	store.Mu.Unlock()
 
 	store.DbUpsertTrack(track)
-	dbSetReviewStatus(trackID, "unchecked", "[]", "")
-	wakeReviewWorker()
+	SetReviewStatus(trackID, "unchecked", "[]", "")
+	WakeReviewWorker()
 
 	log.Printf("[scan] Added single file: %s - %s -> %s", track.Artist, track.Title, relPath)
 }

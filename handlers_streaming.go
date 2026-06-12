@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -26,7 +27,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath := resolveFilePath(track.FilePath)
+	fullPath := scanner.ResolveFilePath(track.FilePath)
 	file, err := os.Open(fullPath)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
@@ -139,7 +140,7 @@ func coverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	store.Mu.RUnlock()
 
-	svg := generatePlaceholderSVG(albumName, albumID)
+	svg := scanner.GeneratePlaceholderSVG(albumName, albumID)
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write([]byte(svg))
@@ -201,7 +202,7 @@ func artistArtHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	store.Mu.RUnlock()
 
-	svg := generatePlaceholderSVG(artistName, artistName)
+	svg := scanner.GeneratePlaceholderSVG(artistName, artistName)
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write([]byte(svg))
@@ -226,7 +227,7 @@ func artistArtFetchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func extractCoverFromFile(filePath string) ([]byte, error) {
-	fullPath := resolveFilePath(filePath)
+	fullPath := scanner.ResolveFilePath(filePath)
 	f, err := os.Open(fullPath)
 	if err != nil {
 		return nil, err

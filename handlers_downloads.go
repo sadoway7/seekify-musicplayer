@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -32,7 +33,7 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath := resolveFilePath(track.FilePath)
+	fullPath := scanner.ResolveFilePath(track.FilePath)
 	file, err := os.Open(fullPath)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
@@ -55,7 +56,7 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 	// Build a friendly filename: Artist - Title.ext
 	filename := filepath.Base(fullPath)
 	if track.Artist != "" && track.Title != "" {
-		filename = sanitizePath(track.Artist) + " - " + sanitizePath(track.Title) + ext
+		filename = scanner.SanitizePath(track.Artist) + " - " + scanner.SanitizePath(track.Title) + ext
 	}
 
 	w.Header().Set("Content-Type", contentType)
