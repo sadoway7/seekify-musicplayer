@@ -79,88 +79,257 @@
   cursor: pointer;
 }
 
+.home-search-bar::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 140px;
+  border-radius: 0 24px 24px 0;
+  background: linear-gradient(to right, transparent, var(--bg));
+  pointer-events: none;
+}
+
 .home-top-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin: 8px var(--page-margin) 12px;
 }
 
 .home-menu-btn {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--l3);
-  color: var(--text2);
   flex-shrink: 0;
-  transition: color 0.15s ease, background 0.15s ease;
+  position: relative;
+  z-index: 200;
+  background: linear-gradient(180deg, #c5e030, #D4F040);
+  box-shadow:
+    inset 0 2px 6px rgba(0,0,0,0.35),
+    inset 0 -1px 2px rgba(255,255,255,0.15),
+    0 1px 2px rgba(0,0,0,0.3);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.2s ease;
 }
 
-.home-menu-btn svg {
-  width: 20px;
-  height: 20px;
+.home-menu-wrap:has(.home-menu-dropdown.open) .home-menu-btn {
+  background: transparent;
+  box-shadow: none;
+}
+
+.home-menu-wrap:has(.home-menu-dropdown.open) .home-menu-btn::before {
+  background: linear-gradient(160deg, #1e1e1e 0%, #2a2a2a 60%, #3a3a3a 100%);
+  box-shadow:
+    inset 0 -3px 6px rgba(0,0,0,0.3),
+    inset 0 2px 4px rgba(255,255,255,0.04);
+}
+
+.home-menu-wrap:has(.home-menu-dropdown.open) .home-menu-btn::after {
+  background: radial-gradient(ellipse at 45% 45%, #2a2a2a 0%, #222 40%, #1a1a1a 100%);
+  box-shadow:
+    inset 0 -2px 5px rgba(0,0,0,0.4),
+    inset 0 1px 2px rgba(255,255,255,0.04);
+}
+
+.home-menu-btn::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #1e1e1e 0%, #2a2a2a 60%, #3a3a3a 100%);
+  box-shadow:
+    inset 0 3px 6px rgba(0,0,0,0.5),
+    inset 0 -2px 4px rgba(255,255,255,0.06);
+}
+
+.home-menu-btn::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 45% 55%, #1c1c1c 0%, #282828 40%, #333 100%);
+  box-shadow:
+    inset 0 2px 5px rgba(0,0,0,0.6),
+    inset 0 -1px 2px rgba(255,255,255,0.08);
+}
+
+.home-menu-btn .hm-icon {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 14px;
+}
+
+.home-menu-btn .hm-bar {
+  width: 100%;
+  height: 2px;
+  border-radius: 1.5px;
+  background: rgba(255,255,255,0.9);
 }
 
 .home-menu-btn:active {
-  transform: scale(0.95);
+  transform: scale(0.93);
+  box-shadow:
+    inset 0 5px 14px rgba(0,0,0,0.8),
+    inset 0 -1px 2px rgba(255,255,255,0.04),
+    0 1px 2px rgba(0,0,0,0.3);
 }
 
 .home-menu-wrap {
   position: relative;
 }
 
-.home-menu-dropdown {
+.home-menu-wrap .home-menu-dropdown {
   display: none;
   position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 200px;
-  background: var(--l2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-deep);
-  z-index: 200;
-  padding: 4px 0;
-  animation: menuFadeIn 0.15s ease;
+  top: -8px;
+  right: -8px;
+  min-width: 250px;
+  background: #222;
+  border: 2px solid #D4F040;
+  border-radius: 28px;
+  box-shadow:
+    0 12px 36px rgba(0,0,0,0.55),
+    0 2px 8px rgba(0,0,0,0.3);
+  z-index: 190;
+  padding: 36px 0 4px;
+  transform-origin: calc(100% - 21px) 0;
+  animation: menuGrowOut 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.home-menu-dropdown.open {
+.home-menu-wrap .home-menu-dropdown.open {
   display: block;
 }
 
-.home-menu-item {
+.home-menu-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 0 20px 10px 25px;
+  margin-top: -15px;
+}
+
+@keyframes menuGrowOut {
+  from {
+    opacity: 0;
+    transform: scaleY(0.3) scaleX(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1) scaleX(1);
+  }
+}
+
+.home-menu-wrap .home-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 12px;
+  padding: 14px 20px;
   color: var(--text-primary);
-  font-size: var(--fs-body);
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.1s ease;
+  border-radius: 8px;
+  margin: 2px 4px;
+  transition: background 0.15s var(--ease-soft);
 }
 
-.home-menu-item:hover {
-  background: var(--l3);
+.home-menu-wrap .home-menu-item:hover {
+  background: rgba(212, 240, 64, 0.08);
 }
 
-.home-menu-item:active {
-  background: var(--l4);
+.home-menu-wrap .home-menu-item:active {
+  background: rgba(212, 240, 64, 0.14);
+  transform: scale(0.98);
 }
 
-.home-menu-item svg {
+.home-menu-wrap .home-menu-item svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: var(--text2);
+  color: var(--accent);
+  opacity: 0.8;
 }
 
-.home-menu-divider {
+.home-menu-wrap .home-menu-divider {
   height: 1px;
-  background: var(--border);
-  margin: 4px 0;
+  background: rgba(212, 240, 64, 0.1);
+  margin: 4px 12px;
+}
+
+.home-review-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(255, 107, 107, 0.06);
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  margin: var(--sp-5) var(--page-margin);
+  transition: background 0.15s ease;
+}
+
+.home-review-card:active {
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.home-review-icon {
+  color: #ff6b6b;
+  flex-shrink: 0;
+}
+
+.home-review-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.home-review-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-review-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #ff6b6b;
+}
+
+.home-review-count {
+  color: #ff6b6b;
+}
+
+.home-review-arrow {
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.home-review-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.home-fav-grid .track-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+@media (min-width: 768px) {
+  .home-fav-grid .track-list {
+    grid-template-columns: 1fr 1fr;
+    gap: 0 32px;
+  }
 }
 
 @keyframes menuFadeIn {

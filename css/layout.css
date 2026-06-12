@@ -83,10 +83,12 @@ body.mini-player-visible #app-content {
   align-items: stretch;
   height: auto;
   min-height: 60px;
-  padding: 6px var(--sp-1);
+  padding: 6px 12px;
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
-  background: var(--bg);
-  box-shadow: 0 -1px 0 var(--border-subtle);
+  background: rgba(10, 11, 10, 0.72);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.06);
   z-index: 100;
   flex-shrink: 0;
 }
@@ -97,32 +99,71 @@ body.mini-player-visible #app-content {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   color: var(--text3);
   font-size: 10px;
   font-weight: 500;
-  padding: 8px var(--sp-2);
-  margin: 2px;
-  border-radius: 10px;
-  transition: color var(--t-fast) var(--ease-soft);
+  padding: 8px 0;
+  margin: 0 2px;
+  border-radius: 14px;
+  transition: color 0.25s var(--ease-soft), background 0.3s var(--ease-soft), transform 0.15s var(--ease-soft);
   position: relative;
+  overflow: hidden;
 }
 
 .tab-item svg {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
+  transition: transform 0.25s var(--ease-soft);
 }
 
 .tab-item span {
   display: block;
+  transition: color 0.25s var(--ease-soft);
 }
 
 .tab-item.active {
   color: var(--accent);
-  background: var(--accent-soft);
 }
 
-.tab-item:active {
-  transform: scale(0.92);
+.tab-item.active span {
+  color: var(--accent);
+}
+
+.tab-item.active svg {
+  transform: scale(1.08);
+}
+
+@media (max-width: 767px) {
+  .tab-item {
+    background: radial-gradient(circle at 50% 45%, rgba(212, 240, 64, 0.03), transparent 55%);
+  }
+  .tab-item.active {
+    background: radial-gradient(circle at 50% 45%, rgba(212, 240, 64, 0.09), transparent 55%);
+  }
+  .tab-item:active {
+    transform: scale(0.93);
+    background: radial-gradient(circle at 50% 45%, rgba(212, 240, 64, 0.14), transparent 50%);
+    transition-duration: 0.08s;
+  }
+}
+
+@media (min-width: 768px) {
+  .tab-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(212, 240, 64, 0.4);
+  }
+  .tab-item:active {
+    transform: scale(0.92);
+    background: rgba(255, 255, 255, 0.03);
+  }
 }

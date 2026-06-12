@@ -356,7 +356,6 @@
   left: var(--page-margin);
   white-space: nowrap;
   pointer-events: none;
-  transform: rotate(-1deg);
 }
 
 .quick-play-grid {
@@ -371,9 +370,22 @@
   position: relative;
   display: flex;
   align-items: center;
-  border-radius: var(--radius-full);
-  padding: 0;
+  border-radius: 24px;
   height: 44px;
+  background: var(--l3);
+  margin: 12px var(--page-margin) 16px;
+}
+
+.search-container::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 140px;
+  border-radius: 0 24px 24px 0;
+  background: linear-gradient(to right, transparent, var(--bg));
+  pointer-events: none;
 }
 
 .new-songs-grid {
@@ -391,7 +403,7 @@
   gap: 14px;
   padding: var(--sp-3) var(--sp-4);
   min-height: 64px;
-  background: rgba(26, 28, 26, 0.45);
+  background: var(--l3);
   border-radius: 14px;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -578,6 +590,49 @@
 
 .chip:active {
   transform: scale(0.95);
+}
+
+.lib-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  padding-top: 4px;
+}
+
+.lib-tabs {
+  display: flex;
+  gap: 10px;
+  background: transparent;
+  box-shadow: none;
+  padding: 6px var(--page-margin) 8px;
+  margin: 0 0 4px;
+}
+
+.lib-tab {
+  flex: 1;
+  font-size: 17px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lib-tab.active {
+  background: var(--accent);
+  color: #111;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.lib-tab:active {
+  opacity: 0.8;
 }
 
 .list-item {

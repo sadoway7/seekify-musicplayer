@@ -856,7 +856,7 @@ const UI = {
         return;
       }
 
-      const seg = e.target.closest('.chip[data-filter]');
+      const seg = e.target.closest('.lib-tab[data-filter]');
       if (seg) {
         this.libFilter = seg.dataset.filter;
         this.renderLibrary();
@@ -886,7 +886,18 @@ const UI = {
         const trackId = trow.dataset.trackId;
         const track = Store.getTrack(trackId);
         if (track) {
-          this._smartPlay(track);
+          const favSection = trow.closest('[data-home-section="favorites"]');
+          if (favSection && Store.currentView === 'home') {
+            const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
+            const idx = favTracks.findIndex(t => t.id === trackId);
+            if (idx !== -1 && favTracks.length > 1) {
+              Player.play(track, favTracks, { type: 'favorites', name: 'Favorites' });
+            } else {
+              Player.play(track, null, null);
+            }
+          } else {
+            this._smartPlay(track);
+          }
           this.showNowPlaying();
         }
         return;
@@ -995,7 +1006,7 @@ const UI = {
         return;
       }
 
-      const actionBtn = e.target.closest('.detail-action-btn');
+      const actionBtn = e.target.closest('.detail-action-btn, .home-review-card, [data-action].list-item');
       if (actionBtn) {
         this._handleAction(actionBtn.dataset.action);
         return;
@@ -1208,16 +1219,48 @@ const UI = {
       + '<input class="search-input" type="text" placeholder="Search library..." readonly>'
       + '</div>'
       + '<div class="home-menu-wrap" id="home-menu-wrap">'
-      + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu"></button>'
+      + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu"><span class="hm-icon"><span class="hm-bar"></span><span class="hm-bar"></span><span class="hm-bar"></span></span></button>'
       + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
-      + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Homepage Layout</span></div>'
+      + '<div class="home-menu-label">Options</div>'
+      + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
       + '<div class="home-menu-divider"></div>'
-      + '<div class="home-menu-item" data-action="rescan">' + Icons.refresh() + '<span>Rescan Library</span></div>'
       + '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>'
       + '</div>'
       + '</div>'
       + '</div>';
 
+    const layout = Store.getHomeLayout();
+    const sectionRenderers = {
+      'recent': () => this._homeRecent(),
+      'artists': () => this._homeArtists(),
+      'albums': () => this._homeAlbums(),
+      'new-songs': () => this._homeNewSongs(),
+      'playlists': () => this._homePlaylists(),
+      'needs-review': () => this._homeNeedsReview(),
+      'favorites': () => this._homeFavorites()
+    };
+
+    const sections = [];
+    layout.forEach(s => {
+      if (!s.enabled) return;
+      const renderer = sectionRenderers[s.id];
+      if (!renderer) return;
+      const rendered = renderer();
+      if (rendered) sections.push(rendered);
+    });
+
+    html += sections.join('');
+
+    if (Store.library.tracks.length === 0) {
+      html += this._emptyState('No music yet', 'Add music files and rescan to get started', Icons.music());
+    }
+
+    this.els.content.innerHTML = html;
+
+    this._bindHomeEvents();
+  },
+
+  _homeRecent() {
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
     const currentTrack = Player.getCurrentTrack();
 
@@ -1230,156 +1273,148 @@ const UI = {
       }
     });
 
-    html += '<div class="mega-title"><span>Recently Played</span></div>';
+    if (recentCards.length === 0 && !currentTrack) return '';
 
-    if (recentCards.length > 0 || currentTrack) {
-      html += '<div class="quick-play-grid">';
+    let html = '<div class="mega-title"><span>Recently Played</span></div>';
+    html += '<div class="quick-play-grid">';
 
-      // Spot 1: Shuffle
-      html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
-        + '<div class="quick-play-art" style="background:linear-gradient(135deg, #ffffff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
-        + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
-        + '<circle cx="25" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
-        + '<circle cx="75" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
-        + '<circle cx="50" cy="50" r="9" fill="rgba(168,200,48,0.85)"/>'
-        + '<circle cx="25" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
-        + '<circle cx="75" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
-        + '</svg>'
-        + '<div style="position:absolute;top:14px;left:16px;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:clamp(14px, 4vw, 28px);font-weight:900;color:rgba(0,0,0,0.9);letter-spacing:-0.06em;display:block;white-space:nowrap;filter:drop-shadow(0 0 4px rgba(255,255,255,1)) drop-shadow(0 0 10px rgba(255,255,255,0.9)) drop-shadow(0 0 20px rgba(255,255,255,0.7)) drop-shadow(0 0 40px rgba(255,255,255,0.5)) drop-shadow(0 0 60px rgba(255,255,255,0.3))">SHUFFLE</span></div>'
-        + '</div>'
+    html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
+      + '<div class="quick-play-art" style="background:linear-gradient(135deg, #ffffff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
+      + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
+      + '<circle cx="25" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
+      + '<circle cx="75" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
+      + '<circle cx="50" cy="50" r="9" fill="rgba(168,200,48,0.85)"/>'
+      + '<circle cx="25" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
+      + '<circle cx="75" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
+      + '</svg>'
+      + '<div style="position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:14px;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:clamp(14px, 4vw, 28px);font-weight:900;color:rgba(0,0,0,0.9);letter-spacing:-0.06em;display:block;white-space:nowrap;filter:drop-shadow(0 0 4px rgba(255,255,255,1)) drop-shadow(0 0 10px rgba(255,255,255,0.9)) drop-shadow(0 0 20px rgba(255,255,255,0.7)) drop-shadow(0 0 40px rgba(255,255,255,0.5)) drop-shadow(0 0 60px rgba(255,255,255,0.3))">SHUFFLED</span></div>'
+      + '</div>'
+      + '</div>';
+
+    const cols = window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
+    const maxRecent = window.innerWidth >= 768 ? 12 : 7;
+    let addedRecent = 0;
+    recentCards.forEach(c => {
+      if (addedRecent >= maxRecent) return;
+      addedRecent++;
+      const isNowPlaying = currentTrack && c.id === currentTrack.id;
+      const artInner = '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">';
+      const nowPlayingBadge = isNowPlaying
+        ? '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div>'
+        : '';
+      const cardClass = isNowPlaying ? ' quick-play-card-now' : '';
+      html += '<div class="quick-play-card quick-play-card-recent' + cardClass + '" data-track-id="' + c.id + '" data-album-id="' + (c.albumID || c.id) + '">'
+        + '<div class="quick-play-art">' + artInner + nowPlayingBadge + '</div>'
+        + '<div class="quick-play-title">' + this._esc(c.name) + '</div>'
         + '</div>';
+    });
 
-      // Fill rows: 3 cols mobile, 4 cols tablet, 5 cols desktop, aim for 3 full rows
-      const cols = window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
-      const maxRecent = window.innerWidth >= 768 ? 12 : 7;
-      let addedRecent = 0;
-      recentCards.forEach(c => {
-        if (addedRecent >= maxRecent) return;
-        addedRecent++;
-        const isNowPlaying = currentTrack && c.id === currentTrack.id;
-        const artInner = '<img src="' + Api.coverUrl(c.albumID || c.id) + '" alt="">';
-        const nowPlayingBadge = isNowPlaying
-          ? '<div class="quick-play-playing"><div class="eq"><div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div></div></div>'
-          : '';
-        const cardClass = isNowPlaying ? ' quick-play-card-now' : '';
-        html += '<div class="quick-play-card quick-play-card-recent' + cardClass + '" data-track-id="' + c.id + '" data-album-id="' + (c.albumID || c.id) + '">'
-          + '<div class="quick-play-art">' + artInner + nowPlayingBadge + '</div>'
-          + '<div class="quick-play-title">' + this._esc(c.name) + '</div>'
-          + '</div>';
-      });
+    html += '<div class="quick-play-card quick-play-card-all" data-action="shuffle-recent">'
+      + '<div class="quick-play-art" style="background:#0d0d0d;display:flex;align-items:center;justify-content:center">'
+      + '<div style="position:absolute;bottom:0;left:0;right:0;height:55%;background:linear-gradient(175deg, rgba(220,50,80,0.35), rgba(50,100,220,0.25));pointer-events:none"></div>'
+      + '<div style="position:absolute;top:-4px;right:-10px;width:40px;height:40px;background:rgba(220,50,80,0.6);border-radius:50%;pointer-events:none"></div>'
+      + '<div style="position:absolute;bottom:28px;left:-6px;width:24px;height:24px;background:rgba(50,140,220,0.5);pointer-events:none"></div>'
+      + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Impact,Haettenschweiler,Arial Black,sans-serif;font-size:100px;font-weight:900;color:rgba(255,255,255,0.35);transform:rotate(-10deg);line-height:0.85;letter-spacing:-0.04em;display:block;margin-top:-8px;-webkit-text-stroke:1px rgba(255,255,255,0.08)">100</span></div></div>'
+      + '<div class="quick-play-title" style="background:none;padding-top:38px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:rgba(255,255,255,0.7);line-height:1.3;white-space:normal">Recently<br>Added</div>'
+      + '</div>';
 
-      // Last spot: Last 100 Added
-      html += '<div class="quick-play-card quick-play-card-all" data-action="shuffle-recent">'
-        + '<div class="quick-play-art" style="background:#0d0d0d;display:flex;align-items:center;justify-content:center">'
-        + '<div style="position:absolute;bottom:0;left:0;right:0;height:55%;background:linear-gradient(175deg, rgba(220,50,80,0.35), rgba(50,100,220,0.25));pointer-events:none"></div>'
-        + '<div style="position:absolute;top:-4px;right:-10px;width:40px;height:40px;background:rgba(220,50,80,0.6);border-radius:50%;pointer-events:none"></div>'
-        + '<div style="position:absolute;bottom:28px;left:-6px;width:24px;height:24px;background:rgba(50,140,220,0.5);pointer-events:none"></div>'
-        + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden"><span style="font-family:Impact,Haettenschweiler,Arial Black,sans-serif;font-size:100px;font-weight:900;color:rgba(255,255,255,0.35);transform:rotate(-10deg);line-height:0.85;letter-spacing:-0.04em;display:block;margin-top:-8px;-webkit-text-stroke:1px rgba(255,255,255,0.08)">100</span></div></div>'
-        + '<div class="quick-play-title" style="background:none;padding-top:38px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:rgba(255,255,255,0.7);line-height:1.3;white-space:normal">Recently<br>Added</div>'
-        + '</div>';
+    html += '</div>';
+    return html;
+  },
 
-      html += '</div>';
-    } else {
-      html += '<div class="empty-state" style="padding:16px"><div class="empty-state-text" style="color:var(--text3)">Play some music to see your history</div></div>';
-    }
-
+  _homeArtists() {
     const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     const artistLimit = window.innerWidth >= 768 ? 10 : 6;
     const newArtists = namedArtists.sort(() => Math.random() - 0.5).slice(0, artistLimit);
-    html += '<div class="mega-title"><span>Artists</span></div>';
-    if (newArtists.length > 0) {
-      html += '<div class="scroll-row artist-row">';
-      newArtists.forEach(a => {
-        html += '<div class="quick-play-card-inline artist-pill" data-type="artist" data-id="' + this._esc(a.name) + '">'
-          + '<div class="quick-play-art"><img src="' + Api.artistArtUrl(a.name) + '" alt=""></div>'
-          + '<div class="quick-play-title">' + this._esc(a.name) + '</div>'
-          + '</div>';
-      });
-      html += '</div>';
-    } else {
-      html += '<div class="empty-state" style="padding:16px 22px">' + Icons.music() + '<div class="empty-state-title">No artists yet</div><div class="empty-state-text">Add tagged music files to see artists</div></div>';
-    }
+    if (newArtists.length === 0) return '';
+    let html = '<div class="mega-title"><span>Artists</span></div>';
+    html += '<div class="scroll-row artist-row">';
+    newArtists.forEach(a => {
+      html += '<div class="quick-play-card-inline artist-pill" data-type="artist" data-id="' + this._esc(a.name) + '">'
+        + '<div class="quick-play-art"><img src="' + Api.artistArtUrl(a.name) + '" alt=""></div>'
+        + '<div class="quick-play-title">' + this._esc(a.name) + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+    return html;
+  },
 
+  _homeAlbums() {
     const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
-    html += '<div class="mega-title"><span>Albums</span></div>';
-    if (namedAlbums.length > 0) {
-      const shuffledAlbums = namedAlbums.sort(() => Math.random() - 0.5).slice(0, 15);
-      html += '<div class="scroll-row">';
-      shuffledAlbums.forEach(a => {
-        html += '<div class="card" data-album-id="' + a.id + '">'
-          + '<div class="card-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
-          + '<div class="card-title">' + this._esc(a.name) + '</div>'
-          + '<div class="card-subtitle">' + this._esc(a.artist) + '</div>'
-          + '</div>';
-      });
-      html += '</div>';
-    } else {
-      html += '<div class="empty-state" style="padding:16px 22px">' + Icons.library() + '<div class="empty-state-title">No albums yet</div><div class="empty-state-text">Add tagged music files to see albums</div></div>';
-    }
+    if (namedAlbums.length === 0) return '';
+    let html = '<div class="mega-title"><span>Albums</span></div>';
+    const shuffledAlbums = namedAlbums.sort(() => Math.random() - 0.5).slice(0, 15);
+    html += '<div class="scroll-row">';
+    shuffledAlbums.forEach(a => {
+      html += '<div class="card" data-album-id="' + a.id + '">'
+        + '<div class="card-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
+        + '<div class="card-title">' + this._esc(a.name) + '</div>'
+        + '<div class="card-subtitle">' + this._esc(a.artist) + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+    return html;
+  },
 
+  _homeNewSongs() {
     const allTracks = Store.library.tracks.slice();
     const sortedNew = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0));
     const newLimit = this._newSongsLimit || 6;
     const newTracks = sortedNew.slice(0, newLimit);
-    if (newTracks.length > 0) {
-      html += '<div class="mega-title"><span>New Songs</span></div>';
-      html += '<div class="new-songs-grid">';
-      newTracks.forEach(t => {
-        html += '<div class="new-song-card" data-track-id="' + t.id + '">'
-          + '<div class="new-song-art" style="background-image:url(' + Api.coverUrl(t.albumID) + ')"></div>'
-          + '<div class="new-song-info">'
-          + '<div class="new-song-title">' + this._esc(this._trackTitle(t)) + '</div>'
-          + '<div class="new-song-artist">' + this._esc(this._trackArtist(t)) + '</div>'
-          + '</div></div>';
-      });
-      html += '</div>';
-      if (sortedNew.length > newLimit) {
-        html += '<button class="btn-text show-more-btn" data-action="show-more-new">Show more</button>';
-      }
+    if (newTracks.length === 0) return '';
+    let html = '<div class="mega-title"><span>New Songs</span></div>';
+    html += this.renderTrackList(newTracks, { showArt: true });
+    if (sortedNew.length > newLimit) {
+      html += '<button class="btn-text show-more-btn" data-action="show-more-new">Show more</button>';
     }
+    return html;
+  },
 
-    if (Store.playlists.length > 0) {
-      html += '<div class="mega-title"><span>Playlists</span></div>';
-      Store.playlists.slice(0, 4).forEach(p => {
-        const pTracks = p.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
-        const firstTrack = pTracks[0];
-        const artStyle = firstTrack && firstTrack.albumID
-          ? 'background-image:url(' + Api.coverUrl(firstTrack.albumID) + ');background-size:cover;background-position:center'
-          : 'background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)';
-        const artContent = firstTrack && firstTrack.albumID ? '' : Icons.music();
-        html += '<div class="list-item" data-type="playlist" data-id="' + p.id + '">'
-          + '<div class="list-item-art" style="' + artStyle + '">' + artContent + '</div>'
-          + '<div class="list-item-info">'
-          + '<div class="list-item-title">' + this._esc(p.name) + '</div>'
-          + '<div class="list-item-subtitle">' + pTracks.length + ' tracks</div>'
-          + '</div></div>';
-      });
-    }
-
-    const reviewCount = Store.reviewCounts.needs_review || 0;
-    if (reviewCount > 0) {
-      html += '<div class="mega-title"><span>Needs Review</span></div>';
-      html += '<div class="list-item" data-action="needs-review" style="cursor:pointer">'
-        + '<div class="list-item-art" style="background:rgba(255,107,107,.1);display:flex;align-items:center;justify-content:center;color:#ff6b6b">'
-        + Icons.warning() + '</div>'
+  _homePlaylists() {
+    if (Store.playlists.length === 0) return '';
+    let html = '<div class="mega-title"><span>Playlists</span></div>';
+    Store.playlists.slice(0, 4).forEach(p => {
+      const pTracks = p.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
+      const firstTrack = pTracks[0];
+      const artStyle = firstTrack && firstTrack.albumID
+        ? 'background-image:url(' + Api.coverUrl(firstTrack.albumID) + ');background-size:cover;background-position:center'
+        : 'background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-muted)';
+      const artContent = firstTrack && firstTrack.albumID ? '' : Icons.music();
+      html += '<div class="list-item" data-type="playlist" data-id="' + p.id + '">'
+        + '<div class="list-item-art" style="' + artStyle + '">' + artContent + '</div>'
         + '<div class="list-item-info">'
-        + '<div class="list-item-title" style="color:#ff6b6b">Needs Review</div>'
-        + '<div class="list-item-subtitle">' + reviewCount + ' tracks flagged</div>'
+        + '<div class="list-item-title">' + this._esc(p.name) + '</div>'
+        + '<div class="list-item-subtitle">' + pTracks.length + ' tracks</div>'
         + '</div></div>';
-    }
+    });
+    return html;
+  },
 
+  _homeNeedsReview() {
+    const reviewCount = Store.reviewCounts.needs_review || 0;
+    if (reviewCount === 0) return '';
+    let html = '<div class="home-review-card" data-action="needs-review">'
+      + '<div class="home-review-icon">' + Icons.warning() + '</div>'
+      + '<div class="home-review-info">'
+      + '<div class="home-review-title"><span class="home-review-count">' + reviewCount + '</span> For Review</div>'
+      + '</div>'
+      + '<div class="home-review-arrow">' + Icons.chevronRight() + '</div>'
+      + '</div>';
+    return html;
+  },
+
+  _homeFavorites() {
     const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
-    if (favTracks.length > 0) {
-      html += '<div class="mega-title"><span>Favorites</span></div>';
-      html += this.renderTrackList(favTracks.slice(0, 5), { showArt: true });
-    }
+    if (favTracks.length === 0) return '';
+    const limit = window.innerWidth >= 768 ? 10 : 5;
+    let html = '<div class="mega-title"><span>Favorites</span></div>';
+    html += '<div class="home-fav-grid" data-home-section="favorites">';
+    html += this.renderTrackList(favTracks.slice(0, limit), { showArt: true });
+    html += '</div>';
+    return html;
+  },
 
-    if (Store.library.tracks.length === 0) {
-      html += this._emptyState('No music yet', 'Add music files and rescan to get started', Icons.music());
-    }
-
-    this.els.content.innerHTML = html;
-
+  _bindHomeEvents() {
     const homeSearch = document.getElementById('home-search-bar');
     if (homeSearch) {
       homeSearch.addEventListener('click', () => {
@@ -1566,17 +1601,16 @@ const UI = {
 
   renderLibrary() {
     this._viewTrackList = [];
-    let html = '<div class="library-header">'
-      + '<h1>Your Library</h1>'
+    let html = '<div class="lib-sticky-header">'
+      + '<div class="lib-tabs">'
+      + '<button class="lib-tab' + (this.libFilter === 'playlists' ? ' active' : '') + '" data-filter="playlists">Playlists</button>'
+      + '<button class="lib-tab' + (this.libFilter === 'albums' ? ' active' : '') + '" data-filter="albums">Albums</button>'
+      + '<button class="lib-tab' + (this.libFilter === 'artists' ? ' active' : '') + '" data-filter="artists">Artists</button>'
       + '</div>'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input lib-search-input" type="text" placeholder="Filter...">'
+      + '<input class="search-input lib-search-input" type="text" placeholder="">'
       + '</div>'
-      + '<div class="filter-chips">'
-      + '<button class="chip' + (this.libFilter === 'playlists' ? ' active' : '') + '" data-filter="playlists">Playlists</button>'
-      + '<button class="chip' + (this.libFilter === 'albums' ? ' active' : '') + '" data-filter="albums">Albums</button>'
-      + '<button class="chip' + (this.libFilter === 'artists' ? ' active' : '') + '" data-filter="artists">Artists</button>'
       + '</div>'
       + '<div class="lib-results">';
 
@@ -4332,14 +4366,218 @@ const UI = {
     }
   },
 
+  _homeLayoutDrag: { item: null, spacer: null, dragging: false, startX: 0, startY: 0, offsetY: 0, offsetX: 0, listLeft: 0 },
+
   _openHomepageLayoutModal() {
     const modal = document.getElementById('home-layout-modal');
-    const closeBtn = document.getElementById('home-layout-close');
-    if (!modal) return;
+    const body = document.getElementById('home-layout-body');
+    if (!modal || !body) return;
+
     modal.classList.remove('hidden');
-    const close = () => { modal.classList.add('hidden'); };
-    closeBtn.onclick = close;
-    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+    const layout = Store.getHomeLayout();
+
+    let html = '<div class="hl-hint">Drag to reorder</div>';
+    html += '<div class="hl-sections" id="hl-sections">';
+    layout.forEach((s, i) => {
+      html += '<div class="hl-section' + (s.enabled ? ' hl-enabled' : '') + '" data-section-id="' + s.id + '" data-index="' + i + '">'
+        + '<div class="hl-row">'
+        + '<div class="hl-drag" aria-label="Drag to reorder">' + Icons.grip() + '</div>'
+        + '<div class="hl-label">' + this._esc(s.title) + '</div>'
+        + '<div class="hl-toggle' + (s.enabled ? ' active' : '') + '" data-section-id="' + s.id + '">'
+        + '<div class="hl-toggle-track"><div class="hl-toggle-knob"></div></div>'
+        + '</div>'
+        + '</div>'
+        + '<div class="hl-options' + (s.enabled ? '' : ' hl-options-collapsed') + '" data-section-id="' + s.id + '">'
+        + '<div class="hl-options-inner"></div>'
+        + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+
+    const close = () => {
+      const sheet = modal.querySelector('.home-layout-sheet');
+      if (sheet) sheet.style.animation = 'sheetSlideUp 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
+      modal.style.animation = 'modalFadeOut 0.25s ease forwards';
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.style.animation = '';
+        if (sheet) sheet.style.animation = '';
+      }, 250);
+    };
+    modal.addEventListener('click', function handler(e) {
+      if (e.target === modal) { close(); modal.removeEventListener('click', handler); }
+    });
+
+    body.querySelectorAll('.hl-toggle').forEach(toggle => {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = toggle.dataset.sectionId;
+        const isActive = toggle.classList.toggle('active');
+        const section = toggle.closest('.hl-section');
+        if (section) section.classList.toggle('hl-enabled', isActive);
+        const options = body.querySelector('.hl-options[data-section-id="' + id + '"]');
+        if (options) options.classList.toggle('hl-options-collapsed');
+      });
+    });
+
+    const saveBtn = document.getElementById('home-layout-save');
+    const cancelBtn = document.getElementById('home-layout-cancel');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        this._saveHomeLayoutFromModal(body);
+        close();
+        if (Store.currentView === 'home') this._renderHomeContent();
+      });
+    }
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        close();
+      });
+    }
+
+    this._bindHomeLayoutDrag(body);
+  },
+
+  _saveHomeLayoutFromModal(body) {
+    const items = body.querySelectorAll('.hl-section');
+    const layout = [];
+    items.forEach(item => {
+      const id = item.dataset.sectionId;
+      const toggle = item.querySelector('.hl-toggle');
+      const def = Store.defaultHomeLayout.find(d => d.id === id);
+      layout.push({
+        id,
+        title: def ? def.title : id,
+        enabled: toggle ? toggle.classList.contains('active') : true
+      });
+    });
+    Store.saveHomeLayout(layout);
+  },
+
+  _bindHomeLayoutDrag(body) {
+    const list = document.getElementById('hl-sections');
+    if (!list) return;
+    const d = this._homeLayoutDrag;
+    const self = this;
+
+    const startDrag = (item, clientX, clientY) => {
+      const rect = item.getBoundingClientRect();
+      const listRect = list.getBoundingClientRect();
+      d.offsetY = clientY - rect.top;
+      const itemH = item.offsetHeight;
+      const itemW = list.offsetWidth;
+      d.spacer = document.createElement('div');
+      d.spacer.className = 'hl-drag-spacer';
+      d.spacer.style.height = itemH + 'px';
+      list.insertBefore(d.spacer, item);
+      item.classList.add('hl-dragging');
+      item.style.position = 'absolute';
+      item.style.left = '0';
+      item.style.width = itemW + 'px';
+      item.style.top = (clientY - d.offsetY - listRect.top) + 'px';
+      item.style.zIndex = '200';
+    };
+
+    const moveDrag = (clientY) => {
+      const listRect = list.getBoundingClientRect();
+      d.item.style.top = (clientY - d.offsetY - listRect.top) + 'px';
+      const items = list.querySelectorAll('.hl-section:not(.hl-dragging)');
+      let inserted = false;
+      for (const item of items) {
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (clientY < midY) {
+          list.insertBefore(d.spacer, item);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) list.appendChild(d.spacer);
+    };
+
+    const endDrag = () => {
+      if (!d.item || !d.dragging || !d.spacer) {
+        d.item = null;
+        d.dragging = false;
+        return;
+      }
+      list.insertBefore(d.item, d.spacer);
+      d.spacer.remove();
+      d.spacer = null;
+      d.item.classList.remove('hl-dragging');
+      d.item.style.position = '';
+      d.item.style.left = '';
+      d.item.style.top = '';
+      d.item.style.width = '';
+      d.item.style.zIndex = '';
+      const sections = list.querySelectorAll('.hl-section');
+      sections.forEach((s, i) => s.dataset.index = i);
+      d.item = null;
+      d.dragging = false;
+    };
+
+    list.addEventListener('touchstart', (e) => {
+      const handle = e.target.closest('.hl-drag');
+      if (!handle) return;
+      const item = handle.closest('.hl-section');
+      if (!item) return;
+      d.item = item;
+      d.startX = e.touches[0].clientX;
+      d.startY = e.touches[0].clientY;
+      d.dragging = false;
+    }, { passive: true });
+
+    list.addEventListener('touchmove', (e) => {
+      if (!d.item) return;
+      const dy = e.touches[0].clientY - d.startY;
+      if (!d.dragging) {
+        if (Math.abs(dy) < 8) return;
+        d.dragging = true;
+        startDrag(d.item, e.touches[0].clientX, e.touches[0].clientY);
+      }
+      if (d.dragging) {
+        e.preventDefault();
+        moveDrag(e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    list.addEventListener('touchend', () => {
+      if (!d.item) return;
+      endDrag();
+    }, { passive: true });
+
+    list.addEventListener('mousedown', (e) => {
+      const handle = e.target.closest('.hl-drag');
+      if (!handle) return;
+      e.preventDefault();
+      const item = handle.closest('.hl-section');
+      if (!item) return;
+      d.item = item;
+      d.startX = e.clientX;
+      d.startY = e.clientY;
+      d.dragging = false;
+
+      const onMouseMove = (e) => {
+        const dy = e.clientY - d.startY;
+        if (!d.dragging) {
+          if (Math.abs(dy) < 5) return;
+          d.dragging = true;
+          startDrag(d.item, e.clientX, e.clientY);
+        }
+        if (d.dragging) moveDrag(e.clientY);
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        endDrag();
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
   },
 
   async _rescanLibrary() {
@@ -5181,7 +5419,12 @@ const UI = {
   },
 
   hideQueue() {
-    this.els.queuePanel.classList.add('hidden');
+    const panel = this.els.queuePanel;
+    panel.style.animation = 'panelSlideDownFade 0.25s cubic-bezier(0.4, 0, 1, 1) forwards';
+    setTimeout(() => {
+      panel.classList.add('hidden');
+      panel.style.animation = '';
+    }, 250);
   },
 
   updateQueueIfVisible() {
@@ -5195,18 +5438,8 @@ const UI = {
     }
 
     const sourceName = Player.getSourceName();
-    const sourceEl = this.els.queuePanel.querySelector('.queue-source');
-    if (sourceEl) sourceEl.remove();
-
-    if (sourceName) {
-      const label = document.createElement('div');
-      label.className = 'queue-source';
-      label.textContent = sourceName;
-      this.els.queueList.parentElement.insertBefore(label, this.els.queueList);
-    } else {
-      const existing = this.els.queuePanel.querySelector('.queue-source');
-      if (existing) existing.remove();
-    }
+    const headerTitle = this.els.queuePanel.querySelector('.queue-header h2');
+    if (headerTitle) headerTitle.textContent = sourceName || 'Playlist';
 
     this.els.queueList.innerHTML = Player.queue.map((track, i) => {
       const isCurrent = i === Player.currentIndex;
@@ -5263,18 +5496,16 @@ const UI = {
 
     if (triggerEl) {
       const rect = triggerEl.getBoundingClientRect();
-      const menuW = 240;
-      const menuH = sheet.scrollHeight || 200;
       const vpW = window.innerWidth;
       const vpH = window.innerHeight;
+      const menuW = 240;
 
       let top = rect.bottom + 4;
       let left = rect.right - menuW;
 
       if (left < 8) left = rect.left;
       if (left + menuW > vpW - 8) left = vpW - menuW - 8;
-      if (top + menuH > vpH - 8) top = rect.top - menuH - 4;
-      if (top < 8) top = 8;
+      if (top + 20 > vpH) top = Math.max(8, vpH - 20);
 
       sheet.style.top = top + 'px';
       sheet.style.left = left + 'px';
@@ -5741,6 +5972,10 @@ const UI = {
 
   _handleAction(action) {
     if (!action) return;
+    if (action === 'needs-review') {
+      this.navigateTo('needs-review');
+      return;
+    }
     if (action === 'shuffle' || action === 'shuffle-all') {
       let list = (this._viewTrackList && this._viewTrackList.length > 0)
         ? this._viewTrackList.slice()

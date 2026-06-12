@@ -1,4 +1,4 @@
 #!/bin/bash
 echo "Starting Music..."
-go build -o server .
+go build -mod=vendor -o server .
 ./server

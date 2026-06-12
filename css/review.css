@@ -195,10 +195,27 @@
   margin: 4px 0;
 }
 
-/* Edit Metadata Modal */
+#edit-meta-modal {
+  align-items: flex-start;
+  justify-content: center;
+}
+
 #edit-meta-modal .modal-sheet {
-  max-height: 85vh;
+  max-height: none;
+  border-radius: 0;
   overflow-y: auto;
+  animation: sheetSlideDown 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+@media (min-width: 768px) {
+  #edit-meta-modal {
+    padding: 0 calc(76px + var(--page-margin));
+  }
+  #edit-meta-modal .modal-sheet {
+    max-width: 480px;
+    max-height: 80vh;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  }
 }
 
 .edit-meta-fields {
@@ -239,28 +256,37 @@
 
 .edit-meta-actions {
   display: flex;
-  gap: 10px;
-  padding: 0 20px 20px;
+  align-items: center;
+  gap: 16px;
+  padding: 16px var(--page-margin) calc(16px + env(safe-area-inset-bottom, 0px));
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
 }
 
 .edit-meta-actions button {
   flex: 1;
-  padding: 12px;
-  border-radius: 10px;
-  font-size: 14px;
+  padding: 12px 28px;
+  border-radius: var(--radius-md);
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   border: none;
+  transition: opacity 0.15s ease;
+}
+
+.edit-meta-actions button:active {
+  opacity: 0.8;
 }
 
 .edit-meta-cancel {
-  background: var(--l3, #2c2c2e);
-  color: #fff;
+  background: transparent;
+  color: var(--text2);
 }
 
 .edit-meta-save {
-  background: var(--accent, #d4f040);
-  color: #000;
+  background: var(--l4);
+  color: var(--text1);
 }
 
 /* Review flags badges */

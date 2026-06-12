@@ -11,6 +11,40 @@ const Store = {
   waveformStyle: 'rounded',
   reviewCounts: { unchecked: 0, needs_review: 0, reviewed_ok: 0 },
 
+  defaultHomeLayout: [
+    { id: 'needs-review', title: 'Needs Review', enabled: false },
+    { id: 'recent', title: 'Recently Played', enabled: true },
+    { id: 'favorites', title: 'Favorites', enabled: true },
+    { id: 'artists', title: 'Artists', enabled: true },
+    { id: 'albums', title: 'Albums', enabled: true },
+    { id: 'playlists', title: 'Playlists', enabled: true },
+    { id: 'new-songs', title: 'New Songs', enabled: true }
+  ],
+
+  getHomeLayout() {
+    try {
+      const raw = localStorage.getItem('home_layout');
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const defaults = this.defaultHomeLayout;
+        const savedIds = new Set(saved.map(s => s.id));
+        const merged = saved.map(s => {
+          const def = defaults.find(d => d.id === s.id);
+          return { ...def, ...s };
+        });
+        defaults.forEach(d => {
+          if (!savedIds.has(d.id)) merged.push({ ...d });
+        });
+        return merged;
+      }
+    } catch(e) {}
+    return this.defaultHomeLayout.map(s => ({ ...s }));
+  },
+
+  saveHomeLayout(layout) {
+    localStorage.setItem('home_layout', JSON.stringify(layout));
+  },
+
   async init() {
     this.loading = true;
     try {

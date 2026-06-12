@@ -275,19 +275,19 @@
         </div>
       </div>
       <div class="edit-meta-actions">
-        <button class="edit-meta-cancel" onclick="ReviewUI.closeEditMetaModal()">Cancel</button>
         <button class="edit-meta-save" onclick="ReviewUI.saveEditMeta()">Save</button>
+        <button class="edit-meta-cancel" onclick="ReviewUI.closeEditMetaModal()">Cancel</button>
       </div>
     </div>
   </div>
 
-  <div id="home-layout-modal" class="modal-overlay hidden">
+  <div id="home-layout-modal" class="home-layout-overlay hidden">
     <div class="home-layout-sheet">
-      <div class="home-layout-header">
-        <h3 class="home-layout-title">Home Layout</h3>
-        <button class="home-layout-close" id="home-layout-close" aria-label="Close">&times;</button>
-      </div>
       <div class="home-layout-body" id="home-layout-body">
+      </div>
+      <div class="home-layout-footer">
+        <button class="home-layout-save" id="home-layout-save">Save</button>
+        <button class="home-layout-cancel" id="home-layout-cancel">Cancel</button>
       </div>
     </div>
   </div>
