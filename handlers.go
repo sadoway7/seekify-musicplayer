@@ -1497,7 +1497,7 @@ func spaHandler(w http.ResponseWriter, r *http.Request) {
 				mu.RUnlock()
 				if ogTitle == "" {
 					ogTitle = "Music"
-					ogDesc = "Listen on Music."
+					ogDesc = "Private Music Library."
 				}
 			} else if albumID != "" {
 				mu.RLock()
