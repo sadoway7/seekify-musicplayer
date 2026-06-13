@@ -70,7 +70,6 @@ const App = {
     } else if (playId) {
       const track = Store.getTrack(playId);
       if (track) {
-        // Load the track but don't auto-play — user taps play
         Player.queue = [track];
         Player.currentIndex = 0;
         Player.audio.src = Api.streamUrl(track.id);
@@ -78,6 +77,7 @@ const App = {
         if (Player.onTrackChange) Player.onTrackChange(track);
         if (Player.onStateChange) Player.onStateChange();
         UI.showNowPlaying();
+        UI.showToast('Tap play to start listening');
       }
     }
 

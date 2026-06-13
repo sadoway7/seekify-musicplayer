@@ -43,13 +43,9 @@ const Player = {
     if ('mediaSession' in navigator) {
       navigator.mediaSession.setActionHandler('play', () => {
         this.audio.play().catch(() => {});
-        this.playing = true;
-        if (this.onStateChange) this.onStateChange();
       });
       navigator.mediaSession.setActionHandler('pause', () => {
         this.audio.pause();
-        this.playing = false;
-        if (this.onStateChange) this.onStateChange();
       });
       navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
       navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
@@ -70,8 +66,6 @@ const Player = {
     if (this.getCurrentTrack() && this.getCurrentTrack().id === track.id) {
       if (!this.playing) {
         this.audio.play().catch(() => {});
-        this.playing = true;
-        if (this.onStateChange) this.onStateChange();
       }
       return;
     }
@@ -101,16 +95,17 @@ const Player = {
 
   _loadAndPlay(track) {
     this.audio.src = Api.streamUrl(track.id);
-    this.audio.play().catch(() => {
+    this.audio.play().then(() => {
+      this.playing = true;
+      if (this.onStateChange) this.onStateChange();
+    }).catch(() => {
       this.playing = false;
       if (this.onStateChange) this.onStateChange();
       if (typeof UI !== 'undefined' && UI.showToast) {
         UI.showToast('Could not play this track');
       }
     });
-    this.playing = true;
     if (this.onTrackChange) this.onTrackChange(track);
-    if (this.onStateChange) this.onStateChange();
     this._updateMediaSession(track);
   },
 
@@ -120,16 +115,9 @@ const Player = {
 
   togglePlay() {
     if (this.playing) {
-      this.playing = false;
       this.audio.pause();
-      if (this.onStateChange) this.onStateChange();
     } else {
-      this.playing = true;
-      this.audio.play().catch(() => {
-        this.playing = false;
-        if (this.onStateChange) this.onStateChange();
-      });
-      if (this.onStateChange) this.onStateChange();
+      this.audio.play().catch(() => {});
     }
   },
 
@@ -146,10 +134,12 @@ const Player = {
     this.currentIndex = nextIndex;
     const track = this.queue[this.currentIndex];
     this.audio.src = Api.streamUrl(track.id);
-    this.audio.play().catch(() => {});
-    this.playing = true;
+    this.audio.play().then(() => {
+      this.playing = true;
+      if (this.onStateChange) this.onStateChange();
+    }).catch(() => {});
     if (this.onTrackChange) this.onTrackChange(track);
-    if (this.onStateChange) this.onStateChange();
+    this._updateMediaSession(track);
   },
 
   prev() {
@@ -170,10 +160,12 @@ const Player = {
     this.currentIndex = prevIndex;
     const track = this.queue[this.currentIndex];
     this.audio.src = Api.streamUrl(track.id);
-    this.audio.play().catch(() => {});
-    this.playing = true;
+    this.audio.play().then(() => {
+      this.playing = true;
+      if (this.onStateChange) this.onStateChange();
+    }).catch(() => {});
     if (this.onTrackChange) this.onTrackChange(track);
-    if (this.onStateChange) this.onStateChange();
+    this._updateMediaSession(track);
   },
 
   seek(fraction) {
@@ -241,7 +233,14 @@ const Player = {
 
   removeFromQueue(index) {
     if (index < 0 || index >= this.queue.length) return;
+    const removedId = this.queue[index].id;
     this.queue.splice(index, 1);
+    if (this._originalQueue.length > 0) {
+      const origIdx = this._originalQueue.findIndex(t => t.id === removedId);
+      if (origIdx !== -1) {
+        this._originalQueue.splice(origIdx, 1);
+      }
+    }
     if (index < this.currentIndex) {
       this.currentIndex--;
     } else if (index === this.currentIndex) {

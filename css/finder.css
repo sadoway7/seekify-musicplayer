@@ -846,41 +846,12 @@
 .settings-field-toggle {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 
 .settings-field-toggle label {
   margin-bottom: 0;
-}
-
-.settings-toggle {
-  width: 40px;
-  height: 22px;
-  appearance: none;
-  background: var(--l3);
-  border-radius: 11px;
-  position: relative;
-  cursor: pointer;
-}
-
-.settings-toggle:checked {
-  background: var(--accent);
-}
-
-.settings-toggle::after {
-  content: '';
-  width: 18px;
-  height: 18px;
-  background: white;
-  border-radius: 50%;
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: transform 0.2s;
-}
-
-.settings-toggle:checked::after {
-  transform: translateX(18px);
 }
 
 .settings-textarea {

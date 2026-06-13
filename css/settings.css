@@ -12,18 +12,75 @@
   margin-bottom: 4px;
 }
 
-.settings-toggles-row {
+.settings-toggle-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 4px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.settings-toggle-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-toggle-row:first-child {
+  padding-top: 0;
+}
+
+.settings-toggle-label {
+  font-size: 14px;
+  color: var(--text1);
+}
+
+.settings-toggle-hint {
+  font-size: 12px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+.stoggle {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.stoggle-track {
+  width: 52px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--l4);
+  position: relative;
+  transition: background 0.25s ease;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.stoggle.active .stoggle-track {
+  background: #b8d435;
+  border-color: transparent;
+}
+
+.stoggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 32px;
+  height: 20px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 1px rgba(0,0,0,0.1);
+  transition: transform 0.25s ease;
+}
+
+.stoggle.active .stoggle-knob {
+  transform: translateX(14px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.6), 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .settings-checks-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px 20px;
-  margin-bottom: 4px;
+  gap: 0 20px;
 }
 
 .settings-subsection-label {

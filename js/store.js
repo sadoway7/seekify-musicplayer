@@ -1,5 +1,7 @@
 const Store = {
   library: { tracks: [], albums: [], artists: [] },
+  _trackMap: new Map(),
+  _albumMap: new Map(),
   playlists: [],
   favorites: [],
   recent: [],
@@ -58,6 +60,7 @@ const Store = {
       this.playlists = playlists;
       this.favorites = favorites;
       this.recent = recent;
+      this._rebuildMaps();
       try {
         const settings = await Api.getSettings();
         this.downloadsEnabled = settings.downloads_enabled !== 'false';
@@ -68,6 +71,11 @@ const Store = {
       } catch(e) {}
     } catch (err) {
       UI.showToast('Failed to load library');
+      UI.els.content.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;color:#aaa">'
+        + '<div style="font-size:48px;margin-bottom:16px">&#9835;</div>'
+        + '<div style="font-size:16px;margin-bottom:16px;color:#fff">Could not load your library</div>'
+        + '<button onclick="App.init()" style="padding:10px 24px;border-radius:8px;border:1px solid #444;background:#222;color:#fff;font-size:14px;cursor:pointer">Retry</button>'
+        + '</div>';
     }
     this.loading = false;
   },
@@ -75,6 +83,7 @@ const Store = {
   async refreshLibrary() {
     try {
       this.library = await Api.getLibrary();
+      this._rebuildMaps();
     } catch (err) {
       UI.showToast('Failed to refresh library');
     }
@@ -104,12 +113,17 @@ const Store = {
     }
   },
 
+  _rebuildMaps() {
+    this._trackMap = new Map(this.library.tracks.map(t => [t.id, t]));
+    this._albumMap = new Map(this.library.albums.map(a => [a.id, a]));
+  },
+
   getTrack(id) {
-    return this.library.tracks.find(t => t.id === id) || null;
+    return this._trackMap.get(id) || null;
   },
 
   getAlbum(id) {
-    return this.library.albums.find(a => a.id === id) || null;
+    return this._albumMap.get(id) || null;
   },
 
   albumHasCover(albumId) {

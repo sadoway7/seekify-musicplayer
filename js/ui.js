@@ -311,6 +311,7 @@ const UI = {
 
     const onMove = (e) => {
       if (!this.seeking) return;
+      if (e.cancelable) e.preventDefault();
       const f = getFraction(e);
       this._waveformProgress = f;
       this._paintWaveform(f);
@@ -337,7 +338,7 @@ const UI = {
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onEnd);
     canvas.addEventListener('touchstart', onStart, { passive: true });
-    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchmove', onMove, { passive: false });
     document.addEventListener('touchend', onEnd);
 
     canvas.addEventListener('mousemove', (e) => {
@@ -1147,30 +1148,44 @@ const UI = {
   navigateBack() {
     if (!this.els.nowPlaying.classList.contains('hidden')) {
       this.hideNowPlaying();
+      if (this._navHistory.length > 0) {
+        const prev = this._navHistory.pop();
+        Store.currentView = prev.view;
+        Store.viewData = prev.data;
+        this._clearPollTimers();
+        this.renderPage();
+        this.els.content.scrollTop = 0;
+      }
       return;
     }
-    // Pop from history stack if available
     if (this._navHistory.length > 0) {
       const prev = this._navHistory.pop();
       Store.currentView = prev.view;
       Store.viewData = prev.data;
+      this._clearPollTimers();
       this.renderPage();
       this.els.content.scrollTop = 0;
       return;
     }
-    // Default: go to home
     Store.currentView = 'home';
     Store.viewData = {};
     this._navHistory = [];
+    this._clearPollTimers();
     this.renderPage();
-    // Activate home tab
     document.querySelectorAll('.tab-item').forEach(t => {
       t.classList.toggle('active', t.dataset.tab === 'home');
     });
     Store.currentTab = 'home';
   },
 
+  _clearPollTimers() {
+    if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
+    if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
+    if (this._downloadPollInterval) { clearInterval(this._downloadPollInterval); this._downloadPollInterval = null; }
+  },
+
   renderPage() {
+    this._clearPollTimers();
     this.els.header.innerHTML = '';
     switch (Store.currentView) {
       case 'home': this.renderHome(); break;
@@ -1198,15 +1213,22 @@ const UI = {
     this._viewTrackList = [];
     this._renderHomeContent();
 
-    Store.refreshLibrary().then(() => {
-      if (Store.currentView === 'home') this._renderHomeContent();
-    });
-    Store.refreshRecent().then(() => {
-      if (Store.currentView === 'home') this._renderHomeContent();
-    });
+    let homeRenderPending = false;
+    const scheduleHomeRender = () => {
+      if (!homeRenderPending) {
+        homeRenderPending = true;
+        requestAnimationFrame(() => {
+          homeRenderPending = false;
+          if (Store.currentView === 'home') this._renderHomeContent();
+        });
+      }
+    };
+
+    Store.refreshLibrary().then(scheduleHomeRender);
+    Store.refreshRecent().then(scheduleHomeRender);
     Api.getReviewCounts().then(counts => {
       Store.reviewCounts = counts;
-      if (Store.currentView === 'home') this._renderHomeContent();
+      scheduleHomeRender();
     }).catch(() => {});
   },
 
@@ -3412,7 +3434,7 @@ const UI = {
   _startReviewProgressPoll() {
     if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
     this._loadInitialReviewLog();
-    this._reviewPollTimer = setInterval(() => this._pollReviewProgress(), 300);
+    this._reviewPollTimer = setInterval(() => this._pollReviewProgress(), 2000);
     this._pollReviewProgress();
   },
 
@@ -5919,12 +5941,13 @@ const UI = {
         const pct = Math.round(c.score * 100);
         const cls = pct >= 80 ? 'score-high' : pct >= 50 ? 'score-mid' : 'score-low';
         const art = c.albumId ? '<img src="/api/finder/cover/' + c.albumId + '" alt="" onerror="this.style.display=\'none\'">' : '';
+        const coverBadge = c.hasCover ? ' <span style="color:var(--accent);font-size:10px">&#10003; cover</span>' : '';
         html += '<div class="rescan-candidate" data-title="' + this._esc(c.title) + '" data-artist="' + this._esc(c.artist) + '" data-album="' + this._esc(c.album) + '" data-album-id="' + (c.albumId || '') + '">'
           + (art ? '<div class="rescan-candidate-art">' + art + '</div>' : '')
           + '<div class="rescan-candidate-info">'
           + '<div class="rescan-candidate-title">' + this._esc(c.title) + '</div>'
           + '<div class="rescan-candidate-artist">' + this._esc(c.artist) + '</div>'
-          + '<div class="rescan-candidate-album">' + this._esc(c.album || '—') + '</div>'
+          + '<div class="rescan-candidate-album">' + this._esc(c.album || '—') + coverBadge + '</div>'
           + '</div>'
           + '<span class="review-score ' + cls + '">' + pct + '%</span>'
           + '</div>';
@@ -6028,6 +6051,10 @@ const UI = {
       const sorted = Store.library.tracks.slice().sort((a, b) => (b.modTime || 0) - (a.modTime || 0));
       const recent = sorted.slice(0, 100);
       if (recent.length > 0) {
+        for (let i = recent.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [recent[i], recent[j]] = [recent[j], recent[i]];
+        }
         Player.play(recent[0], recent, { type: 'recent', name: 'Recently Added' });
         this.showNowPlaying();
       }

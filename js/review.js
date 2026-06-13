@@ -155,10 +155,11 @@ const ReviewUI = {
     });
 
     try {
-      await Api.reviewEditMeta(modal._trackId, fields);
+      const trackId = modal._trackId;
+      await Api.reviewEditMeta(trackId, fields);
       this.closeEditMetaModal();
       await Store.refreshLibrary();
-      if (modal._trackId === this.currentTrackId) {
+      if (trackId === this.currentTrackId) {
         this.overlay.classList.remove('visible');
         this.currentTrackId = null;
       }

@@ -1,0 +1,130 @@
+package review
+
+import (
+	"musicapp/internal/models"
+	"musicapp/internal/store"
+	"testing"
+)
+
+func TestNormalizeForCompare(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"Hello World", "hello world"},
+		{"Hello-World", "hello world"},
+		{"Hello_World", "hello world"},
+		{"Hello (World)", "hello world"},
+		{"Hello [World]", "hello world"},
+		{"Hello.World", "helloworld"},
+		{"  Hello   World  ", "hello world"},
+	}
+	for _, tt := range tests {
+		got := NormalizeForCompare(tt.input)
+		if got != tt.want {
+			t.Errorf("NormalizeForCompare(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestTitleSimilarity_exact(t *testing.T) {
+	score := TitleSimilarity("Hello World", "Hello World")
+	if score != 1.0 {
+		t.Errorf("exact match = %f, want 1.0", score)
+	}
+}
+
+func TestTitleSimilarity_partial(t *testing.T) {
+	score := TitleSimilarity("Hello World", "Hello There")
+	if score <= 0 || score >= 1.0 {
+		t.Errorf("partial match = %f, want between 0 and 1", score)
+	}
+}
+
+func TestTitleSimilarity_noMatch(t *testing.T) {
+	score := TitleSimilarity("Completely Different", "No Overlap Words")
+	if score != 0.0 {
+		t.Errorf("no match = %f, want 0.0", score)
+	}
+}
+
+func TestIsGenericName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"", true},
+		{"Track", true},
+		{"Unknown", true},
+		{"Untitled", true},
+		{"track 5", true},
+		{"Track 05", true},
+		{"Real Title", false},
+		{"My Song", false},
+	}
+	for _, tt := range tests {
+		got := IsGenericName(tt.input, nil)
+		if got != tt.want {
+			t.Errorf("IsGenericName(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestIsGenericName_extras(t *testing.T) {
+	if !IsGenericName("custom", []string{"custom"}) {
+		t.Error("should match extra generic name")
+	}
+	if IsGenericName("custom", nil) {
+		t.Error("should not match when extras is nil")
+	}
+}
+
+func TestIsFilenameDerived(t *testing.T) {
+	tests := []struct {
+		filePath string
+		title    string
+		want     bool
+	}{
+		{"Artist/Album/Track Name.mp3", "Track Name", true},
+		{"Artist/Album/Real Title.mp3", "Different Title", false},
+		{"Artist/Album/Song Title.flac", "Song Title", true},
+		{"media:Artist/Album/Song.mp3", "Song", true},
+	}
+	for _, tt := range tests {
+		track := &models.Track{Title: tt.title, FilePath: tt.filePath}
+		got := IsFilenameDerived(track)
+		if got != tt.want {
+			t.Errorf("IsFilenameDerived(%q, %q) = %v, want %v", tt.filePath, tt.title, got, tt.want)
+		}
+	}
+}
+
+func TestQualityScore(t *testing.T) {
+	full := &models.Track{Title: "Title", Artist: "Artist", Album: "Album", HasCover: true, TrackNumber: 1, Year: 2020, Genre: "Rock", Duration: 200}
+	empty := &models.Track{Title: "", Artist: "", Album: "", HasCover: false}
+	fullScore := QualityScore(full)
+	emptyScore := QualityScore(empty)
+	if fullScore <= emptyScore {
+		t.Errorf("full track (%d) should score higher than empty (%d)", fullScore, emptyScore)
+	}
+}
+
+func TestPickBestQuality(t *testing.T) {
+	tracks := []*models.Track{
+		{Title: "A", HasCover: false, FilePath: "a.mp3"},
+		{Title: "B", HasCover: true, FilePath: "b.mp3"},
+	}
+	best := PickBestQuality(tracks)
+	if !best.HasCover {
+		t.Error("should pick track with cover")
+	}
+}
+
+func TestBoolToInt(t *testing.T) {
+	if store.BoolToInt(true) != 1 {
+		t.Error("store.BoolToInt(true) should be 1")
+	}
+	if store.BoolToInt(false) != 0 {
+		t.Error("store.BoolToInt(false) should be 0")
+	}
+}

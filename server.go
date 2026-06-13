@@ -5,10 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"musicapp/internal/downloads"
+	"musicapp/internal/handlers"
 	"musicapp/internal/models"
 	"musicapp/internal/musicbrainz"
+	"musicapp/internal/review"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
+	"musicapp/internal/watched"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,16 +72,17 @@ func main() {
 	store.CoverCache = make(map[string][]byte)
 
 	store.InitDB(filepath.Join("data", "music.db"))
-	initDownloadTables()
-	initWatchedTables()
-	initReviewTables()
+	downloads.InitDownloadTables()
+	watched.InitWatchedTables()
+	review.InitReviewTables()
 
 	// Wire scanner callbacks (avoid circular import from scanner -> main)
-	scanner.WakeReviewWorker = wakeReviewWorker
-	scanner.InsertUncheckedReviews = dbInsertUncheckedReviews
-	scanner.LibraryVersionAdd = func(delta int64) { libraryVersion.Add(delta) }
-	scanner.DeleteReview = dbDeleteReview
-	scanner.SetReviewStatus = dbSetReviewStatus
+	downloads.EnrichFunc = handlers.EnrichWithPython
+	scanner.WakeReviewWorker = review.WakeReviewWorker
+	scanner.InsertUncheckedReviews = review.DbInsertUncheckedReviews
+	scanner.LibraryVersionAdd = func(delta int64) { handlers.LibraryVersion.Add(delta) }
+	scanner.DeleteReview = review.DbDeleteReview
+	scanner.SetReviewStatus = review.DbSetReviewStatus
 
 	// Try loading from DB first
 	dbTracks := store.DbLoadTracks()
@@ -90,8 +95,8 @@ func main() {
 
 	// Covers and artist art are lazy-loaded from disk on first request
 
-	ytdlp := findYtDlp()
-	ffmpeg := findFfmpeg()
+	ytdlp := downloads.FindYtDlp()
+	ffmpeg := downloads.FindFfmpeg()
 	if ytdlp != "" {
 		log.Printf("yt-dlp found: %s", ytdlp)
 	} else {
@@ -164,128 +169,128 @@ func main() {
 	}
 
 	scanner.ExtractEmbeddedCovers()
-	syncWatchedPlaylistsToLibrary()
-	recoverStalledDownloads()
+	watched.SyncWatchedPlaylistsToLibrary()
+	downloads.RecoverStalledDownloads()
 	go musicbrainz.FetchMissingCovers()
 	go musicbrainz.FetchMissingArtistArt()
 	go scanner.StartWatcher()
-	go startWatchScheduler()
-	go downloadWatchdog()
-	seedMissingReviewTracks()
-	cleanupOldReviewFlags()
-	cleanupOrphanedReviews()
-	go startReviewScheduler()
+	go watched.StartWatchScheduler()
+	go downloads.DownloadWatchdog()
+	review.SeedMissingReviewTracks()
+	review.CleanupOldReviewFlags()
+	review.CleanupOrphanedReviews()
+	go review.StartReviewScheduler()
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/api/library", libraryHandler)
-	mux.HandleFunc("/api/stats", statsHandler)
-	mux.HandleFunc("/api/stream/", streamHandler)
-	mux.HandleFunc("/api/cover/", coverHandler)
-	mux.HandleFunc("/api/artist-art/", artistArtHandler)
-	mux.HandleFunc("/api/artist-art-fetch/", artistArtFetchHandler)
-	mux.HandleFunc("/api/scan", scanHandler)
-	mux.HandleFunc("/api/playlists", playlistsHandler)
-	mux.HandleFunc("/api/playlists/", playlistHandler)
-	mux.HandleFunc("/api/favorites", favoritesHandler)
-	mux.HandleFunc("/api/favorites/", favoriteToggleHandler)
-	mux.HandleFunc("/api/recent", recentHandler)
-	mux.HandleFunc("/api/recent/", recentAddHandler)
-	mux.HandleFunc("/admin", adminHandler)
-	mux.HandleFunc("/api/v2/resolve-url", resolveURLHandler)
-	mux.HandleFunc("/api/v2/search", v2SearchHandler)
-	mux.HandleFunc("/api/v2/lyrics", v2LyricsHandler)
+	mux.HandleFunc("/api/library", handlers.LibraryHandler)
+	mux.HandleFunc("/api/stats", handlers.StatsHandler)
+	mux.HandleFunc("/api/stream/", handlers.StreamHandler)
+	mux.HandleFunc("/api/cover/", handlers.CoverHandler)
+	mux.HandleFunc("/api/artist-art/", handlers.ArtistArtHandler)
+	mux.HandleFunc("/api/artist-art-fetch/", handlers.ArtistArtFetchHandler)
+	mux.HandleFunc("/api/scan", handlers.ScanHandler)
+	mux.HandleFunc("/api/playlists", handlers.PlaylistsHandler)
+	mux.HandleFunc("/api/playlists/", handlers.PlaylistHandler)
+	mux.HandleFunc("/api/favorites", handlers.FavoritesHandler)
+	mux.HandleFunc("/api/favorites/", handlers.FavoriteToggleHandler)
+	mux.HandleFunc("/api/recent", handlers.RecentHandler)
+	mux.HandleFunc("/api/recent/", handlers.RecentAddHandler)
+	mux.HandleFunc("/admin", handlers.AdminHandler)
+	mux.HandleFunc("/api/v2/resolve-url", handlers.ResolveURLHandler)
+	mux.HandleFunc("/api/v2/search", handlers.V2SearchHandler)
+	mux.HandleFunc("/api/v2/lyrics", handlers.V2LyricsHandler)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-		ytdlp := findYtDlp()
-		ffmpeg := findFfmpeg()
+		ytdlp := downloads.FindYtDlp()
+		ffmpeg := downloads.FindFfmpeg()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
 			"yt-dlp": ytdlp,
 			"ffmpeg": ffmpeg,
 		})
 	})
-	mux.HandleFunc("/api/admin-login", adminLoginHandler)
-	mux.HandleFunc("/api/files", requireAdmin(fileListHandler))
-	mux.HandleFunc("/api/upload", requireAdmin(uploadHandler))
-	mux.HandleFunc("/api/delete", requireAdmin(deleteFileHandler))
-	mux.HandleFunc("/api/folders", requireAdmin(createFolderHandler))
+	mux.HandleFunc("/api/admin-login", handlers.AdminLoginHandler)
+	mux.HandleFunc("/api/files", handlers.RequireAdmin(handlers.FileListHandler))
+	mux.HandleFunc("/api/upload", handlers.RequireAdmin(handlers.UploadHandler))
+	mux.HandleFunc("/api/delete", handlers.RequireAdmin(handlers.DeleteFileHandler))
+	mux.HandleFunc("/api/folders", handlers.RequireAdmin(handlers.CreateFolderHandler))
 
-	mux.HandleFunc("/api/download/", downloadHandler)
-	mux.HandleFunc("/api/admin/downloads", requireAdmin(downloadsListHandler))
-	mux.HandleFunc("/api/admin/download-toggle/", requireAdmin(downloadToggleHandler))
-	mux.HandleFunc("/api/admin/downloads-enable-all", requireAdmin(downloadsEnableAllHandler))
+	mux.HandleFunc("/api/download/", handlers.DownloadHandler)
+	mux.HandleFunc("/api/admin/downloads", handlers.RequireAdmin(handlers.DownloadsListHandler))
+	mux.HandleFunc("/api/admin/download-toggle/", handlers.RequireAdmin(handlers.DownloadToggleHandler))
+	mux.HandleFunc("/api/admin/downloads-enable-all", handlers.RequireAdmin(handlers.DownloadsEnableAllHandler))
 
-	mux.HandleFunc("/api/waveform/", waveformHandler)
-	mux.HandleFunc("/api/track-duration/", trackDurationHandler)
+	mux.HandleFunc("/api/waveform/", handlers.WaveformHandler)
+	mux.HandleFunc("/api/track-duration/", handlers.TrackDurationHandler)
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
 	})
-	mux.HandleFunc("/api/metadata/scan", metadataScanHandler)
-	mux.HandleFunc("/api/metadata/rescan/", metadataRescanHandler)
-	mux.HandleFunc("/api/metadata/rescan-sync/", metadataRescanSyncHandler)
-	mux.HandleFunc("/api/metadata/search", metadataSearchHandler)
-	mux.HandleFunc("/api/metadata/update-track/", metadataUpdateTrackHandler)
-	mux.HandleFunc("/api/metadata/scan-progress", metadataScanProgressHandler)
-	mux.HandleFunc("/api/metadata/pending", metadataPendingHandler)
-	mux.HandleFunc("/api/metadata/all", metadataAllHandler)
-	mux.HandleFunc("/api/metadata/approve/", metadataApproveHandler)
-	mux.HandleFunc("/api/metadata/reject/", metadataRejectHandler)
-	mux.HandleFunc("/api/metadata/approve-all", metadataApproveAllHandler)
-	mux.HandleFunc("/api/metadata/clear", metadataClearHandler)
-	mux.HandleFunc("/api/metadata/counts", metadataCountsHandler)
-	mux.HandleFunc("/api/metadata/undo/", metadataUndoHandler)
+	mux.HandleFunc("/api/metadata/scan", handlers.MetadataScanHandler)
+	mux.HandleFunc("/api/metadata/rescan/", handlers.MetadataRescanHandler)
+	mux.HandleFunc("/api/metadata/rescan-sync/", handlers.MetadataRescanSyncHandler)
+	mux.HandleFunc("/api/metadata/search", handlers.MetadataSearchHandler)
+	mux.HandleFunc("/api/metadata/update-track/", handlers.MetadataUpdateTrackHandler)
+	mux.HandleFunc("/api/metadata/scan-progress", handlers.MetadataScanProgressHandler)
+	mux.HandleFunc("/api/metadata/pending", handlers.MetadataPendingHandler)
+	mux.HandleFunc("/api/metadata/all", handlers.MetadataAllHandler)
+	mux.HandleFunc("/api/metadata/approve/", handlers.MetadataApproveHandler)
+	mux.HandleFunc("/api/metadata/reject/", handlers.MetadataRejectHandler)
+	mux.HandleFunc("/api/metadata/approve-all", handlers.MetadataApproveAllHandler)
+	mux.HandleFunc("/api/metadata/clear", handlers.MetadataClearHandler)
+	mux.HandleFunc("/api/metadata/counts", handlers.MetadataCountsHandler)
+	mux.HandleFunc("/api/metadata/undo/", handlers.MetadataUndoHandler)
 
-	mux.HandleFunc("/api/finder/search", finderSearchHandler)
-	mux.HandleFunc("/api/finder/artist/", finderArtistReleasesHandler)
-	mux.HandleFunc("/api/finder/release/", finderReleaseTracksHandler)
-	mux.HandleFunc("/api/finder/cover/", finderCoverHandler)
-	mux.HandleFunc("/api/finder/youtube", youtubeSearchHandler)
-	mux.HandleFunc("/api/preview/", previewAudioHandler)
-	mux.HandleFunc("/api/download-job/", downloadJobFileHandler)
+	mux.HandleFunc("/api/finder/search", handlers.FinderSearchHandler)
+	mux.HandleFunc("/api/finder/artist/", handlers.FinderArtistReleasesHandler)
+	mux.HandleFunc("/api/finder/release/", handlers.FinderReleaseTracksHandler)
+	mux.HandleFunc("/api/finder/cover/", handlers.FinderCoverHandler)
+	mux.HandleFunc("/api/finder/youtube", handlers.YoutubeSearchHandler)
+	mux.HandleFunc("/api/preview/", handlers.PreviewAudioHandler)
+	mux.HandleFunc("/api/download-job/", handlers.DownloadJobFileHandler)
 
-	mux.HandleFunc("/api/queue", downloadQueueHandler)
-	mux.HandleFunc("/api/queue/add", downloadQueueAddHandler)
-	mux.HandleFunc("/api/queue/add-batch", downloadQueueAddBatchHandler)
-	mux.HandleFunc("/api/queue/counts", queueCountsHandler)
-	mux.HandleFunc("/api/queue/clear-completed", queueClearCompletedHandler)
+	mux.HandleFunc("/api/queue", handlers.DownloadQueueHandler)
+	mux.HandleFunc("/api/queue/add", handlers.DownloadQueueAddHandler)
+	mux.HandleFunc("/api/queue/add-batch", handlers.DownloadQueueAddBatchHandler)
+	mux.HandleFunc("/api/queue/counts", handlers.QueueCountsHandler)
+	mux.HandleFunc("/api/queue/clear-completed", handlers.QueueClearCompletedHandler)
 	mux.HandleFunc("/api/queue/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/retry") {
-			downloadJobRetryHandler(w, r)
+			handlers.DownloadJobRetryHandler(w, r)
 		} else if strings.HasSuffix(path, "/delete") {
-			downloadJobDeleteHandler(w, r)
+			handlers.DownloadJobDeleteHandler(w, r)
 		} else if strings.HasSuffix(path, "/select") {
-			downloadJobSelectHandler(w, r)
+			handlers.DownloadJobSelectHandler(w, r)
 		} else {
-			downloadJobStatusHandler(w, r)
+			handlers.DownloadJobStatusHandler(w, r)
 		}
 	})
 
-	mux.HandleFunc("/api/bulk-import", bulkImportHandler)
+	mux.HandleFunc("/api/bulk-import", handlers.BulkImportHandler)
 
-	mux.HandleFunc("/api/shared-queue", sharedQueueCreateHandler)
-	mux.HandleFunc("/api/shared-queue/", sharedQueueGetHandler)
+	mux.HandleFunc("/api/shared-queue", handlers.SharedQueueCreateHandler)
+	mux.HandleFunc("/api/shared-queue/", handlers.SharedQueueGetHandler)
 
-	mux.HandleFunc("/api/playlist-import", playlistImportHandler)
-	mux.HandleFunc("/api/watch/", watchedPlaylistsHandler)
-	mux.HandleFunc("/api/watch", watchedPlaylistsHandler)
+	mux.HandleFunc("/api/playlist-import", handlers.PlaylistImportHandler)
+	mux.HandleFunc("/api/watch/", handlers.WatchedPlaylistsHandler)
+	mux.HandleFunc("/api/watch", handlers.WatchedPlaylistsHandler)
 
 	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
-			settingsSetHandler(w, r)
+			handlers.SettingsSetHandler(w, r)
 		} else {
-			settingsGetHandler(w, r)
+			handlers.SettingsGetHandler(w, r)
 		}
 	})
 
-	mux.HandleFunc("/api/review/tracks", reviewTracksHandler)
-	mux.HandleFunc("/api/review/counts", reviewCountsHandler)
-	mux.HandleFunc("/api/review/mark-ok", reviewMarkOkHandler)
-	mux.HandleFunc("/api/review/edit-meta", reviewEditMetaHandler)
-	mux.HandleFunc("/api/review/delete", reviewDeleteHandler)
-	mux.HandleFunc("/api/review/recheck-all", reviewRecheckAllHandler)
-	mux.HandleFunc("/api/review/progress", reviewProgressHandler)
-	mux.HandleFunc("/api/review/log", reviewLogHandler)
+	mux.HandleFunc("/api/review/tracks", review.ReviewTracksHandler)
+	mux.HandleFunc("/api/review/counts", review.ReviewCountsHandler)
+	mux.HandleFunc("/api/review/mark-ok", review.ReviewMarkOkHandler)
+	mux.HandleFunc("/api/review/edit-meta", review.ReviewEditMetaHandler)
+	mux.HandleFunc("/api/review/delete", review.ReviewDeleteHandler)
+	mux.HandleFunc("/api/review/recheck-all", review.ReviewRecheckAllHandler)
+	mux.HandleFunc("/api/review/progress", review.ReviewProgressHandler)
+	mux.HandleFunc("/api/review/log", review.ReviewLogHandler)
 
 	var handler http.Handler = mux
 	handler = loggingMiddleware(recoveryMiddleware(handler))
@@ -295,7 +300,7 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
-		spaHandler(w, r)
+		handlers.SpaHandler(w, r)
 	})
 
 	port := os.Getenv("PORT")
@@ -311,7 +316,7 @@ func main() {
 
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-		openBrowser(url)
+		handlers.OpenBrowser(url)
 	}()
 
 	if err := http.ListenAndServe(addr, handler); err != nil {

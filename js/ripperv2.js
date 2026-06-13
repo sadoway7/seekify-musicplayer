@@ -25,7 +25,7 @@ const RipperV2 = {
     return d.innerHTML;
   },
 
-  _showToast(msg) { UI._showToast(msg); },
+  _showToast(msg) { UI.showToast(msg); },
 
   _isQueued(artist, title) {
     return this._downloadJobs.some(j =>
