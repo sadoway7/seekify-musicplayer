@@ -511,7 +511,6 @@ func ProcessSingleDownload(job *DownloadJob) {
 		"-x",
 		"--audio-format", audioFormat,
 		"--audio-quality", audioQuality,
-		"--embed-metadata",
 		"--embed-thumbnail",
 		"--convert-thumbnails", "jpg",
 		"--no-warnings",
@@ -1008,15 +1007,10 @@ func TagAudioFile(filePath, artist, title, album string, trackNum, trackTotal in
 
 	tmpFile := filePath + ".tagged" + filepath.Ext(filePath)
 
-	args := []string{"-y", "-i", filePath}
-	if artist != "" {
-		args = append(args, "-metadata", fmt.Sprintf("artist=%s", artist))
-	}
-	if title != "" {
-		args = append(args, "-metadata", fmt.Sprintf("title=%s", title))
-	}
-	if album != "" {
-		args = append(args, "-metadata", fmt.Sprintf("album=%s", album))
+	args := []string{"-y", "-i", filePath,
+		"-metadata", fmt.Sprintf("artist=%s", artist),
+		"-metadata", fmt.Sprintf("title=%s", title),
+		"-metadata", fmt.Sprintf("album=%s", album),
 	}
 	if trackNum > 0 {
 		trackVal := fmt.Sprintf("%d", trackNum)
