@@ -609,7 +609,7 @@
   gap: 10px;
   background: transparent;
   box-shadow: none;
-  padding: 6px var(--page-margin);
+  padding: 6px var(--page-margin) var(--sp-4);
 }
 
 .lib-tab {

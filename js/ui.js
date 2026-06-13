@@ -1756,7 +1756,8 @@ const UI = {
           + '<div class="list-item-subtitle">' + p.trackIds.length + ' tracks</div>'
           + '</div>'
           + '<button class="list-item-more">' + Icons.more() + '</button></div>';
-    });
+      });
+    }
     return html;
   },
 
@@ -2188,19 +2189,19 @@ const UI = {
     if (!this._finderTab) this._finderTab = 'search';
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
-    let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Ripper Search</span>'
-      + '<button class="chip finder-chip' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads" style="margin-left:auto;background:#3B82F6;color:#fff;border-color:#3B82F6">Downloads</button>'
-      + '</div>'
-      + '<div class="filter-chips finder-type-chips">'
-      + '<button class="chip finder-chip' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Search</button>'
-      + '<button class="chip finder-chip' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">Import</button>'
+    let html = '<div class="lib-sticky-header">'
+      + '<div class="lib-tabs">'
+      + '<button class="lib-tab' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Rip Search</button>'
+      + '<button class="lib-tab' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">YT Import</button>'
+      + '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
       + '</div>';
 
     if (this._finderTab === 'downloads') {
-      html += '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+      html += '</div>'
+        + '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
     } else if (this._finderTab === 'import') {
-      html += '<div class="playlist-import-section" style="margin:8px 0 0">'
+      html += '</div>'
+        + '<div class="playlist-import-section">'
         + '<div class="playlist-import-body">'
         + '<div class="playlist-import-form">'
         + '<input class="settings-input" type="text" id="playlist-url-input" placeholder="Paste YouTube playlist URL..." style="flex:1">'
@@ -2212,12 +2213,11 @@ const UI = {
         + '</div>';
     } else {
       const subChips = '<div class="finder-type-chips finder-sub-chips">'
-        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
-        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
-        + '<button class="chip finder-chip finder-sub' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
+        + '<button class="chip finder-sub' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
+        + '<button class="chip finder-sub' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
+        + '<button class="chip finder-sub' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
         + '</div>';
-      html += '<div class="finder-search-row">'
-        + '<div class="search-container finder-search-container">'
+      html += '<div class="search-container finder-search-container">'
         + '<span class="search-icon">' + Icons.search() + '</span>'
         + '<input class="search-input finder-search-input" type="text" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
         + subChips
@@ -2389,7 +2389,7 @@ const UI = {
     this._viewTrackList = [];
 
     let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Downloads</span></div>'
+      + '<span class="page-header-title">Downloads</span></div>'
       + '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
 
     this.els.content.innerHTML = html;
@@ -2630,22 +2630,6 @@ const UI = {
   },
 
   _updateDownloadBadge(counts) {
-    const tab = document.querySelector('[data-tab="finder"]');
-    if (!tab) return;
-    const existing = tab.querySelector('.nav-badge');
-    const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
-    if (active > 0) {
-      if (!existing) {
-        const badge = document.createElement('span');
-        badge.className = 'nav-badge';
-        badge.textContent = active;
-        tab.appendChild(badge);
-      } else {
-        existing.textContent = active;
-      }
-    } else if (existing) {
-      existing.remove();
-    }
   },
 
   _pollDownloadBadge() {
@@ -2907,10 +2891,10 @@ const UI = {
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
       + '<span class="page-header-title">' + this._esc(name) + '</span>'
       + '</div>'
-      + '<div class="filter-chips finder-type-chips">'
-      + '<button class="chip finder-chip' + (this._artistView === 'tracklist' ? ' active' : '') + '" data-artist-tab="tracklist">Tracklist</button>'
-      + '<button class="chip finder-chip' + (this._artistView === 'albums' ? ' active' : '') + '" data-artist-tab="albums">Albums</button>'
-      + '<button class="chip finder-chip" data-artist-tab="downloads" style="margin-left:auto;background:#3B82F6;color:#fff;border-color:#3B82F6">Downloads</button>'
+      + '<div class="lib-tabs">'
+      + '<button class="lib-tab' + (this._artistView === 'tracklist' ? ' active' : '') + '" data-artist-tab="tracklist">Tracklist</button>'
+      + '<button class="lib-tab' + (this._artistView === 'albums' ? ' active' : '') + '" data-artist-tab="albums">Albums</button>'
+      + '<button class="lib-tab' + (this._artistView === 'downloads' ? ' active' : '') + '" data-artist-tab="downloads">Downloads</button>'
       + '</div>'
       + '<div id="finder-artist-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
 

@@ -373,15 +373,17 @@
   }
 }
 
-.finder-sub-chips .finder-chip {
+.finder-sub-chips .chip {
   font-size: 11px;
   padding: 3px 10px;
   background: rgba(255,255,255,0.08);
   color: rgba(255,255,255,0.7);
   border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  flex: none;
 }
 
-.finder-sub-chips .finder-chip.active {
+.finder-sub-chips .chip.active {
   background: var(--accent);
   color: #111;
   border-color: var(--accent);
@@ -1022,7 +1024,7 @@
 }
 
 .playlist-import-section {
-  margin: 20px var(--page-margin);
+  margin: var(--sp-3) var(--page-margin) var(--sp-6);
   background: var(--l2);
   border-radius: 14px;
   padding: 14px;
