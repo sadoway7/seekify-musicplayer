@@ -1222,7 +1222,8 @@
 }
 
 .progress-bar-track {
-  max-width: 360px;
+  max-width: 280px;
+  margin: 0 auto;
   height: 4px;
   background: var(--l3);
   border-radius: 2px;
@@ -1234,9 +1235,42 @@
   width: 40%;
   background: var(--accent);
   border-radius: 2px;
-  transition: width 0.3s ease;
 }
 
-.artist-track-progress-wrap {
-  max-width: 420px;
+.finder-load-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.finder-load-more-btn:hover {
+  background: var(--accent-hover);
+}
+
+.finder-load-more-btn:active:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.finder-load-more-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.finder-load-more-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes progress-pulse {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
 }

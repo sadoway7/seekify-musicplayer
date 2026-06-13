@@ -557,23 +557,21 @@ func GetArtistTrackProgress() ArtistTrackProgress {
 	return artistTrackProg
 }
 
-func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
-	artistTrackProgLock.Lock()
-	artistTrackProg = ArtistTrackProgress{Running: true, Current: artistName}
-	artistTrackProgLock.Unlock()
+type ArtistTrackPage struct {
+	Tracks []ArtistTrack `json:"tracks"`
+	Total  int           `json:"total"`
+}
 
-	defer func() {
-		artistTrackProgLock.Lock()
-		artistTrackProg.Running = false
-		artistTrackProgLock.Unlock()
-	}()
-
+func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) ArtistTrackPage {
 	seen := map[string]*ArtistTrack{}
 	libLookup := buildLibraryLookup()
 
-	offset := 0
-	for {
-		reqURL := fmt.Sprintf("%s/recording?query=arid:%s&fmt=json&limit=100&offset=%d&sort=tagcount&order=desc",
+	totalAvailable := 0
+	offset := pageOffset
+	pagesToFetch := (pageLimit + 99) / 100
+
+	for p := 0; p < pagesToFetch; p++ {
+		reqURL := fmt.Sprintf("%s/recording?query=arid:%s+AND+video:false&fmt=json&limit=100&offset=%d&order=desc",
 			MbBaseURL, mbid, offset)
 
 		var body []byte
@@ -599,31 +597,34 @@ func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 			break
 		}
 
-		artistTrackProgLock.Lock()
-		artistTrackProg.Total = resp.Count
-		artistTrackProg.Fetched = offset + len(resp.Recordings)
-		artistTrackProgLock.Unlock()
+		totalAvailable = resp.Count
 
 		for _, raw := range resp.Recordings {
 			var rec struct {
 				Title          string `json:"title"`
 				Length         int    `json:"length"`
-				Video          bool   `json:"video"`
 				Disambiguation string `json:"disambiguation"`
 				ArtistCredit   []struct {
 					Name string `json:"name"`
 				} `json:"artist-credit"`
+				Releases []struct {
+					Title string `json:"title"`
+					ID    string `json:"id"`
+				} `json:"releases"`
 			}
 			if json.Unmarshal(raw, &rec) != nil {
-				continue
-			}
-			if rec.Video {
 				continue
 			}
 
 			title := CleanTrackTitle(rec.Title)
 			if title == "" || strings.HasPrefix(title, "[") {
 				continue
+			}
+
+			var album, albumID string
+			if len(rec.Releases) > 0 {
+				album = rec.Releases[0].Title
+				albumID = rec.Releases[0].ID
 			}
 
 			key := strings.ToLower(title)
@@ -639,10 +640,16 @@ func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 				if length > existing.Length && length > 0 {
 					existing.Length = length
 				}
+				if existing.Album == "" && album != "" {
+					existing.Album = album
+					existing.AlbumID = albumID
+				}
 			} else {
 				seen[key] = &ArtistTrack{
 					Title:     title,
 					Artist:    artist,
+					Album:     album,
+					AlbumID:   albumID,
 					Length:    length,
 					Count:     1,
 					InLibrary: isInLibrary(libLookup, artist, title),
@@ -651,10 +658,12 @@ func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 		}
 
 		offset += len(resp.Recordings)
-		if offset >= resp.Count || len(resp.Recordings) == 0 || offset >= 500 {
+		if len(resp.Recordings) == 0 {
 			break
 		}
-		time.Sleep(400 * time.Millisecond)
+		if p < pagesToFetch-1 {
+			time.Sleep(400 * time.Millisecond)
+		}
 	}
 
 	var result []ArtistTrack
@@ -666,7 +675,10 @@ func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 		return result[i].Count > result[j].Count
 	})
 
-	return result
+	return ArtistTrackPage{
+		Tracks: result,
+		Total:  totalAvailable,
+	}
 }
 
 func CleanChannelName(name string) string {

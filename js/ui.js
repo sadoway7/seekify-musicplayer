@@ -3032,59 +3032,52 @@ const UI = {
 
   async _renderArtistTracklist(container, releases, artistName) {
     if (this._artistTrackCache) {
-      this._renderArtistTracklistDOM(container, this._artistTrackCache);
+      this._renderArtistTracklistDOM(container, this._artistTrackCache, this._artistTrackTotal, releases, artistName);
       return;
     }
     if (this._artistTrackFetching) return;
     this._artistTrackFetching = true;
+    this._artistTrackOffset = 0;
+    this._artistTrackCache = [];
+    this._artistTrackTotal = 0;
 
-    container.innerHTML = '<div style="padding:32px 22px">'
-      + '<div class="artist-track-progress-wrap">'
-      + '<div class="progress-bar-track"><div class="progress-bar-fill" id="artist-track-progress-fill" style="width:0%"></div></div>'
-      + '<div style="display:flex;justify-content:space-between;margin-top:8px">'
-      + '<span id="artist-track-progress-label" style="color:var(--text3);font-size:13px">Finding popular tracks&hellip;</span>'
-      + '<span id="artist-track-progress-count" style="color:var(--text3);font-size:13px"></span>'
-      + '</div></div></div>';
+    container.innerHTML = '<div style="padding:32px 22px;text-align:center">'
+      + '<div style="max-width:280px;margin:0 auto">'
+      + '<div class="progress-bar-track"><div class="progress-bar-fill" style="animation:progress-pulse 1.8s ease-in-out infinite"></div></div>'
+      + '<div style="color:var(--text2);font-size:14px;margin-top:16px;font-weight:500">Finding popular tracks&hellip;</div>'
+      + '<div style="color:var(--text3);font-size:13px;margin-top:4px">This can take a moment for artists with large catalogs.</div>'
+      + '</div></div>';
 
-    const pollProgress = setInterval(async () => {
-      try {
-        const p = await Api.artistTrackProgress();
-        const pct = p.total > 0 ? Math.min(100, Math.round((p.fetched / p.total) * 100)) : 0;
-        const fill = document.getElementById('artist-track-progress-fill');
-        const count = document.getElementById('artist-track-progress-count');
-        if (fill) fill.style.width = pct + '%';
-        if (count) count.textContent = p.fetched + ' / ' + p.total;
-        if (!p.running) clearInterval(pollProgress);
-      } catch (e) {}
-    }, 500);
-
-    const allTracks = await Api.finderArtistTracks(releases[0].artistId || '', artistName).catch(() => null);
-    clearInterval(pollProgress);
+    const page = await Api.finderArtistTracks(releases[0].artistId || '', artistName, 0).catch(() => null);
     this._artistTrackFetching = false;
 
-    if (!allTracks || allTracks.length === 0) {
-      if (this._artistView === 'tracklist' && !this._artistTrackCache) {
+    if (!page || !page.tracks || page.tracks.length === 0) {
+      if (this._artistView === 'tracklist' && this._artistTrackCache.length === 0) {
         container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
-          + '<div class="empty-state-text">' + (allTracks === null ? 'Failed to load tracks' : 'No tracks found') + '</div></div>';
+          + '<div class="empty-state-text">' + (page === null ? 'Failed to load tracks' : 'No tracks found') + '</div></div>';
       }
       return;
     }
 
-    this._artistTrackCache = allTracks;
+    this._artistTrackCache = page.tracks;
+    this._artistTrackTotal = page.total;
+    this._artistTrackOffset = 100;
     if (this._artistView === 'tracklist') {
-      this._renderArtistTracklistDOM(container, allTracks);
+      this._renderArtistTracklistDOM(container, this._artistTrackCache, this._artistTrackTotal, releases, artistName);
     }
   },
 
-  _renderArtistTracklistDOM(container, allTracks) {
+  _renderArtistTracklistDOM(container, allTracks, totalCount, releases, artistName) {
+    const hasMore = allTracks.length < totalCount;
     let html = '<div class="tracklist-toolbar">'
       + '<div class="search-container finder-search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input artist-tracklist-search" type="text" placeholder="Filter tracks...">'
       + '</div>'
-      + '<button class="settings-btn settings-btn-primary" id="btn-download-all-artist">' + Icons.download() + '<span>Download All</span></button>'
+      + (hasMore ? '<button class="finder-load-more-btn" id="btn-load-more-tracks"><span>Load More</span></button>' : '')
+      + '<button class="settings-btn settings-btn-primary" id="btn-download-all-artist" style="display:none">' + Icons.download() + '<span>Download All</span></button>'
       + '</div>';
-    html += '<div class="finder-results-count">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
+    html += '<div class="finder-results-count" style="font-size:15px;text-align:right;padding:12px var(--page-margin) var(--sp-2);color:var(--text1)">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
     html += '<div class="finder-tracklist">';
     allTracks.forEach((t, i) => {
       const length = t.length > 0 ? Math.floor(t.length / 60) + ':' + String(t.length % 60).padStart(2, '0') : '';
@@ -3109,6 +3102,25 @@ const UI = {
     html += '</div>';
 
     container.innerHTML = html;
+
+    const loadMoreBtn = container.querySelector('#btn-load-more-tracks');
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener('click', async () => {
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.innerHTML = '<div class="progress-bar-track" style="width:80px"><div class="progress-bar-fill" style="animation:progress-pulse 1.8s ease-in-out infinite"></div></div>';
+        const page = await Api.finderArtistTracks(releases[0].artistId || '', artistName, this._artistTrackOffset).catch(() => null);
+        if (page && page.tracks && page.tracks.length > 0) {
+          page.tracks.forEach(t => {
+            const key = t.title.toLowerCase();
+            if (!this._artistTrackCache.find(c => c.title.toLowerCase() === key)) {
+              this._artistTrackCache.push(t);
+            }
+          });
+          this._artistTrackOffset += 100;
+        }
+        this._renderArtistTracklistDOM(container, this._artistTrackCache, this._artistTrackTotal, releases, artistName);
+      });
+    }
 
     const dlAllBtn = container.querySelector('#btn-download-all-artist');
     if (dlAllBtn) {
@@ -3154,7 +3166,7 @@ const UI = {
           row.style.display = match ? '' : 'none';
           if (match) visible++;
         });
-        if (countEl) countEl.textContent = q ? visible + ' of ' + allTracks.length + ' tracks' : allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '');
+        if (countEl) countEl.firstElementChild.textContent = q ? visible + ' of ' + allTracks.length + ' tracks' : allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '');
       });
     }
 

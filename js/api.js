@@ -307,8 +307,9 @@ const Api = {
     return res.json();
   },
 
-  async finderArtistTracks(mbid, artistName) {
-    const res = await fetch('/api/finder/artist/' + mbid + '/tracks?artist=' + encodeURIComponent(artistName));
+  async finderArtistTracks(mbid, artistName, offset) {
+    const params = 'artist=' + encodeURIComponent(artistName) + '&offset=' + (offset || 0) + '&limit=100';
+    const res = await fetch('/api/finder/artist/' + mbid + '/tracks?' + params);
     if (!res.ok) throw new Error('Failed to load artist tracks');
     return res.json();
   },

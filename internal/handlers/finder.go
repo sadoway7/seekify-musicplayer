@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -81,12 +82,17 @@ func FinderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(path, "/tracks") {
 		mbid := strings.TrimSuffix(path, "/tracks")
 		artistName := r.URL.Query().Get("artist")
-		tracks := musicbrainz.FinderArtistTracks(mbid, artistName)
-		if tracks == nil {
-			tracks = []musicbrainz.ArtistTrack{}
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		limit := 100
+		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
+			limit = l
+		}
+		page := musicbrainz.FinderArtistTracks(mbid, artistName, offset, limit)
+		if page.Tracks == nil {
+			page.Tracks = []musicbrainz.ArtistTrack{}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(tracks)
+		json.NewEncoder(w).Encode(page)
 		return
 	}
 
