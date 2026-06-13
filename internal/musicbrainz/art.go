@@ -224,6 +224,45 @@ func MbFetchCoverArt(mbid string) ([]byte, string, error) {
 	return data, contentType, nil
 }
 
+func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
+	if albumID == "" || releaseMBID == "" {
+		return false
+	}
+
+	coverDir := filepath.Join(store.MusicDir, "images")
+	os.MkdirAll(coverDir, 0755)
+
+	coverPath := filepath.Join(coverDir, albumID+".jpg")
+	if _, err := os.Stat(coverPath); err == nil {
+		data, err := os.ReadFile(coverPath)
+		if err == nil {
+			store.CoverMu.Lock()
+			store.CoverCache[albumID] = data
+			store.CoverMu.Unlock()
+			return true
+		}
+	}
+
+	data, _, err := MbFetchCoverArt(releaseMBID)
+	if err != nil {
+		return false
+	}
+
+	os.WriteFile(coverPath, data, 0644)
+
+	store.CoverMu.Lock()
+	store.CoverCache[albumID] = data
+	store.CoverMu.Unlock()
+
+	store.Mu.Lock()
+	if a, ok := store.Albums[albumID]; ok {
+		a.HasCover = true
+	}
+	store.Mu.Unlock()
+
+	return true
+}
+
 func FetchAndCacheCover(albumID, artist, album string) bool {
 	if album == "" || artist == "" {
 		return false

@@ -571,7 +571,7 @@ func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) Arti
 	pagesToFetch := (pageLimit + 99) / 100
 
 	for p := 0; p < pagesToFetch; p++ {
-		reqURL := fmt.Sprintf("%s/recording?query=arid:%s+AND+video:false&fmt=json&limit=100&offset=%d&order=desc",
+		reqURL := fmt.Sprintf("%s/recording?query=arid:%s&fmt=json&limit=100&offset=%d",
 			MbBaseURL, mbid, offset)
 
 		var body []byte
@@ -603,16 +603,21 @@ func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) Arti
 			var rec struct {
 				Title          string `json:"title"`
 				Length         int    `json:"length"`
+				Video          bool   `json:"video"`
 				Disambiguation string `json:"disambiguation"`
 				ArtistCredit   []struct {
 					Name string `json:"name"`
 				} `json:"artist-credit"`
 				Releases []struct {
-					Title string `json:"title"`
-					ID    string `json:"id"`
+					Title  string `json:"title"`
+					ID     string `json:"id"`
+					Status string `json:"status"`
 				} `json:"releases"`
 			}
 			if json.Unmarshal(raw, &rec) != nil {
+				continue
+			}
+			if rec.Video {
 				continue
 			}
 
@@ -622,7 +627,16 @@ func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) Arti
 			}
 
 			var album, albumID string
-			if len(rec.Releases) > 0 {
+			var hasOfficialAlbum bool
+			for _, r := range rec.Releases {
+				if r.Status == "Official" && r.Title != "" {
+					album = r.Title
+					albumID = r.ID
+					hasOfficialAlbum = true
+					break
+				}
+			}
+			if !hasOfficialAlbum && len(rec.Releases) > 0 {
 				album = rec.Releases[0].Title
 				albumID = rec.Releases[0].ID
 			}
@@ -640,9 +654,11 @@ func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) Arti
 				if length > existing.Length && length > 0 {
 					existing.Length = length
 				}
-				if existing.Album == "" && album != "" {
-					existing.Album = album
-					existing.AlbumID = albumID
+				if hasOfficialAlbum || existing.Album == "" {
+					if album != "" {
+						existing.Album = album
+						existing.AlbumID = albumID
+					}
 				}
 			} else {
 				seen[key] = &ArtistTrack{

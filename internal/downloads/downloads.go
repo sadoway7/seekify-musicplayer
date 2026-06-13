@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"os"
@@ -607,6 +608,7 @@ func ProcessSingleDownload(job *DownloadJob) {
 
 	job.ProgressStage = "Tagging file"
 	DbUpdateJob(job)
+	log.Printf("[download] Tagging %s - %s (album=%q)", job.Artist, job.Title, job.Album)
 
 	if job.Pipeline == "v2" && EnrichFunc != nil {
 		job.ProgressStage = "Enriching metadata"
@@ -630,6 +632,21 @@ func ProcessSingleDownload(job *DownloadJob) {
 	go func() {
 		time.Sleep(1 * time.Second)
 		scanner.ScanSingleFile(audioFile)
+
+		if job.AlbumMBID != "" {
+			store.Mu.RLock()
+			var albumID string
+			for _, tr := range store.Tracks {
+				if tr.FilePath == audioFile {
+					albumID = tr.AlbumID
+					break
+				}
+			}
+			store.Mu.RUnlock()
+			if albumID != "" {
+				musicbrainz.FetchAndCacheCoverByMBID(albumID, job.AlbumMBID)
+			}
+		}
 
 		if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
 			store.Mu.RLock()
