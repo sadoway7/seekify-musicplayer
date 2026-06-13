@@ -600,7 +600,14 @@ func CheckAllDuplicates() {
 					if existingStatus == "reviewed_ok" && existingFlags == nil {
 						continue
 					}
-					flagJSON, _ := json.Marshal(append(existingFlags, "potential_duplicate"))
+					var newFlags []string
+					for _, f := range existingFlags {
+						if f != "potential_duplicate" {
+							newFlags = append(newFlags, f)
+						}
+					}
+					newFlags = append(newFlags, "potential_duplicate")
+					flagJSON, _ := json.Marshal(newFlags)
 					DbSetReviewStatus(t.ID, "needs_review", string(flagJSON), "worker")
 				}
 			}
