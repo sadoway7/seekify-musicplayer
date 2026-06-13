@@ -2,8 +2,6 @@ server
 server.exe
 musicapp
 data/
-*.flac
-music/images/
-music/Unknown/
+music/
 .DS_Store
 *.db

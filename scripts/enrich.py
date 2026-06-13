@@ -168,11 +168,34 @@ def _get_genre(recording_id):
     if not recording_id or not musicbrainzngs:
         return ""
     try:
+        detail = musicbrainzngs.get_recording_by_id(recording_id, includes=["genres"])
+        genres = detail.get("recording", {}).get("genre-list", [])
+        if genres:
+            top = sorted(genres, key=lambda g: int(g.get("count", 0)), reverse=True)[:2]
+            return ", ".join(g.get("name", "") for g in top)
+    except Exception:
+        pass
+    try:
         detail = musicbrainzngs.get_recording_by_id(recording_id, includes=["tags"])
         tags = detail.get("recording", {}).get("tag-list", [])
-        if tags:
-            top = sorted(tags, key=lambda t: int(t.get("count", 0)), reverse=True)[:3]
-            return ", ".join(t.get("name", "") for t in top)
+        music_genres = [
+            "rock", "pop", "hip hop", "rap", "jazz", "blues", "classical",
+            "electronic", "dance", "r&b", "soul", "funk", "metal", "punk",
+            "country", "folk", "reggae", "latin", "indie", "alternative",
+            "progressive rock", "hard rock", "soft rock", "grunge", "synthpop",
+            "techno", "house", "drum and bass", "dubstep", "trance",
+            "ambient", "chillout", "trip hop", "lo-fi", "lofi",
+            "soundtrack", "world", "new age", "grime", "emo", "ska",
+            "swing", "big band", "disco", "garage rock", "psychedelic",
+            "shoegaze", "post-punk", "dream pop", "art rock",
+        ]
+        music_tags = []
+        for t in sorted(tags, key=lambda t: int(t.get("count", 0)), reverse=True):
+            name = t.get("name", "").lower().strip()
+            if name in music_genres and len(music_tags) < 2:
+                music_tags.append(t.get("name", "").strip())
+        if music_tags:
+            return ", ".join(music_tags)
     except Exception:
         pass
     return ""

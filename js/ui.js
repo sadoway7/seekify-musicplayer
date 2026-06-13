@@ -3138,6 +3138,15 @@ const UI = {
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
 
+    const st = (id, label, hint) => {
+      return '<div class="settings-toggle-row">'
+        + '<div><div class="settings-toggle-label">' + label + '</div>'
+        + (hint ? '<div class="settings-toggle-hint">' + hint + '</div>' : '')
+        + '</div>'
+        + '<div class="stoggle" id="' + id + '"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div>'
+        + '</div>';
+    };
+
     // Section 1: Playback
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.waveform() + ' Playback</div>'
@@ -3155,10 +3164,22 @@ const UI = {
       + '<button class="settings-btn settings-btn-primary" id="btn-save-waveform-style">' + Icons.check() + '<span>Save</span></button>'
       + '</div></div>';
 
-    // Section 2: Downloads
+    // Section 2: User Downloads
     html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.download() + ' Downloads</div>'
-      + '<div class="settings-section-desc">Configure audio format, quality, and download behaviour.</div>'
+      + '<div class="settings-section-title">' + Icons.download() + ' User Downloads</div>'
+      + '<div class="settings-section-desc">Control whether listeners can download music from your library.</div>'
+      + st('setting-downloads-enabled', 'Enable Downloads', 'Allow users to download tracks from the player')
+      + '<div class="settings-actions" style="margin-top:16px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-user-downloads">' + Icons.check() + '<span>Save</span></button>'
+      + '<button class="settings-btn" id="btn-toggle-download-list">' + Icons.library() + '<span>Manage Per-Track</span></button>'
+      + '</div>'
+      + '<div id="download-list"></div>'
+      + '</div>';
+
+    // Section 3: Import Settings
+    html += '<div class="settings-section">'
+      + '<div class="settings-section-title">' + Icons.download() + ' Import Settings</div>'
+      + '<div class="settings-section-desc">Configure format and quality for music imported from external sources.</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
       + '<div class="settings-form-grid">'
       + '<div class="settings-field"><label>Audio Format</label>'
@@ -3189,27 +3210,17 @@ const UI = {
       + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
       + '<input type="text" id="setting-download-min-bitrate" class="settings-input" placeholder="0 (no minimum)"></div>'
       + '</div>'
-      + '<div class="settings-toggles-row">'
-      + '<div class="settings-field settings-field-toggle"><label>Convert to FLAC</label>'
-      + '<input type="checkbox" id="setting-download-convert-to-flac" class="settings-toggle"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Organise by Artist</label>'
-      + '<input type="checkbox" id="setting-download-organise-by-artist" class="settings-toggle"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Enable Downloads</label>'
-      + '<input type="checkbox" id="setting-downloads-enabled" class="settings-toggle"></div>'
-      + '</div>'
-      + '<div class="settings-actions" style="margin-top:12px">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Settings</span></button>'
-      + '<button class="settings-btn" id="btn-toggle-download-list">' + Icons.library() + '<span>Manage Per-Track</span></button>'
-      + '</div>'
-      + '<div id="download-list"></div>'
+      + st('setting-download-convert-to-flac', 'Convert to FLAC', 'Re-encode imported files as FLAC')
+      + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders')
       + '<div class="settings-subsection-label" style="margin-top:16px">Bulk Import</div>'
       + '<div class="settings-section-desc">Paste tracks to download (one per line, "Artist - Title").</div>'
       + '<textarea id="bulk-import-input" class="settings-textarea" rows="4" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion"></textarea>'
       + '<div class="settings-actions" style="margin-top:8px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Import Settings</span></button>'
       + '<button class="settings-btn settings-btn-primary" id="btn-bulk-import">' + Icons.download() + '<span>Import & Download All</span></button>'
       + '</div></div>';
 
-    // Section 3: Library Health (metadata + review combined)
+    // Section 4: Library Health
     const rc = Store.reviewCounts || {};
     const total = (rc.unchecked || 0) + (rc.needs_review || 0) + (rc.reviewed_ok || 0);
     const reviewedPct = total > 0 ? Math.round(((rc.reviewed_ok || 0) / total) * 100) : 0;
@@ -3235,35 +3246,25 @@ const UI = {
       + '</div>'
       + '<div id="review-progress-text" class="review-progress-text"></div>'
       + '<div id="review-live-log" class="review-live-log"></div>'
-      + '<div class="settings-toggles-row" style="margin-top:12px">'
-      + '<div class="settings-field settings-field-toggle"><label>Enable Review Worker</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-enabled"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Recheck Interval (hours)</label>'
+      + '<div style="margin-top:12px">'
+      + st('setting-review-enabled', 'Review Worker', 'Automatically flag tracks with metadata or quality issues')
+      + '<div class="settings-field" style="padding:10px 0"><label style="font-size:14px;color:var(--text1)">Recheck Interval (hours)</label>'
       + '<input type="text" id="setting-review-recheck-hours" class="settings-input" style="width:60px;display:inline-block;margin-left:6px" placeholder="24"></div>'
       + '</div>'
       + '<div class="settings-subsection-label">Metadata Checks</div>'
       + '<div class="settings-checks-grid">'
-      + '<div class="settings-field settings-field-toggle"><label>Missing Title</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-title"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Missing Artist</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-artist"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Missing Album</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-album"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Missing Genre</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-missing-genre"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Missing Cover Art</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-no-cover"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Filename as Title</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-filename-derived"></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Missing Title</div></div><div class="stoggle" id="setting-review-flag-missing-title"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Missing Artist</div></div><div class="stoggle" id="setting-review-flag-missing-artist"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Missing Album</div></div><div class="stoggle" id="setting-review-flag-missing-album"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Missing Genre</div></div><div class="stoggle" id="setting-review-flag-missing-genre"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Missing Cover Art</div></div><div class="stoggle" id="setting-review-flag-no-cover"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Filename as Title</div></div><div class="stoggle" id="setting-review-flag-filename-derived"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
       + '</div>'
       + '<div class="settings-subsection-label">Quality Checks</div>'
       + '<div class="settings-checks-grid">'
-      + '<div class="settings-field settings-field-toggle"><label>Suspicious Naming</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-suspicious"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Duration Anomalies</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duration"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Potential Duplicates</label>'
-      + '<input type="checkbox" class="settings-toggle" id="setting-review-flag-duplicates"></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Suspicious Naming</div></div><div class="stoggle" id="setting-review-flag-suspicious"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Duration Anomalies</div></div><div class="stoggle" id="setting-review-flag-duration"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Potential Duplicates</div></div><div class="stoggle" id="setting-review-flag-duplicates"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
       + '</div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-review-recheck">' + Icons.refresh() + '<span>Recheck All Tracks</span></button>'
@@ -3271,7 +3272,7 @@ const UI = {
       + '</div>'
       + '</div>';
 
-    // Section 4: System
+    // Section 5: System
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.settings() + ' System</div>'
       + '<div class="settings-section-desc">Manage library scanning and background workers.</div>'
@@ -3279,21 +3280,16 @@ const UI = {
       + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
       + '</div>'
       + '<div class="settings-subsection-label">Background Workers</div>'
-      + '<div class="settings-checks-grid">'
-      + '<div class="settings-field settings-field-toggle"><label>File Watcher</label>'
-      + '<input type="checkbox" id="setting-watcher-enabled" class="settings-toggle"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Cover Art Fetch</label>'
-      + '<input type="checkbox" id="setting-cover-fetch-enabled" class="settings-toggle"></div>'
-      + '<div class="settings-field settings-field-toggle"><label>Artist Art Fetch</label>'
-      + '<input type="checkbox" id="setting-artist-art-fetch-enabled" class="settings-toggle"></div>'
-      + '</div>'
-      + '<div class="settings-field" style="max-width:200px"><label>Watcher Interval (seconds)</label>'
+      + st('setting-watcher-enabled', 'File Watcher', 'Poll music directories for changes')
+      + st('setting-cover-fetch-enabled', 'Cover Art Fetch', 'Download missing album covers')
+      + st('setting-artist-art-fetch-enabled', 'Artist Art Fetch', 'Download artist images')
+      + '<div class="settings-field" style="max-width:200px;margin-top:8px"><label>Watcher Interval (seconds)</label>'
       + '<input type="text" id="setting-watcher-interval" class="settings-input" placeholder="30"></div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Worker Settings</span></button>'
       + '</div></div>';
 
-    // Section 5: About
+    // Section 6: About
     html += '<div class="settings-section">'
       + '<div class="settings-section-title">' + Icons.settings() + ' About</div>'
       + '<div class="settings-about">'
@@ -3304,6 +3300,10 @@ const UI = {
     this.els.content.innerHTML = html;
 
     this._loadMetadataStatus();
+
+    this.els.content.querySelectorAll('.stoggle').forEach(el => {
+      el.addEventListener('click', () => el.classList.toggle('active'));
+    });
 
     document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());
     document.getElementById('btn-meta-history').addEventListener('click', () => this.navigateTo('metadata-history'));
@@ -3317,6 +3317,11 @@ const UI = {
     }
 
     this._loadFinderSettings();
+
+    const saveUserDlBtn = document.getElementById('btn-save-user-downloads');
+    if (saveUserDlBtn) {
+      saveUserDlBtn.addEventListener('click', () => this._saveUserDownloads());
+    }
 
     const saveSettingsBtn = document.getElementById('btn-save-finder-settings');
     if (saveSettingsBtn) {
@@ -3353,51 +3358,55 @@ const UI = {
 
   },
 
+  _stoggleOn(id, on) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (on) el.classList.add('active');
+    else el.classList.remove('active');
+  },
+
+  _stoggleVal(id) {
+    const el = document.getElementById(id);
+    return el ? el.classList.contains('active') : true;
+  },
+
   async _loadFinderSettings() {
     try {
       const settings = await Api.getSettings();
       const fmt = document.getElementById('setting-download-format');
-      const flac = document.getElementById('setting-download-convert-to-flac');
-      const org = document.getElementById('setting-download-organise-by-artist');
       const mp3 = document.getElementById('setting-mp3-bitrate');
       const opus = document.getElementById('setting-opus-bitrate');
       const minBr = document.getElementById('setting-download-min-bitrate');
       if (fmt && settings.download_format) fmt.value = settings.download_format;
-      if (flac) flac.checked = settings.download_convert_to_flac !== 'false';
-      if (org) org.checked = settings.download_organise_by_artist !== 'false';
+      this._stoggleOn('setting-download-convert-to-flac', settings.download_convert_to_flac !== 'false');
+      this._stoggleOn('setting-download-organise-by-artist', settings.download_organise_by_artist !== 'false');
       if (mp3 && settings.mp3_bitrate) mp3.value = settings.mp3_bitrate;
       if (opus && settings.opus_bitrate) opus.value = settings.opus_bitrate;
       if (minBr && settings.download_min_bitrate) minBr.value = settings.download_min_bitrate;
-      const dlEnabled = document.getElementById('setting-downloads-enabled');
-      if (dlEnabled) dlEnabled.checked = settings.downloads_enabled !== 'false';
+      this._stoggleOn('setting-downloads-enabled', settings.downloads_enabled !== 'false');
       Store.downloadsEnabled = settings.downloads_enabled !== 'false';
       this._updateQualityVisibility();
       if (fmt) fmt.addEventListener('change', () => this._updateQualityVisibility());
 
-      // Worker settings
-      const watcherEnabled = document.getElementById('setting-watcher-enabled');
+      this._stoggleOn('setting-watcher-enabled', settings.watcher_enabled !== 'false');
       const watcherInterval = document.getElementById('setting-watcher-interval');
-      const coverFetch = document.getElementById('setting-cover-fetch-enabled');
-      const artistArt = document.getElementById('setting-artist-art-fetch-enabled');
-      if (watcherEnabled) watcherEnabled.checked = settings.watcher_enabled !== 'false';
       if (watcherInterval && settings.watcher_interval) watcherInterval.value = settings.watcher_interval;
-      if (coverFetch) coverFetch.checked = settings.cover_fetch_enabled !== 'false';
-      if (artistArt) artistArt.checked = settings.artist_art_fetch_enabled !== 'false';
+      this._stoggleOn('setting-cover-fetch-enabled', settings.cover_fetch_enabled !== 'false');
+      this._stoggleOn('setting-artist-art-fetch-enabled', settings.artist_art_fetch_enabled !== 'false');
 
-      // Review settings
-      const revEnabled = document.getElementById('setting-review-enabled');
+      this._stoggleOn('setting-review-enabled', settings.review_enabled !== 'false');
       const revRecheckHours = document.getElementById('setting-review-recheck-hours');
-      if (revEnabled) revEnabled.checked = settings.review_enabled !== 'false';
       if (revRecheckHours && settings.review_recheck_hours) revRecheckHours.value = settings.review_recheck_hours;
-      if (revEnabled) revEnabled.addEventListener('change', () => this._saveReviewSettings());
+      const revEnabled = document.getElementById('setting-review-enabled');
+      if (revEnabled) revEnabled.addEventListener('click', () => this._saveReviewSettings());
       if (revRecheckHours) revRecheckHours.addEventListener('change', () => this._saveReviewSettings());
 
       const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
       flagKeys.forEach(key => {
         const el = document.getElementById('setting-review-flag-' + key);
         if (el) {
-          el.checked = settings['review_flag_' + key.replace(/-/g, '_')] !== 'false';
-          el.addEventListener('change', () => this._saveReviewSettings());
+          this._stoggleOn('setting-review-flag-' + key, settings['review_flag_' + key.replace(/-/g, '_')] !== 'false');
+          el.addEventListener('click', () => this._saveReviewSettings());
         }
       });
 
@@ -3558,42 +3567,45 @@ const UI = {
     opusGroup.style.display = fmt.value === 'opus' ? '' : 'none';
   },
 
+  async _saveUserDownloads() {
+    const on = this._stoggleVal('setting-downloads-enabled');
+    try {
+      await Api.saveSettings({ downloads_enabled: String(on) });
+      Store.downloadsEnabled = on;
+      this._showToast('Saved');
+    } catch (e) {
+      this._showToast('Failed to save');
+    }
+  },
+
   async _saveFinderSettings() {
     const fmt = document.getElementById('setting-download-format');
-    const flac = document.getElementById('setting-download-convert-to-flac');
-    const org = document.getElementById('setting-download-organise-by-artist');
     const mp3 = document.getElementById('setting-mp3-bitrate');
     const opus = document.getElementById('setting-opus-bitrate');
     const minBr = document.getElementById('setting-download-min-bitrate');
-    const dlEnabled = document.getElementById('setting-downloads-enabled');
     try {
       await Api.saveSettings({
         download_format: fmt ? fmt.value : 'flac',
-        download_convert_to_flac: flac ? String(flac.checked) : 'true',
-        download_organise_by_artist: org ? String(org.checked) : 'true',
+        download_convert_to_flac: String(this._stoggleVal('setting-download-convert-to-flac')),
+        download_organise_by_artist: String(this._stoggleVal('setting-download-organise-by-artist')),
         mp3_bitrate: mp3 ? mp3.value : 'v2',
         opus_bitrate: opus ? opus.value : '320k',
-        download_min_bitrate: minBr ? minBr.value : '0',
-        downloads_enabled: dlEnabled ? String(dlEnabled.checked) : 'true'
+        download_min_bitrate: minBr ? minBr.value : '0'
       });
-      Store.downloadsEnabled = dlEnabled ? dlEnabled.checked : true;
-      this._showToast('Settings saved');
+      this._showToast('Import settings saved');
     } catch (e) {
       this._showToast('Failed to save settings');
     }
   },
 
   async _saveWorkerSettings() {
-    const watcherEnabled = document.getElementById('setting-watcher-enabled');
     const watcherInterval = document.getElementById('setting-watcher-interval');
-    const coverFetch = document.getElementById('setting-cover-fetch-enabled');
-    const artistArt = document.getElementById('setting-artist-art-fetch-enabled');
     try {
       await Api.saveSettings({
-        watcher_enabled: watcherEnabled ? String(watcherEnabled.checked) : 'true',
+        watcher_enabled: String(this._stoggleVal('setting-watcher-enabled')),
         watcher_interval: watcherInterval ? watcherInterval.value : '30',
-        cover_fetch_enabled: coverFetch ? String(coverFetch.checked) : 'true',
-        artist_art_fetch_enabled: artistArt ? String(artistArt.checked) : 'true'
+        cover_fetch_enabled: String(this._stoggleVal('setting-cover-fetch-enabled')),
+        artist_art_fetch_enabled: String(this._stoggleVal('setting-artist-art-fetch-enabled'))
       });
       this._showToast('Worker settings saved');
     } catch (e) {
@@ -3602,16 +3614,14 @@ const UI = {
   },
 
   async _saveReviewSettings() {
-    const revEnabled = document.getElementById('setting-review-enabled');
     const revRecheckHours = document.getElementById('setting-review-recheck-hours');
     const data = {
-      review_enabled: revEnabled ? String(revEnabled.checked) : 'true',
+      review_enabled: String(this._stoggleVal('setting-review-enabled')),
       review_recheck_hours: revRecheckHours ? revRecheckHours.value : '24'
     };
     const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
     flagKeys.forEach(key => {
-      const el = document.getElementById('setting-review-flag-' + key);
-      data['review_flag_' + key.replace(/-/g, '_')] = el ? String(el.checked) : 'true';
+      data['review_flag_' + key.replace(/-/g, '_')] = String(this._stoggleVal('setting-review-flag-' + key));
     });
     try {
       await Api.saveSettings(data);
