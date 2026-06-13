@@ -115,10 +115,11 @@ func DbGetTracksByReviewStatus(status string, limit int) []string {
 func DbGetReviewTracks() []models.Track {
 	rows, err := store.DB.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review'")
 	if err != nil {
-		return nil
+		return []models.Track{}
 	}
 	defer rows.Close()
-	var result []models.Track
+	result := make([]models.Track, 0)
+	var orphanIDs []string
 	for rows.Next() {
 		var trackID, flagsJSON string
 		rows.Scan(&trackID, &flagsJSON)
@@ -126,12 +127,16 @@ func DbGetReviewTracks() []models.Track {
 		t, exists := store.Tracks[trackID]
 		store.Mu.RUnlock()
 		if !exists {
+			orphanIDs = append(orphanIDs, trackID)
 			continue
 		}
 		copy := *t
 		copy.ReviewStatus = "needs_review"
 		json.Unmarshal([]byte(flagsJSON), &copy.ReviewFlags)
 		result = append(result, copy)
+	}
+	if len(orphanIDs) > 0 {
+		go cleanupOrphanedReviewIDs(orphanIDs)
 	}
 	return result
 }
@@ -240,6 +245,15 @@ func CleanupOldReviewFlags() {
 	}
 	if len(items) > 0 {
 		log.Printf("[review] Cleaned up %d tracks with removed flags", len(items))
+	}
+}
+
+func cleanupOrphanedReviewIDs(ids []string) {
+	for _, id := range ids {
+		store.DB.Exec("DELETE FROM track_reviews WHERE track_id = ?", id)
+	}
+	if len(ids) > 0 {
+		log.Printf("[review] Cleaned up %d orphaned review records", len(ids))
 	}
 }
 

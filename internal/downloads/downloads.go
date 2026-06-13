@@ -738,7 +738,7 @@ func SearchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearc
 	}
 
 	seen := make(map[string]bool)
-	deduped := raw[:0]
+	var deduped []rawResult
 	for _, r := range raw {
 		if !seen[r.ID] {
 			seen[r.ID] = true

@@ -2040,6 +2040,7 @@ const UI = {
     try {
       reviewTracks = await Api.getReviewTracks();
     } catch (e) {}
+    if (!Array.isArray(reviewTracks)) reviewTracks = [];
     this._viewTrackList = reviewTracks;
 
     let html = '<div class="review-page-header">'
