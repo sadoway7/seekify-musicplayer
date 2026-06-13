@@ -3037,7 +3037,29 @@ const UI = {
     }
     if (this._artistTrackFetching) return;
     this._artistTrackFetching = true;
+
+    container.innerHTML = '<div style="padding:32px 22px">'
+      + '<div class="artist-track-progress-wrap">'
+      + '<div class="progress-bar-track"><div class="progress-bar-fill" id="artist-track-progress-fill" style="width:0%"></div></div>'
+      + '<div style="display:flex;justify-content:space-between;margin-top:8px">'
+      + '<span id="artist-track-progress-label" style="color:var(--text3);font-size:13px">Finding popular tracks&hellip;</span>'
+      + '<span id="artist-track-progress-count" style="color:var(--text3);font-size:13px"></span>'
+      + '</div></div></div>';
+
+    const pollProgress = setInterval(async () => {
+      try {
+        const p = await Api.artistTrackProgress();
+        const pct = p.total > 0 ? Math.min(100, Math.round((p.fetched / p.total) * 100)) : 0;
+        const fill = document.getElementById('artist-track-progress-fill');
+        const count = document.getElementById('artist-track-progress-count');
+        if (fill) fill.style.width = pct + '%';
+        if (count) count.textContent = p.fetched + ' / ' + p.total;
+        if (!p.running) clearInterval(pollProgress);
+      } catch (e) {}
+    }, 500);
+
     const allTracks = await Api.finderArtistTracks(releases[0].artistId || '', artistName).catch(() => null);
+    clearInterval(pollProgress);
     this._artistTrackFetching = false;
 
     if (!allTracks || allTracks.length === 0) {
@@ -3170,7 +3192,7 @@ const UI = {
       + '<div class="detail-hero-meta">' + this._esc(artist) + '</div>'
       + '</div></div></div>'
       + '<div id="finder-release-actions" style="display:none;padding:0 22px 8px"></div>'
-      + '<div id="finder-release-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+      + '<div id="finder-release-content"><div class="loading-spinner" style="margin:40px auto"></div><div style="text-align:center;color:var(--text3);font-size:13px;margin-top:12px">Loading track listing&hellip; this can take a moment.</div></div>';
 
     this.els.content.innerHTML = html;
 

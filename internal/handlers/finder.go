@@ -275,3 +275,8 @@ func YoutubeSearchHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
+
+func ArtistTrackProgressHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(musicbrainz.GetArtistTrackProgress())
+}

@@ -242,6 +242,7 @@ func main() {
 
 	mux.HandleFunc("/api/finder/search", handlers.FinderSearchHandler)
 	mux.HandleFunc("/api/finder/artist/", handlers.FinderArtistReleasesHandler)
+	mux.HandleFunc("/api/finder/artist-track-progress", handlers.ArtistTrackProgressHandler)
 	mux.HandleFunc("/api/finder/release/", handlers.FinderReleaseTracksHandler)
 	mux.HandleFunc("/api/finder/cover/", handlers.FinderCoverHandler)
 	mux.HandleFunc("/api/finder/youtube", handlers.YoutubeSearchHandler)

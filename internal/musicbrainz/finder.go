@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -538,13 +539,41 @@ func ResolveToReleaseID(id string) string {
 	return resp.Releases[0].ID
 }
 
+type ArtistTrackProgress struct {
+	Running  bool   `json:"running"`
+	Total    int    `json:"total"`
+	Fetched  int    `json:"fetched"`
+	Current  string `json:"current"`
+}
+
+var (
+	artistTrackProg     ArtistTrackProgress
+	artistTrackProgLock sync.Mutex
+)
+
+func GetArtistTrackProgress() ArtistTrackProgress {
+	artistTrackProgLock.Lock()
+	defer artistTrackProgLock.Unlock()
+	return artistTrackProg
+}
+
 func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
+	artistTrackProgLock.Lock()
+	artistTrackProg = ArtistTrackProgress{Running: true, Current: artistName}
+	artistTrackProgLock.Unlock()
+
+	defer func() {
+		artistTrackProgLock.Lock()
+		artistTrackProg.Running = false
+		artistTrackProgLock.Unlock()
+	}()
+
 	seen := map[string]*ArtistTrack{}
 	libLookup := buildLibraryLookup()
 
 	offset := 0
 	for {
-		reqURL := fmt.Sprintf("%s/recording?artist=%s&inc=artist-credits&fmt=json&limit=100&offset=%d",
+		reqURL := fmt.Sprintf("%s/recording?query=arid:%s&fmt=json&limit=100&offset=%d&sort=tagcount&order=desc",
 			MbBaseURL, mbid, offset)
 
 		var body []byte
@@ -563,12 +592,17 @@ func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 		}
 
 		var resp struct {
-			Recordings     []json.RawMessage `json:"recordings"`
-			RecordingCount int               `json:"recording-count"`
+			Recordings []json.RawMessage `json:"recordings"`
+			Count      int                `json:"count"`
 		}
 		if json.Unmarshal(body, &resp) != nil {
 			break
 		}
+
+		artistTrackProgLock.Lock()
+		artistTrackProg.Total = resp.Count
+		artistTrackProg.Fetched = offset + len(resp.Recordings)
+		artistTrackProgLock.Unlock()
 
 		for _, raw := range resp.Recordings {
 			var rec struct {
@@ -617,7 +651,7 @@ func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 		}
 
 		offset += len(resp.Recordings)
-		if offset >= resp.RecordingCount || len(resp.Recordings) == 0 || offset >= 1000 {
+		if offset >= resp.Count || len(resp.Recordings) == 0 || offset >= 500 {
 			break
 		}
 		time.Sleep(400 * time.Millisecond)

@@ -1220,3 +1220,23 @@
   background: var(--l3);
   color: var(--text-primary);
 }
+
+.progress-bar-track {
+  max-width: 360px;
+  height: 4px;
+  background: var(--l3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 40%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.artist-track-progress-wrap {
+  max-width: 420px;
+}
