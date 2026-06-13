@@ -1201,6 +1201,7 @@ const UI = {
     if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
     if (this._downloadPollInterval) { clearInterval(this._downloadPollInterval); this._downloadPollInterval = null; }
     if (this._reviewScrollObserver) { this._reviewScrollObserver.disconnect(); this._reviewScrollObserver = null; }
+    if (this._finderStatusPoll) { clearTimeout(this._finderStatusPoll); this._finderStatusPoll = null; }
   },
 
   renderPage() {
@@ -2281,6 +2282,9 @@ const UI = {
       this._renderFinderResults();
     }
 
+    this._clearPollTimers();
+    this._pollFinderStatus();
+
     this.els.content.querySelectorAll('.finder-history-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         this._finderQuery = chip.dataset.history;
@@ -2460,20 +2464,34 @@ const UI = {
         }
 
         const clickable = completed && j.filePath;
-        const cardClass = active ? ' queue-active' : isQueued ? ' queue-waiting' : needsSelection ? ' queue-needs-selection' : '';
+        let leftHtml;
+        if (completed && j.artist && j.title) {
+          const libTrack = Store.library.tracks.find(t =>
+            t.artist && t.title &&
+            t.artist.toLowerCase() === (j.artist || '').toLowerCase() &&
+            t.title.toLowerCase() === (j.title || '').toLowerCase()
+          );
+          if (libTrack && libTrack.albumID) {
+            leftHtml = '<div class="queue-job-art">'
+              + '<img src="' + Api.coverUrl(libTrack.albumID) + '" alt="" onerror="this.style.display=\'none\'">'
+              + '</div>';
+          }
+        }
+        if (!leftHtml) {
+          leftHtml = '<div class="queue-job-status ' + (active ? 'job-active' : isQueued ? 'job-queued' : failed ? 'job-failed' : 'job-done') + '">'
+          + (active ? '<div class="queue-spinner"></div>' : isQueued ? '<div class="queue-status-dot dot-waiting"></div>' : (failed ? '<div class="queue-status-dot dot-failed"></div>' : '<div class="queue-status-dot dot-done"></div>'))
+          + '</div>';
+        }        const cardClass = active ? ' queue-active' : isQueued ? ' queue-waiting' : needsSelection ? ' queue-needs-selection' : '';
         html += '<div class="queue-job-card' + cardClass + (clickable ? ' queue-job-clickable' : '') + '"'
           + (clickable ? ' data-artist="' + this._esc(j.artist || '') + '" data-title="' + this._esc(j.title || '') + '"' : '') + '>'
-          + '<div class="queue-job-status ' + (active ? 'job-active' : isQueued ? 'job-queued' : failed ? 'job-failed' : 'job-done') + '">'
-          + (active ? '<div class="queue-spinner"></div>' : isQueued ? '<div class="queue-status-dot dot-waiting"></div>' : (failed ? '<div class="queue-status-dot dot-failed"></div>' : '<div class="queue-status-dot dot-done"></div>'))
-          + '</div>'
+          + leftHtml
           + '<div class="queue-job-info">'
           + '<div class="queue-job-title">' + this._esc(j.artist || '') + (j.artist && j.title ? ' - ' : '') + this._esc(j.title || j.query || 'Unknown') + '</div>'
       + '<div class="queue-job-detail">'
-      + (active ? '<span class="queue-elapsed">' + elapsed + '</span>' : (isQueued ? queuePos + '<span class="queue-elapsed">' + elapsed + '</span>' : '<span>' + j.status + '</span>'))
-      + (j.progressStage && !isQueued ? '<span>' + this._esc(j.progressStage) + '</span>' : '')
-      + (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
+      + (completed ? (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '<span>Completed</span>') : (active ? '<span class="queue-elapsed">' + elapsed + '</span>' : (isQueued ? queuePos + '<span class="queue-elapsed">' + elapsed + '</span>' : '<span>' + j.status + '</span>')))
+      + (j.progressStage && !isQueued && !completed ? '<span>' + this._esc(j.progressStage) + '</span>' : '')
+      + (!completed && j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
       + (failed && j.error ? '<span class="queue-job-error">' + this._esc(j.error) + '</span>' : '')
-      + (j.filePath ? '<div class="queue-job-file">' + this._esc(j.filePath) + '</div>' : '')
       + '</div>'
           + '</div>'
       + '<div class="queue-job-actions">'
@@ -2520,17 +2538,16 @@ const UI = {
             t.artist.toLowerCase() === artist.toLowerCase() &&
             t.title.toLowerCase() === title.toLowerCase()
           );
+          const tryPlay = (track) => {
+            if (!track) return false;
+            Player.play(track, [track], { type: 'album', name: track.album || '', id: track.albumID });
+            return true;
+          };
           const track = find();
-          if (track && track.albumID) {
-            this.navigateTo('album', { albumId: track.albumID });
-          } else {
-            this.showToast('Refreshing library...');
+          if (!tryPlay(track)) {
             Store.refreshLibrary().then(() => {
-              const t = find();
-              if (t && t.albumID) {
-                this.navigateTo('album', { albumId: t.albumID });
-              } else {
-                this.showToast('Track not yet in library — try scanning first');
+              if (!tryPlay(find())) {
+                this._showToast('Track not yet in library — try scanning first');
               }
             });
           }
@@ -2570,6 +2587,50 @@ const UI = {
     } catch (e) {
       container.innerHTML = '<div class="empty-state-text">Failed to load downloads</div>';
     }
+  },
+
+  async _pollFinderStatus() {
+    try {
+      const counts = await Api.getQueueCounts();
+      this._updateDownloadBadge(counts);
+      const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
+      if (active > 0) {
+        this._downloadJobs = await Api.getQueue();
+        this._updateFinderBadges();
+        this._finderStatusPoll = setTimeout(() => this._pollFinderStatus(), 5000);
+      } else {
+        if (this._downloadJobs && this._downloadJobs.some(j => j.status === 'completed')) {
+          this._downloadJobs = await Api.getQueue();
+          this._updateFinderBadges();
+        }
+        this._finderStatusPoll = setTimeout(() => this._pollFinderStatus(), 15000);
+      }
+    } catch (e) {
+      this._finderStatusPoll = setTimeout(() => this._pollFinderStatus(), 15000);
+    }
+  },
+
+  _updateFinderBadges() {
+    this.els.content.querySelectorAll('.finder-download-btn').forEach(btn => {
+      const artist = btn.dataset.artist;
+      const title = btn.dataset.title;
+      const libTrack = Store.library.tracks.find(t =>
+        t.artist && t.title &&
+        t.artist.toLowerCase() === (artist || '').toLowerCase() &&
+        t.title.toLowerCase() === (title || '').toLowerCase()
+      );
+      if (libTrack) {
+        const badge = document.createElement('span');
+        badge.className = 'finder-status-badge finder-in-library';
+        badge.textContent = 'In Library';
+        btn.replaceWith(badge);
+      } else if (this._isQueued(artist, title)) {
+        const badge = document.createElement('span');
+        badge.className = 'finder-status-badge finder-in-queue';
+        badge.textContent = 'Queued';
+        btn.replaceWith(badge);
+      }
+    });
   },
 
   _showCandidateModal(job) {
@@ -2896,7 +2957,10 @@ const UI = {
       + '<button class="lib-tab' + (this._artistView === 'albums' ? ' active' : '') + '" data-artist-tab="albums">Albums</button>'
       + '<button class="lib-tab' + (this._artistView === 'downloads' ? ' active' : '') + '" data-artist-tab="downloads">Downloads</button>'
       + '</div>'
-      + '<div id="finder-artist-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+      + '<div id="finder-artist-content">'
+      + '<div id="artist-tracklist-panel"><div class="loading-spinner" style="margin:40px auto"></div></div>'
+      + '<div id="artist-albums-panel" style="display:none"></div>'
+      + '</div>';
 
     this.els.content.innerHTML = html;
 
@@ -2908,43 +2972,35 @@ const UI = {
           return;
         }
         this._artistView = chip.dataset.artistTab;
-        if (this._artistReleases) {
-          const container = document.getElementById('finder-artist-content');
-          if (container) {
-            if (this._artistView === 'tracklist') {
-              this._renderArtistTracklist(container, this._artistReleases, name);
-            } else {
-              this._renderArtistAlbums(container, this._artistReleases);
-            }
-          }
-          this.els.content.querySelectorAll('[data-artist-tab]').forEach(c => c.classList.toggle('active', c.dataset.artistTab === this._artistView));
-        } else {
-          this.renderFinderArtist(data);
+        const tlPanel = document.getElementById('artist-tracklist-panel');
+        const alPanel = document.getElementById('artist-albums-panel');
+        if (tlPanel) tlPanel.style.display = this._artistView === 'tracklist' ? '' : 'none';
+        if (alPanel) alPanel.style.display = this._artistView === 'albums' ? '' : 'none';
+        this.els.content.querySelectorAll('[data-artist-tab]').forEach(c => c.classList.toggle('active', c.dataset.artistTab === this._artistView));
+        if (this._artistView === 'albums' && alPanel && !alPanel.hasChildNodes()) {
+          this._renderArtistAlbums(alPanel, this._artistReleases);
         }
       });
     });
 
     this._artistReleases = null;
+    this._artistTrackCache = null;
+    this._artistTrackFetching = false;
     Api.finderArtistReleases(data.mbid).then(releases => {
-      const container = document.getElementById('finder-artist-content');
-      if (!container) return;
+      const tlPanel = document.getElementById('artist-tracklist-panel');
+      if (!tlPanel) return;
 
       if (!releases || releases.length === 0) {
-        container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+        tlPanel.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
           + '<div class="empty-state-text">No releases found for this artist</div></div>';
         return;
       }
 
       this._artistReleases = releases;
-
-      if (this._artistView === 'tracklist') {
-        this._renderArtistTracklist(container, releases, name);
-      } else {
-        this._renderArtistAlbums(container, releases);
-      }
+      this._renderArtistTracklist(tlPanel, releases, name);
     }).catch(() => {
-      const container = document.getElementById('finder-artist-content');
-      if (container) container.innerHTML = '<div class="empty-state-text">Failed to load releases</div>';
+      const tlPanel = document.getElementById('artist-tracklist-panel');
+      if (tlPanel) tlPanel.innerHTML = '<div class="empty-state-text">Failed to load releases</div>';
     });
   },
 
@@ -2975,22 +3031,30 @@ const UI = {
   },
 
   async _renderArtistTracklist(container, releases, artistName) {
-    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div><div style="text-align:center;color:var(--text3);font-size:13px;margin-top:8px">Loading tracks...</div>';
-
-    try {
-      var allTracks = await Api.finderArtistTracks(releases[0].artistId || '', artistName);
-    } catch (e) {
-      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
-        + '<div class="empty-state-text">Failed to load tracks</div></div>';
+    if (this._artistTrackCache) {
+      this._renderArtistTracklistDOM(container, this._artistTrackCache);
       return;
     }
+    if (this._artistTrackFetching) return;
+    this._artistTrackFetching = true;
+    const allTracks = await Api.finderArtistTracks(releases[0].artistId || '', artistName).catch(() => null);
+    this._artistTrackFetching = false;
 
     if (!allTracks || allTracks.length === 0) {
-      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
-        + '<div class="empty-state-text">No tracks found</div></div>';
+      if (this._artistView === 'tracklist' && !this._artistTrackCache) {
+        container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
+          + '<div class="empty-state-text">' + (allTracks === null ? 'Failed to load tracks' : 'No tracks found') + '</div></div>';
+      }
       return;
     }
 
+    this._artistTrackCache = allTracks;
+    if (this._artistView === 'tracklist') {
+      this._renderArtistTracklistDOM(container, allTracks);
+    }
+  },
+
+  _renderArtistTracklistDOM(container, allTracks) {
     let html = '<div class="tracklist-toolbar">'
       + '<div class="search-container finder-search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
@@ -3212,7 +3276,8 @@ const UI = {
 
     // Section 1: Playback
     html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.waveform() + ' Playback</div>'
+      + '<div class="settings-section-title" data-collapse>' + Icons.waveform() + ' Playback' + Icons.chevronDown() + '</div>'
+      + '<div class="settings-section-body">'
       + '<div class="settings-section-desc">Customize the waveform style shown during playback.</div>'
       + '<div class="settings-field"><label>Waveform Style</label>'
       + '<select id="setting-waveform-style" class="settings-select">'
@@ -3225,24 +3290,24 @@ const UI = {
       + '<div class="settings-waveform-preview"><canvas id="waveform-preview-canvas"></canvas></div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-waveform-style">' + Icons.check() + '<span>Save</span></button>'
-      + '</div></div>';
+      + '</div></div></div>';
 
     // Section 2: User Downloads
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.download() + ' User Downloads</div>'
-      + '<div class="settings-section-desc">Control whether listeners can download music from your library.</div>'
+    html += '<div class="settings-section collapsed">'
+      + '<div class="settings-section-title" data-collapse>' + Icons.download() + ' User Downloads' + Icons.chevronDown() + '</div>'
+      + '<div class="settings-section-body">'
       + st('setting-downloads-enabled', 'Enable Downloads', 'Allow users to download tracks from the player')
       + '<div class="settings-actions" style="margin-top:16px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-user-downloads">' + Icons.check() + '<span>Save</span></button>'
       + '<button class="settings-btn" id="btn-toggle-download-list">' + Icons.library() + '<span>Manage Per-Track</span></button>'
       + '</div>'
       + '<div id="download-list"></div>'
-      + '</div>';
+      + '</div></div>';
 
     // Section 3: Import Settings
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.download() + ' Import Settings</div>'
-      + '<div class="settings-section-desc">Configure format and quality for music imported from external sources.</div>'
+    html += '<div class="settings-section collapsed">'
+      + '<div class="settings-section-title" data-collapse>' + Icons.download() + ' Import Settings' + Icons.chevronDown() + '</div>'
+      + '<div class="settings-section-body">'
       + '<div id="finder-settings" class="settings-status"></div>'
       + '<div class="settings-form-grid">'
       + '<div class="settings-field"><label>Audio Format</label>'
@@ -3275,23 +3340,38 @@ const UI = {
       + '</div>'
       + st('setting-download-convert-to-flac', 'Convert to FLAC', 'Re-encode imported files as FLAC')
       + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders')
+      + '<div class="settings-subsection-label" style="margin-top:16px">YouTube Cookies</div>'
+      + '<div class="settings-section-desc">Required for age-restricted videos. Choose a browser to import cookies from, or provide a cookies.txt file path.</div>'
+      + '<div class="settings-form-grid">'
+      + '<div class="settings-field"><label>Cookies from Browser</label>'
+      + '<select id="setting-yt-cookies-from-browser" class="settings-select">'
+      + '<option value="">Disabled</option>'
+      + '<option value="chrome">Chrome</option>'
+      + '<option value="firefox">Firefox</option>'
+      + '<option value="safari">Safari</option>'
+      + '<option value="edge">Edge</option>'
+      + '<option value="brave">Brave</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Or: Cookies File Path</label>'
+      + '<input type="text" id="setting-yt-cookies-file" class="settings-input" placeholder="/path/to/cookies.txt"></div>'
+      + '</div>'
       + '<div class="settings-subsection-label" style="margin-top:16px">Bulk Import</div>'
       + '<div class="settings-section-desc">Paste tracks to download (one per line, "Artist - Title").</div>'
       + '<textarea id="bulk-import-input" class="settings-textarea" rows="4" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion"></textarea>'
       + '<div class="settings-actions" style="margin-top:8px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Import Settings</span></button>'
       + '<button class="settings-btn settings-btn-primary" id="btn-bulk-import">' + Icons.download() + '<span>Import & Download All</span></button>'
-      + '</div></div>';
+      + '</div></div></div>';
 
     // Section 4: Library Health
     const rc = Store.reviewCounts || {};
     const total = (rc.unchecked || 0) + (rc.needs_review || 0) + (rc.reviewed_ok || 0);
     const reviewedPct = total > 0 ? Math.round(((rc.reviewed_ok || 0) / total) * 100) : 0;
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title" style="color:#ff6b6b">'
+    html += '<div class="settings-section collapsed">'
+      + '<div class="settings-section-title" data-collapse style="color:#ff6b6b">'
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-      + ' Library Health</div>'
-      + '<div class="settings-section-desc">Scan MusicBrainz for metadata, review flagged tracks, and fix problems.</div>'
+      + ' Library Health' + Icons.chevronDown() + '</div>'
+      + '<div class="settings-section-body">'
       + '<div class="settings-actions" style="margin-bottom:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
       + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Pending</span></button>'
@@ -3333,12 +3413,12 @@ const UI = {
       + '<button class="settings-btn settings-btn-primary" id="btn-review-recheck">' + Icons.refresh() + '<span>Recheck All Tracks</span></button>'
       + '<button class="settings-btn" id="btn-review-copy-log">' + Icons.share() + '<span>Copy Log</span></button>'
       + '</div>'
-      + '</div>';
+      + '</div></div>';
 
     // Section 5: System
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.settings() + ' System</div>'
-      + '<div class="settings-section-desc">Manage library scanning and background workers.</div>'
+    html += '<div class="settings-section collapsed">'
+      + '<div class="settings-section-title" data-collapse>' + Icons.settings() + ' System' + Icons.chevronDown() + '</div>'
+      + '<div class="settings-section-body">'
       + '<div class="settings-actions" style="margin-bottom:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
       + '</div>'
@@ -3350,15 +3430,16 @@ const UI = {
       + '<input type="text" id="setting-watcher-interval" class="settings-input" placeholder="30"></div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Worker Settings</span></button>'
-      + '</div></div>';
+      + '</div></div></div>';
 
     // Section 6: About
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title">' + Icons.settings() + ' About</div>'
+    html += '<div class="settings-section collapsed">'
+      + '<div class="settings-section-title" data-collapse>' + Icons.settings() + ' About' + Icons.chevronDown() + '</div>'
+      + '<div class="settings-section-body">'
       + '<div class="settings-about">'
       + '<div>MusicApp</div>'
       + '<div style="color:var(--text3);font-size:13px">Personal music library with MusicBrainz integration</div>'
-      + '</div></div>';
+      + '</div></div></div>';
 
     this.els.content.innerHTML = html;
 
@@ -3366,6 +3447,16 @@ const UI = {
 
     this.els.content.querySelectorAll('.stoggle').forEach(el => {
       el.addEventListener('click', () => el.classList.toggle('active'));
+    });
+
+    this.els.content.querySelectorAll('.settings-section-title').forEach(el => {
+      const section = el.closest('.settings-section');
+      if (section && section.querySelector('.settings-section-body')) {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', () => {
+          section.classList.toggle('collapsed');
+        });
+      }
     });
 
     document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());

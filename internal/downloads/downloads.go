@@ -518,6 +518,12 @@ func ProcessSingleDownload(job *DownloadJob) {
 		url,
 	}
 
+	if cookiesFrom := store.GetSetting("yt_cookies_from_browser", ""); cookiesFrom != "" {
+		ytArgs = append([]string{"--cookies-from-browser", cookiesFrom}, ytArgs...)
+	} else if cookiesFile := store.GetSetting("yt_cookies_file", ""); cookiesFile != "" {
+		ytArgs = append([]string{"--cookies", cookiesFile}, ytArgs...)
+	}
+
 	minBr := store.GetSettingInt("download_min_bitrate", 0)
 
 	cmd := exec.Command(ytdlpPath, ytArgs...)
@@ -546,7 +552,7 @@ func ProcessSingleDownload(job *DownloadJob) {
 	case <-done:
 		if cmdErr != nil {
 			job.Status = "failed"
-			job.Error = fmt.Sprintf("yt-dlp failed: %v — %s", cmdErr, string(output))
+			job.Error = userFriendlyError(string(output))
 			job.CompletedAt = time.Now().Format(time.RFC3339)
 			DbUpdateJob(job)
 			log.Printf("[download] yt-dlp failed for %q: %v", job.SearchQuery, cmdErr)
@@ -1148,4 +1154,27 @@ func DownloadWatchdog() {
 			}
 		}
 	}
+}
+
+func userFriendlyError(output string) string {
+	out := string(output)
+	if strings.Contains(out, "Sign in to confirm your age") || strings.Contains(out, "age-restricted") {
+		return "Age-restricted video — add YouTube cookies in Settings to download"
+	}
+	if strings.Contains(out, "Sign in to confirm you're not a bot") || strings.Contains(out, "not a bot") {
+		return "YouTube blocked the request — add cookies in Settings"
+	}
+	if strings.Contains(out, "Video unavailable") {
+		return "Video unavailable — it may be private or deleted"
+	}
+	if strings.Contains(out, "HTTP Error 429") {
+		return "YouTube rate limit — try again later"
+	}
+	if strings.Contains(out, "yt-dlp not found") {
+		return "yt-dlp not installed"
+	}
+	if len(out) > 200 {
+		return out[:200]
+	}
+	return strings.TrimSpace(out)
 }

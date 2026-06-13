@@ -100,6 +100,28 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-section-title svg:last-child {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+  color: var(--text3);
+  width: 18px;
+  height: 18px;
+}
+
+.settings-section.collapsed .settings-section-title svg:last-child {
+  transform: rotate(-90deg);
+}
+
+.settings-section-body {
+  padding-top: 14px;
+}
+
+.settings-section.collapsed .settings-section-body {
+  display: none !important;
 }
 
 .settings-section-title svg {

@@ -617,10 +617,10 @@ func FinderArtistTracks(mbid, artistName string) []ArtistTrack {
 		}
 
 		offset += len(resp.Recordings)
-		if offset >= resp.RecordingCount || len(resp.Recordings) == 0 || offset >= 5000 {
+		if offset >= resp.RecordingCount || len(resp.Recordings) == 0 || offset >= 1000 {
 			break
 		}
-		time.Sleep(750 * time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 	}
 
 	var result []ArtistTrack
