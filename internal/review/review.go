@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -112,33 +113,47 @@ func DbGetTracksByReviewStatus(status string, limit int) []string {
 	return ids
 }
 
-func DbGetReviewTracks() []models.Track {
-	rows, err := store.DB.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review'")
+func DbGetReviewTracks(limit int) []models.Track {
+	rows, err := store.DB.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review' LIMIT ?", limit)
 	if err != nil {
 		return []models.Track{}
 	}
 	defer rows.Close()
-	result := make([]models.Track, 0)
-	var orphanIDs []string
+	type row struct {
+		id    string
+		flags string
+	}
+	var rowBuf []row
 	for rows.Next() {
 		var trackID, flagsJSON string
 		rows.Scan(&trackID, &flagsJSON)
-		store.Mu.RLock()
-		t, exists := store.Tracks[trackID]
-		store.Mu.RUnlock()
+		rowBuf = append(rowBuf, row{trackID, flagsJSON})
+	}
+	store.Mu.RLock()
+	result := make([]models.Track, 0, len(rowBuf))
+	var orphanIDs []string
+	for _, r := range rowBuf {
+		t, exists := store.Tracks[r.id]
 		if !exists {
-			orphanIDs = append(orphanIDs, trackID)
+			orphanIDs = append(orphanIDs, r.id)
 			continue
 		}
-		copy := *t
-		copy.ReviewStatus = "needs_review"
-		json.Unmarshal([]byte(flagsJSON), &copy.ReviewFlags)
-		result = append(result, copy)
+		cp := *t
+		cp.ReviewStatus = "needs_review"
+		json.Unmarshal([]byte(r.flags), &cp.ReviewFlags)
+		result = append(result, cp)
 	}
+	store.Mu.RUnlock()
 	if len(orphanIDs) > 0 {
 		go cleanupOrphanedReviewIDs(orphanIDs)
 	}
 	return result
+}
+
+func DbGetReviewTotal() int {
+	var count int
+	store.DB.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE status = 'needs_review'").Scan(&count)
+	return count
 }
 
 func DbGetReviewForTrack(trackID string) (string, []string) {
@@ -150,6 +165,43 @@ func DbGetReviewForTrack(trackID string) (string, []string) {
 	var flags []string
 	json.Unmarshal([]byte(flagsJSON), &flags)
 	return status, flags
+}
+
+func DbGetReviewTracksPage(limit, offset int) []models.Track {
+	rows, err := store.DB.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review' LIMIT ? OFFSET ?", limit, offset)
+	if err != nil {
+		return []models.Track{}
+	}
+	defer rows.Close()
+	type row struct {
+		id    string
+		flags string
+	}
+	var rowBuf []row
+	for rows.Next() {
+		var trackID, flagsJSON string
+		rows.Scan(&trackID, &flagsJSON)
+		rowBuf = append(rowBuf, row{trackID, flagsJSON})
+	}
+	store.Mu.RLock()
+	result := make([]models.Track, 0, len(rowBuf))
+	var orphanIDs []string
+	for _, r := range rowBuf {
+		t, exists := store.Tracks[r.id]
+		if !exists {
+			orphanIDs = append(orphanIDs, r.id)
+			continue
+		}
+		cp := *t
+		cp.ReviewStatus = "needs_review"
+		json.Unmarshal([]byte(r.flags), &cp.ReviewFlags)
+		result = append(result, cp)
+	}
+	store.Mu.RUnlock()
+	if len(orphanIDs) > 0 {
+		go cleanupOrphanedReviewIDs(orphanIDs)
+	}
+	return result
 }
 
 func DbLoadAllReviewStatuses() map[string]struct {
@@ -846,9 +898,21 @@ func UniqueFlags(flags []string) []string {
 // --- Review API handlers ---
 
 func ReviewTracksHandler(w http.ResponseWriter, r *http.Request) {
-	tracks := DbGetReviewTracks()
+	limit := 200
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 500 {
+		limit = l
+	}
+	offset := 0
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+	tracks := DbGetReviewTracksPage(limit, offset)
+	total := DbGetReviewTotal()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tracks)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tracks": tracks,
+		"total":  total,
+	})
 }
 
 func ReviewCountsHandler(w http.ResponseWriter, r *http.Request) {

@@ -163,25 +163,19 @@ func main() {
 		log.Printf("File counts match DB, skipping full scan")
 	}
 
-	log.Printf("Applying approved metadata matches...")
 	applied := musicbrainz.ApplyApprovedMatches()
 	if applied > 0 {
 		log.Printf("Applied %d metadata overrides from database", applied)
 	}
 
-	log.Printf("Extracting embedded covers...")
 	scanner.ExtractEmbeddedCovers()
-	log.Printf("Syncing watched playlists...")
 	watched.SyncWatchedPlaylistsToLibrary()
-	log.Printf("Recovering stalled downloads...")
 	downloads.RecoverStalledDownloads()
-	log.Printf("Starting background services...")
 	go musicbrainz.FetchMissingCovers()
 	go musicbrainz.FetchMissingArtistArt()
 	go scanner.StartWatcher()
 	go watched.StartWatchScheduler()
 	go downloads.DownloadWatchdog()
-	log.Printf("Seeding review tracks...")
 	review.SeedMissingReviewTracks()
 	review.CleanupOldReviewFlags()
 	review.CleanupOrphanedReviews()

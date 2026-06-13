@@ -127,6 +127,7 @@ const UI = {
         }
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
+        this._updateTabIcons();
         const tabName = tab.dataset.tab;
         Store.currentTab = tabName;
         // Favorites tab navigates to favorites view
@@ -142,6 +143,23 @@ const UI = {
         this.renderPage();
         this.els.content.scrollTop = 0;
       });
+    });
+  },
+
+  _tabIcons: {
+    home: { inactive: () => Icons.home(), active: () => Icons.homeFilled() },
+    finder: { inactive: () => Icons.magnet(), active: () => Icons.magnetFilled() },
+    library: { inactive: () => Icons.library(), active: () => Icons.libraryFilled() },
+  },
+
+  _updateTabIcons() {
+    document.querySelectorAll('.tab-item').forEach(t => {
+      const map = this._tabIcons[t.dataset.tab];
+      if (!map) return;
+      const svg = t.querySelector('svg');
+      if (!svg) return;
+      const newSvg = t.classList.contains('active') ? map.active() : map.inactive();
+      svg.outerHTML = newSvg;
     });
   },
 
@@ -1182,6 +1200,7 @@ const UI = {
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
     if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
     if (this._downloadPollInterval) { clearInterval(this._downloadPollInterval); this._downloadPollInterval = null; }
+    if (this._reviewScrollObserver) { this._reviewScrollObserver.disconnect(); this._reviewScrollObserver = null; }
   },
 
   renderPage() {
@@ -1737,8 +1756,7 @@ const UI = {
           + '<div class="list-item-subtitle">' + p.trackIds.length + ' tracks</div>'
           + '</div>'
           + '<button class="list-item-more">' + Icons.more() + '</button></div>';
-      });
-    }
+    });
     return html;
   },
 
@@ -2034,14 +2052,18 @@ const UI = {
 
   async renderNeedsReview() {
     this._viewTrackList = [];
+    this._reviewOffset = 0;
+    this._reviewTotal = 0;
     this.els.content.innerHTML = '<div class="loading-spinner"></div>';
 
-    let reviewTracks = [];
+    let data;
     try {
-      reviewTracks = await Api.getReviewTracks();
-    } catch (e) {}
-    if (!Array.isArray(reviewTracks)) reviewTracks = [];
-    this._viewTrackList = reviewTracks;
+      data = await Api.getReviewTracks(0, 200);
+    } catch (e) { data = { tracks: [], total: 0 }; }
+    const tracks = data.tracks || [];
+    this._reviewTotal = data.total || 0;
+    this._reviewOffset = tracks.length;
+    this._viewTrackList = tracks;
 
     let html = '<div class="review-page-header">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
@@ -2049,24 +2071,80 @@ const UI = {
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;color:#ff6b6b;flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
       + '<h1>Needs Review</h1>'
       + '</div>'
-      + '<div class="review-page-meta">' + reviewTracks.length + ' tracks flagged</div>'
+      + '<div class="review-page-meta">' + this._reviewTotal + ' tracks flagged</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
       + '</div>'
       + '</div>';
 
-    if (reviewTracks.length === 0) {
+    if (tracks.length === 0) {
       html += this._emptyState('All clear', 'No tracks need review right now', Icons.checkCircle());
     } else {
-      html += this._renderReviewTrackList(reviewTracks);
+      html += '<div id="review-track-list-container">' + this._renderReviewTrackList(tracks) + '</div>';
+      if (this._reviewOffset < this._reviewTotal) {
+        html += '<div class="review-load-more" id="review-load-trigger" style="text-align:center;padding:24px;color:var(--text-muted)">Scroll for more...</div>';
+      }
     }
 
     this.els.content.innerHTML = html;
+    this._setupReviewScrollLoader();
+  },
+
+  _setupReviewScrollLoader() {
+    const trigger = document.getElementById('review-load-trigger');
+    if (!trigger) return;
+    const container = this.els.content;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries[0].isIntersecting) return;
+      observer.disconnect();
+      this._loadMoreReviewTracks();
+    }, { root: container, threshold: 0.1 });
+    observer.observe(trigger);
+    this._reviewScrollObserver = observer;
+  },
+
+  async _loadMoreReviewTracks() {
+    const trigger = document.getElementById('review-load-trigger');
+    if (trigger) trigger.innerHTML = '<div class="loading-spinner" style="margin:0 auto"></div>';
+
+    let data;
+    try {
+      data = await Api.getReviewTracks(this._reviewOffset, 200);
+    } catch (e) { data = { tracks: [], total: 0 }; }
+    const more = data.tracks || [];
+    this._reviewTotal = data.total || this._reviewTotal;
+
+    if (more.length > 0) {
+      const container = document.getElementById('review-track-list-container');
+      const listEl = container ? container.querySelector('.track-list') : null;
+      if (listEl) {
+        listEl.insertAdjacentHTML('beforeend', this._renderReviewTrackRows(more));
+      }
+      this._viewTrackList = this._viewTrackList.concat(more);
+      this._reviewOffset += more.length;
+    }
+
+    const oldTrigger = document.getElementById('review-load-trigger');
+    if (oldTrigger) oldTrigger.remove();
+
+    if (this._reviewOffset < this._reviewTotal) {
+      const newTrigger = document.createElement('div');
+      newTrigger.className = 'review-load-more';
+      newTrigger.id = 'review-load-trigger';
+      newTrigger.style.cssText = 'text-align:center;padding:24px;color:var(--text-muted)';
+      newTrigger.textContent = 'Scroll for more...';
+      this.els.content.appendChild(newTrigger);
+      this._setupReviewScrollLoader();
+    }
   },
 
   _renderReviewTrackList(reviewTracks) {
-    let html = '<div class="track-list">';
+    return '<div class="track-list">' + this._renderReviewTrackRows(reviewTracks) + '</div>';
+  },
+
+  _renderReviewTrackRows(reviewTracks) {
+    let html = '';
     reviewTracks.forEach(t => {
       const artStyle = t.albumID
         ? 'background-image:url(' + Api.coverUrl(t.albumID) + ');background-size:cover;background-position:center'

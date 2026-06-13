@@ -487,12 +487,14 @@ const Api = {
     return res.json();
   },
 
-  async getReviewTracks() {
+  async getReviewTracks(offset = 0, limit = 200) {
     try {
-      const res = await fetch('/api/review/tracks');
-      if (!res.ok) return [];
-      return res.json();
-    } catch { return []; }
+      const res = await fetch('/api/review/tracks?offset=' + offset + '&limit=' + limit);
+      if (!res.ok) return { tracks: [], total: 0 };
+      const data = await res.json();
+      if (!data || !Array.isArray(data.tracks)) return { tracks: [], total: 0 };
+      return data;
+    } catch { return { tracks: [], total: 0 }; }
   },
 
   async getReviewCounts() {

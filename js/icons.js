@@ -1,12 +1,18 @@
 const Icons = {
   home() {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 21v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6"/></svg>';
+  },
+  homeFilled() {
+    return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 21v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6z"/></svg>';
   },
   search() {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
   },
   library() {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-7.4a2 2 0 0 1-1.5-.7l-1.2-1.4A2 2 0 0 0 8.4 3.7H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2z"/></svg>';
+  },
+  libraryFilled() {
+    return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20 20a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-7.4a2 2 0 0 1-1.5-.7l-1.2-1.4A2 2 0 0 0 8.4 3.7H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2z"/></svg>';
   },
   play() {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></svg>';
@@ -111,7 +117,10 @@ const Icons = {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/></svg>';
   },
   folder() {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-7.4a2 2 0 0 1-1.5-.7l-1.2-1.4A2 2 0 0 0 8.4 3.7H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2z"/></svg>';
+  },
+  folderFilled() {
+    return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20 20a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-7.4a2 2 0 0 1-1.5-.7l-1.2-1.4A2 2 0 0 0 8.4 3.7H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2z"/></svg>';
   },
   upload() {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
@@ -135,7 +144,10 @@ const Icons = {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
   },
   magnet() {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a3.14 3.14 0 0 0-4.44-4.43l-6.8 6.8Z"/></svg>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.8 19.6 C 13.4 16.3 7.6 13.4 7.6 9 C 7.6 5.2 10.9 3.4 13.8 5.4 C 16.2 7 15.9 9.7 13.4 10.2 C 12 10.5 10.9 9.6 11.2 8.2"/></svg>';
+  },
+  magnetFilled() {
+    return '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M17.9 20.6 C 13.7 17.2 6 14.1 6 8.7 C 6 4.3 9.7 1.9 13.4 3.9 C 16.9 5.8 17.2 10.2 14 11.9 C 12.1 12.9 10 12.4 9 10.6 C 9.9 11.6 11.4 11.9 12.6 11.4 C 14.8 10.5 15 7.2 12.6 5.9 C 10.3 4.6 7.8 6.2 7.8 8.7 C 7.8 12.9 13.4 15.9 17.9 20.6 Z"/></svg>';
   },
   waveform() {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="2" height="6" rx="1"/><rect x="6" y="5" width="2" height="14" rx="1"/><rect x="10" y="3" width="2" height="18" rx="1"/><rect x="14" y="7" width="2" height="10" rx="1"/><rect x="18" y="4" width="2" height="16" rx="1"/><rect x="22" y="8" width="2" height="8" rx="1"/></svg>';
