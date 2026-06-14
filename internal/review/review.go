@@ -455,6 +455,46 @@ func ReviewDeleteTrack(trackID string) error {
 	return nil
 }
 
+func ReviewDeleteAllFlagged() (int, error) {
+	ids := DbGetTracksByReviewStatus("needs_review", 0)
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	type item struct {
+		id   string
+		path string
+	}
+	items := make([]item, 0, len(ids))
+	store.Mu.RLock()
+	for _, id := range ids {
+		if track, exists := store.Tracks[id]; exists {
+			items = append(items, item{id, ResolveTrackFilePath(track)})
+		}
+	}
+	store.Mu.RUnlock()
+
+	for _, it := range items {
+		if err := os.Remove(it.path); err != nil && !os.IsNotExist(err) {
+			log.Printf("[review] delete-all: failed to remove %s: %v", it.path, err)
+		}
+	}
+
+	store.Mu.Lock()
+	for _, it := range items {
+		delete(store.Tracks, it.id)
+		store.DbDeleteTrack(it.id)
+		DbDeleteReview(it.id)
+	}
+	musicbrainz.RebuildAlbumsFromTracks()
+	store.Mu.Unlock()
+
+	if len(items) > 0 {
+		log.Printf("[review] Deleted all flagged tracks: %d removed", len(items))
+	}
+	return len(items), nil
+}
+
 // --- Review check functions ---
 
 func CheckMetadataCompleteness(t *models.Track) []string {
@@ -989,6 +1029,16 @@ func ReviewDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+}
+
+func ReviewDeleteAllHandler(w http.ResponseWriter, r *http.Request) {
+	count, err := ReviewDeleteAllFlagged()
+	if err != nil {
+		http.Error(w, "Could not delete files", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"deleted": count})
 }
 
 func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {

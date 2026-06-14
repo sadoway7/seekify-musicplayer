@@ -41,6 +41,37 @@ const Api = {
     } catch { return null; }
   },
 
+  metadataPreview(files, onProgress) {
+    return new Promise((resolve, reject) => {
+      const audioExts = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'opus', 'wma'];
+      const form = new FormData();
+      let count = 0;
+      for (const file of files) {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (audioExts.indexOf(ext) === -1) continue;
+        const rel = file.webkitRelativePath || file.name;
+        form.append('files', file, rel);
+        count++;
+      }
+      if (count === 0) { resolve({ tracks: [] }); return; }
+      const xhr = new XMLHttpRequest();
+      if (onProgress) {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) onProgress(e.loaded, e.total);
+        });
+      }
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch (e) { reject(new Error('Preview failed')); }
+        } else { reject(new Error('Preview failed')); }
+      });
+      xhr.addEventListener('error', () => reject(new Error('Preview failed')));
+      xhr.open('POST', '/api/metadata-preview');
+      xhr.send(form);
+    });
+  },
+
   libraryUploadProgress(files, onProgress) {
     return new Promise((resolve, reject) => {
       const audioExts = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'opus', 'wma'];
@@ -592,6 +623,12 @@ const Api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trackId })
     });
+    if (!res.ok) throw new Error('Failed to delete');
+    return res.json();
+  },
+
+  async reviewDeleteAll() {
+    const res = await fetch('/api/review/delete-all', { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete');
     return res.json();
   },

@@ -1713,11 +1713,16 @@ const UI = {
       this._uploadInit = true;
     }
     this._uploadSelected = [];
-    this._uploadedTracks = [];
+    this._uploadPreviewTracks = null;
+    this._uploadCustomCover = null;
+    this._uploadAddedTracks = [];
+    this._uploadStep = 'select';
     const fi = document.getElementById('upload-file-input');
     const fo = document.getElementById('upload-folder-input');
     if (fi) fi.value = '';
     if (fo) fo.value = '';
+    const preview = document.getElementById('upload-preview-area');
+    if (preview) preview.innerHTML = '';
     this._setUploadTab('file');
     this._setUploadStep('select');
     modal.classList.remove('hidden');
@@ -1733,6 +1738,16 @@ const UI = {
     const folderIcon = document.getElementById('upload-folder-icon');
     if (fileIcon) fileIcon.innerHTML = Icons.upload();
     if (folderIcon) folderIcon.innerHTML = Icons.folder();
+
+    const closeBtn = document.getElementById('upload-close-btn');
+    if (closeBtn) closeBtn.addEventListener('click', () => this.closeUploadModal());
+
+    const overlay = document.getElementById('upload-modal');
+    if (overlay) {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay && this._uploadStep !== 'progress') this.closeUploadModal();
+      });
+    }
 
     document.querySelectorAll('.upload-modal-tab').forEach((t) => {
       t.addEventListener('click', () => this._setUploadTab(t.dataset.utab));
@@ -1751,6 +1766,34 @@ const UI = {
       folderBtn.addEventListener('click', () => folderInput.click());
       folderInput.addEventListener('change', (e) => this._setUploadFiles(e.target.files));
     }
+
+    const coverInput = document.getElementById('upload-cover-input');
+    if (coverInput) {
+      coverInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        this._uploadCustomCover = file;
+        const objUrl = URL.createObjectURL(file);
+        let img = document.getElementById('upload-cover-img');
+        if (!img) {
+          const ph = document.getElementById('upload-cover-placeholder');
+          if (ph) {
+            img = document.createElement('img');
+            img.className = 'upload-cover-img';
+            img.id = 'upload-cover-img';
+            ph.parentNode.replaceChild(img, ph);
+          }
+        }
+        if (img) img.src = objUrl;
+        coverInput.value = '';
+        const hint = document.querySelector('.upload-cover-hint');
+        if (hint) {
+          hint.textContent = 'Cover selected';
+          hint.classList.add('upload-cover-set');
+          setTimeout(() => { hint.classList.remove('upload-cover-set'); }, 2000);
+        }
+      });
+    }
   },
 
   _setUploadTab(tab) {
@@ -1761,11 +1804,16 @@ const UI = {
       p.classList.toggle('hidden', p.dataset.utab !== tab);
     });
     this._uploadSelected = [];
+    this._uploadPreviewTracks = null;
+    this._uploadCustomCover = null;
     const list = document.getElementById('upload-file-list');
     if (list) list.innerHTML = '';
+    const preview = document.getElementById('upload-preview-area');
+    if (preview) preview.innerHTML = '';
+    this._updateUploadButton();
   },
 
-  _setUploadFiles(fileList) {
+  async _setUploadFiles(fileList) {
     const audioExts = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'opus', 'wma'];
     const files = [];
     for (const f of fileList) {
@@ -1773,7 +1821,10 @@ const UI = {
       if (audioExts.indexOf(ext) !== -1) files.push(f);
     }
     this._uploadSelected = files;
+    this._uploadPreviewTracks = null;
+    this._uploadCustomCover = null;
     const list = document.getElementById('upload-file-list');
+    const preview = document.getElementById('upload-preview-area');
     if (list) {
       if (files.length === 0) {
         list.innerHTML = '';
@@ -1788,124 +1839,64 @@ const UI = {
         list.innerHTML = html;
       }
     }
-    const btn = document.getElementById('upload-modal-do');
-    if (btn) btn.disabled = files.length === 0;
-  },
-
-  _setUploadStep(step) {
-    ['select', 'progress', 'complete'].forEach((s) => {
-      const el = document.getElementById('upload-step-' + s);
-      if (el) el.classList.toggle('hidden', s !== step);
-    });
-    const title = document.getElementById('upload-modal-title');
-    const area = document.getElementById('upload-actions');
-    if (title) {
-      title.textContent = step === 'select' ? 'Upload Music' : step === 'progress' ? 'Uploading…' : 'Upload Complete';
-    }
-    if (!area) return;
-    const hasFiles = (this._uploadSelected || []).length > 0;
-    if (step === 'select') {
-      area.innerHTML = '<button class="edit-meta-cancel" onclick="UI.closeUploadModal()">Cancel</button>'
-        + '<button class="edit-meta-save" id="upload-modal-do" onclick="UI.doUpload()"' + (hasFiles ? '' : ' disabled') + '>Upload</button>';
-    } else if (step === 'progress') {
-      area.innerHTML = '';
+    if (preview) preview.innerHTML = '<div class="upload-preview-loading">Reading metadata…</div>';
+    this._updateUploadButton();
+    if (files.length > 0) {
+      try {
+        const result = await Api.metadataPreview(files);
+        this._uploadPreviewTracks = result.tracks || [];
+        this._showPreviewEdit();
+      } catch (e) {
+        if (preview) preview.innerHTML = '<div class="upload-preview-loading">Could not read metadata</div>';
+      }
     } else {
-      const hasTracks = (this._uploadedTracks || []).length > 0;
-      area.innerHTML = '<button class="edit-meta-cancel" onclick="UI.openUploadModal()">Upload More</button>'
-        + '<button class="edit-meta-save" onclick="UI._uploadGoTo()">' + (hasTracks ? 'Save &amp; Go to Album' : 'Done') + '</button>';
+      if (preview) preview.innerHTML = '';
     }
   },
 
-  async doUpload() {
-    const files = this._uploadSelected || [];
-    if (files.length === 0) {
-      this.showToast('No audio files selected');
+  _showPreviewEdit() {
+    const tracks = this._uploadPreviewTracks;
+    const area = document.getElementById('upload-preview-area');
+    if (!area || !tracks || tracks.length === 0) {
+      if (area) area.innerHTML = '';
       return;
     }
-    this._setUploadStep('progress');
-    const fill = document.getElementById('upload-progress-fill');
-    const ptext = document.getElementById('upload-progress-text');
-    if (ptext) ptext.textContent = 'Uploading ' + files.length + ' file' + (files.length !== 1 ? 's' : '') + '…';
-    if (fill) fill.style.width = '0%';
-    try {
-      const result = await Api.libraryUploadProgress(files, (loaded, total) => {
-        const pct = Math.round(loaded / total * 100);
-        if (fill) fill.style.width = pct + '%';
-        if (ptext) ptext.textContent = 'Uploading… ' + pct + '%';
-      });
-      if (ptext) ptext.textContent = 'Scanning library…';
-      if (fill) fill.style.width = '100%';
-      await Api.scan();
-      await Store.refreshLibrary();
-      const tracks = this._findTracksByPaths(result.uploaded || []);
-      this._showUploadComplete(tracks, result.errors || []);
-    } catch (e) {
-      this.showToast('Upload failed');
-      this._setUploadStep('select');
+    const t = tracks[0];
+    const coverSrc = t.cover || '';
+    let html = '<div class="upload-edit-row">';
+    html += '<div class="upload-cover-pick" id="upload-cover-pick">';
+    if (coverSrc) {
+      html += '<img class="upload-cover-img" id="upload-cover-img" src="' + coverSrc + '" alt="">';
+    } else {
+      html += '<div class="upload-cover-img upload-cover-placeholder" id="upload-cover-placeholder"><span>' + Icons.music() + '</span></div>';
     }
+    html += '<div class="upload-cover-hint">Tap to change</div>';
+    html += '</div>';
+    html += '<div class="upload-meta-fields">';
+    html += this._uploadMetaField('Title', 'title', t.title);
+    html += this._uploadMetaField('Artist', 'artist', t.artist);
+    html += this._uploadMetaField('Album', 'album', t.album);
+    html += this._uploadMetaField('Year', 'year', t.year || '');
+    html += '</div>';
+    html += '</div>';
+    if (tracks.length > 1) {
+      html += '<div class="upload-more-tracks">+' + (tracks.length - 1) + ' more track' + (tracks.length - 1 !== 1 ? 's' : '') + '</div>';
+    }
+    area.innerHTML = html;
+    const coverPick = document.getElementById('upload-cover-pick');
+    const coverInput = document.getElementById('upload-cover-input');
+    if (coverPick && coverInput) {
+      coverPick.addEventListener('click', () => coverInput.click());
+    }
+    this._updateUploadButton();
   },
 
-  _findTracksByPaths(paths) {
-    const pathSet = new Set(paths);
-    const tracks = [];
-    for (const t of Store.library.tracks) {
-      if (pathSet.has(t.filePath)) tracks.push(t);
-    }
-    return tracks;
-  },
-
-  _showUploadComplete(tracks, errors) {
-    this._uploadedTracks = tracks;
-    const summary = document.getElementById('upload-result-summary');
-    const metaArea = document.getElementById('upload-meta-area');
-    if (summary) {
-      let html = '<div class="upload-complete-check">' + Icons.check() + '</div>';
-      html += '<div class="upload-complete-msg">' + tracks.length + ' track' + (tracks.length !== 1 ? 's' : '') + ' uploaded</div>';
-      if (errors.length > 0) {
-        html += '<div class="upload-complete-errors">' + errors.length + ' error' + (errors.length !== 1 ? 's' : '') + '</div>';
-      }
-      summary.innerHTML = html;
-    }
-    if (metaArea) {
-      if (tracks.length > 0) {
-        const t = tracks[0];
-        let html = '<div class="upload-cover-pick" id="upload-cover-pick">';
-        html += '<img class="upload-cover-img" id="upload-cover-img" src="' + Api.coverUrl(t.albumID) + '" alt="">';
-        html += '<div class="upload-cover-hint">Tap to change cover</div>';
-        html += '</div>';
-        html += '<input type="file" id="upload-cover-input" accept="image/*" hidden>';
-        html += '<div class="upload-meta-fields">';
-        html += this._uploadMetaField('Title', 'title', t.title);
-        html += this._uploadMetaField('Artist', 'artist', t.artist);
-        html += this._uploadMetaField('Album', 'album', t.album);
-        html += this._uploadMetaField('Year', 'year', t.year || '');
-        html += '</div>';
-        if (tracks.length > 1) {
-          html += '<div class="upload-more-tracks">+' + (tracks.length - 1) + ' more track' + (tracks.length - 1 !== 1 ? 's' : '') + '</div>';
-        }
-        metaArea.innerHTML = html;
-        const coverPick = document.getElementById('upload-cover-pick');
-        const coverInput = document.getElementById('upload-cover-input');
-        if (coverPick && coverInput) {
-          coverPick.addEventListener('click', () => coverInput.click());
-          coverInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            try {
-              await Api.uploadCustomCover(t.id, file);
-              const img = document.getElementById('upload-cover-img');
-              if (img) img.src = Api.coverUrl(t.albumID);
-              this.showToast('Cover updated');
-            } catch (err) {
-              this.showToast('Failed to upload cover');
-            }
-          });
-        }
-      } else {
-        metaArea.innerHTML = '';
-      }
-    }
-    this._setUploadStep('complete');
+  _updateUploadButton() {
+    const btn = document.getElementById('upload-modal-do');
+    if (!btn) return;
+    const ready = (this._uploadSelected || []).length > 0 && this._uploadPreviewTracks !== null;
+    btn.disabled = !ready;
+    btn.textContent = ready ? 'Add to Library' : 'Upload';
   },
 
   _uploadMetaField(label, key, value) {
@@ -1913,32 +1904,98 @@ const UI = {
       + '<input type="text" id="upload-meta-' + key + '" value="' + this._esc(value) + '"></div>';
   },
 
-  async _uploadGoTo() {
-    const tracks = this._uploadedTracks || [];
-    if (tracks.length > 0) {
-      const t = tracks[0];
-      const fields = {};
-      const titleEl = document.getElementById('upload-meta-title');
-      const artistEl = document.getElementById('upload-meta-artist');
-      const albumEl = document.getElementById('upload-meta-album');
-      const yearEl = document.getElementById('upload-meta-year');
-      if (titleEl && titleEl.value !== (t.title || '')) fields.title = titleEl.value;
-      if (artistEl && artistEl.value !== (t.artist || '')) fields.artist = artistEl.value;
-      if (albumEl && albumEl.value !== (t.album || '')) fields.album = albumEl.value;
-      if (yearEl && yearEl.value && parseInt(yearEl.value, 10) !== (t.year || 0)) fields.year = parseInt(yearEl.value, 10);
-      if (Object.keys(fields).length > 0) {
-        try { await Api.reviewEditMeta(t.id, fields); } catch (e) {}
-      }
+  _setUploadStep(step) {
+    this._uploadStep = step;
+    ['select', 'progress', 'complete'].forEach((s) => {
+      const el = document.getElementById('upload-step-' + s);
+      if (el) el.classList.toggle('hidden', s !== step);
+    });
+    const title = document.getElementById('upload-modal-title');
+    const area = document.getElementById('upload-actions');
+    if (title) {
+      title.textContent = step === 'select' ? 'Upload Music' : step === 'progress' ? 'Adding…' : 'Added';
     }
+    if (!area) return;
+    if (step === 'select') {
+      const ready = (this._uploadSelected || []).length > 0 && this._uploadPreviewTracks !== null;
+      area.innerHTML = '<button class="edit-meta-cancel" onclick="UI.closeUploadModal()">Cancel</button>'
+        + '<button class="edit-meta-save" id="upload-modal-do" onclick="UI.doUpload()"' + (ready ? '' : ' disabled') + '>' + (ready ? 'Add to Library' : 'Upload') + '</button>';
+    } else if (step === 'progress') {
+      area.innerHTML = '';
+    } else {
+      const hasTracks = (this._uploadAddedTracks || []).length > 0;
+      area.innerHTML = '<button class="edit-meta-cancel" onclick="UI.closeUploadModal()">Close</button>'
+        + '<button class="edit-meta-save" onclick="UI._uploadGoTo()">' + (hasTracks ? 'Play Now' : 'Done') + '</button>';
+    }
+  },
+
+  async doUpload() {
+    const files = this._uploadSelected || [];
+    if (files.length === 0 || !this._uploadPreviewTracks) {
+      this.showToast('No files selected');
+      return;
+    }
+    this._setUploadStep('progress');
+    const fill = document.getElementById('upload-progress-fill');
+    const ptext = document.getElementById('upload-progress-text');
+    if (ptext) ptext.textContent = 'Adding ' + files.length + ' file' + (files.length !== 1 ? 's' : '') + '…';
+    if (fill) fill.style.width = '0%';
+    try {
+      const result = await Api.libraryUploadProgress(files, (loaded, total) => {
+        const pct = Math.round(loaded / total * 100);
+        if (fill) fill.style.width = pct + '%';
+        if (ptext) ptext.textContent = 'Adding… ' + pct + '%';
+      });
+      const tracks = result.tracks || [];
+      this._uploadAddedTracks = tracks;
+
+      if (tracks.length > 0) {
+        const t = tracks[0];
+        const preview = this._uploadPreviewTracks[0] || {};
+        const fields = {};
+        const titleEl = document.getElementById('upload-meta-title');
+        const artistEl = document.getElementById('upload-meta-artist');
+        const albumEl = document.getElementById('upload-meta-album');
+        const yearEl = document.getElementById('upload-meta-year');
+        if (titleEl && titleEl.value !== (preview.title || '')) fields.title = titleEl.value;
+        if (artistEl && artistEl.value !== (preview.artist || '')) fields.artist = artistEl.value;
+        if (albumEl && albumEl.value !== (preview.album || '')) fields.album = albumEl.value;
+        if (yearEl && yearEl.value && parseInt(yearEl.value, 10) !== (preview.year || 0)) fields.year = parseInt(yearEl.value, 10);
+        if (Object.keys(fields).length > 0) {
+          if (ptext) ptext.textContent = 'Applying metadata…';
+          try { await Api.reviewEditMeta(t.id, fields); } catch (e) {}
+        }
+        if (this._uploadCustomCover) {
+          if (ptext) ptext.textContent = 'Uploading cover…';
+          try { await Api.uploadCustomCover(t.id, this._uploadCustomCover); } catch (e) {}
+        }
+      }
+
+      const summary = document.getElementById('upload-result-summary');
+      if (summary) {
+        let html = '<div class="upload-complete-check">' + Icons.check() + '</div>';
+        html += '<div class="upload-complete-msg">' + tracks.length + ' track' + (tracks.length !== 1 ? 's' : '') + ' added to your library</div>';
+        summary.innerHTML = html;
+      }
+      this._setUploadStep('complete');
+    } catch (e) {
+      this.showToast('Upload failed');
+      this._setUploadStep('select');
+    }
+  },
+
+  async _uploadGoTo() {
+    const tracks = this._uploadAddedTracks || [];
     this.closeUploadModal();
     if (tracks.length > 0) {
       await Store.refreshLibrary();
-      const updated = Store.library.tracks.find(tr => tr.id === tracks[0].id);
-      if (updated && updated.albumID) {
-        this.navigateTo('album', { albumId: updated.albumID });
-      } else {
-        this.renderPage();
+      const track = Store.library.tracks.find(tr => tr.id === tracks[0].id);
+      if (track) {
+        const queueTracks = tracks.map(t => Store.library.tracks.find(tr => tr.id === t.id)).filter(Boolean);
+        Player.play(track, queueTracks, { type: 'upload', name: 'Uploaded' });
+        this.showNowPlaying();
       }
+      this.renderPage();
     } else {
       this.renderPage();
     }
@@ -2323,6 +2380,7 @@ const UI = {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + (tracks.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-all">' + Icons.trash() + '<span>Delete All</span></button>' : '')
       + '</div>'
       + '</div>';
 
@@ -2419,12 +2477,9 @@ const UI = {
   },
 
   _showReviewTrackMenu(trackId, triggerEl) {
-    const options = [
-      { label: 'Edit Metadata', icon: Icons.edit(), action: () => ReviewUI.showEditMetaModal(trackId) },
-      { label: 'Delete File', icon: Icons.trash(), action: () => ReviewUI.deleteTrack(trackId, false), danger: true },
-      { label: 'Does Not Need Review', icon: Icons.check(), action: () => { ReviewUI.markOk(trackId).then(() => this.renderNeedsReview()); } }
-    ];
-    this.showContextMenu(options, triggerEl);
+    ReviewUI.showDropdownForTrack(trackId, triggerEl, () => {
+      if (Store.currentView === 'needs-review') this.renderNeedsReview();
+    });
   },
 
   renderFinder() {
@@ -6473,6 +6528,10 @@ const UI = {
     }
     if (action === 'needs-review') {
       this.navigateTo('needs-review');
+      return;
+    }
+    if (action === 'delete-review-all') {
+      ReviewUI.deleteAllFlagged(() => this.renderNeedsReview());
       return;
     }
     if (action === 'shuffle' || action === 'shuffle-all') {

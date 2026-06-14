@@ -9,9 +9,11 @@ const ReviewUI = {
     if (!this.overlay) return;
 
     document.addEventListener('click', (e) => {
-      if (this.dropdown && !this.dropdown.contains(e.target) && !this.overlay.contains(e.target)) {
-        this.hideDropdown();
-      }
+      if (!this.dropdown) return;
+      if (this.dropdown.contains(e.target)) return;
+      if (this.overlay && this.overlay.contains(e.target)) return;
+      if (this._dropdownTrigger && this._dropdownTrigger.contains(e.target)) return;
+      this.hideDropdown();
     });
 
     const coverInput = document.getElementById('edit-meta-cover-input');
@@ -35,6 +37,8 @@ const ReviewUI = {
     const fresh = track ? Store.getTrack(track.id) : null;
     if (fresh && fresh.reviewStatus === 'needs_review') {
       this.currentTrackId = fresh.id;
+      this.onActionDone = null;
+      this._dropdownTrigger = null;
       this.overlay.classList.add('visible');
     } else {
       this.currentTrackId = null;
@@ -45,6 +49,8 @@ const ReviewUI = {
 
   toggleDropdown() {
     if (!this.dropdown) return;
+    this.onActionDone = null;
+    this._dropdownTrigger = null;
     try {
       if (!this.dropdown.classList.contains('visible') && this.currentTrackId) {
         const track = Store.getTrack(this.currentTrackId);
@@ -52,6 +58,16 @@ const ReviewUI = {
       }
     } catch (e) {}
     this.dropdown.classList.toggle('visible');
+  },
+
+  showDropdownForTrack(trackId, triggerEl, onDone) {
+    if (!this.dropdown || !trackId) return;
+    this.currentTrackId = trackId;
+    this.onActionDone = onDone || null;
+    this._dropdownTrigger = triggerEl || null;
+    const track = Store.getTrack(trackId);
+    this._renderFlags(track ? (track.reviewFlags || []) : []);
+    this.dropdown.classList.add('visible');
   },
 
   hideDropdown() {
@@ -120,6 +136,7 @@ const ReviewUI = {
         track.reviewFlags = [];
       }
       UI.showToast('Marked as reviewed');
+      if (this.onActionDone) { const cb = this.onActionDone; this.onActionDone = null; cb(); }
     } catch (e) {
       UI.showToast('Failed to mark as reviewed');
     }
@@ -231,10 +248,48 @@ const ReviewUI = {
         await Store.refreshLibrary();
         el.remove();
         UI.showToast('File deleted');
-        if (skip) Player.next();
+        const playing = Player.getCurrentTrack();
+        if (skip && playing && playing.id === trackId) Player.next();
+        if (this.onActionDone) { const cb = this.onActionDone; this.onActionDone = null; cb(); }
       } catch (e) {
         el.remove();
         UI.showToast('Failed to delete file');
+      }
+    });
+  },
+
+  deleteAllFlagged(onDone) {
+    const existing = document.getElementById('review-delete-confirm');
+    if (existing) existing.remove();
+
+    const count = (UI._reviewTotal || Store.reviewCounts.needs_review || 0);
+    const el = document.createElement('div');
+    el.id = 'review-delete-confirm';
+    el.innerHTML = '<div class="review-confirm-overlay">'
+      + '<div class="review-confirm-box">'
+      + '<div class="review-confirm-title">Delete All Flagged Tracks</div>'
+      + '<div class="review-confirm-desc">This will permanently delete every track currently flagged for review (' + count + '). This cannot be undone.</div>'
+      + '<div class="review-confirm-actions">'
+      + '<button class="review-confirm-cancel" id="review-delete-cancel">Cancel</button>'
+      + '<button class="review-confirm-delete" id="review-delete-confirm-btn">Delete All</button>'
+      + '</div></div></div>';
+    document.body.appendChild(el);
+
+    document.getElementById('review-delete-cancel').addEventListener('click', () => el.remove());
+    document.getElementById('review-delete-confirm-btn').addEventListener('click', async () => {
+      el.querySelector('.review-confirm-box').innerHTML = '<div class="loading-spinner" style="margin:24px auto"></div>';
+      try {
+        const data = await Api.reviewDeleteAll();
+        Store.reviewCounts.needs_review = 0;
+        this.overlay.classList.remove('visible');
+        this.currentTrackId = null;
+        await Store.refreshLibrary();
+        el.remove();
+        UI.showToast((data && data.deleted != null ? data.deleted : 0) + ' files deleted');
+        if (typeof onDone === 'function') onDone();
+      } catch (e) {
+        el.remove();
+        UI.showToast('Failed to delete files');
       }
     });
   },
