@@ -105,6 +105,32 @@ const App = {
     if (sharedQueueId || playId || artistName || albumId || playlistId) {
       window.history.replaceState({}, '', window.location.pathname);
     }
+
+    this._startLibraryPoll();
+  },
+
+  _startLibraryPoll() {
+    let lastVersion = null;
+    let stableCount = 0;
+    const poll = async () => {
+      const stats = await Api.getStats();
+      if (!stats) { setTimeout(poll, 5000); return; }
+      if (lastVersion === null) lastVersion = stats.version;
+      const empty = !Store.library.tracks || Store.library.tracks.length === 0;
+      if (stats.version !== lastVersion || (empty && stats.tracks > 0)) {
+        lastVersion = stats.version;
+        stableCount = 0;
+        await Store.refreshLibrary();
+        UI.renderPage();
+      } else {
+        stableCount++;
+      }
+      const stillEmpty = !Store.library.tracks || Store.library.tracks.length === 0;
+      if (stillEmpty || stableCount < 3) {
+        setTimeout(poll, 5000);
+      }
+    };
+    setTimeout(poll, 3000);
   }
 };
 

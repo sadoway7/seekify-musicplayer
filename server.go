@@ -145,27 +145,26 @@ func main() {
 		}
 	}
 
-	if needScan {
-		// Scan primary music directory
-		log.Printf("Scanning music directory: %s", store.MusicDir)
-		stats := scanner.ScanMusicDir(store.MusicDir)
-		log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(store.Tracks))
+	go func() {
+		if needScan {
+			log.Printf("Scanning music directory: %s", store.MusicDir)
+			stats := scanner.ScanMusicDir(store.MusicDir)
+			log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(store.Tracks))
 
-		// Scan additional media directories
-		for prefix, dir := range store.MusicDirs {
-			if prefix == "" {
-				continue
+			for prefix, dir := range store.MusicDirs {
+				if prefix == "" {
+					continue
+				}
+				log.Printf("Scanning media directory [%s]: %s", prefix, dir)
+				mediaStats := scanner.ScanMusicDirWithPrefix(dir, prefix)
+				log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(store.Tracks))
 			}
-			log.Printf("Scanning media directory [%s]: %s", prefix, dir)
-			mediaStats := scanner.ScanMusicDirWithPrefix(dir, prefix)
-			log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(store.Tracks))
+
+			scanner.LibraryVersionAdd(1)
+		} else {
+			log.Printf("File counts match DB, skipping full scan")
 		}
 
-	} else {
-		log.Printf("File counts match DB, skipping full scan")
-	}
-
-	go func() {
 		applied := musicbrainz.ApplyApprovedMatches()
 		if applied > 0 {
 			log.Printf("Applied %d metadata overrides from database", applied)

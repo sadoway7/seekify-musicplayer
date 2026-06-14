@@ -33,21 +33,41 @@ const Api = {
     return res.json();
   },
 
-  async libraryUpload(files) {
-    const audioExts = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'opus', 'wma'];
-    const form = new FormData();
-    let count = 0;
-    for (const file of files) {
-      const ext = (file.name.split('.').pop() || '').toLowerCase();
-      if (audioExts.indexOf(ext) === -1) continue;
-      const rel = file.webkitRelativePath || file.name;
-      form.append('files', file, rel);
-      count++;
-    }
-    if (count === 0) return { uploaded: [], errors: ['No audio files selected'] };
-    const res = await fetch('/api/library-upload', { method: 'POST', body: form });
-    if (!res.ok) throw new Error('Upload failed');
-    return res.json();
+  async getStats() {
+    try {
+      const res = await fetch('/api/stats');
+      if (!res.ok) return null;
+      return res.json();
+    } catch { return null; }
+  },
+
+  libraryUploadProgress(files, onProgress) {
+    return new Promise((resolve, reject) => {
+      const audioExts = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'opus', 'wma'];
+      const form = new FormData();
+      let count = 0;
+      for (const file of files) {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (audioExts.indexOf(ext) === -1) continue;
+        const rel = file.webkitRelativePath || file.name;
+        form.append('files', file, rel);
+        count++;
+      }
+      if (count === 0) { resolve({ uploaded: [], errors: ['No audio files selected'] }); return; }
+      const xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
+      });
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch (e) { reject(new Error('Upload failed')); }
+        } else { reject(new Error('Upload failed')); }
+      });
+      xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+      xhr.open('POST', '/api/library-upload');
+      xhr.send(form);
+    });
   },
 
   async getPlaylists() {
