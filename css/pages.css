@@ -641,6 +641,47 @@
   opacity: 0.8;
 }
 
+.lib-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px var(--page-margin) var(--sp-4);
+}
+
+.lib-search-row .search-container {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.lib-search-row .search-container::after {
+  display: none;
+}
+
+.lib-upload-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 24px;
+  background: var(--l3);
+  border: none;
+  color: var(--text1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.lib-upload-btn:active {
+  opacity: 0.7;
+}
+
+.lib-upload-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
 .list-item {
   display: flex;
   flex-direction: row;

@@ -195,6 +195,7 @@ func main() {
 	mux.HandleFunc("/api/artist-art/", handlers.ArtistArtHandler)
 	mux.HandleFunc("/api/artist-art-fetch/", handlers.ArtistArtFetchHandler)
 	mux.HandleFunc("/api/scan", handlers.ScanHandler)
+	mux.HandleFunc("/api/library-upload", handlers.LibraryUploadHandler)
 	mux.HandleFunc("/api/playlists", handlers.PlaylistsHandler)
 	mux.HandleFunc("/api/playlists/", handlers.PlaylistHandler)
 	mux.HandleFunc("/api/favorites", handlers.FavoritesHandler)

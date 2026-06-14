@@ -33,6 +33,23 @@ const Api = {
     return res.json();
   },
 
+  async libraryUpload(files) {
+    const audioExts = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'opus', 'wma'];
+    const form = new FormData();
+    let count = 0;
+    for (const file of files) {
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      if (audioExts.indexOf(ext) === -1) continue;
+      const rel = file.webkitRelativePath || file.name;
+      form.append('files', file, rel);
+      count++;
+    }
+    if (count === 0) return { uploaded: [], errors: ['No audio files selected'] };
+    const res = await fetch('/api/library-upload', { method: 'POST', body: form });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+  },
+
   async getPlaylists() {
     const res = await fetch('/api/playlists');
     if (!res.ok) throw new Error('Failed to load playlists');

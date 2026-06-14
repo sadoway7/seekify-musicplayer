@@ -292,6 +292,36 @@
     </div>
   </div>
 
+  <div id="upload-modal" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h3 class="modal-title">Upload Music</h3>
+      <div class="upload-modal-tabs">
+        <button class="upload-modal-tab active" data-utab="file">Single File</button>
+        <button class="upload-modal-tab" data-utab="folder">Folder</button>
+      </div>
+      <div class="upload-modal-panel" data-utab="file">
+        <input type="file" id="upload-file-input" accept=".mp3,.flac,.m4a,.aac,.ogg,.wav,.opus,.wma,audio/*" multiple hidden>
+        <div class="upload-dropzone" id="upload-file-zone">
+          <span class="upload-dropzone-icon" id="upload-file-icon"></span>
+          <span class="upload-dropzone-text">Tap to choose audio files</span>
+        </div>
+      </div>
+      <div class="upload-modal-panel hidden" data-utab="folder">
+        <input type="file" id="upload-folder-input" webkitdirectory directory multiple hidden>
+        <div class="upload-dropzone" id="upload-folder-zone">
+          <span class="upload-dropzone-icon" id="upload-folder-icon"></span>
+          <span class="upload-dropzone-text">Tap to choose a music folder</span>
+        </div>
+      </div>
+      <div class="upload-modal-summary" id="upload-modal-summary"></div>
+      <div class="edit-meta-actions">
+        <button class="edit-meta-cancel" onclick="UI.closeUploadModal()">Cancel</button>
+        <button class="edit-meta-save" id="upload-modal-do" onclick="UI.doUpload()">Upload</button>
+      </div>
+    </div>
+  </div>
+
   <div id="home-layout-modal" class="home-layout-overlay hidden">
     <div class="home-layout-sheet">
       <div class="home-layout-body" id="home-layout-body">

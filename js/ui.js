@@ -1649,10 +1649,12 @@ const UI = {
       + '<button class="lib-tab' + (this.libFilter === 'albums' ? ' active' : '') + '" data-filter="albums">Albums</button>'
       + '<button class="lib-tab' + (this.libFilter === 'artists' ? ' active' : '') + '" data-filter="artists">Artists</button>'
       + '</div>'
+      + '<div class="lib-search-row">'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input lib-search-input" type="text" placeholder="">'
       + '</div>'
+      + '<button class="lib-upload-btn" id="lib-upload-btn" aria-label="Upload music">' + Icons.upload() + '</button>'
       + '</div>'
       + '<div class="lib-results">';
 
@@ -1695,6 +1697,116 @@ const UI = {
           this._filterLibResults('');
         }
       });
+    }
+
+    const uploadBtn = this.els.content.querySelector('#lib-upload-btn');
+    if (uploadBtn) {
+      uploadBtn.addEventListener('click', () => this.openUploadModal());
+    }
+  },
+
+  openUploadModal() {
+    const modal = document.getElementById('upload-modal');
+    if (!modal) return;
+    if (!this._uploadInit) {
+      this._initUploadModal();
+      this._uploadInit = true;
+    }
+    this._uploadSelected = [];
+    const fi = document.getElementById('upload-file-input');
+    const fo = document.getElementById('upload-folder-input');
+    if (fi) fi.value = '';
+    if (fo) fo.value = '';
+    const sum = document.getElementById('upload-modal-summary');
+    if (sum) sum.textContent = '';
+    this._setUploadTab('file');
+    modal.classList.remove('hidden');
+  },
+
+  closeUploadModal() {
+    const modal = document.getElementById('upload-modal');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  _initUploadModal() {
+    const fileIcon = document.getElementById('upload-file-icon');
+    const folderIcon = document.getElementById('upload-folder-icon');
+    if (fileIcon) fileIcon.innerHTML = Icons.upload();
+    if (folderIcon) folderIcon.innerHTML = Icons.folder();
+
+    document.querySelectorAll('.upload-modal-tab').forEach((t) => {
+      t.addEventListener('click', () => this._setUploadTab(t.dataset.utab));
+    });
+
+    const fileZone = document.getElementById('upload-file-zone');
+    const fileInput = document.getElementById('upload-file-input');
+    if (fileZone && fileInput) {
+      fileZone.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => this._setUploadFiles(e.target.files));
+    }
+
+    const folderZone = document.getElementById('upload-folder-zone');
+    const folderInput = document.getElementById('upload-folder-input');
+    if (folderZone && folderInput) {
+      folderZone.addEventListener('click', () => folderInput.click());
+      folderInput.addEventListener('change', (e) => this._setUploadFiles(e.target.files));
+    }
+  },
+
+  _setUploadTab(tab) {
+    document.querySelectorAll('.upload-modal-tab').forEach((t) => {
+      t.classList.toggle('active', t.dataset.utab === tab);
+    });
+    document.querySelectorAll('.upload-modal-panel').forEach((p) => {
+      p.classList.toggle('hidden', p.dataset.utab !== tab);
+    });
+  },
+
+  _setUploadFiles(fileList) {
+    const audioExts = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'wav', 'opus', 'wma'];
+    const files = [];
+    for (const f of fileList) {
+      const ext = (f.name.split('.').pop() || '').toLowerCase();
+      if (audioExts.indexOf(ext) !== -1) files.push(f);
+    }
+    this._uploadSelected = files;
+    const sum = document.getElementById('upload-modal-summary');
+    if (sum) {
+      if (files.length === 0) {
+        sum.textContent = 'No audio files selected';
+      } else {
+        sum.textContent = files.length + ' audio file' + (files.length !== 1 ? 's' : '') + ' ready';
+      }
+    }
+  },
+
+  async doUpload() {
+    const files = this._uploadSelected || [];
+    if (files.length === 0) {
+      this.showToast('No audio files selected');
+      return;
+    }
+    const btn = document.getElementById('upload-modal-do');
+    const sum = document.getElementById('upload-modal-summary');
+    if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
+    try {
+      const result = await Api.libraryUpload(files);
+      const ok = (result.uploaded || []).length;
+      const errs = result.errors || [];
+      if (ok > 0) {
+        this.showToast('Uploaded ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' — scanning...');
+        this.closeUploadModal();
+        await Api.scan();
+        await Store.refreshLibrary();
+        this.showToast('Library updated');
+      } else if (errs.length) {
+        if (sum) sum.textContent = errs[0];
+      }
+    } catch (e) {
+      if (sum) sum.textContent = 'Upload failed';
+      this.showToast('Upload failed');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Upload'; }
     }
   },
 
