@@ -14,7 +14,13 @@ const Api = {
   },
 
   coverUrl(albumId) {
-    return '/api/cover/' + albumId;
+    const v = this._coverVer && this._coverVer[albumId];
+    return '/api/cover/' + albumId + (v ? '?v=' + v : '');
+  },
+
+  bustCover(albumId) {
+    this._coverVer = this._coverVer || {};
+    this._coverVer[albumId] = Date.now();
   },
 
   artistArtUrl(artistName) {
@@ -530,6 +536,17 @@ const Api = {
     });
     if (!res.ok) throw new Error('Failed to edit metadata');
     return res.json();
+  },
+
+  async uploadCustomCover(trackId, file) {
+    const form = new FormData();
+    form.append('trackId', trackId);
+    form.append('cover', file);
+    const res = await fetch('/api/review/upload-cover', { method: 'POST', body: form });
+    if (!res.ok) throw new Error('Failed to upload cover');
+    const data = await res.json();
+    if (data.albumId) this.bustCover(data.albumId);
+    return data;
   },
 
   async reviewDelete(trackId) {

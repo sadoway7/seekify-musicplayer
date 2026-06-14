@@ -379,6 +379,7 @@ func ApplyApprovedMatches() int {
 						store.CoverMu.Lock()
 						store.CoverCache[track.AlbumID] = data
 						store.CoverMu.Unlock()
+						store.MoveCustomCover(oldAlbumID, track.AlbumID)
 					}
 				}
 			}
@@ -401,6 +402,9 @@ func ApplyApprovedMatches() int {
 
 	go func() {
 		for _, job := range coverJobs {
+			if store.IsCustomCover(job.trackAlbumID) {
+				continue
+			}
 			store.CoverMu.RLock()
 			_, exists := store.CoverCache[job.trackAlbumID]
 			store.CoverMu.RUnlock()

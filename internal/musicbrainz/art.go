@@ -228,6 +228,9 @@ func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
 	if albumID == "" || releaseMBID == "" {
 		return false
 	}
+	if store.IsCustomCover(albumID) {
+		return true
+	}
 
 	coverDir := filepath.Join(store.MusicDir, "images")
 	os.MkdirAll(coverDir, 0755)
@@ -266,6 +269,9 @@ func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
 func FetchAndCacheCover(albumID, artist, album string) bool {
 	if album == "" || artist == "" {
 		return false
+	}
+	if store.IsCustomCover(albumID) {
+		return true
 	}
 
 	coverDir := filepath.Join(store.MusicDir, "images")
@@ -340,7 +346,7 @@ func FetchMissingCovers() {
 	}
 	var missing []albumInfo
 	for _, a := range store.Albums {
-		if !a.HasCover && a.Name != "" && a.Artist != "" {
+		if !a.HasCover && a.Name != "" && a.Artist != "" && !store.IsCustomCover(a.ID) {
 			missing = append(missing, albumInfo{a.ID, a.Artist, a.Name})
 		}
 	}

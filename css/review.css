@@ -225,6 +225,51 @@
   gap: 14px;
 }
 
+.edit-meta-cover {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px 4px;
+}
+
+.edit-meta-cover-img {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: var(--l3, #2c2c2e);
+  flex-shrink: 0;
+}
+
+.edit-meta-cover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-meta-cover-pick {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: var(--l3, #2c2c2e);
+  color: var(--text1);
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.15s ease;
+}
+
+.edit-meta-cover-pick:active {
+  opacity: 0.8;
+}
+
+.edit-meta-cover-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .edit-meta-field {
   display: flex;
   flex-direction: column;

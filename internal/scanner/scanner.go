@@ -243,7 +243,9 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 				if err == nil && tagReader2 != nil {
 					pic := tagReader2.Picture()
 					if pic != nil && albumID != "" {
-						newCovers[albumID] = pic.Data
+						if !store.IsCustomCover(albumID) {
+							newCovers[albumID] = pic.Data
+						}
 						if newAlbums[albumID] == nil {
 							newAlbums[albumID] = &models.Album{
 								ID:   albumID,
@@ -387,6 +389,9 @@ func ExtractEmbeddedCovers() {
 	var jobs []job
 	for _, t := range store.Tracks {
 		if !t.HasCover || t.AlbumID == "" {
+			continue
+		}
+		if store.IsCustomCover(t.AlbumID) {
 			continue
 		}
 		store.CoverMu.RLock()
@@ -541,7 +546,7 @@ func ScanSingleFile(filePath string) {
 	}
 	track.AlbumID = albumID
 
-	if track.HasCover {
+	if track.HasCover && !store.IsCustomCover(albumID) {
 		file2, err := os.Open(fpath)
 		if err == nil {
 			tagReader2, err := tag.ReadFrom(file2)

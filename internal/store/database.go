@@ -104,6 +104,10 @@ func InitDB(path string) {
 		created_at TEXT NOT NULL
 	)`)
 
+	DB.Exec(`CREATE TABLE IF NOT EXISTS custom_covers (
+		album_id TEXT PRIMARY KEY
+	)`)
+
 	// Add orig_* columns for undo support (SQLite ALTER TABLE ADD COLUMN is safe)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN orig_title TEXT NOT NULL DEFAULT ''`)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN orig_artist TEXT NOT NULL DEFAULT ''`)

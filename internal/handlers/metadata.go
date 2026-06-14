@@ -405,6 +405,7 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 				store.CoverCache[track.AlbumID] = data
 				store.CoverMu.Unlock()
 				track.HasCover = true
+				store.MoveCustomCover(oldAlbumID, track.AlbumID)
 			}
 		}
 	}
@@ -420,7 +421,7 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	if albumIDForCover == "" {
 		albumIDForCover = track.AlbumID
 	}
-	if albumIDForCover != "" {
+	if albumIDForCover != "" && !store.IsCustomCover(track.AlbumID) {
 		coverDir := filepath.Join(store.MusicDir, "images")
 		os.MkdirAll(coverDir, 0755)
 

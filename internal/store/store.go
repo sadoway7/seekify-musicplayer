@@ -11,8 +11,9 @@ var (
 	Tracks     map[string]*models.Track
 	Albums     map[string]*models.Album
 	Mu         sync.RWMutex
-	CoverCache map[string][]byte
-	CoverMu    sync.RWMutex
+	CoverCache    map[string][]byte
+	CoverMu       sync.RWMutex
+	CustomCovers  map[string]bool
 	MusicDir   string
 	MusicDirs  map[string]string
 	ScanMu     sync.Mutex

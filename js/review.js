@@ -13,6 +13,21 @@ const ReviewUI = {
         this.hideDropdown();
       }
     });
+
+    const coverInput = document.getElementById('edit-meta-cover-input');
+    if (coverInput) {
+      coverInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        const modal = document.getElementById('edit-meta-modal');
+        const preview = document.getElementById('edit-meta-cover-preview');
+        const hint = document.getElementById('edit-meta-cover-hint');
+        if (file && modal) {
+          modal._coverFile = file;
+          if (preview) preview.src = URL.createObjectURL(file);
+          if (hint) hint.textContent = file.name;
+        }
+      });
+    }
   },
 
   updateForTrack(track) {
@@ -126,6 +141,16 @@ const ReviewUI = {
       else if (track[field] !== undefined) input.value = track[field] || '';
     });
 
+    const preview = document.getElementById('edit-meta-cover-preview');
+    const coverInput = document.getElementById('edit-meta-cover-input');
+    const coverHint = document.getElementById('edit-meta-cover-hint');
+    if (preview) {
+      preview.src = track.albumID ? Api.coverUrl(track.albumID) : '';
+    }
+    if (coverInput) coverInput.value = '';
+    if (coverHint) coverHint.textContent = '';
+    modal._coverFile = null;
+
     modal.classList.remove('hidden');
     modal._trackId = trackId;
   },
@@ -156,6 +181,9 @@ const ReviewUI = {
 
     try {
       const trackId = modal._trackId;
+      if (modal._coverFile) {
+        await Api.uploadCustomCover(trackId, modal._coverFile);
+      }
       await Api.reviewEditMeta(trackId, fields);
       this.closeEditMetaModal();
       await Store.refreshLibrary();

@@ -70,8 +70,10 @@ func main() {
 	store.Tracks = make(map[string]*models.Track)
 	store.Albums = make(map[string]*models.Album)
 	store.CoverCache = make(map[string][]byte)
+	store.CustomCovers = make(map[string]bool)
 
 	store.InitDB(filepath.Join("data", "music.db"))
+	store.LoadCustomCovers()
 	downloads.InitDownloadTables()
 	watched.InitWatchedTables()
 	review.InitReviewTables()
@@ -163,22 +165,25 @@ func main() {
 		log.Printf("File counts match DB, skipping full scan")
 	}
 
-	applied := musicbrainz.ApplyApprovedMatches()
-	if applied > 0 {
-		log.Printf("Applied %d metadata overrides from database", applied)
-	}
+	go func() {
+		applied := musicbrainz.ApplyApprovedMatches()
+		if applied > 0 {
+			log.Printf("Applied %d metadata overrides from database", applied)
+		}
 
-	scanner.ExtractEmbeddedCovers()
-	watched.SyncWatchedPlaylistsToLibrary()
-	downloads.RecoverStalledDownloads()
+		scanner.ExtractEmbeddedCovers()
+		watched.SyncWatchedPlaylistsToLibrary()
+		downloads.RecoverStalledDownloads()
+		review.SeedMissingReviewTracks()
+		review.CleanupOldReviewFlags()
+		review.CleanupOrphanedReviews()
+	}()
+
 	go musicbrainz.FetchMissingCovers()
 	go musicbrainz.FetchMissingArtistArt()
 	go scanner.StartWatcher()
 	go watched.StartWatchScheduler()
 	go downloads.DownloadWatchdog()
-	review.SeedMissingReviewTracks()
-	review.CleanupOldReviewFlags()
-	review.CleanupOrphanedReviews()
 	go review.StartReviewScheduler()
 
 	mux := http.NewServeMux()
@@ -288,6 +293,7 @@ func main() {
 	mux.HandleFunc("/api/review/counts", review.ReviewCountsHandler)
 	mux.HandleFunc("/api/review/mark-ok", review.ReviewMarkOkHandler)
 	mux.HandleFunc("/api/review/edit-meta", review.ReviewEditMetaHandler)
+	mux.HandleFunc("/api/review/upload-cover", handlers.UploadCustomCoverHandler)
 	mux.HandleFunc("/api/review/delete", review.ReviewDeleteHandler)
 	mux.HandleFunc("/api/review/recheck-all", review.ReviewRecheckAllHandler)
 	mux.HandleFunc("/api/review/progress", review.ReviewProgressHandler)
