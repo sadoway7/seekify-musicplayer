@@ -2,7 +2,9 @@ const Api = {
   async getLibrary() {
     const res = await fetch('/api/library');
     if (!res.ok) throw new Error('Failed to load library');
-    return res.json();
+    const data = await res.json();
+    this._libVersion = data.version;
+    return data;
   },
 
   streamUrl(trackId) {
@@ -14,7 +16,7 @@ const Api = {
   },
 
   coverUrl(albumId) {
-    const v = this._coverVer && this._coverVer[albumId];
+    const v = (this._coverVer && this._coverVer[albumId]) || this._libVersion;
     return '/api/cover/' + albumId + (v ? '?v=' + v : '');
   },
 

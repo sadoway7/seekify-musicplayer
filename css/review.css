@@ -603,6 +603,26 @@
   color: var(--text1);
 }
 
+.edit-meta-delete-top {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(229, 72, 72, 0.12);
+  color: #e54848;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.edit-meta-delete-top:hover,
+.edit-meta-delete-top:active {
+  background: rgba(229, 72, 72, 0.22);
+}
+
 /* Review flags badges */
 .review-flag-badge {
   display: inline-flex;

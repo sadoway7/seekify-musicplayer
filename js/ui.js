@@ -5530,13 +5530,14 @@ const UI = {
     const track = Player.getCurrentTrack();
     if (!track) return;
 
-    const artTrackChanged = !this._lastArtTrackId || this._lastArtTrackId !== track.id || this._lastArtAlbumId !== track.albumID;
-    if (artTrackChanged) {
+    const newSrc = Api.coverUrl(track.albumID);
+    const artChanged = !this._lastArtTrackId || this._lastArtTrackId !== track.id || this._lastArtAlbumId !== track.albumID || this._lastArtSrc !== newSrc;
+    if (artChanged) {
       this._lastArtTrackId = track.id;
       this._lastArtAlbumId = track.albumID;
+      this._lastArtSrc = newSrc;
       const art = this.els.npArt;
       const bg = this.els.npArtBg;
-      const newSrc = Api.coverUrl(track.albumID);
       if (!this.els.nowPlaying.classList.contains('hidden') && art.src && !art.src.endsWith('/') && art.src !== newSrc) {
         const preload = new Image();
         preload.src = newSrc;
@@ -5597,7 +5598,7 @@ const UI = {
     this._applyNowPlayingBg();
     this._checkTitleOverflow();
 
-    if (artTrackChanged) {
+    if (artChanged) {
       this._currentWaveformTrackId = track.id;
       this._loadWaveform(track);
     }

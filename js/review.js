@@ -180,6 +180,14 @@ const ReviewUI = {
     }
   },
 
+  deleteFromEditMeta() {
+    const modal = document.getElementById('edit-meta-modal');
+    if (!modal || !modal._trackId) return;
+    const trackId = modal._trackId;
+    this.closeEditMetaModal();
+    this.deleteTrack(trackId, true);
+  },
+
   async saveEditMeta() {
     const modal = document.getElementById('edit-meta-modal');
     if (!modal || !modal._trackId) return;
