@@ -23,6 +23,8 @@ var (
 	ReviewWake   = make(chan struct{}, 1)
 )
 
+var LibraryVersionAdd func(delta int64)
+
 type ReviewProgressInfo struct {
 	sync.RWMutex
 	CurrentTrack string
@@ -1003,6 +1005,10 @@ func ReviewEditMetaHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	DbUpdateTrackMeta(body.TrackID, body.Fields)
+
+	if LibraryVersionAdd != nil {
+		LibraryVersionAdd(1)
+	}
 
 	store.Mu.Lock()
 	if t, ok := store.Tracks[body.TrackID]; ok {

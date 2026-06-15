@@ -83,6 +83,7 @@ func main() {
 	scanner.WakeReviewWorker = review.WakeReviewWorker
 	scanner.InsertUncheckedReviews = review.DbInsertUncheckedReviews
 	scanner.LibraryVersionAdd = func(delta int64) { handlers.LibraryVersion.Add(delta) }
+	review.LibraryVersionAdd = func(delta int64) { handlers.LibraryVersion.Add(delta) }
 	scanner.DeleteReview = review.DbDeleteReview
 	scanner.SetReviewStatus = review.DbSetReviewStatus
 

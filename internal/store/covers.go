@@ -1,6 +1,10 @@
 package store
 
-import "log"
+import (
+	"log"
+	"os"
+	"path/filepath"
+)
 
 func LoadCustomCovers() {
 	CoverMu.Lock()
@@ -61,6 +65,20 @@ func MoveCustomCover(oldID, newID string) {
 	if !custom {
 		return
 	}
+
+	oldPath := filepath.Join(MusicDir, "images", oldID+".jpg")
+	newPath := filepath.Join(MusicDir, "images", newID+".jpg")
+	if data, err := os.ReadFile(oldPath); err == nil {
+		if err := os.WriteFile(newPath, data, 0644); err != nil {
+			log.Printf("[cover] Failed to move custom cover file %s -> %s: %v", oldID, newID, err)
+		}
+		os.Remove(oldPath)
+	}
+
+	CoverMu.Lock()
+	delete(CoverCache, oldID)
+	CoverMu.Unlock()
+
 	ClearCustomCover(oldID)
 	SetCustomCover(newID)
 }

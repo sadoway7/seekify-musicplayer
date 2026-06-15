@@ -40,6 +40,7 @@ type LibraryResponse struct {
 	Tracks  []Track  `json:"tracks"`
 	Albums  []Album  `json:"albums"`
 	Artists []Artist `json:"artists"`
+	Version int64    `json:"version"`
 }
 
 type Playlist struct {

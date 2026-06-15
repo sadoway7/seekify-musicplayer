@@ -82,6 +82,7 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 		Tracks:  trackList,
 		Albums:  albumList,
 		Artists: artistList,
+		Version: LibraryVersion.Load(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

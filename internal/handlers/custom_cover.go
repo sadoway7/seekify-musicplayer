@@ -87,6 +87,8 @@ func UploadCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	store.SetCustomCover(albumID)
 
+	LibraryVersion.Add(1)
+
 	log.Printf("[cover] Custom cover uploaded for album %s (%d bytes)", albumID, len(data))
 
 	w.Header().Set("Content-Type", "application/json")
