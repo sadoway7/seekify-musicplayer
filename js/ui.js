@@ -1317,8 +1317,8 @@ const UI = {
 
     if (recentCards.length === 0 && !currentTrack) return '';
 
-    let html = '<div class="mega-title"><span>Recently Played</span></div>';
-    html += '<div class="quick-play-grid">';
+    let html = '';
+    html += '<div class="quick-play-grid" style="margin-top:24px">';
 
     html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
       + '<div class="quick-play-art" style="background:linear-gradient(135deg, #ffffff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
@@ -1329,7 +1329,7 @@ const UI = {
       + '<circle cx="25" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
       + '<circle cx="75" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
       + '</svg>'
-      + '<div style="position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:14px;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:clamp(14px, 4vw, 28px);font-weight:900;color:rgba(0,0,0,0.9);letter-spacing:-0.06em;display:block;white-space:nowrap;filter:drop-shadow(0 0 4px rgba(255,255,255,1)) drop-shadow(0 0 10px rgba(255,255,255,0.9)) drop-shadow(0 0 20px rgba(255,255,255,0.7)) drop-shadow(0 0 40px rgba(255,255,255,0.5)) drop-shadow(0 0 60px rgba(255,255,255,0.3))">SHUFFLED</span></div>'
+      + '<div style="position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:14px;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:clamp(14px, 4vw, 28px);font-weight:900;color:rgba(0,0,0,0.9);letter-spacing:-0.06em;display:block;white-space:nowrap;filter:drop-shadow(0 0 4px rgba(255,255,255,1)) drop-shadow(0 0 10px rgba(255,255,255,0.9)) drop-shadow(0 0 20px rgba(255,255,255,0.7)) drop-shadow(0 0 40px rgba(255,255,255,0.5)) drop-shadow(0 0 60px rgba(255,255,255,0.3));display:none">SHUFFLED</span></div>'
       + '</div>'
       + '</div>';
 
