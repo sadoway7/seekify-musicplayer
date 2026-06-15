@@ -1321,7 +1321,7 @@ const UI = {
     html += '<div class="quick-play-grid" style="margin-top:24px">';
 
     html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
-      + '<div class="quick-play-art" style="background:linear-gradient(135deg, #ffffff, #f5f5f5);display:flex;align-items:center;justify-content:center">'
+      + '<div class="quick-play-art" style="background:linear-gradient(135deg, #ffffff, #f5f5f5);display:flex;align-items:center;justify-content:center;box-shadow:inset 6px 6px 8px rgba(255,255,255,0.75), inset -8px -8px 12px rgba(0,0,0,0.4), inset 0 0 18px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.5)">'
       + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
       + '<circle cx="25" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
       + '<circle cx="75" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
@@ -5530,9 +5530,10 @@ const UI = {
     const track = Player.getCurrentTrack();
     if (!track) return;
 
-    const artTrackChanged = !this._lastArtTrackId || this._lastArtTrackId !== track.id;
+    const artTrackChanged = !this._lastArtTrackId || this._lastArtTrackId !== track.id || this._lastArtAlbumId !== track.albumID;
     if (artTrackChanged) {
       this._lastArtTrackId = track.id;
+      this._lastArtAlbumId = track.albumID;
       const art = this.els.npArt;
       const bg = this.els.npArtBg;
       const newSrc = Api.coverUrl(track.albumID);

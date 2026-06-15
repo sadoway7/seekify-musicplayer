@@ -198,16 +198,26 @@ const ReviewUI = {
 
     try {
       const trackId = modal._trackId;
+      await Api.reviewEditMeta(trackId, fields);
       if (modal._coverFile) {
         await Api.uploadCustomCover(trackId, modal._coverFile);
       }
-      await Api.reviewEditMeta(trackId, fields);
       this.closeEditMetaModal();
       await Store.refreshLibrary();
       if (trackId === this.currentTrackId) {
         this.overlay.classList.remove('visible');
         this.currentTrackId = null;
       }
+      const cur = Player.getCurrentTrack();
+      if (cur && cur.id === trackId) {
+        const fresh = Store.getTrack(trackId);
+        if (fresh) {
+          Object.assign(cur, fresh);
+          UI.updateMiniPlayer();
+          UI.updateNowPlaying();
+        }
+      }
+      UI.renderPage();
       UI.showToast('Metadata updated');
     } catch (e) {
       UI.showToast('Failed to update metadata');

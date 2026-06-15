@@ -43,7 +43,7 @@
 }
 
 body.mini-player-visible #app-content {
-  padding-bottom: calc(var(--tab-bar-height) + var(--mini-player-height));
+  padding-bottom: calc(var(--tab-bar-height) + var(--mini-player-height) + 8px);
 }
 
 #app-header .header-title {

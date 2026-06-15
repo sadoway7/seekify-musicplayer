@@ -115,7 +115,7 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 			contentType = "image/jpeg"
 		}
 		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(data)
 		return
 	}
@@ -126,7 +126,7 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 		store.CoverCache[albumID] = diskData
 		store.CoverMu.Unlock()
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(diskData)
 		return
 	}
@@ -143,7 +143,7 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	svg := scanner.GeneratePlaceholderSVG(albumName, albumID)
 	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Write([]byte(svg))
 }
 
