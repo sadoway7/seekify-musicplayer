@@ -619,6 +619,17 @@ const Api = {
     return data;
   },
 
+  async clearCustomCover(trackId) {
+    const res = await fetch('/api/review/clear-cover?trackId=' + encodeURIComponent(trackId), { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to clear cover');
+    const data = await res.json();
+    if (data.cleared) {
+      const track = Store.getTrack(trackId);
+      if (track) this.bustCover(track.albumID);
+    }
+    return data;
+  },
+
   async reviewDelete(trackId) {
     const res = await fetch('/api/review/delete', {
       method: 'DELETE',

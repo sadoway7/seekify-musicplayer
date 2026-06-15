@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
@@ -93,4 +94,53 @@ func UploadCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"updated": "true", "albumId": albumID})
+}
+
+func ClearCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	trackID := r.URL.Query().Get("trackId")
+	if trackID == "" {
+		http.Error(w, "trackId required", http.StatusBadRequest)
+		return
+	}
+
+	store.Mu.RLock()
+	track, exists := store.Tracks[trackID]
+	albumID := ""
+	if exists {
+		albumID = track.AlbumID
+	}
+	store.Mu.RUnlock()
+	if !exists || albumID == "" {
+		http.Error(w, "Track or album not found", http.StatusNotFound)
+		return
+	}
+
+	if !store.IsCustomCover(albumID) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"cleared": false})
+		return
+	}
+
+	store.ClearCustomCover(albumID)
+
+	coverPath := filepath.Join(store.MusicDir, "images", albumID+".jpg")
+	os.Remove(coverPath)
+
+	store.CoverMu.Lock()
+	delete(store.CoverCache, albumID)
+	store.CoverMu.Unlock()
+
+	scanner.ExtractEmbeddedCovers()
+
+	LibraryVersion.Add(1)
+
+	log.Printf("[cover] Custom cover cleared for album %s", albumID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"cleared": true})
 }

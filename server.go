@@ -296,6 +296,7 @@ func main() {
 	mux.HandleFunc("/api/review/mark-ok", review.ReviewMarkOkHandler)
 	mux.HandleFunc("/api/review/edit-meta", review.ReviewEditMetaHandler)
 	mux.HandleFunc("/api/review/upload-cover", handlers.UploadCustomCoverHandler)
+	mux.HandleFunc("/api/review/clear-cover", handlers.ClearCustomCoverHandler)
 	mux.HandleFunc("/api/review/delete", review.ReviewDeleteHandler)
 	mux.HandleFunc("/api/review/delete-all", review.ReviewDeleteAllHandler)
 	mux.HandleFunc("/api/review/recheck-all", review.ReviewRecheckAllHandler)

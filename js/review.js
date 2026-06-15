@@ -188,6 +188,37 @@ const ReviewUI = {
     this.deleteTrack(trackId, true);
   },
 
+  async clearCover() {
+    const modal = document.getElementById('edit-meta-modal');
+    if (!modal || !modal._trackId) return;
+    const trackId = modal._trackId;
+    try {
+      const data = await Api.clearCustomCover(trackId);
+      if (!data.cleared) {
+        UI.showToast('No custom cover set');
+        return;
+      }
+      await Store.refreshLibrary();
+      const preview = document.getElementById('edit-meta-cover-preview');
+      if (preview && Store.getTrack(trackId)) {
+        preview.src = Api.coverUrl(Store.getTrack(trackId).albumID);
+      }
+      const cur = Player.getCurrentTrack();
+      if (cur && cur.id === trackId) {
+        const fresh = Store.getTrack(trackId);
+        if (fresh) {
+          Object.assign(cur, fresh);
+          UI.updateMiniPlayer();
+          UI.updateNowPlaying();
+        }
+      }
+      UI.renderPage();
+      UI.showToast('Cover reset');
+    } catch (e) {
+      UI.showToast('Failed to clear cover');
+    }
+  },
+
   async saveEditMeta() {
     const modal = document.getElementById('edit-meta-modal');
     if (!modal || !modal._trackId) return;

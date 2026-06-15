@@ -213,7 +213,7 @@
   }
   #edit-meta-modal .modal-sheet {
     max-width: 480px;
-    max-height: 80vh;
+    max-height: none;
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   }
 }
@@ -262,6 +262,22 @@
 }
 
 .edit-meta-cover-pick:active {
+  opacity: 0.8;
+}
+
+.edit-meta-cover-clear {
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.15s ease;
+}
+
+.edit-meta-cover-clear:active {
   opacity: 0.8;
 }
 
