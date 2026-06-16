@@ -11,9 +11,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 )
 
 const WaveformMaxPeaks = 300
+
+var (
+	pendingMu sync.Mutex
+	pending   = make(map[string]bool)
+)
 
 func GenerateWaveformPeaks(filePath string) ([]float64, error) {
 	ffmpeg := downloads.FindFfmpeg()
@@ -162,4 +168,64 @@ func GetOrGenerateWaveform(trackID string) ([]float64, error) {
 
 	log.Printf("[waveform] Generated and cached %d peaks for %s", len(peaks), trackID)
 	return peaks, nil
+}
+
+func GetCachedWaveform(trackID string) ([]float64, error) {
+	path := WaveformPath(trackID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Peaks []float64 `json:"peaks"`
+	}
+	if json.Unmarshal(data, &result) == nil && len(result.Peaks) > 0 {
+		return result.Peaks, nil
+	}
+	return nil, nil
+}
+
+func IsPending(trackID string) bool {
+	pendingMu.Lock()
+	defer pendingMu.Unlock()
+	return pending[trackID]
+}
+
+func GenerateAsync(trackID string) {
+	pendingMu.Lock()
+	if pending[trackID] {
+		pendingMu.Unlock()
+		return
+	}
+	pending[trackID] = true
+	pendingMu.Unlock()
+
+	go func() {
+		defer func() {
+			pendingMu.Lock()
+			delete(pending, trackID)
+			pendingMu.Unlock()
+		}()
+
+		store.Mu.RLock()
+		track, exists := store.Tracks[trackID]
+		store.Mu.RUnlock()
+		if !exists {
+			return
+		}
+
+		fullPath := scanner.ResolveFilePath(track.FilePath)
+		peaks, err := GenerateWaveformPeaks(fullPath)
+		if err != nil || peaks == nil {
+			return
+		}
+
+		EnsureWaveformDir()
+		jsonData, _ := json.Marshal(struct {
+			Peaks []float64 `json:"peaks"`
+		}{Peaks: peaks})
+		os.WriteFile(WaveformPath(trackID), jsonData, 0644)
+
+		log.Printf("[waveform] Generated and cached %d peaks for %s", len(peaks), trackID)
+	}()
 }

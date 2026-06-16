@@ -356,15 +356,17 @@ func WaveformHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peaks, err := waveform.GetOrGenerateWaveform(trackID)
-	if err != nil || peaks == nil {
+	peaks, err := waveform.GetCachedWaveform(trackID)
+	if err == nil && peaks != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-cache")
-		json.NewEncoder(w).Encode(map[string]interface{}{"peaks": []float64{}})
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		json.NewEncoder(w).Encode(map[string]interface{}{"peaks": peaks})
 		return
 	}
 
+	waveform.GenerateAsync(trackID)
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	json.NewEncoder(w).Encode(map[string]interface{}{"peaks": peaks})
+	w.Header().Set("Cache-Control", "no-cache")
+	json.NewEncoder(w).Encode(map[string]interface{}{"peaks": []float64{}, "pending": true})
 }

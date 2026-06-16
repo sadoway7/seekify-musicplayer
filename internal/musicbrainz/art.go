@@ -239,9 +239,7 @@ func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
 	if _, err := os.Stat(coverPath); err == nil {
 		data, err := os.ReadFile(coverPath)
 		if err == nil {
-			store.CoverMu.Lock()
-			store.CoverCache[albumID] = data
-			store.CoverMu.Unlock()
+			store.CacheCover(albumID, data)
 			return true
 		}
 	}
@@ -253,9 +251,7 @@ func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
 
 	os.WriteFile(coverPath, data, 0644)
 
-	store.CoverMu.Lock()
-	store.CoverCache[albumID] = data
-	store.CoverMu.Unlock()
+	store.CacheCover(albumID, data)
 
 	store.Mu.Lock()
 	if a, ok := store.Albums[albumID]; ok {
@@ -281,9 +277,7 @@ func FetchAndCacheCover(albumID, artist, album string) bool {
 	if _, err := os.Stat(coverPath); err == nil {
 		data, err := os.ReadFile(coverPath)
 		if err == nil {
-			store.CoverMu.Lock()
-			store.CoverCache[albumID] = data
-			store.CoverMu.Unlock()
+			store.CacheCover(albumID, data)
 			return true
 		}
 	}
@@ -302,9 +296,7 @@ func FetchAndCacheCover(albumID, artist, album string) bool {
 
 	os.WriteFile(coverPath, data, 0644)
 
-	store.CoverMu.Lock()
-	store.CoverCache[albumID] = data
-	store.CoverMu.Unlock()
+	store.CacheCover(albumID, data)
 
 	store.Mu.Lock()
 	if a, ok := store.Albums[albumID]; ok {

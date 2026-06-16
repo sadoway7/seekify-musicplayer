@@ -11,6 +11,7 @@
   flex-direction: column;
   animation: panelSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  will-change: transform;
 }
 
 .queue-header {
@@ -340,6 +341,7 @@
   flex-direction: column;
   animation: sheetSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  will-change: transform;
 }
 
 .modal-handle {
@@ -625,6 +627,7 @@
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
+  will-change: opacity;
 }
 .candidate-modal-overlay.show { opacity: 1; }
 .candidate-modal {
@@ -720,6 +723,7 @@
   flex-direction: column;
   animation: sheetSlideDown 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  will-change: transform;
 }
 
 .home-layout-overlay {
@@ -967,4 +971,59 @@
 
 .home-layout-cancel:active {
   color: var(--text1);
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modalFadeIn 0.2s ease forwards;
+}
+
+.confirm-box {
+  background: var(--l1);
+  border-radius: 16px;
+  padding: 24px;
+  width: 300px;
+  max-width: 85vw;
+  text-align: center;
+  animation: contextMenuIn 0.2s ease forwards;
+}
+
+.confirm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.confirm-cancel,
+.confirm-ok {
+  flex: 1;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.confirm-cancel {
+  background: var(--l3);
+  color: var(--text1);
+}
+
+.confirm-ok {
+  background: var(--accent);
+  color: #000;
 }

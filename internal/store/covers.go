@@ -75,10 +75,40 @@ func MoveCustomCover(oldID, newID string) {
 		os.Remove(oldPath)
 	}
 
-	CoverMu.Lock()
-	delete(CoverCache, oldID)
-	CoverMu.Unlock()
+	RemoveCover(oldID)
 
 	ClearCustomCover(oldID)
 	SetCustomCover(newID)
+}
+
+func CacheCover(albumID string, data []byte) {
+	CoverMu.Lock()
+	defer CoverMu.Unlock()
+	if _, exists := CoverCache[albumID]; exists {
+		return
+	}
+	CoverCache[albumID] = data
+	CoverCacheOrder = append(CoverCacheOrder, albumID)
+	CoverCacheBytes += int64(len(data))
+	for CoverCacheBytes > MaxCoverCacheBytes && len(CoverCacheOrder) > 1 {
+		oldest := CoverCacheOrder[0]
+		CoverCacheOrder = CoverCacheOrder[1:]
+		CoverCacheBytes -= int64(len(CoverCache[oldest]))
+		delete(CoverCache, oldest)
+	}
+}
+
+func RemoveCover(albumID string) {
+	CoverMu.Lock()
+	defer CoverMu.Unlock()
+	if data, exists := CoverCache[albumID]; exists {
+		CoverCacheBytes -= int64(len(data))
+		delete(CoverCache, albumID)
+		for i, id := range CoverCacheOrder {
+			if id == albumID {
+				CoverCacheOrder = append(CoverCacheOrder[:i], CoverCacheOrder[i+1:]...)
+				break
+			}
+		}
+	}
 }

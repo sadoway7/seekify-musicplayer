@@ -73,9 +73,7 @@ func UploadCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.CoverMu.Lock()
-	store.CoverCache[albumID] = data
-	store.CoverMu.Unlock()
+	store.CacheCover(albumID, data)
 
 	store.Mu.Lock()
 	if t, ok := store.Tracks[trackID]; ok {
@@ -131,9 +129,7 @@ func ClearCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 	coverPath := filepath.Join(store.MusicDir, "images", albumID+".jpg")
 	os.Remove(coverPath)
 
-	store.CoverMu.Lock()
-	delete(store.CoverCache, albumID)
-	store.CoverMu.Unlock()
+	store.RemoveCover(albumID)
 
 	scanner.ExtractEmbeddedCovers()
 

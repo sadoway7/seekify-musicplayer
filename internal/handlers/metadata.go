@@ -401,9 +401,7 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			if len(data) > 0 {
 				os.WriteFile(newPath, data, 0644)
-				store.CoverMu.Lock()
-				store.CoverCache[track.AlbumID] = data
-				store.CoverMu.Unlock()
+				store.CacheCover(track.AlbumID, data)
 				track.HasCover = true
 				store.MoveCustomCover(oldAlbumID, track.AlbumID)
 			}
@@ -431,9 +429,7 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 			if err == nil && len(data) > 0 {
 				coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
 				os.WriteFile(coverPath, data, 0644)
-				store.CoverMu.Lock()
-				store.CoverCache[track.AlbumID] = data
-				store.CoverMu.Unlock()
+				store.CacheCover(track.AlbumID, data)
 				store.Mu.Lock()
 				track.HasCover = true
 				if a, ok := store.Albums[track.AlbumID]; ok {

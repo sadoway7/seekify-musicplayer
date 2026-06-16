@@ -828,6 +828,7 @@
   align-items: center;
   justify-content: center;
   z-index: 10000;
+  animation: modalFadeIn 0.2s ease forwards;
 }
 
 .review-confirm-box {
@@ -837,6 +838,7 @@
   width: 300px;
   max-width: 85vw;
   text-align: center;
+  animation: contextMenuIn 0.2s ease forwards;
 }
 
 .review-confirm-title {

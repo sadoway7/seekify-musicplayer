@@ -248,11 +248,21 @@ func SeedMissingReviewTracks() {
 	}
 	store.Mu.RUnlock()
 
+	rows, err := store.DB.Query("SELECT track_id FROM track_reviews")
+	if err != nil {
+		return
+	}
+	existing := make(map[string]bool, len(trackIDs))
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		existing[id] = true
+	}
+	rows.Close()
+
 	count := 0
 	for _, id := range trackIDs {
-		var exists int
-		store.DB.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE track_id = ?", id).Scan(&exists)
-		if exists == 0 {
+		if !existing[id] {
 			DbSetReviewStatus(id, "unchecked", "[]", "")
 			count++
 		}
@@ -319,11 +329,21 @@ func CleanupOrphanedReviews() {
 	}
 	store.Mu.RUnlock()
 
+	rows, err := store.DB.Query("SELECT track_id FROM track_reviews")
+	if err != nil {
+		return
+	}
+	reviewed := make(map[string]bool, len(existingIDs))
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		reviewed[id] = true
+	}
+	rows.Close()
+
 	count := 0
 	for _, id := range existingIDs {
-		var exists int
-		store.DB.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE track_id = ?", id).Scan(&exists)
-		if exists == 0 {
+		if !reviewed[id] {
 			DbSetReviewStatus(id, "unchecked", "[]", "")
 			count++
 		}

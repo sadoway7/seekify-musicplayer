@@ -376,9 +376,7 @@ func ApplyApprovedMatches() int {
 				if _, err := os.Stat(newPath); os.IsNotExist(err) {
 					if data, ferr := os.ReadFile(oldPath); ferr == nil {
 						os.WriteFile(newPath, data, 0644)
-						store.CoverMu.Lock()
-						store.CoverCache[track.AlbumID] = data
-						store.CoverMu.Unlock()
+						store.CacheCover(track.AlbumID, data)
 						store.MoveCustomCover(oldAlbumID, track.AlbumID)
 					}
 				}
@@ -417,9 +415,7 @@ func ApplyApprovedMatches() int {
 			coverPath := filepath.Join(coverDir, job.trackAlbumID+".jpg")
 
 			if diskData, err := os.ReadFile(coverPath); err == nil && len(diskData) > 0 {
-				store.CoverMu.Lock()
-				store.CoverCache[job.trackAlbumID] = diskData
-				store.CoverMu.Unlock()
+				store.CacheCover(job.trackAlbumID, diskData)
 				store.Mu.Lock()
 				if a, ok := store.Albums[job.trackAlbumID]; ok {
 					a.HasCover = true
@@ -440,9 +436,7 @@ func ApplyApprovedMatches() int {
 						resp.Body.Close()
 						if len(data) > 0 {
 							os.WriteFile(coverPath, data, 0644)
-							store.CoverMu.Lock()
-							store.CoverCache[job.trackAlbumID] = data
-							store.CoverMu.Unlock()
+							store.CacheCover(job.trackAlbumID, data)
 							store.Mu.Lock()
 							if a, ok := store.Albums[job.trackAlbumID]; ok {
 								a.HasCover = true

@@ -72,10 +72,10 @@
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--l2) 25%, var(--l3) 50%, var(--l2) 75%);
-  background-size: 200% 100%;
+  background: var(--l2);
   animation: shimmer 1.5s ease infinite;
   border-radius: var(--radius-sm);
+  will-change: opacity;
 }
 
 .skeleton-card {
@@ -116,6 +116,7 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
   animation: toastIn 0.3s ease forwards;
   white-space: nowrap;
+  will-change: transform, opacity;
 }
 
 .toast.removing {

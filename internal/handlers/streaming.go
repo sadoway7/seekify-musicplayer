@@ -122,9 +122,7 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	coverPath := filepath.Join(store.MusicDir, "images", albumID+".jpg")
 	if diskData, err := os.ReadFile(coverPath); err == nil {
-		store.CoverMu.Lock()
-		store.CoverCache[albumID] = diskData
-		store.CoverMu.Unlock()
+		store.CacheCover(albumID, diskData)
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(diskData)

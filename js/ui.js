@@ -797,7 +797,7 @@ const UI = {
 
     document.getElementById('rescan-modal').addEventListener('click', (e) => {
       if (e.target.id === 'rescan-modal') {
-        e.target.classList.add('hidden');
+        this._closeSheetModal(e.target);
       }
     });
 
@@ -1754,7 +1754,7 @@ const UI = {
 
   closeUploadModal() {
     const modal = document.getElementById('upload-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) this._closeSheetModal(modal);
   },
 
   _initUploadModal() {
@@ -6101,7 +6101,16 @@ const UI = {
   },
 
   hideContextMenu() {
-    this.els.contextMenu.classList.add('hidden');
+    const menu = this.els.contextMenu;
+    if (menu.classList.contains('hidden')) return;
+    const sheet = menu.querySelector('.modal-sheet');
+    if (sheet) sheet.style.animation = 'sheetSlideOutUp 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
+    menu.style.animation = 'modalFadeOut 0.2s ease forwards';
+    setTimeout(() => {
+      menu.classList.add('hidden');
+      menu.style.animation = '';
+      if (sheet) sheet.style.animation = '';
+    }, 200);
     this._contextMenuActions = null;
     this._contextMenuTrigger = null;
   },
@@ -6125,8 +6134,20 @@ const UI = {
   },
 
   hidePlaylistModal() {
-    this.els.playlistModal.classList.add('hidden');
+    this._closeSheetModal(this.els.playlistModal);
     this.playlistModalTrackId = null;
+  },
+
+  _closeSheetModal(modalEl) {
+    if (!modalEl || modalEl.classList.contains('hidden')) return;
+    const sheet = modalEl.querySelector('.modal-sheet');
+    if (sheet) sheet.style.animation = 'sheetSlideOutUp 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
+    modalEl.style.animation = 'modalFadeOut 0.25s ease forwards';
+    setTimeout(() => {
+      modalEl.classList.add('hidden');
+      modalEl.style.animation = '';
+      if (sheet) sheet.style.animation = '';
+    }, 250);
   },
 
   showToast(message) {

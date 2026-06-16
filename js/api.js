@@ -345,11 +345,16 @@ const Api = {
     return res.json();
   },
 
-  async getWaveform(trackId) {
+  async getWaveform(trackId, retries = 3) {
     try {
       const res = await fetch('/api/waveform/' + trackId);
       if (!res.ok) return null;
-      return res.json();
+      const data = await res.json();
+      if (data.pending && retries > 0) {
+        await new Promise(r => setTimeout(r, 1500));
+        return this.getWaveform(trackId, retries - 1);
+      }
+      return data;
     } catch { return null; }
   },
 

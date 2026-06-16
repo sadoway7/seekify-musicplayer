@@ -207,6 +207,7 @@
   padding: 48px 0 12px;
   transform-origin: 21px 0;
   animation: menuGrowOut 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
 }
 
 .home-menu-wrap .home-menu-dropdown.open {
@@ -227,11 +228,11 @@
 @keyframes menuGrowOut {
   from {
     opacity: 0;
-    transform: scaleY(0.3) scaleX(0.6);
+    transform: scale(0.6);
   }
   to {
     opacity: 1;
-    transform: scaleY(1) scaleX(1);
+    transform: scale(1);
   }
 }
 
@@ -339,11 +340,6 @@
     grid-template-columns: 1fr 1fr;
     gap: 0 32px;
   }
-}
-
-@keyframes menuFadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .home-search-bar .search-input {
@@ -1008,28 +1004,6 @@
   display: flex;
   gap: 4px;
   flex-shrink: 0;
-}
-
-.queue-item-delete,
-.queue-item-retry {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 18px;
-  padding: 4px 8px;
-  cursor: pointer;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.queue-item-delete:hover {
-  color: #f87171;
-  background: rgba(248,113,113,0.1);
-}
-
-.queue-item-retry:hover {
-  color: var(--accent);
-  background: rgba(212,240,64,0.1);
 }
 
 .nav-badge {

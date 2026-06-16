@@ -11,7 +11,8 @@
   transition: transform var(--t-med) var(--ease-out);
   width: calc(100% - 24px);
   max-width: 500px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.1), 0 0 40px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.2);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.1);
+  will-change: transform;
 }
 
 .mini-player.hidden {
@@ -139,21 +140,12 @@
 }
 
 .mini-play-btn {
-  background: var(--text1);
+  background: var(--text-primary);
   color: var(--bg);
 }
 
 .mini-play-btn:active {
   transform: scale(0.93);
-}
-
-.mini-btn:active {
-  transform: scale(0.9);
-}
-
-.mini-play-btn {
-  background: var(--text-primary);
-  color: var(--bg);
 }
 
 .mini-play-btn svg {

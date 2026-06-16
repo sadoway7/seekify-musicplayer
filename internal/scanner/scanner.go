@@ -168,6 +168,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		}
 
 		hasRealTags := false
+		var embeddedPic []byte
 		if err == nil && tagReader != nil {
 			track.Title = tagReader.Title()
 			track.Artist = tagReader.Artist()
@@ -181,6 +182,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			picture := tagReader.Picture()
 			if picture != nil {
 				track.HasCover = true
+				embeddedPic = picture.Data
 			}
 
 			if tagReader.Title() != "" && tagReader.Title() != "Unknown" {
@@ -235,33 +237,24 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			newAlbums[albumID].TrackCount++
 		}
 
-		if track.HasCover {
-			file2, err := os.Open(fpath)
-			if err == nil {
-				tagReader2, err := tag.ReadFrom(file2)
-				file2.Close()
-				if err == nil && tagReader2 != nil {
-					pic := tagReader2.Picture()
-					if pic != nil && albumID != "" {
-						if !store.IsCustomCover(albumID) {
-							newCovers[albumID] = pic.Data
-						}
-						if newAlbums[albumID] == nil {
-							newAlbums[albumID] = &models.Album{
-								ID:   albumID,
-								Name: track.Album,
-							}
-						}
-						newAlbums[albumID].HasCover = true
-
-						// Always store covers in the primary musicDir
-						coverDir := filepath.Join(store.MusicDir, "images")
-						os.MkdirAll(coverDir, 0755)
-						coverPath := filepath.Join(coverDir, albumID+".jpg")
-						if _, err := os.Stat(coverPath); os.IsNotExist(err) {
-							os.WriteFile(coverPath, pic.Data, 0644)
-						}
+		if track.HasCover && len(embeddedPic) > 0 {
+			if albumID != "" {
+				if !store.IsCustomCover(albumID) {
+					newCovers[albumID] = embeddedPic
+				}
+				if newAlbums[albumID] == nil {
+					newAlbums[albumID] = &models.Album{
+						ID:   albumID,
+						Name: track.Album,
 					}
+				}
+				newAlbums[albumID].HasCover = true
+
+				coverDir := filepath.Join(store.MusicDir, "images")
+				os.MkdirAll(coverDir, 0755)
+				coverPath := filepath.Join(coverDir, albumID+".jpg")
+				if _, err := os.Stat(coverPath); os.IsNotExist(err) {
+					os.WriteFile(coverPath, embeddedPic, 0644)
 				}
 			}
 		}
@@ -340,6 +333,14 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	store.CoverMu.Lock()
 	for id, data := range newCovers {
 		store.CoverCache[id] = data
+		store.CoverCacheOrder = append(store.CoverCacheOrder, id)
+		store.CoverCacheBytes += int64(len(data))
+	}
+	for store.CoverCacheBytes > store.MaxCoverCacheBytes && len(store.CoverCacheOrder) > 1 {
+		oldest := store.CoverCacheOrder[0]
+		store.CoverCacheOrder = store.CoverCacheOrder[1:]
+		store.CoverCacheBytes -= int64(len(store.CoverCache[oldest]))
+		delete(store.CoverCache, oldest)
 	}
 	store.CoverMu.Unlock()
 
@@ -412,9 +413,7 @@ func ExtractEmbeddedCovers() {
 		if _, err := os.Stat(coverPath); err == nil {
 			data, err := os.ReadFile(coverPath)
 			if err == nil {
-				store.CoverMu.Lock()
-				store.CoverCache[t.AlbumID] = data
-				store.CoverMu.Unlock()
+				store.CacheCover(t.AlbumID, data)
 				cached = true
 				continue
 			}
@@ -568,9 +567,7 @@ func ScanSingleFile(filePath string) {
 					if _, err := os.Stat(coverPath); os.IsNotExist(err) {
 						os.WriteFile(coverPath, pic.Data, 0644)
 					}
-					store.CoverMu.Lock()
-					store.CoverCache[albumID] = pic.Data
-					store.CoverMu.Unlock()
+					store.CacheCover(albumID, pic.Data)
 				}
 			}
 		}

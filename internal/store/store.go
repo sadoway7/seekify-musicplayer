@@ -11,9 +11,11 @@ var (
 	Tracks     map[string]*models.Track
 	Albums     map[string]*models.Album
 	Mu         sync.RWMutex
-	CoverCache    map[string][]byte
-	CoverMu       sync.RWMutex
-	CustomCovers  map[string]bool
+	CoverCache      map[string][]byte
+	CoverMu         sync.RWMutex
+	CoverCacheOrder []string
+	CoverCacheBytes int64
+	CustomCovers    map[string]bool
 	MusicDir   string
 	MusicDirs  map[string]string
 	ScanMu     sync.Mutex
@@ -32,6 +34,8 @@ var (
 		".wma":  "audio/x-ms-wma",
 	}
 )
+
+const MaxCoverCacheBytes = 256 * 1024 * 1024
 
 func BoolToInt(b bool) int {
 	if b {

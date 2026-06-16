@@ -19,34 +19,6 @@
   color: var(--text-secondary);
 }
 
-.shuffle-all-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  color: #0A0A0A;
-  padding: 6px var(--sp-3);
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.85);
-  transition: background 0.15s ease;
-  animation: shuffle-glow 3s ease-in-out infinite;
-}
-
-.shuffle-all-btn:active {
-  background: #fff;
-}
-
-@keyframes shuffle-glow {
-  0%, 100% { background: rgba(255, 255, 255, 0.85); }
-  50% { background: rgba(255, 255, 255, 0.6); }
-}
-
-.shuffle-all-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
 .scroll-row {
   display: flex;
   flex-direction: row;
@@ -249,11 +221,6 @@
   letter-spacing: 0.04em;
 }
 
-@keyframes shuffle-card-glow {
-  0%, 100% { background: linear-gradient(135deg, #fff, #f5f5f5); }
-  50% { background: linear-gradient(135deg, #f0f0f0, #e6e6e6); }
-}
-
 .quick-play-card-shuffle .quick-play-art {
 }
 
@@ -330,10 +297,6 @@
 .quick-play-card-inline.artist-pill .quick-play-title {
   font-size: 15px;
   font-weight: 600;
-}
-
-.greeting {
-  display: none;
 }
 
 .mega-title {
@@ -890,10 +853,6 @@
   display: flex;
   flex-direction: column-reverse;
   gap: 2px;
-}
-
-.detail-hero-bottom {
-  display: none;
 }
 
 .detail-hero-title {
