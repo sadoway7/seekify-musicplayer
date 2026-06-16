@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	htmlpkg "html"
 	"log"
 	"mime"
 	"musicapp/internal/musicbrainz"
@@ -122,18 +123,18 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 			ogDesc = "Private Music Library."
 		}
 
-		ogTags := "\n<meta property=\"og:title\" content=\"" + ogTitle + "\">"
-		ogTags += "\n<meta property=\"og:description\" content=\"" + ogDesc + "\">"
-		ogTags += "\n<meta property=\"og:url\" content=\"" + ogURL + "\">"
+		ogTags := "\n<meta property=\"og:title\" content=\"" + htmlpkg.EscapeString(ogTitle) + "\">"
+		ogTags += "\n<meta property=\"og:description\" content=\"" + htmlpkg.EscapeString(ogDesc) + "\">"
+		ogTags += "\n<meta property=\"og:url\" content=\"" + htmlpkg.EscapeString(ogURL) + "\">"
 		ogTags += "\n<meta property=\"og:type\" content=\"music.playlist\">"
 		if ogImage != "" {
-			ogTags += "\n<meta property=\"og:image\" content=\"" + ogImage + "\">"
+			ogTags += "\n<meta property=\"og:image\" content=\"" + htmlpkg.EscapeString(ogImage) + "\">"
 		}
 		ogTags += "\n<meta name=\"twitter:card\" content=\"summary\">"
-		ogTags += "\n<meta name=\"twitter:title\" content=\"" + ogTitle + "\">"
-		ogTags += "\n<meta name=\"twitter:description\" content=\"" + ogDesc + "\">"
+		ogTags += "\n<meta name=\"twitter:title\" content=\"" + htmlpkg.EscapeString(ogTitle) + "\">"
+		ogTags += "\n<meta name=\"twitter:description\" content=\"" + htmlpkg.EscapeString(ogDesc) + "\">"
 		if ogImage != "" {
-			ogTags += "\n<meta name=\"twitter:image\" content=\"" + ogImage + "\">"
+			ogTags += "\n<meta name=\"twitter:image\" content=\"" + htmlpkg.EscapeString(ogImage) + "\">"
 		}
 
 		htmlStr := string(html)

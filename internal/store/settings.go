@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"strconv"
 )
 
 func InitSettingsTable() {
@@ -65,13 +66,9 @@ func GetSettingInt(key string, defaultVal int) int {
 	if val == "" {
 		return defaultVal
 	}
-	var n int
-	for _, c := range val {
-		if c >= '0' && c <= '9' {
-			n = n*10 + int(c-'0')
-		} else {
-			return defaultVal
-		}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return defaultVal
 	}
 	return n
 }

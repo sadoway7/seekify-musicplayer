@@ -103,7 +103,7 @@
 
 .toast {
   position: fixed;
-  bottom: 140px;
+  bottom: calc(140px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-elevated);

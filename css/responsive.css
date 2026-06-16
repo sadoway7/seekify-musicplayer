@@ -210,6 +210,20 @@
     margin-left: 0;
   }
 
+  .mini-volume-wrap::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 4px;
+    background: var(--text2);
+    border-radius: 50%;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
   .mini-volume-wrap:hover .mini-volume-bar,
   .mini-volume-wrap.active .mini-volume-bar {
     width: 100px;

@@ -303,6 +303,16 @@ func RefreshWatchedPlaylist(p *WatchedPlaylist) error {
 	libraryPlaylistID := store.DbGetOrCreatePlaylistByName(p.Name)
 
 	newCount := 0
+
+	store.Mu.RLock()
+	libLookup := make(map[string]string, len(store.Tracks))
+	for _, tr := range store.Tracks {
+		if tr.Artist != "" && tr.Title != "" {
+			libLookup[strings.ToLower(tr.Artist+"|"+tr.Title)] = tr.ID
+		}
+	}
+	store.Mu.RUnlock()
+
 	for _, t := range tracksFromYT {
 		artist, title, videoID := t.Artist, t.Title, t.VideoID
 		key := strings.ToLower(artist + "|" + title)
@@ -313,17 +323,7 @@ func RefreshWatchedPlaylist(p *WatchedPlaylist) error {
 			continue
 		}
 
-		store.Mu.RLock()
-		inLib := false
-		var libTrackID string
-		for _, tr := range store.Tracks {
-			if strings.EqualFold(tr.Artist, artist) && strings.EqualFold(tr.Title, title) {
-				inLib = true
-				libTrackID = tr.ID
-				break
-			}
-		}
-		store.Mu.RUnlock()
+		libTrackID, inLib := libLookup[strings.ToLower(artist+"|"+title)]
 		if inLib {
 			if libTrackID != "" {
 				store.DbAddTrackToPlaylist(libraryPlaylistID, libTrackID)

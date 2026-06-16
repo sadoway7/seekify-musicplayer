@@ -132,14 +132,12 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store.Mu.RLock()
-	var albumName string
-	for _, a := range store.Albums {
-		if a.ID == albumID {
-			albumName = a.Name
-			break
-		}
-	}
+	album, ok := store.Albums[albumID]
 	store.Mu.RUnlock()
+	var albumName string
+	if ok {
+		albumName = album.Name
+	}
 
 	svg := scanner.GeneratePlaceholderSVG(albumName, albumID)
 	w.Header().Set("Content-Type", "image/svg+xml")

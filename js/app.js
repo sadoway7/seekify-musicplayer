@@ -121,7 +121,11 @@ const App = {
         lastVersion = stats.version;
         stableCount = 0;
         await Store.refreshLibrary();
-        UI.renderPage();
+        if (Store.currentView === 'home') {
+          UI.renderPage();
+        } else {
+          UI.updateTrackHighlights();
+        }
       } else {
         stableCount++;
       }

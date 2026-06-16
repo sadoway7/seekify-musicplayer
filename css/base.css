@@ -123,8 +123,6 @@ body {
   overflow: hidden;
   height: 100%;
   touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
   text-rendering: optimizeLegibility;
 }
 

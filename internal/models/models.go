@@ -37,10 +37,13 @@ type Artist struct {
 }
 
 type LibraryResponse struct {
-	Tracks  []Track  `json:"tracks"`
-	Albums  []Album  `json:"albums"`
-	Artists []Artist `json:"artists"`
-	Version int64    `json:"version"`
+	Tracks       []Track  `json:"tracks"`
+	Albums       []Album  `json:"albums"`
+	Artists      []Artist `json:"artists"`
+	Version      int64    `json:"version"`
+	TotalTracks  int      `json:"totalTracks,omitempty"`
+	TotalAlbums  int      `json:"totalAlbums,omitempty"`
+	TotalArtists int      `json:"totalArtists,omitempty"`
 }
 
 type Playlist struct {

@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-func ripperV2Handler(w http.ResponseWriter, r *http.Request) {
+func RipperV2Handler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "ripperv2.html")
 }
 
@@ -53,7 +53,9 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 		)
 		output, err = cmd.Output()
 		if err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"yt-dlp failed: %s"}`, strings.ReplaceAll(string(output), `"`, `\"`)), http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "yt-dlp failed: " + string(output)})
 			return
 		}
 	}
@@ -367,7 +369,9 @@ func V2SearchHandler(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			errMsg = string(exitErr.Stderr)
 		}
-		http.Error(w, fmt.Sprintf(`{"error":"search failed: %s"}`, strings.ReplaceAll(errMsg, `"`, `\"`)), http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "search failed: " + errMsg})
 		return
 	}
 

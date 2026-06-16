@@ -218,7 +218,7 @@ func DbAddRecent(trackID string) {
 	DB.Exec("UPDATE recent SET position = position + 1")
 	DB.Exec("INSERT INTO recent (track_id, position) VALUES (?, 0)", trackID)
 
-	rows, _ := DB.Query("SELECT track_id FROM recent ORDER BY position ASC LIMIT -1 OFFSET 50")
+	rows, _ := DB.Query("SELECT track_id FROM recent ORDER BY position ASC LIMIT 999999 OFFSET 50")
 	defer rows.Close()
 	for rows.Next() {
 		var id string

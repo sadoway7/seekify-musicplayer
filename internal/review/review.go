@@ -354,7 +354,11 @@ func DbInsertUncheckedReviews(newTracks map[string]*models.Track) {
 	}
 	rows.Close()
 
-	tx, _ := store.DB.Begin()
+	tx, err := store.DB.Begin()
+	if err != nil {
+		log.Printf("[review] ERROR: DB.Begin failed in DbInsertUncheckedReviews: %v", err)
+		return
+	}
 	for id := range newTracks {
 		if !existing[id] {
 			tx.Exec(`INSERT OR IGNORE INTO track_reviews (track_id, status, flags, checked_at, reviewer) VALUES (?, 'unchecked', '[]', datetime('now'), '')`, id)
@@ -615,46 +619,56 @@ func CheckAllDuplicates() {
 		if len(artistTracks) < 2 {
 			continue
 		}
+		byTitle := make(map[string][]*models.Track)
+		for _, t := range artistTracks {
+			titleKey := NormalizeForCompare(t.Title)
+			byTitle[titleKey] = append(byTitle[titleKey], t)
+		}
 		checked := make(map[string]bool)
-		for i, a := range artistTracks {
-			if checked[a.ID] {
+		for _, titleGroup := range byTitle {
+			if len(titleGroup) < 2 {
 				continue
 			}
-			var group []*models.Track
-			for j, b := range artistTracks {
-				if i == j || checked[b.ID] {
+			for i, a := range titleGroup {
+				if checked[a.ID] {
 					continue
 				}
-				if TitleSimilarity(a.Title, b.Title) >= 0.95 {
-					group = append(group, b)
-					checked[b.ID] = true
+				var group []*models.Track
+				for j, b := range titleGroup {
+					if i == j || checked[b.ID] {
+						continue
+					}
+					if TitleSimilarity(a.Title, b.Title) >= 0.95 {
+						group = append(group, b)
+						checked[b.ID] = true
+					}
 				}
-			}
-			if len(group) > 0 {
-				group = append(group, a)
-				checked[a.ID] = true
-				best := PickBestQuality(group)
-				for _, t := range group {
-					if t.ID == best.ID {
-						status, _ := DbGetReviewForTrack(t.ID)
-						if status == "unchecked" {
-							DbSetReviewStatus(t.ID, "reviewed_ok", "[]", "worker")
+				if len(group) > 0 {
+					group = append(group, a)
+					checked[a.ID] = true
+					best := PickBestQuality(group)
+					for _, t := range group {
+						if t.ID == best.ID {
+							status, _ := DbGetReviewForTrack(t.ID)
+							if status == "unchecked" {
+								DbSetReviewStatus(t.ID, "reviewed_ok", "[]", "worker")
+							}
+							continue
 						}
-						continue
-					}
-					existingStatus, existingFlags := DbGetReviewForTrack(t.ID)
-					if existingStatus == "reviewed_ok" && existingFlags == nil {
-						continue
-					}
-					var newFlags []string
-					for _, f := range existingFlags {
-						if f != "potential_duplicate" {
-							newFlags = append(newFlags, f)
+						existingStatus, existingFlags := DbGetReviewForTrack(t.ID)
+						if existingStatus == "reviewed_ok" && existingFlags == nil {
+							continue
 						}
+						var newFlags []string
+						for _, f := range existingFlags {
+							if f != "potential_duplicate" {
+								newFlags = append(newFlags, f)
+							}
+						}
+						newFlags = append(newFlags, "potential_duplicate")
+						flagJSON, _ := json.Marshal(newFlags)
+						DbSetReviewStatus(t.ID, "needs_review", string(flagJSON), "worker")
 					}
-					newFlags = append(newFlags, "potential_duplicate")
-					flagJSON, _ := json.Marshal(newFlags)
-					DbSetReviewStatus(t.ID, "needs_review", string(flagJSON), "worker")
 				}
 			}
 		}

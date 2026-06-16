@@ -39,7 +39,8 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 		results, err := musicbrainz.FinderSearchRecordings(q, limit)
 		if err != nil {
 			log.Printf("[finder] Recording search error: %v", err)
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 		if results == nil {
@@ -51,7 +52,8 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 		results, err := musicbrainz.FinderSearchArtists(q, limit)
 		if err != nil {
 			log.Printf("[finder] Artist search error: %v", err)
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 		if results == nil {
@@ -63,7 +65,8 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 		results, err := musicbrainz.FinderSearchReleases(q, limit)
 		if err != nil {
 			log.Printf("[finder] Release search error: %v", err)
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 		if results == nil {
@@ -105,7 +108,8 @@ func FinderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
 	results, err := musicbrainz.FinderArtistReleases(mbid)
 	if err != nil {
 		log.Printf("[finder] Artist releases error: %v", err)
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 	if results == nil {
@@ -128,7 +132,8 @@ func FinderReleaseTracksHandler(w http.ResponseWriter, r *http.Request) {
 	results, err := musicbrainz.FinderReleaseTracks(mbid)
 	if err != nil {
 		log.Printf("[finder] Release tracks error: %v", err)
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 	if results == nil {

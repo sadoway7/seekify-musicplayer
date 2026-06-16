@@ -56,6 +56,7 @@ const Api = {
         count++;
       }
       if (count === 0) { resolve({ tracks: [] }); return; }
+      // XMLHttpRequest used for upload progress tracking (fetch does not expose upload progress)
       const xhr = new XMLHttpRequest();
       if (onProgress) {
         xhr.upload.addEventListener('progress', (e) => {
@@ -87,6 +88,7 @@ const Api = {
         count++;
       }
       if (count === 0) { resolve({ uploaded: [], errors: ['No audio files selected'] }); return; }
+      // XMLHttpRequest used for upload progress tracking (fetch does not expose upload progress)
       const xhr = new XMLHttpRequest();
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);

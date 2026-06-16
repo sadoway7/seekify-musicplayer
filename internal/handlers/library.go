@@ -7,6 +7,7 @@ import (
 	"musicapp/internal/store"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync/atomic"
 )
 
@@ -78,11 +79,58 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 		return artistList[i].Name < artistList[j].Name
 	})
 
+	offset, hasOffset := 0, false
+	limit, hasLimit := 0, false
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+		hasOffset = true
+	}
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
+		limit = l
+		hasLimit = true
+	}
+
 	resp := models.LibraryResponse{
 		Tracks:  trackList,
 		Albums:  albumList,
 		Artists: artistList,
 		Version: LibraryVersion.Load(),
+	}
+
+	if hasOffset || hasLimit {
+		if !hasLimit {
+			limit = 100
+		}
+		resp.TotalTracks = len(trackList)
+		resp.TotalAlbums = len(albumList)
+		resp.TotalArtists = len(artistList)
+		if offset < len(trackList) {
+			end := offset + limit
+			if end > len(trackList) {
+				end = len(trackList)
+			}
+			resp.Tracks = trackList[offset:end]
+		} else {
+			resp.Tracks = []models.Track{}
+		}
+		if offset < len(albumList) {
+			end := offset + limit
+			if end > len(albumList) {
+				end = len(albumList)
+			}
+			resp.Albums = albumList[offset:end]
+		} else {
+			resp.Albums = []models.Album{}
+		}
+		if offset < len(artistList) {
+			end := offset + limit
+			if end > len(artistList) {
+				end = len(artistList)
+			}
+			resp.Artists = artistList[offset:end]
+		} else {
+			resp.Artists = []models.Artist{}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

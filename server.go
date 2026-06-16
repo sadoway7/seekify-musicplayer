@@ -132,11 +132,13 @@ func main() {
 				}
 				count := scanner.CountAudioFiles(dir)
 				mediaDBCount := 0
+				store.Mu.RLock()
 				for _, t := range store.Tracks {
 					if strings.HasPrefix(t.FilePath, prefix+":") {
 						mediaDBCount++
 					}
 				}
+				store.Mu.RUnlock()
 				if count != mediaDBCount {
 					log.Printf("Media dir [%s] file count changed (%d in DB vs %d on disk), rescanning", prefix, mediaDBCount, count)
 					needScan = true
@@ -161,7 +163,9 @@ func main() {
 				log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(store.Tracks))
 			}
 
-			scanner.LibraryVersionAdd(1)
+		if scanner.LibraryVersionAdd != nil {
+				scanner.LibraryVersionAdd(1)
+			}
 		} else {
 			log.Printf("File counts match DB, skipping full scan")
 		}
@@ -207,6 +211,7 @@ func main() {
 	mux.HandleFunc("/api/v2/resolve-url", handlers.ResolveURLHandler)
 	mux.HandleFunc("/api/v2/search", handlers.V2SearchHandler)
 	mux.HandleFunc("/api/v2/lyrics", handlers.V2LyricsHandler)
+	mux.HandleFunc("/ripperv2", handlers.RipperV2Handler)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		ytdlp := downloads.FindYtDlp()
 		ffmpeg := downloads.FindFfmpeg()

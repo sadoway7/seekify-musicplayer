@@ -115,7 +115,7 @@ func FinderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
-	libLookup := buildLibraryLookup()
+	libLookup := getLibraryLookup()
 
 	seen := map[string]bool{}
 	for _, rec := range searchResp.Recordings {
@@ -485,7 +485,7 @@ func FinderReleaseTracks(idOrRGID string) ([]FinderReleaseTrack, error) {
 		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
-	libLookup := buildLibraryLookup()
+	libLookup := getLibraryLookup()
 
 	for _, m := range resp.Media {
 		for _, t := range m.Tracks {
@@ -564,7 +564,7 @@ type ArtistTrackPage struct {
 
 func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) ArtistTrackPage {
 	seen := map[string]*ArtistTrack{}
-	libLookup := buildLibraryLookup()
+	libLookup := getLibraryLookup()
 
 	totalAvailable := 0
 	offset := pageOffset
@@ -744,6 +744,34 @@ func CleanTrackTitle(title string) string {
 
 	title = strings.TrimSpace(title)
 	return title
+}
+
+var (
+	cachedLibLookup        map[string]bool
+	cachedLibLookupCount   int
+	cachedLibLookupMu      sync.RWMutex
+)
+
+func getLibraryLookup() map[string]bool {
+	store.Mu.RLock()
+	currentCount := len(store.Tracks)
+	store.Mu.RUnlock()
+
+	cachedLibLookupMu.RLock()
+	if cachedLibLookup != nil && cachedLibLookupCount == currentCount {
+		m := cachedLibLookup
+		cachedLibLookupMu.RUnlock()
+		return m
+	}
+	cachedLibLookupMu.RUnlock()
+
+	m := buildLibraryLookup()
+
+	cachedLibLookupMu.Lock()
+	cachedLibLookup = m
+	cachedLibLookupCount = currentCount
+	cachedLibLookupMu.Unlock()
+	return m
 }
 
 // buildLibraryLookup creates a lookup map of "artist|title" keys for library tracks.

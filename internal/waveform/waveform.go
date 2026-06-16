@@ -56,10 +56,16 @@ func GenerateWaveformPeaks(filePath string) ([]float64, error) {
 			break
 		}
 	}
-	cmd.Wait()
+	waitErr := cmd.Wait()
 
 	if len(samples) == 0 {
+		if waitErr != nil {
+			return nil, waitErr
+		}
 		return nil, nil
+	}
+	if waitErr != nil {
+		log.Printf("[waveform] ffmpeg wait error (partial data used): %v", waitErr)
 	}
 
 	bucketSize := len(samples) / WaveformMaxPeaks

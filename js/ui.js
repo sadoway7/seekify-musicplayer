@@ -1207,25 +1207,30 @@ const UI = {
   renderPage() {
     this._clearPollTimers();
     this.els.header.innerHTML = '';
-    switch (Store.currentView) {
-      case 'home': this.renderHome(); break;
-      case 'search': this.renderSearch(); break;
-      case 'library': this.renderLibrary(); break;
-      case 'album': this.renderAlbum(Store.viewData.albumId); break;
-      case 'artist': this.renderArtist(Store.viewData.artistName); break;
-      case 'playlist': this.renderPlaylist(Store.viewData.playlistId); break;
-      case 'favorites': this.renderFavorites(); break;
-      case 'all-music': this.renderAllMusic(); break;
-      case 'needs-review': this.renderNeedsReview(); break;
-      case 'finder': this.renderFinder(); break;
-      case 'finder-artist': this.renderFinderArtist(Store.viewData); break;
-      case 'finder-release': this.renderFinderRelease(Store.viewData); break;
-      case 'ripper2': RipperV2.render(this.els.content); break;
-      case 'downloads': this.renderSettings(); break;
-      case 'settings': this.renderSettings(); break;
-      case 'metadata-review': this.renderMetadataReview(); break;
-      case 'metadata-history': this.renderMetadataHistory(); break;
-      default: this.renderHome();
+    try {
+      switch (Store.currentView) {
+        case 'home': this.renderHome(); break;
+        case 'search': this.renderSearch(); break;
+        case 'library': this.renderLibrary(); break;
+        case 'album': this.renderAlbum(Store.viewData.albumId); break;
+        case 'artist': this.renderArtist(Store.viewData.artistName); break;
+        case 'playlist': this.renderPlaylist(Store.viewData.playlistId); break;
+        case 'favorites': this.renderFavorites(); break;
+        case 'all-music': this.renderAllMusic(); break;
+        case 'needs-review': this.renderNeedsReview(); break;
+        case 'finder': this.renderFinder(); break;
+        case 'finder-artist': this.renderFinderArtist(Store.viewData); break;
+        case 'finder-release': this.renderFinderRelease(Store.viewData); break;
+        case 'ripper2': RipperV2.render(this.els.content); break;
+        case 'downloads': this.renderSettings(); break;
+        case 'settings': this.renderSettings(); break;
+        case 'metadata-review': this.renderMetadataReview(); break;
+        case 'metadata-history': this.renderMetadataHistory(); break;
+        default: this.renderHome();
+      }
+    } catch (e) {
+      console.error('renderPage error for view', Store.currentView, e);
+      this.els.content.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b"><div style="font-size:16px;font-weight:600">Error loading page</div><div style="font-size:12px;margin-top:8px;color:#aaa">' + (e.message || e) + '</div></div>';
     }
   },
 
@@ -1267,7 +1272,7 @@ const UI = {
       + '</div>'
       + '<div class="home-search-bar" id="home-search-bar">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input" type="text" placeholder="" readonly>'
+      + '<input class="search-input" type="text" placeholder="Search library...">'
       + '</div>'
       + '</div>';
 
@@ -1367,7 +1372,7 @@ const UI = {
   _homeArtists() {
     const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     const artistLimit = window.innerWidth >= 768 ? 10 : 6;
-    const newArtists = namedArtists.sort(() => Math.random() - 0.5).slice(0, artistLimit);
+    const newArtists = namedArtists.sort((a, b) => this._stableHash(a.name) - this._stableHash(b.name)).slice(0, artistLimit);
     if (newArtists.length === 0) return '';
     let html = '<div class="mega-title"><span>Artists</span></div>';
     html += '<div class="scroll-row artist-row">';
@@ -1385,7 +1390,7 @@ const UI = {
     const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
     if (namedAlbums.length === 0) return '';
     let html = '<div class="mega-title"><span>Albums</span></div>';
-    const shuffledAlbums = namedAlbums.sort(() => Math.random() - 0.5).slice(0, 15);
+    const shuffledAlbums = namedAlbums.sort((a, b) => this._stableHash(a.name) - this._stableHash(b.name)).slice(0, 15);
     html += '<div class="scroll-row">';
     shuffledAlbums.forEach(a => {
       html += '<div class="card" data-album-id="' + a.id + '">'
@@ -1469,6 +1474,23 @@ const UI = {
         const input = this.els.content.querySelector('.search-input');
         if (input) input.focus();
       });
+      const searchInput = homeSearch.querySelector('.search-input');
+      if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            const q = searchInput.value.trim();
+            if (!q) return;
+            Store.currentView = 'search';
+            Store.viewData = {};
+            document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+            const searchTab = document.querySelector('[data-tab="search"]');
+            if (searchTab) searchTab.classList.add('active');
+            this.renderSearch();
+            const input = this.els.content.querySelector('.search-input');
+            if (input) { input.value = q; input.dispatchEvent(new Event('input')); }
+          }
+        });
+      }
     }
 
     const menuBtn = document.getElementById('home-menu-btn');
@@ -1607,7 +1629,9 @@ const UI = {
       }
     });
     const genres = Object.values(found).sort(() => Math.random() - 0.5);
-    if (genres.length === 0) return '';
+    if (genres.length === 0) {
+      return '<div class="empty-state" style="padding:24px 22px"><div class="empty-state-text">No genres found in your library</div></div>';
+    }
 
     // Build a map of genre → list of album IDs (prefer ones with covers)
     const genreAlbums = {};
@@ -1839,7 +1863,7 @@ const UI = {
         list.innerHTML = html;
       }
     }
-    if (preview) preview.innerHTML = '<div class="upload-preview-loading">Reading metadata…</div>';
+    if (preview) preview.innerHTML = '<div class="upload-preview-loading"><div class="loading-spinner" style="width:16px;height:16px;margin-right:8px;display:inline-block;vertical-align:middle"></div>Reading metadata…</div>';
     this._updateUploadButton();
     if (files.length > 0) {
       try {
@@ -2570,11 +2594,15 @@ const UI = {
 
     this.els.content.querySelectorAll('.finder-sub-chips .chip').forEach(chip => {
       chip.addEventListener('click', () => {
-        this._finderType = chip.dataset.finderType;
-        this._finderResults = null;
-        this.renderFinder();
-        if (this._finderQuery) {
+        const newType = chip.dataset.finderType;
+        if (newType === this._finderType) return;
+        this._finderType = newType;
+        if (this._finderQuery && this._finderResults) {
+          this._renderFinderResultsList(document.getElementById('finder-results'), this._finderResults);
+        } else if (this._finderQuery) {
           this._renderFinderResults();
+        } else {
+          this.renderFinder();
         }
       });
     });
@@ -2681,10 +2709,12 @@ const UI = {
         });
       });
       container.querySelectorAll('[data-delete]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
+        btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          await Api.deleteWatch(btn.dataset.delete);
-          this._loadWatchedPlaylists();
+          this.showConfirm('Delete this watched playlist?', async () => {
+            await Api.deleteWatch(btn.dataset.delete);
+            this._loadWatchedPlaylists();
+          });
         });
       });
     } catch (e) {}
@@ -2815,7 +2845,9 @@ const UI = {
       container.querySelectorAll('.queue-item-delete').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          Api.deleteJob(btn.dataset.jobId).then(() => this._loadDownloads());
+          this.showConfirm('Delete this download job?', () => {
+            Api.deleteJob(btn.dataset.jobId).then(() => this._loadDownloads());
+          });
         });
       });
 
@@ -2871,18 +2903,20 @@ const UI = {
 
       const clearBtn = document.getElementById('btn-clear-history');
       if (clearBtn) {
-        clearBtn.addEventListener('click', async () => {
-          clearBtn.disabled = true;
-          clearBtn.textContent = 'Clearing...';
-          try {
-            await Api.clearCompletedJobs();
-            this._pollDownloadBadge();
-            this._loadDownloads();
-          } catch (e) {
-            this.showToast('Failed to clear history');
-            clearBtn.disabled = false;
-            clearBtn.textContent = 'Clear History';
-          }
+        clearBtn.addEventListener('click', () => {
+          this.showConfirm('Clear all completed download history?', async () => {
+            clearBtn.disabled = true;
+            clearBtn.textContent = 'Clearing...';
+            try {
+              await Api.clearCompletedJobs();
+              this._pollDownloadBadge();
+              this._loadDownloads();
+            } catch (e) {
+              this.showToast('Failed to clear history');
+              clearBtn.disabled = false;
+              clearBtn.textContent = 'Clear History';
+            }
+          });
         });
       }
     } catch (e) {
@@ -2992,6 +3026,12 @@ const UI = {
   },
 
   _updateDownloadBadge(counts) {
+    const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
+    const tab = document.querySelector('[data-tab="finder"] .tab-badge');
+    if (tab) {
+      tab.textContent = active > 0 ? active : '';
+      tab.style.display = active > 0 ? '' : 'none';
+    }
   },
 
   _pollDownloadBadge() {
@@ -3020,7 +3060,9 @@ const UI = {
     container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
 
     try {
-      try { this._downloadJobs = await Api.getQueue(); } catch(e) { this._downloadJobs = []; }
+      if (this._finderType === 'recording' || this._finderType === 'youtube') {
+        try { this._downloadJobs = await Api.getQueue(); } catch(e) { this._downloadJobs = []; }
+      }
       let results;
       if (this._finderType === 'youtube') {
         results = await Api.finderYouTubeSearch(this._finderQuery);
@@ -3066,7 +3108,7 @@ const UI = {
         } else if (this._isQueued(r.artist, r.title)) {
           statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
         } else {
-          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" data-album="' + this._esc(r.album || '') + '" data-album-mbid="' + this._esc(r.albumId || '') + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
+          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" data-album="' + this._esc(r.album || '') + '" data-album-mbid="' + this._esc(r.albumId || '') + '" aria-label="Download ' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
         }
         html += '<div class="finder-item">'
           + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
@@ -3090,7 +3132,7 @@ const UI = {
         } else if (this._isQueued(r.channel, r.title)) {
           statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
         } else {
-          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.channel) + '" data-title="' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
+          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.channel) + '" data-title="' + this._esc(r.title) + '" aria-label="Download ' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
         }
         html += '<div class="finder-item">'
           + '<button class="finder-preview-btn" data-preview="' + this._esc(r.videoId) + '" title="Preview">&#9654;</button>'
@@ -3222,6 +3264,7 @@ const UI = {
     try {
       await Api.queueAdd(track);
       this._showToast('Added to download queue');
+      try { this._downloadJobs = await Api.getQueue(); } catch(e) {}
     } catch (err) {
       const msg = err.message || 'Failed to add to queue';
       if (msg.includes('already in library') || msg.includes('already')) {
@@ -3233,14 +3276,7 @@ const UI = {
   },
 
   _showToast(msg) {
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = msg;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.classList.add('show'), 10);
-    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2500);
+    this.showToast(msg);
   },
 
   renderFinderArtist(data) {
@@ -4743,13 +4779,17 @@ const UI = {
 
   async _doBulkImport() {
     const input = document.getElementById('bulk-import-input');
+    const btn = document.getElementById('bulk-import-btn');
     if (!input || !input.value.trim()) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
     try {
       const result = await Api.bulkImport(input.value);
       this._showToast(result.queued + ' tracks queued');
       input.value = '';
     } catch (e) {
       this._showToast('Bulk import failed');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
     }
   },
 
@@ -5628,7 +5668,13 @@ const UI = {
     if (this.seeking) return;
     const fraction = progress.fraction;
     this._waveformProgress = fraction;
-    this._paintWaveform(fraction);
+    if (!this._waveformRafPending) {
+      this._waveformRafPending = true;
+      requestAnimationFrame(() => {
+        this._waveformRafPending = false;
+        this._paintWaveform(this._waveformProgress);
+      });
+    }
     this.els.npTimeCurrent.textContent = this._formatTime(progress.current);
     this.els.npTimeTotal.textContent = this._formatTime(progress.duration);
     const pct = (fraction * 100) + '%';
@@ -6097,32 +6143,60 @@ const UI = {
     }, 2500);
   },
 
+  showConfirm(message, onConfirm) {
+    const existing = document.querySelector('.confirm-overlay');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.className = 'confirm-overlay';
+    el.innerHTML = '<div class="confirm-box">'
+      + '<div class="confirm-title">' + this._esc(message) + '</div>'
+      + '<div class="confirm-actions">'
+      + '<button class="confirm-cancel">Cancel</button>'
+      + '<button class="confirm-ok">OK</button>'
+      + '</div></div>';
+    document.body.appendChild(el);
+    el.querySelector('.confirm-cancel').addEventListener('click', () => el.remove());
+    el.querySelector('.confirm-ok').addEventListener('click', () => {
+      el.remove();
+      if (onConfirm) onConfirm();
+    });
+    el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
+  },
+
   updateTrackHighlights() {
     const current = Player.getCurrentTrack();
     if (!current) return;
-    document.querySelectorAll('.track-row').forEach(row => {
-      const isCurrent = row.dataset.trackId === current.id;
+    if (this._lastHighlightedId === current.id) return;
+    if (this._lastHighlightedId) {
+      document.querySelectorAll('.track-row[data-track-id="' + this._lastHighlightedId + '"]').forEach(row => {
+        const titleEl = row.querySelector('.track-title');
+        const eqEl = row.querySelector('.eq');
+        const durationEl = row.querySelector('.track-duration');
+        if (titleEl) titleEl.classList.remove('on');
+        if (eqEl) {
+          eqEl.remove();
+          if (!durationEl) {
+            const dur = document.createElement('div');
+            dur.className = 'track-duration';
+            const track = Store.getTrack(row.dataset.trackId);
+            dur.textContent = this._formatTime(track ? track.duration : 0);
+            row.appendChild(dur);
+          }
+        }
+      });
+    }
+    this._lastHighlightedId = current.id;
+    document.querySelectorAll('.track-row[data-track-id="' + current.id + '"]').forEach(row => {
       const titleEl = row.querySelector('.track-title');
       const eqEl = row.querySelector('.eq');
       const durationEl = row.querySelector('.track-duration');
-      if (titleEl) {
-        titleEl.classList.toggle('on', isCurrent);
-      }
-      if (isCurrent && !eqEl && durationEl) {
+      if (titleEl) titleEl.classList.add('on');
+      if (!eqEl && durationEl) {
         durationEl.remove();
         const eq = document.createElement('div');
         eq.className = 'eq';
         eq.innerHTML = '<div class="eqb" style="height:5px"></div><div class="eqb" style="height:11px"></div><div class="eqb" style="height:7px"></div>';
         row.appendChild(eq);
-      } else if (!isCurrent && eqEl) {
-        eqEl.remove();
-        if (!durationEl) {
-          const dur = document.createElement('div');
-          dur.className = 'track-duration';
-          const track = Store.getTrack(row.dataset.trackId);
-          dur.textContent = this._formatTime(track ? track.duration : 0);
-          row.appendChild(dur);
-        }
       }
     });
     document.querySelectorAll('.queue-item').forEach(item => {
@@ -6358,7 +6432,9 @@ const UI = {
     const menuItems = [
       { label: 'Remove from Queue', icon: Icons.trash(), action: () => {
         this.hideContextMenu();
-        Player.removeFromQueue(index);
+        this.showConfirm('Remove this track from the queue?', () => {
+          Player.removeFromQueue(index);
+        });
       }},
       { label: 'Play Next', icon: Icons.play(), action: () => {
         this.hideContextMenu();
@@ -6818,5 +6894,14 @@ const UI = {
     if (this.els.queueVolumeBtn) this.els.queueVolumeBtn.innerHTML = icon;
     if (this.els.miniVolumeFill) this.els.miniVolumeFill.style.width = pct;
     if (this.els.miniVolumeBtn) this.els.miniVolumeBtn.innerHTML = icon;
+  },
+
+  _stableHash(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) {
+      h = ((h << 5) - h) + s.charCodeAt(i);
+      h |= 0;
+    }
+    return h;
   }
 };

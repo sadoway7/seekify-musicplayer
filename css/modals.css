@@ -106,13 +106,19 @@
   justify-content: center;
   color: var(--text3);
   cursor: grab;
-  opacity: 0.5;
+  opacity: 0.65;
   transition: opacity 0.15s;
 }
 
 .queue-item:hover .queue-item-drag,
 .queue-item:active .queue-item-drag {
-  opacity: 0.8;
+  opacity: 0.9;
+}
+
+@media (hover: none) {
+  .queue-item-drag {
+    opacity: 0.65;
+  }
 }
 
 .queue-item-drag svg {

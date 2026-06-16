@@ -272,19 +272,25 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	store.Mu.Lock()
 	oldTrackCount := len(store.Tracks)
 
-	tx, _ := store.DB.Begin()
-	for _, t := range newTracks {
-		if _, changed := changedTracks[t.ID]; changed {
-			store.DbUpsertTrackTx(tx, t)
+	tx, err := store.DB.Begin()
+	if err != nil {
+		log.Printf("[scan] ERROR: DB.Begin failed: %v", err)
+	} else {
+		for _, t := range newTracks {
+			if _, changed := changedTracks[t.ID]; changed {
+				store.DbUpsertTrackTx(tx, t)
+			}
 		}
+		for _, a := range newAlbums {
+			store.DbUpsertAlbumTx(tx, a)
+		}
+		tx.Commit()
 	}
-	for _, a := range newAlbums {
-		store.DbUpsertAlbumTx(tx, a)
-	}
-	tx.Commit()
 
-	InsertUncheckedReviews(newTracks)
-	if len(newTracks) > 0 {
+	if InsertUncheckedReviews != nil {
+		InsertUncheckedReviews(newTracks)
+	}
+	if len(newTracks) > 0 && WakeReviewWorker != nil {
 		WakeReviewWorker()
 	}
 
@@ -295,7 +301,9 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			}
 			if _, exists := newTracks[oldID]; !exists {
 				store.DbDeleteTrack(oldID)
-				DeleteReview(oldID)
+				if DeleteReview != nil {
+					DeleteReview(oldID)
+				}
 			}
 		}
 
@@ -587,8 +595,12 @@ func ScanSingleFile(filePath string) {
 	store.Mu.Unlock()
 
 	store.DbUpsertTrack(track)
-	SetReviewStatus(trackID, "unchecked", "[]", "")
-	WakeReviewWorker()
+	if SetReviewStatus != nil {
+		SetReviewStatus(trackID, "unchecked", "[]", "")
+	}
+	if WakeReviewWorker != nil {
+		WakeReviewWorker()
+	}
 
 	log.Printf("[scan] Added single file: %s - %s -> %s", track.Artist, track.Title, relPath)
 }
