@@ -2842,8 +2842,10 @@ const UI = {
           + (active ? '<div class="queue-spinner"></div>' : isQueued ? '<div class="queue-status-dot dot-waiting"></div>' : (failed ? '<div class="queue-status-dot dot-failed"></div>' : '<div class="queue-status-dot dot-done"></div>'))
           + '</div>';
         }        const cardClass = active ? ' queue-active' : isQueued ? ' queue-waiting' : needsSelection ? ' queue-needs-selection' : '';
-        html += '<div class="queue-job-card' + cardClass + (clickable ? ' queue-job-clickable' : '') + '"'
-          + (clickable ? ' data-artist="' + this._esc(j.artist || '') + '" data-title="' + this._esc(j.title || '') + '"' : '') + '>'
+        const isClickable = clickable || needsSelection;
+        html += '<div class="queue-job-card' + cardClass + (isClickable ? ' queue-job-clickable' : '') + '"'
+          + (clickable ? ' data-artist="' + this._esc(j.artist || '') + '" data-title="' + this._esc(j.title || '') + '"' : '')
+          + (needsSelection ? ' data-job-id="' + this._esc(j.id) + '"' : '') + '>'
           + leftHtml
           + '<div class="queue-job-info">'
           + '<div class="queue-job-title">' + this._esc(j.artist || '') + (j.artist && j.title ? ' - ' : '') + this._esc(j.title || j.query || 'Unknown') + '</div>'
@@ -2894,8 +2896,17 @@ const UI = {
       container.querySelectorAll('.queue-job-clickable').forEach(card => {
         card.addEventListener('click', (e) => {
           if (e.target.closest('.queue-job-actions')) return;
+          const jobId = card.dataset.jobId;
+          if (jobId) {
+            const job = jobs.find(j => j.id === jobId);
+            if (job && job.candidates) {
+              this._showCandidateModal(job);
+              return;
+            }
+          }
           const artist = card.dataset.artist;
           const title = card.dataset.title;
+          if (!artist || !title) return;
           const find = () => Store.library.tracks.find(t =>
             t.artist && t.title &&
             t.artist.toLowerCase() === artist.toLowerCase() &&
@@ -3743,8 +3754,21 @@ const UI = {
       + st('setting-download-convert-to-flac', 'Convert to FLAC', 'Re-encode imported files as FLAC')
       + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders')
       + '<div class="settings-subsection-label" style="margin-top:16px">YouTube Authentication</div>'
-      + '<div class="settings-section-desc">YouTube increasingly blocks yt-dlp with "Sign in to confirm you\'re not a bot." To fix downloads, export a Netscape cookies.txt from a logged-in YouTube session and upload it here. Steps: open a private/incognito window, sign into YouTube, visit youtube.com/robots.txt, then export cookies with a "Get cookies.txt" browser extension. <a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies" target="_blank" rel="noopener">Guide</a></div>'
-      + '<div class="settings-form-grid">'
+      + '<div class="settings-section-desc">Pick a browser to extract cookies once — one Keychain prompt, then downloads work forever with zero prompts. Or upload a cookies.txt file below.</div>'
+      + '<div class="settings-field" style="margin-bottom:12px">'
+      + '<label style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Extract cookies from browser</label>'
+      + '<select id="setting-yt-cookies-from-browser" class="settings-select" style="width:100%;padding:10px 12px;font-size:14px">'
+      + '<option value="">— Disabled —</option>'
+      + '<option value="chrome">Chrome</option>'
+      + '<option value="chromium">Chromium</option>'
+      + '<option value="firefox">Firefox</option>'
+      + '<option value="edge">Edge</option>'
+      + '<option value="brave">Brave</option>'
+      + '<option value="opera">Opera</option>'
+      + '<option value="safari">Safari</option>'
+      + '<option value="vivaldi">Vivaldi</option>'
+      + '<option value="whale">Whale</option>'
+      + '</select></div>'
       + '<div class="settings-field"><label>Player Client</label>'
       + '<select id="setting-yt-player-client" class="settings-select">'
       + '<option value="default">Default — recommended</option>'
@@ -3753,18 +3777,8 @@ const UI = {
       + '<option value="tv">TV</option>'
       + '<option value="web_embedded">Web Embedded</option>'
       + '</select></div>'
-      + '<div class="settings-field"><label>Cookies from Browser (alternative)</label>'
-      + '<select id="setting-yt-cookies-from-browser" class="settings-select">'
-      + '<option value="">Disabled</option>'
-      + '<option value="chrome">Chrome</option>'
-      + '<option value="firefox">Firefox</option>'
-      + '<option value="safari">Safari</option>'
-      + '<option value="edge">Edge</option>'
-      + '<option value="brave">Brave</option>'
-      + '</select></div>'
-      + '</div>'
       + '<div class="settings-field"><label>Cookies File</label>'
-      + '<div id="yt-cookies-status" class="settings-section-desc">Checking…</div>'
+      + '<div id="yt-cookies-status" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">Checking…</div>'
       + '<div class="settings-actions" style="margin-top:6px">'
       + '<input type="file" id="yt-cookies-file-input" accept=".txt,text/plain" hidden>'
       + '<button class="settings-btn settings-btn-primary" id="btn-upload-cookies" type="button">' + Icons.upload() + '<span>Upload cookies.txt</span></button>'
@@ -4217,15 +4231,16 @@ const UI = {
       const s = await Api.getCookiesStatus();
       if (s.active && s.size) {
         const kb = Math.max(1, Math.round(s.size / 1024));
-        let txt = 'Active — ' + kb + ' KB';
-        if (s.browser) txt += ' from ' + s.browser;
-        if (s.mtime) txt += ' (' + s.mtime + ')';
-        el.textContent = txt;
+        let detail = kb + ' KB';
+        if (s.browser) detail += ' from ' + s.browser;
+        if (s.mtime) detail += ' · ' + s.mtime;
+        el.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(34,197,94,0.12);color:#22c55e;font-weight:600;font-size:13px">' + Icons.checkCircle() + '<span>Active</span></span>'
+          + '<span style="color:var(--text-secondary);font-size:12px">' + detail + '</span>';
         el.style.color = '';
         if (clearBtn) clearBtn.disabled = false;
       } else {
-        el.textContent = 'No cookies. Pick a browser above to extract once, or upload a cookies.txt.';
-        el.style.color = 'var(--text2)';
+        el.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(248,113,113,0.1);color:#f87171;font-weight:600;font-size:13px">' + Icons.warning() + '<span>No cookies</span></span>'
+          + '<span style="color:var(--text-secondary);font-size:12px">Pick a browser above to extract once</span>';
         if (clearBtn) clearBtn.disabled = true;
       }
     } catch {
