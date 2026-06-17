@@ -298,6 +298,7 @@ func main() {
 
 	mux.HandleFunc("/api/cookies/upload", handlers.UploadCookiesHandler)
 	mux.HandleFunc("/api/cookies/clear", handlers.ClearCookiesHandler)
+	mux.HandleFunc("/api/cookies/extract", handlers.ExtractCookiesHandler)
 	mux.HandleFunc("/api/cookies/status", handlers.CookiesStatusHandler)
 
 	mux.HandleFunc("/api/review/tracks", review.ReviewTracksHandler)

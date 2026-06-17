@@ -3977,11 +3977,21 @@ const UI = {
       }
       if (ytCookiesBrowser && !ytCookiesBrowser._bound) {
         ytCookiesBrowser._bound = true;
-        ytCookiesBrowser.addEventListener('change', () => this._saveYtAuthDropdowns());
+        ytCookiesBrowser.addEventListener('change', () => {
+          const browser = ytCookiesBrowser.value;
+          if (browser) {
+            this._extractCookies(browser);
+          } else {
+            this._clearCookies();
+          }
+        });
       }
       if (ytPlayerClient && !ytPlayerClient._bound) {
         ytPlayerClient._bound = true;
-        ytPlayerClient.addEventListener('change', () => this._saveYtAuthDropdowns());
+        ytPlayerClient.addEventListener('change', () => {
+          const client = ytPlayerClient.value || 'default';
+          Api.saveSettings({ yt_player_client: client }).then(() => this._showToast('Saved')).catch(() => {});
+        });
       }
       this._stoggleOn('setting-downloads-enabled', settings.downloads_enabled !== 'false');
       Store.downloadsEnabled = settings.downloads_enabled !== 'false';
@@ -4191,7 +4201,6 @@ const UI = {
         mp3_bitrate: mp3 ? mp3.value : 'v2',
         opus_bitrate: opus ? opus.value : '320k',
         download_min_bitrate: minBr ? minBr.value : '0',
-        yt_cookies_from_browser: (document.getElementById('setting-yt-cookies-from-browser') || {}).value || '',
         yt_player_client: (document.getElementById('setting-yt-player-client') || {}).value || 'default'
       });
       this._showToast('Import settings saved');
@@ -4208,14 +4217,14 @@ const UI = {
       const s = await Api.getCookiesStatus();
       if (s.active && s.size) {
         const kb = Math.max(1, Math.round(s.size / 1024));
-        let txt = 'Active — cookies.txt (' + kb + ' KB';
-        if (s.mtime) txt += ', uploaded ' + s.mtime;
-        txt += ')';
+        let txt = 'Active — ' + kb + ' KB';
+        if (s.browser) txt += ' from ' + s.browser;
+        if (s.mtime) txt += ' (' + s.mtime + ')';
         el.textContent = txt;
         el.style.color = '';
         if (clearBtn) clearBtn.disabled = false;
       } else {
-        el.textContent = 'No cookies file uploaded. Downloads may be blocked by YouTube.';
+        el.textContent = 'No cookies. Pick a browser above to extract once, or upload a cookies.txt.';
         el.style.color = 'var(--text2)';
         if (clearBtn) clearBtn.disabled = true;
       }
@@ -4251,15 +4260,16 @@ const UI = {
     }
   },
 
-  async _saveYtAuthDropdowns() {
-    const browser = (document.getElementById('setting-yt-cookies-from-browser') || {}).value || '';
-    const client = (document.getElementById('setting-yt-player-client') || {}).value || 'default';
+  async _extractCookies(browser) {
+    const el = document.getElementById('yt-cookies-status');
+    if (el) el.textContent = 'Extracting cookies from ' + browser + '… (one Keychain prompt)';
     try {
-      await Api.saveSettings({ yt_cookies_from_browser: browser, yt_player_client: client });
-      this._showToast('Saved');
+      const result = await Api.extractCookies(browser);
+      this._showToast('Cookies saved from ' + browser + ' — no more prompts');
       this._refreshCookiesStatus();
     } catch (e) {
-      this._showToast('Failed to save');
+      this._showToast(e.message || 'Extraction failed');
+      this._refreshCookiesStatus();
     }
   },
 

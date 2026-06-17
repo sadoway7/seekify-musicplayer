@@ -220,10 +220,10 @@ func YtCommonArgs() []string {
 		args = append(args, "--extractor-args", "youtube:player_client="+client)
 	}
 	if cookiesAllowed() {
-		if cookiesFrom := store.GetSetting("yt_cookies_from_browser", ""); cookiesFrom != "" {
-			args = append([]string{"--cookies-from-browser", cookiesFrom}, args...)
-		} else if cookiesFile := store.GetSetting("yt_cookies_file", ""); cookiesFile != "" {
+		if cookiesFile := store.GetSetting("yt_cookies_file", ""); cookiesFile != "" {
 			args = append([]string{"--cookies", cookiesFile}, args...)
+		} else if cookiesFrom := store.GetSetting("yt_cookies_from_browser", ""); cookiesFrom != "" {
+			args = append([]string{"--cookies-from-browser", cookiesFrom}, args...)
 		}
 	}
 	return args

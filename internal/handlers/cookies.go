@@ -7,6 +7,7 @@ import (
 	"musicapp/internal/store"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -103,9 +104,86 @@ func ClearCookiesHandler(w http.ResponseWriter, r *http.Request) {
 
 	os.Remove(cookiesFilePath())
 	store.SetSetting("yt_cookies_file", "")
+	store.SetSetting("yt_cookies_from_browser", "")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+
+func ExtractCookiesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Browser string `json:"browser"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Browser == "" {
+		http.Error(w, `{"error":"browser required (chrome, firefox, etc.)"}`, http.StatusBadRequest)
+		return
+	}
+
+	ytdlpPath, _ := exec.LookPath("yt-dlp")
+	if ytdlpPath == "" {
+		http.Error(w, `{"error":"yt-dlp not found"}`, http.StatusInternalServerError)
+		return
+	}
+
+	tmpFile := cookiesFilePath() + ".tmp"
+	os.Remove(tmpFile)
+
+	// --skip-download triggers cookie extraction + metadata only (no video download).
+	// "Me at the zoo" is the first YouTube video — always available, minimal work.
+	cmd := exec.Command(ytdlpPath,
+		"--cookies-from-browser", req.Browser,
+		"--cookies", tmpFile,
+		"--skip-download",
+		"--no-warnings",
+		"https://www.youtube.com/watch?v=jNQXAC9IVRw",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		os.Remove(tmpFile)
+		log.Printf("[cookies] extract from %s failed: %v — output: %s", req.Browser, err, string(output))
+		http.Error(w, `{"error":"failed to extract cookies from `+req.Browser+` — close the browser and try again, or try Firefox"}`, http.StatusInternalServerError)
+		return
+	}
+
+	info, err := os.Stat(tmpFile)
+	if err != nil || info.Size() == 0 {
+		os.Remove(tmpFile)
+		http.Error(w, `{"error":"no cookies extracted — sign into YouTube in `+req.Browser+` first"}`, http.StatusInternalServerError)
+		return
+	}
+
+	data, err := os.ReadFile(tmpFile)
+	if err != nil || !looksLikeNetscapeCookies(data) {
+		os.Remove(tmpFile)
+		http.Error(w, `{"error":"extracted file does not contain valid YouTube cookies"}`, http.StatusInternalServerError)
+		return
+	}
+
+	os.Remove(cookiesFilePath())
+	if err := os.Rename(tmpFile, cookiesFilePath()); err != nil {
+		os.Remove(tmpFile)
+		http.Error(w, `{"error":"could not save cookies file"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// File is the delivery mechanism (no prompts); browser is kept as the source label.
+	store.SetSetting("yt_cookies_file", cookiesFilePath())
+	store.SetSetting("yt_cookies_from_browser", req.Browser)
+
+	log.Printf("[cookies] extracted from %s — %d bytes saved to %s", req.Browser, info.Size(), cookiesFilePath())
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":      true,
+		"browser": req.Browser,
+		"path":    cookiesFilePath(),
+		"size":    info.Size(),
+	})
 }
 
 func CookiesStatusHandler(w http.ResponseWriter, r *http.Request) {
