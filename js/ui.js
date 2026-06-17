@@ -1232,6 +1232,34 @@ const UI = {
       console.error('renderPage error for view', Store.currentView, e);
       this.els.content.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b"><div style="font-size:16px;font-weight:600">Error loading page</div><div style="font-size:12px;margin-top:8px;color:#aaa">' + (e.message || e) + '</div></div>';
     }
+    this._fadeIn(this.els.content);
+  },
+
+  homeSkeleton() {
+    let html = '<div class="skeleton-home">';
+    html += '<div class="skeleton-search"></div>';
+    for (let s = 0; s < 3; s++) {
+      html += '<div class="skeleton-section">';
+      html += '<div class="skeleton-section-title"></div>';
+      if (s === 0) {
+        html += '<div class="skeleton-grid">';
+        for (let i = 0; i < 6; i++) html += '<div class="skeleton-grid-item"></div>';
+        html += '</div>';
+      } else {
+        html += '<div class="skeleton-row">';
+        for (let i = 0; i < 5; i++) {
+          html += '<div class="skeleton-card">'
+            + '<div class="skeleton-card-art"></div>'
+            + '<div class="skeleton-card-line"></div>'
+            + '<div class="skeleton-card-line"></div>'
+            + '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    this.els.content.innerHTML = html;
   },
 
   renderHome() {
@@ -1272,7 +1300,7 @@ const UI = {
       + '</div>'
       + '<div class="home-search-bar" id="home-search-bar">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input" type="text" placeholder="Search library...">'
+      + '<input class="search-input" type="search" enterkeyhint="search" placeholder="Search library...">'
       + '</div>'
       + '</div>';
 
@@ -1529,7 +1557,7 @@ const UI = {
     this._viewTrackList = [];
     let html = '<div class="library-search-bar">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input" type="text" placeholder="Songs, artists, or albums" value="' + this._esc(this.searchQuery) + '">'
+      + '<input class="search-input" type="search" enterkeyhint="search" placeholder="Songs, artists, or albums" value="' + this._esc(this.searchQuery) + '">'
       + '</div>'
       + '<div id="search-results" style="margin-top:12px"></div>';
 
@@ -1676,7 +1704,7 @@ const UI = {
       + '<div class="lib-search-row">'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input lib-search-input" type="text" placeholder="">'
+      + '<input class="search-input lib-search-input" type="search" enterkeyhint="search" placeholder="">'
       + '</div>'
       + '<button class="lib-upload-btn" id="lib-upload-btn" aria-label="Upload music">' + Icons.upload() + '</button>'
       + '</div>'
@@ -2418,6 +2446,7 @@ const UI = {
     }
 
     this.els.content.innerHTML = html;
+    this._fadeIn(this.els.content);
     this._setupReviewScrollLoader();
   },
 
@@ -2545,7 +2574,7 @@ const UI = {
         + '</div>';
       html += '<div class="search-container finder-search-container">'
         + '<span class="search-icon">' + Icons.search() + '</span>'
-        + '<input class="search-input finder-search-input" type="text" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
+        + '<input class="search-input finder-search-input" type="search" enterkeyhint="search" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
         + subChips
         + '</div>'
         + '</div>'
@@ -2835,6 +2864,7 @@ const UI = {
       });
       html += '</div>';
       container.innerHTML = html;
+      this._fadeIn(container);
 
       container.querySelectorAll('.queue-item-retry').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -3004,8 +3034,8 @@ const UI = {
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('show'));
 
-    overlay.querySelector('.candidate-modal-close').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('.candidate-modal-close').addEventListener('click', () => this._fadeOutRemove(overlay, 200));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) this._fadeOutRemove(overlay, 200); });
 
     overlay.querySelectorAll('.candidate-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -3013,7 +3043,7 @@ const UI = {
         item.style.opacity = '0.5';
         item.style.pointerEvents = 'none';
         Api.selectVideo(job.id, videoId).then(() => {
-          overlay.remove();
+          this._fadeOutRemove(overlay, 200);
           this._showToast('Download resumed with selected source');
           this._loadDownloads();
         }).catch(() => {
@@ -3185,6 +3215,7 @@ const UI = {
     }
 
     container.innerHTML = html;
+    this._fadeIn(container);
     this._bindFinderResults();
   },
 
@@ -3409,7 +3440,7 @@ const UI = {
     let html = '<div class="tracklist-toolbar">'
       + '<div class="search-container finder-search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input artist-tracklist-search" type="text" placeholder="Filter tracks...">'
+      + '<input class="search-input artist-tracklist-search" type="search" enterkeyhint="search" placeholder="Filter tracks...">'
       + '</div>'
       + (hasMore ? '<button class="finder-load-more-btn" id="btn-load-more-tracks"><span>Load More</span></button>' : '')
       + '<button class="settings-btn settings-btn-primary" id="btn-download-all-artist" style="display:none">' + Icons.download() + '<span>Download All</span></button>'
@@ -3711,10 +3742,18 @@ const UI = {
       + '</div>'
       + st('setting-download-convert-to-flac', 'Convert to FLAC', 'Re-encode imported files as FLAC')
       + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders')
-      + '<div class="settings-subsection-label" style="margin-top:16px">YouTube Cookies</div>'
-      + '<div class="settings-section-desc">Required for age-restricted videos. Choose a browser to import cookies from, or provide a cookies.txt file path.</div>'
+      + '<div class="settings-subsection-label" style="margin-top:16px">YouTube Authentication</div>'
+      + '<div class="settings-section-desc">YouTube increasingly blocks yt-dlp with "Sign in to confirm you\'re not a bot." To fix downloads, export a Netscape cookies.txt from a logged-in YouTube session and upload it here. Steps: open a private/incognito window, sign into YouTube, visit youtube.com/robots.txt, then export cookies with a "Get cookies.txt" browser extension. <a href="https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies" target="_blank" rel="noopener">Guide</a></div>'
       + '<div class="settings-form-grid">'
-      + '<div class="settings-field"><label>Cookies from Browser</label>'
+      + '<div class="settings-field"><label>Player Client</label>'
+      + '<select id="setting-yt-player-client" class="settings-select">'
+      + '<option value="default">Default — recommended</option>'
+      + '<option value="web">Web</option>'
+      + '<option value="mweb">Mobile Web</option>'
+      + '<option value="tv">TV</option>'
+      + '<option value="web_embedded">Web Embedded</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Cookies from Browser (alternative)</label>'
       + '<select id="setting-yt-cookies-from-browser" class="settings-select">'
       + '<option value="">Disabled</option>'
       + '<option value="chrome">Chrome</option>'
@@ -3723,9 +3762,14 @@ const UI = {
       + '<option value="edge">Edge</option>'
       + '<option value="brave">Brave</option>'
       + '</select></div>'
-      + '<div class="settings-field"><label>Or: Cookies File Path</label>'
-      + '<input type="text" id="setting-yt-cookies-file" class="settings-input" placeholder="/path/to/cookies.txt"></div>'
       + '</div>'
+      + '<div class="settings-field"><label>Cookies File</label>'
+      + '<div id="yt-cookies-status" class="settings-section-desc">Checking…</div>'
+      + '<div class="settings-actions" style="margin-top:6px">'
+      + '<input type="file" id="yt-cookies-file-input" accept=".txt,text/plain" hidden>'
+      + '<button class="settings-btn settings-btn-primary" id="btn-upload-cookies" type="button">' + Icons.upload() + '<span>Upload cookies.txt</span></button>'
+      + '<button class="settings-btn settings-btn-danger" id="btn-clear-cookies" type="button">' + Icons.trash() + '<span>Remove</span></button>'
+      + '</div></div>'
       + '<div class="settings-subsection-label" style="margin-top:16px">Bulk Import</div>'
       + '<div class="settings-section-desc">Paste tracks to download (one per line, "Artist - Title").</div>'
       + '<textarea id="bulk-import-input" class="settings-textarea" rows="4" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion"></textarea>'
@@ -3908,6 +3952,37 @@ const UI = {
       if (mp3 && settings.mp3_bitrate) mp3.value = settings.mp3_bitrate;
       if (opus && settings.opus_bitrate) opus.value = settings.opus_bitrate;
       if (minBr && settings.download_min_bitrate) minBr.value = settings.download_min_bitrate;
+      const ytCookiesBrowser = document.getElementById('setting-yt-cookies-from-browser');
+      const ytPlayerClient = document.getElementById('setting-yt-player-client');
+      if (ytCookiesBrowser) ytCookiesBrowser.value = settings.yt_cookies_from_browser || '';
+      if (ytPlayerClient) ytPlayerClient.value = settings.yt_player_client || 'default';
+      this._refreshCookiesStatus();
+      const ytCookiesFileInput = document.getElementById('yt-cookies-file-input');
+      if (ytCookiesFileInput && !ytCookiesFileInput._bound) {
+        ytCookiesFileInput._bound = true;
+        ytCookiesFileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) this._uploadCookies(file);
+        });
+      }
+      const uploadCookiesBtn = document.getElementById('btn-upload-cookies');
+      if (uploadCookiesBtn && !uploadCookiesBtn._bound) {
+        uploadCookiesBtn._bound = true;
+        uploadCookiesBtn.addEventListener('click', () => ytCookiesFileInput && ytCookiesFileInput.click());
+      }
+      const clearCookiesBtn = document.getElementById('btn-clear-cookies');
+      if (clearCookiesBtn && !clearCookiesBtn._bound) {
+        clearCookiesBtn._bound = true;
+        clearCookiesBtn.addEventListener('click', () => this._clearCookies());
+      }
+      if (ytCookiesBrowser && !ytCookiesBrowser._bound) {
+        ytCookiesBrowser._bound = true;
+        ytCookiesBrowser.addEventListener('change', () => this._saveYtAuthDropdowns());
+      }
+      if (ytPlayerClient && !ytPlayerClient._bound) {
+        ytPlayerClient._bound = true;
+        ytPlayerClient.addEventListener('change', () => this._saveYtAuthDropdowns());
+      }
       this._stoggleOn('setting-downloads-enabled', settings.downloads_enabled !== 'false');
       Store.downloadsEnabled = settings.downloads_enabled !== 'false';
       this._updateQualityVisibility();
@@ -4115,11 +4190,76 @@ const UI = {
         download_organise_by_artist: String(this._stoggleVal('setting-download-organise-by-artist')),
         mp3_bitrate: mp3 ? mp3.value : 'v2',
         opus_bitrate: opus ? opus.value : '320k',
-        download_min_bitrate: minBr ? minBr.value : '0'
+        download_min_bitrate: minBr ? minBr.value : '0',
+        yt_cookies_from_browser: (document.getElementById('setting-yt-cookies-from-browser') || {}).value || '',
+        yt_player_client: (document.getElementById('setting-yt-player-client') || {}).value || 'default'
       });
       this._showToast('Import settings saved');
     } catch (e) {
       this._showToast('Failed to save settings');
+    }
+  },
+
+  async _refreshCookiesStatus() {
+    const el = document.getElementById('yt-cookies-status');
+    if (!el) return;
+    const clearBtn = document.getElementById('btn-clear-cookies');
+    try {
+      const s = await Api.getCookiesStatus();
+      if (s.active && s.size) {
+        const kb = Math.max(1, Math.round(s.size / 1024));
+        let txt = 'Active — cookies.txt (' + kb + ' KB';
+        if (s.mtime) txt += ', uploaded ' + s.mtime;
+        txt += ')';
+        el.textContent = txt;
+        el.style.color = '';
+        if (clearBtn) clearBtn.disabled = false;
+      } else {
+        el.textContent = 'No cookies file uploaded. Downloads may be blocked by YouTube.';
+        el.style.color = 'var(--text2)';
+        if (clearBtn) clearBtn.disabled = true;
+      }
+    } catch {
+      el.textContent = 'Could not check cookies status.';
+      if (clearBtn) clearBtn.disabled = true;
+    }
+  },
+
+  async _uploadCookies(file) {
+    const btn = document.getElementById('btn-upload-cookies');
+    if (btn) btn.disabled = true;
+    try {
+      await Api.uploadCookies(file);
+      this._showToast('Cookies uploaded — downloads should work now');
+      this._refreshCookiesStatus();
+    } catch (e) {
+      this._showToast(e.message || 'Upload failed');
+    } finally {
+      if (btn) btn.disabled = false;
+      const input = document.getElementById('yt-cookies-file-input');
+      if (input) input.value = '';
+    }
+  },
+
+  async _clearCookies() {
+    try {
+      await Api.clearCookies();
+      this._showToast('Cookies removed');
+      this._refreshCookiesStatus();
+    } catch (e) {
+      this._showToast('Failed to remove cookies');
+    }
+  },
+
+  async _saveYtAuthDropdowns() {
+    const browser = (document.getElementById('setting-yt-cookies-from-browser') || {}).value || '';
+    const client = (document.getElementById('setting-yt-player-client') || {}).value || 'default';
+    try {
+      await Api.saveSettings({ yt_cookies_from_browser: browser, yt_player_client: client });
+      this._showToast('Saved');
+      this._refreshCookiesStatus();
+    } catch (e) {
+      this._showToast('Failed to save');
     }
   },
 
@@ -5182,7 +5322,7 @@ const UI = {
       const allTracks = Store.library.tracks.slice().sort((a, b) => a.title.localeCompare(b.title));
 
       let html = '<div style="margin-top:12px">'
-        + '<input type="text" id="download-search" placeholder="Search songs..." style="width:100%;padding:10px 14px;background:var(--l2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:14px;margin-bottom:8px">';
+        + '<input type="search" enterkeyhint="search" id="download-search" placeholder="Search songs..." style="width:100%;padding:10px 14px;background:var(--l2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:14px;margin-bottom:8px">';
 
       const renderList = (filter) => {
         const filtered = filter ? allTracks.filter(t =>
@@ -5326,6 +5466,7 @@ const UI = {
       });
 
       listEl.innerHTML = html;
+      this._fadeIn(listEl);
 
       listEl.querySelectorAll('.review-btn-approve').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -5381,7 +5522,7 @@ const UI = {
       + '<span class="page-header-title">Match History</span></div>'
       + '<div class="search-container" style="margin-bottom:12px">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input" id="history-search" type="text" placeholder="Search by track, artist, or album...">'
+      + '<input class="search-input" id="history-search" type="search" enterkeyhint="search" placeholder="Search by track, artist, or album...">'
       + '</div>'
       + '<div class="filter-chips">'
       + '<button class="chip active" data-hist-filter="all">All</button>'
@@ -5472,6 +5613,7 @@ const UI = {
     });
 
     listEl.innerHTML = html;
+    this._fadeIn(listEl);
     this._filterHistory();
 
     listEl.querySelectorAll('[data-undo-id]').forEach(btn => {
@@ -5546,20 +5688,39 @@ const UI = {
   updateMiniPlayer() {
     const track = Player.getCurrentTrack();
     if (!track) {
-      this.els.miniPlayer.classList.add('hidden');
+      if (!this.els.miniPlayer.classList.contains('hidden')) {
+        this.els.miniPlayer.style.animation = 'miniPlayerSlideDown 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards';
+        clearTimeout(this._miniAnimTimer);
+        this._miniAnimTimer = setTimeout(() => {
+          this.els.miniPlayer.classList.add('hidden');
+          this.els.miniPlayer.style.animation = '';
+        }, 300);
+      }
       this.els.miniPlayer.style.background = '';
       document.body.classList.remove('mini-player-visible');
       this._applyThemeColor(14, 14, 14);
       return;
     }
 
+    const wasHidden = this.els.miniPlayer.classList.contains('hidden');
+    clearTimeout(this._miniAnimTimer);
     this.els.miniPlayer.classList.remove('hidden');
+    if (wasHidden) {
+      this.els.miniPlayer.style.animation = 'miniPlayerSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
+      this._miniAnimTimer = setTimeout(() => {
+        this.els.miniPlayer.style.animation = '';
+      }, 300);
+    }
     document.body.classList.add('mini-player-visible');
 
     this.els.miniArt.style.backgroundImage = 'url(' + Api.coverUrl(track.albumID) + ')';
     this.els.miniTitle.textContent = track.title;
     this.els.miniArtist.textContent = track.artist;
+
+    const playingChanged = this._miniWasPlaying !== undefined && this._miniWasPlaying !== Player.playing;
+    this._miniWasPlaying = Player.playing;
     this.els.miniPlayBtn.innerHTML = Player.playing ? Icons.pause() : Icons.play();
+    if (playingChanged) this._popIcon(this.els.miniPlayBtn);
 
     const progress = Player.getProgress();
     this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
@@ -5610,13 +5771,19 @@ const UI = {
     this.els.npArtist.textContent = track.artist;
 
     const isFav = Store.isFavorite(track.id);
+    const favChanged = this._npWasFav !== undefined && this._npWasFav !== isFav;
+    this._npWasFav = isFav;
     this.els.npLikeBtn.innerHTML = isFav ? Icons.heartFilled() : Icons.heart();
     this.els.npLikeBtn.classList.toggle('active', isFav);
+    if (favChanged) this._popIcon(this.els.npLikeBtn);
 
     const canDownload = Store.downloadsEnabled;
     if (this.els.npDownloadBtn) this.els.npDownloadBtn.style.display = canDownload ? '' : 'none';
 
+    const playingChanged = this._npWasPlaying !== undefined && this._npWasPlaying !== Player.playing;
+    this._npWasPlaying = Player.playing;
     this.els.npPlay.innerHTML = Player.playing ? Icons.pause() : Icons.play();
+    if (playingChanged) this._popIcon(this.els.npPlay);
     this.els.npShuffle.classList.toggle('active', Player.shuffle);
     this.els.npRepeat.classList.toggle('active', Player.repeat !== 'off');
     this.els.npRepeat.innerHTML = Player.repeat === 'one' ? Icons.repeatOne() : Icons.repeat();
@@ -6150,6 +6317,27 @@ const UI = {
     }, 250);
   },
 
+  _popIcon(el) {
+    if (!el) return;
+    el.style.animation = 'none';
+    void el.offsetHeight;
+    el.style.animation = 'popScale 0.3s ease';
+    setTimeout(() => { el.style.animation = ''; }, 310);
+  },
+
+  _fadeIn(el) {
+    if (!el) return;
+    el.style.animation = 'none';
+    void el.offsetHeight;
+    el.style.animation = 'pageFadeIn 0.22s var(--ease-out) forwards';
+  },
+
+  _fadeOutRemove(el, ms) {
+    if (!el) return;
+    el.style.animation = 'modalFadeOut ' + (ms || 200) + 'ms ease forwards';
+    setTimeout(() => el.remove(), ms || 200);
+  },
+
   showToast(message) {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
@@ -6176,12 +6364,12 @@ const UI = {
       + '<button class="confirm-ok">OK</button>'
       + '</div></div>';
     document.body.appendChild(el);
-    el.querySelector('.confirm-cancel').addEventListener('click', () => el.remove());
+    el.querySelector('.confirm-cancel').addEventListener('click', () => this._fadeOutRemove(el, 200));
     el.querySelector('.confirm-ok').addEventListener('click', () => {
-      el.remove();
-      if (onConfirm) onConfirm();
+      this._fadeOutRemove(el, 200);
+      if (onConfirm) setTimeout(() => onConfirm(), 200);
     });
-    el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
+    el.addEventListener('click', (e) => { if (e.target === el) this._fadeOutRemove(el, 200); });
   },
 
   updateTrackHighlights() {
@@ -6574,7 +6762,7 @@ const UI = {
           }
 
           await Store.refreshLibrary();
-          modal.classList.add('hidden');
+          this._closeSheetModal(modal);
           this.showToast('Metadata updated');
           this.renderPage();
           if (Player.getCurrentTrack() && Player.getCurrentTrack().id === trackId) {

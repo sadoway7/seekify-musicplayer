@@ -271,6 +271,16 @@
   text-align: center;
 }
 
+.np-title.scrolling {
+  text-overflow: clip;
+  animation: npTitleScroll var(--marquee-dur, 8s) ease-in-out infinite alternate;
+}
+
+@keyframes npTitleScroll {
+  0%, 8% { transform: translateX(0); }
+  92%, 100% { transform: translateX(var(--marquee-dist, 0px)); }
+}
+
 .np-artist {
   font-size: 15px;
   font-weight: 400;

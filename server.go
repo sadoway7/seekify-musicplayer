@@ -296,6 +296,10 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/api/cookies/upload", handlers.UploadCookiesHandler)
+	mux.HandleFunc("/api/cookies/clear", handlers.ClearCookiesHandler)
+	mux.HandleFunc("/api/cookies/status", handlers.CookiesStatusHandler)
+
 	mux.HandleFunc("/api/review/tracks", review.ReviewTracksHandler)
 	mux.HandleFunc("/api/review/counts", review.ReviewCountsHandler)
 	mux.HandleFunc("/api/review/mark-ok", review.ReviewMarkOkHandler)

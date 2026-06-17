@@ -1298,3 +1298,84 @@
   width: 22px;
   height: 22px;
 }
+
+.skeleton-home {
+  padding-top: 12px;
+}
+
+.skeleton-search {
+  height: 44px;
+  border-radius: 24px;
+  margin: 0 var(--page-margin) 24px;
+  background: var(--l3);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-section {
+  margin-bottom: 20px;
+}
+
+.skeleton-section-title {
+  height: 18px;
+  width: 120px;
+  border-radius: 6px;
+  margin: 0 var(--page-margin) 12px;
+  background: var(--l3);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-row {
+  display: flex;
+  gap: 12px;
+  overflow: hidden;
+  padding: 0 var(--page-margin);
+}
+
+.skeleton-card {
+  flex-shrink: 0;
+}
+
+.skeleton-card-art {
+  width: 112px;
+  height: 112px;
+  border-radius: var(--radius-md);
+  background: var(--l3);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-card-line {
+  height: 12px;
+  border-radius: 4px;
+  margin-top: 8px;
+  background: var(--l3);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-card-line:first-of-type { width: 90%; }
+.skeleton-card-line:last-of-type { width: 60%; height: 10px; }
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4);
+}
+
+.skeleton-grid-item {
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-md);
+  background: var(--l3);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@media (min-width: 768px) {
+  .skeleton-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .skeleton-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}

@@ -33,7 +33,7 @@ const App = {
 
     ReviewUI.init();
 
-    UI.els.content.innerHTML = '<div class="loading-spinner"></div>';
+    UI.homeSkeleton();
 
     await Store.init();
 

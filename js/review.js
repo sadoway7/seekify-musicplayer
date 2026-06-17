@@ -175,7 +175,7 @@ const ReviewUI = {
   closeEditMetaModal() {
     const modal = document.getElementById('edit-meta-modal');
     if (modal) {
-      modal.classList.add('hidden');
+      UI._closeSheetModal(modal);
       modal._trackId = null;
     }
   },

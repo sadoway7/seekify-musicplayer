@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,6 +65,89 @@ var (
 const DownloadTimeout = 10 * time.Minute
 const SearchTimeout = 2 * time.Minute
 
+// Bot-backoff and stale-cookie cooldown, adapted from patterns used by other
+// yt-dlp frontends (e.g. musicgrabber). These keep us from hammering YouTube
+// right after a block and from letting one set of stale cookies poison every
+// subsequent download.
+var (
+	ytMu                 sync.Mutex
+	botBackoffUntil      time.Time
+	cookiesDisabledUntil time.Time
+)
+
+const (
+	botBackoffMin      = 5 * time.Second
+	botBackoffMax      = 20 * time.Second
+	cookieFailCooldown = 2 * time.Hour
+)
+
+func noteBotBlock() {
+	sleep := botBackoffMin + time.Duration(rand.Int63n(int64(botBackoffMax-botBackoffMin)+1))
+	ytMu.Lock()
+	botBackoffUntil = time.Now().Add(sleep)
+	ytMu.Unlock()
+}
+
+func sleepIfBotted() {
+	ytMu.Lock()
+	wait := botBackoffUntil.Sub(time.Now())
+	ytMu.Unlock()
+	if wait > 0 {
+		log.Printf("[download] bot-backoff: sleeping %v before next yt-dlp call", wait)
+		time.Sleep(wait)
+	}
+}
+
+func cookiesAllowed() bool {
+	ytMu.Lock()
+	defer ytMu.Unlock()
+	return time.Now().After(cookiesDisabledUntil)
+}
+
+func noteCookieFailure() {
+	ytMu.Lock()
+	cookiesDisabledUntil = time.Now().Add(cookieFailCooldown)
+	ytMu.Unlock()
+}
+
+func isYtdlp403(output string) bool {
+	l := strings.ToLower(output)
+	return strings.Contains(l, "403") || strings.Contains(l, "forbidden") || strings.Contains(l, "sign in to confirm")
+}
+
+func shouldRetryWithoutCookies(output string) bool {
+	l := strings.ToLower(output)
+	return isYtdlp403(output) ||
+		strings.Contains(l, "downloaded file is empty") ||
+		strings.Contains(l, "requested format is not available")
+}
+
+func argsHaveCookies(args []string) bool {
+	for _, a := range args {
+		if a == "--cookies" || a == "--cookies-from-browser" {
+			return true
+		}
+	}
+	return false
+}
+
+func stripCookiesArgs(args []string) []string {
+	var out []string
+	skip := false
+	for _, a := range args {
+		if skip {
+			skip = false
+			continue
+		}
+		if a == "--cookies" || a == "--cookies-from-browser" {
+			skip = true
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // EnrichFunc is a callback set by main to break the circular dependency.
 // When a v2 pipeline job completes, it calls EnrichFunc for metadata enrichment.
 // If nil, TagAudioFile is used as fallback.
@@ -114,6 +199,68 @@ func FindFfprobe() string {
 		}
 	}
 	return ""
+}
+
+// YtCommonArgs returns yt-dlp flags shared by every stream-resolving command:
+// an optional player client override, plus cookies (file or browser).
+//
+// By default ("default" sentinel or empty) NO player_client override is passed,
+// letting yt-dlp use its built-in client cascade — yt-dlp's maintainers
+// recommend this, since the cascade picks clients that don't currently require
+// a PO Token. Forcing a single client (e.g. "web") disables that cascade and
+// "web" in particular is one of the most aggressively throttled clients.
+//
+// YouTube increasingly bot-blocks requests ("Sign in to confirm you're not a
+// bot"); passing cookies (a Netscape cookies.txt exported from a logged-in
+// YouTube session) is the standard workaround. See:
+// https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies
+func YtCommonArgs() []string {
+	var args []string
+	if client := store.GetSetting("yt_player_client", "default"); client != "" && client != "default" {
+		args = append(args, "--extractor-args", "youtube:player_client="+client)
+	}
+	if cookiesAllowed() {
+		if cookiesFrom := store.GetSetting("yt_cookies_from_browser", ""); cookiesFrom != "" {
+			args = append([]string{"--cookies-from-browser", cookiesFrom}, args...)
+		} else if cookiesFile := store.GetSetting("yt_cookies_file", ""); cookiesFile != "" {
+			args = append([]string{"--cookies", cookiesFile}, args...)
+		}
+	}
+	return args
+}
+
+// runDownloadCmd executes a yt-dlp download command with active-job tracking
+// and the standard download timeout. Returns combined output, error, and
+// whether it timed out (and was killed).
+func runDownloadCmd(jobID, ytdlpPath string, args []string) (output string, err error, timedOut bool) {
+	cmd := exec.Command(ytdlpPath, args...)
+	DownloadMu.Lock()
+	ActiveJobs[jobID] = cmd
+	ActiveJobTime[jobID] = time.Now()
+	DownloadMu.Unlock()
+	defer func() {
+		DownloadMu.Lock()
+		delete(ActiveJobs, jobID)
+		delete(ActiveJobTime, jobID)
+		DownloadMu.Unlock()
+	}()
+
+	done := make(chan struct{})
+	var out []byte
+	go func() {
+		out, err = cmd.CombinedOutput()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return string(out), err, false
+	case <-time.After(DownloadTimeout):
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+		<-done
+		return string(out), err, true
+	}
 }
 
 func InitDownloadTables() {
@@ -507,7 +654,7 @@ func ProcessSingleDownload(job *DownloadJob) {
 		audioFormat = "best"
 	}
 
-	ytArgs := []string{
+	ytArgs := append(YtCommonArgs(),
 		"-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
 		"-x",
 		"--audio-format", audioFormat,
@@ -517,58 +664,61 @@ func ProcessSingleDownload(job *DownloadJob) {
 		"--no-warnings",
 		"-o", outputTemplate,
 		url,
-	}
-
-	if cookiesFrom := store.GetSetting("yt_cookies_from_browser", ""); cookiesFrom != "" {
-		ytArgs = append([]string{"--cookies-from-browser", cookiesFrom}, ytArgs...)
-	} else if cookiesFile := store.GetSetting("yt_cookies_file", ""); cookiesFile != "" {
-		ytArgs = append([]string{"--cookies", cookiesFile}, ytArgs...)
-	}
+	)
 
 	minBr := store.GetSettingInt("download_min_bitrate", 0)
 
-	cmd := exec.Command(ytdlpPath, ytArgs...)
+	sleepIfBotted()
 
-	DownloadMu.Lock()
-	ActiveJobs[job.ID] = cmd
-	ActiveJobTime[job.ID] = time.Now()
-	DownloadMu.Unlock()
-
-	defer func() {
-		DownloadMu.Lock()
-		delete(ActiveJobs, job.ID)
-		delete(ActiveJobTime, job.ID)
-		DownloadMu.Unlock()
-	}()
-
-	done := make(chan struct{})
-	var output []byte
-	var cmdErr error
-	go func() {
-		output, cmdErr = cmd.CombinedOutput()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		if cmdErr != nil {
-			job.Status = "failed"
-			job.Error = userFriendlyError(string(output))
-			job.CompletedAt = time.Now().Format(time.RFC3339)
-			DbUpdateJob(job)
-			log.Printf("[download] yt-dlp failed for %q: %v", job.SearchQuery, cmdErr)
-			return
-		}
-	case <-time.After(DownloadTimeout):
-		if cmd.Process != nil {
-			cmd.Process.Kill()
-		}
+	out, cmdErr, timedOut := runDownloadCmd(job.ID, ytdlpPath, ytArgs)
+	if timedOut {
 		job.Status = "failed"
 		job.Error = "Download timed out after " + DownloadTimeout.String()
 		job.CompletedAt = time.Now().Format(time.RFC3339)
 		DbUpdateJob(job)
 		log.Printf("[download] Timed out after %v for %q", DownloadTimeout, job.SearchQuery)
 		return
+	}
+	if cmdErr != nil {
+		if isYtdlp403(out) {
+			noteBotBlock()
+		}
+		// If cookies are present and the failure looks cookie-caused, retry
+		// once without them. A cookieless success means the cookies were
+		// actively harmful (stale/premium session) — disable them for a while.
+		if argsHaveCookies(ytArgs) && shouldRetryWithoutCookies(out) {
+			log.Printf("[download] cookie-related failure for %q, retrying without cookies", job.SearchQuery)
+			out2, cmdErr2, timedOut2 := runDownloadCmd(job.ID, ytdlpPath, stripCookiesArgs(ytArgs))
+			if timedOut2 {
+				job.Status = "failed"
+				job.Error = "Download timed out after " + DownloadTimeout.String()
+				job.CompletedAt = time.Now().Format(time.RFC3339)
+				DbUpdateJob(job)
+				log.Printf("[download] Timed out after %v for %q", DownloadTimeout, job.SearchQuery)
+				return
+			}
+			if cmdErr2 == nil {
+				noteCookieFailure()
+				log.Printf("[download] cookieless retry succeeded for %q — disabling cookies for %v", job.SearchQuery, cookieFailCooldown)
+			} else {
+				if isYtdlp403(out2) {
+					noteBotBlock()
+				}
+				job.Status = "failed"
+				job.Error = userFriendlyError(out2)
+				job.CompletedAt = time.Now().Format(time.RFC3339)
+				DbUpdateJob(job)
+				log.Printf("[download] yt-dlp failed for %q (with and without cookies): %v", job.SearchQuery, cmdErr2)
+				return
+			}
+		} else {
+			job.Status = "failed"
+			job.Error = userFriendlyError(out)
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			log.Printf("[download] yt-dlp failed for %q: %v", job.SearchQuery, cmdErr)
+			return
+		}
 	}
 
 	audioFile := FindDownloadedFile(destDir, safeTitle)
@@ -694,6 +844,8 @@ func SearchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearc
 		return nil, fmt.Errorf("yt-dlp not found")
 	}
 
+	sleepIfBotted()
+
 	cmd := exec.Command(ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
@@ -709,7 +861,8 @@ func SearchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearc
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",
-		fmt.Sprintf("ytmsearch5:%s", query),
+		"--playlist-end", "5",
+		"https://music.youtube.com/search?q="+url.QueryEscape(query),
 	).Output()
 
 	type rawResult struct {
@@ -1174,24 +1327,29 @@ func DownloadWatchdog() {
 }
 
 func userFriendlyError(output string) string {
-	out := string(output)
-	if strings.Contains(out, "Sign in to confirm your age") || strings.Contains(out, "age-restricted") {
+	out := strings.ToLower(output)
+	switch {
+	case strings.Contains(out, "sign in to confirm your age") || strings.Contains(out, "age-restricted"):
 		return "Age-restricted video — add YouTube cookies in Settings to download"
-	}
-	if strings.Contains(out, "Sign in to confirm you're not a bot") || strings.Contains(out, "not a bot") {
-		return "YouTube blocked the request — add cookies in Settings"
-	}
-	if strings.Contains(out, "Video unavailable") {
-		return "Video unavailable — it may be private or deleted"
-	}
-	if strings.Contains(out, "HTTP Error 429") {
-		return "YouTube rate limit — try again later"
-	}
-	if strings.Contains(out, "yt-dlp not found") {
+	case strings.Contains(out, "sign in to confirm you're not a bot") || strings.Contains(out, "not a bot") || strings.Contains(out, "forbidden") || strings.Contains(out, "403"):
+		return "YouTube blocked the request (403) — add cookies in Settings, or try another Player Client"
+	case strings.Contains(out, "private video"):
+		return "Private video — not downloadable"
+	case strings.Contains(out, "video unavailable"):
+		return "Video unavailable — it may be private, deleted, or region-restricted"
+	case strings.Contains(out, "http error 429") || strings.Contains(out, "too many requests"):
+		return "YouTube rate limit (429) — try again later"
+	case strings.Contains(out, "requested format is not available") || strings.Contains(out, "format is not available"):
+		return "Requested audio format unavailable — cookies may be stale; re-export them in Settings"
+	case strings.Contains(out, "unable to extract") || strings.Contains(out, "failed to extract"):
+		return "YouTube metadata extraction failed — site may have changed; try updating yt-dlp"
+	case strings.Contains(out, "unable to download webpage") || strings.Contains(out, "timed out"):
+		return "Network error or timeout — check connection and retry"
+	case strings.Contains(out, "yt-dlp not found"):
 		return "yt-dlp not installed"
 	}
-	if len(out) > 200 {
-		return out[:200]
+	if len(output) > 200 {
+		return strings.TrimSpace(output[:200])
 	}
-	return strings.TrimSpace(out)
+	return strings.TrimSpace(output)
 }

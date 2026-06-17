@@ -437,10 +437,11 @@ func PreviewAudioHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cmd := exec.Command(ytdlpPath,
-		"-f", "bestaudio[protocol=https]/bestaudio/best",
-		"-g", "--no-warnings",
-		fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID),
-	)
+		append(downloads.YtCommonArgs(),
+			"-f", "bestaudio[protocol=https]/bestaudio/best",
+			"-g", "--no-warnings",
+			fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID),
+		)...)
 	output, err := cmd.Output()
 	if err != nil {
 		http.Error(w, `{"error":"could not resolve stream"}`, http.StatusInternalServerError)

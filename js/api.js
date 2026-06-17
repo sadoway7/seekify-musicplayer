@@ -499,6 +499,32 @@ const Api = {
     return res.json();
   },
 
+  async uploadCookies(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/cookies/upload', { method: 'POST', body: form });
+    if (!res.ok) {
+      let msg = 'Upload failed';
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+
+  async clearCookies() {
+    const res = await fetch('/api/cookies/clear', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed');
+    return res.json();
+  },
+
+  async getCookiesStatus() {
+    try {
+      const res = await fetch('/api/cookies/status');
+      if (!res.ok) return { active: false };
+      return res.json();
+    } catch { return { active: false }; }
+  },
+
   async importPlaylist(url) {
     const res = await fetch('/api/playlist-import', {
       method: 'POST',

@@ -46,11 +46,12 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 	output, err := cmd.Output()
 	if err != nil {
 		cmd := exec.Command(ytdlpPath,
-			"--dump-json",
-			"--no-warnings",
-			"--no-download",
-			req.URL,
-		)
+			append(downloads.YtCommonArgs(),
+				"--dump-json",
+				"--no-warnings",
+				"--no-download",
+				req.URL,
+			)...)
 		output, err = cmd.Output()
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")

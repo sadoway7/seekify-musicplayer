@@ -18,6 +18,7 @@ func InitSettingsTable() {
 	MigrateSetting("download_convert_to_flac", "true")
 	MigrateSetting("download_min_bitrate", "0")
 	MigrateSetting("downloads_enabled", "true")
+	MigrateSetting("yt_player_client", "default")
 	MigrateSetting("watcher_enabled", "true")
 	MigrateSetting("watcher_interval", "30")
 	MigrateSetting("cover_fetch_enabled", "true")
@@ -34,6 +35,23 @@ func InitSettingsTable() {
 	MigrateSetting("review_flag_suspicious", "true")
 	MigrateSetting("review_flag_duration", "true")
 	MigrateSetting("review_flag_duplicates", "true")
+
+	migrateStalePlayerClientDefault()
+}
+
+// migrateStalePlayerClientDefault flips an existing "web" value to "default".
+// "web" was the previous default and forces yt-dlp's most-throttled client
+// while disabling its smart client cascade. This is a one-shot, idempotent
+// migration guarded by a flag key: any later explicit choice (including
+// re-selecting "web") is preserved.
+func migrateStalePlayerClientDefault() {
+	if GetSetting("yt_player_client_migrated", "") == "1" {
+		return
+	}
+	if GetSetting("yt_player_client", "") == "web" {
+		SetSetting("yt_player_client", "default")
+	}
+	SetSetting("yt_player_client_migrated", "1")
 }
 
 func MigrateSetting(key, defaultVal string) {

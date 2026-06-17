@@ -1,8 +1,9 @@
 .mini-player {
+  --mini-tx: translateX(-50%);
   position: fixed;
   bottom: calc(var(--tab-bar-height) + 16px);
   left: 50%;
-  transform: translateX(-50%);
+  transform: var(--mini-tx);
   z-index: 45;
   margin: 0;
   background: var(--l2);

@@ -101,6 +101,7 @@
   }
 
   .mini-player {
+    --mini-tx: none;
     position: fixed;
     left: 76px;
     right: 0;
@@ -108,7 +109,7 @@
     width: auto;
     max-width: none;
     border-radius: 0;
-    transform: none;
+    transform: var(--mini-tx);
     margin: 0;
     height: 80px;
     background: rgba(10, 11, 10, 0.85);
