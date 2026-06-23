@@ -9,7 +9,7 @@ deploy:
     CONTAINER_NAME: musicapp
     IMAGE_NAME: musicapp
     DATA_PATH: /mnt/user/appdata/musicapp/data
-    MUSIC_PATH: /mnt/user/appdata/musicapp/music
+    MUSIC_PATH: /mnt/user/Media/music
     MEDIA_MUSIC_PATH: /mnt/user/Media/music
   script:
     - docker build --no-cache -t $IMAGE_NAME .
