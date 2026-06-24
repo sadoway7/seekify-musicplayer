@@ -12,6 +12,9 @@ const Player = {
   onTimeUpdate: null,
   onTrackChange: null,
   onQueueChange: null,
+  _consecutiveErrors: 0,
+  _errorHandledForCurrent: false,
+  _loadTimeout: null,
 
   init() {
     this.audio = new Audio();
@@ -32,12 +35,15 @@ const Player = {
     });
     this.audio.addEventListener('play', () => {
       this.playing = true;
+      this._consecutiveErrors = 0;
+      this._clearLoadTimeout();
       if (this.onStateChange) this.onStateChange();
     });
     this.audio.addEventListener('pause', () => {
       this.playing = false;
       if (this.onStateChange) this.onStateChange();
     });
+    this.audio.addEventListener('error', () => this._onMediaError());
 
     // Media Session API — lock screen controls, keyboard media keys
     if ('mediaSession' in navigator) {
@@ -73,6 +79,7 @@ const Player = {
       this.queue = trackList.slice();
       this.currentIndex = this.queue.findIndex(t => t.id === track.id);
       if (this.currentIndex === -1) this.currentIndex = 0;
+      this._originalQueue = this.shuffle ? this.queue.slice() : [];
     } else {
       const existingIndex = this.queue.findIndex(t => t.id === track.id);
       if (existingIndex !== -1) {
@@ -80,6 +87,7 @@ const Player = {
       } else {
         this.queue = [track];
         this.currentIndex = 0;
+        this._originalQueue = this.shuffle ? this.queue.slice() : [];
       }
     }
     this.source = source || null;
@@ -94,19 +102,52 @@ const Player = {
   },
 
   _loadAndPlay(track) {
+    this._clearLoadTimeout();
+    this._errorHandledForCurrent = false;
     this.audio.src = Api.streamUrl(track.id);
     this.audio.play().then(() => {
       this.playing = true;
       if (this.onStateChange) this.onStateChange();
-    }).catch(() => {
-      this.playing = false;
-      if (this.onStateChange) this.onStateChange();
-      if (typeof UI !== 'undefined' && UI.showToast) {
-        UI.showToast('Could not play this track');
-      }
-    });
+    }).catch((e) => { if (e && e.name === 'AbortError') return; this._onMediaError(); });
+    this._loadTimeout = setTimeout(() => this._onMediaError(), 10000);
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
+  },
+
+  _clearLoadTimeout() {
+    if (this._loadTimeout) {
+      clearTimeout(this._loadTimeout);
+      this._loadTimeout = null;
+    }
+  },
+
+  _onMediaError() {
+    if (this._errorHandledForCurrent) return;
+    this._errorHandledForCurrent = true;
+    this._clearLoadTimeout();
+    this.playing = false;
+
+    if (this.queue.length === 0) {
+      if (this.onStateChange) this.onStateChange();
+      return;
+    }
+
+    this._consecutiveErrors++;
+    if (typeof UI !== 'undefined' && UI.showToast) {
+      UI.showToast('File unavailable — skipping');
+    }
+
+    if (this._consecutiveErrors >= this.queue.length) {
+      if (this.onStateChange) this.onStateChange();
+      return;
+    }
+
+    const atEnd = this.currentIndex >= this.queue.length - 1;
+    if (atEnd && this.repeat !== 'all') {
+      if (this.onStateChange) this.onStateChange();
+      return;
+    }
+    this.next();
   },
 
   pause() {
@@ -133,13 +174,7 @@ const Player = {
     }
     this.currentIndex = nextIndex;
     const track = this.queue[this.currentIndex];
-    this.audio.src = Api.streamUrl(track.id);
-    this.audio.play().then(() => {
-      this.playing = true;
-      if (this.onStateChange) this.onStateChange();
-    }).catch(() => {});
-    if (this.onTrackChange) this.onTrackChange(track);
-    this._updateMediaSession(track);
+    this._loadAndPlay(track);
   },
 
   prev() {
@@ -159,13 +194,7 @@ const Player = {
     }
     this.currentIndex = prevIndex;
     const track = this.queue[this.currentIndex];
-    this.audio.src = Api.streamUrl(track.id);
-    this.audio.play().then(() => {
-      this.playing = true;
-      if (this.onStateChange) this.onStateChange();
-    }).catch(() => {});
-    if (this.onTrackChange) this.onTrackChange(track);
-    this._updateMediaSession(track);
+    this._loadAndPlay(track);
   },
 
   seek(fraction) {
@@ -181,24 +210,27 @@ const Player = {
 
   toggleShuffle() {
     this.shuffle = !this.shuffle;
-    if (this.queue.length <= 1) {
-      if (this.onStateChange) this.onStateChange();
-      return;
-    }
     const currentTrack = this.getCurrentTrack();
     if (this.shuffle) {
+      // Always snapshot the unshuffled order, even for a single-track queue,
+      // so later addToQueue/playNext mutations keep _originalQueue in sync.
       this._originalQueue = this.queue.slice();
-      const remaining = this.queue.filter((t, i) => i !== this.currentIndex);
-      for (let i = remaining.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+      if (this.queue.length > 1) {
+        const remaining = this.queue.filter((t, i) => i !== this.currentIndex);
+        for (let i = remaining.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+        }
+        this.queue = [currentTrack, ...remaining];
+        this.currentIndex = 0;
       }
-      this.queue = [currentTrack, ...remaining];
-      this.currentIndex = 0;
     } else {
-      this.queue = this._originalQueue.slice();
-      this.currentIndex = this.queue.findIndex(t => t.id === currentTrack.id);
-      if (this.currentIndex === -1) this.currentIndex = 0;
+      // Restore only if we have a valid snapshot; never blank out the queue.
+      if (this._originalQueue.length > 0) {
+        this.queue = this._originalQueue.slice();
+        this.currentIndex = currentTrack ? this.queue.findIndex(t => t.id === currentTrack.id) : -1;
+        if (this.currentIndex === -1) this.currentIndex = 0;
+      }
       this._originalQueue = [];
     }
     if (this.onStateChange) this.onStateChange();
@@ -228,6 +260,9 @@ const Player = {
 
   addToQueue(track) {
     this.queue.push(track);
+    if (this.shuffle && this._originalQueue.length > 0) {
+      this._originalQueue.push(track);
+    }
     if (this.onQueueChange) this.onQueueChange();
   },
 
@@ -276,6 +311,9 @@ const Player = {
   playNextInQueue(track) {
     const insertAt = this.currentIndex + 1;
     this.queue.splice(insertAt, 0, track);
+    if (this.shuffle && this._originalQueue.length > 0) {
+      this._originalQueue.push(track);
+    }
     if (this.onQueueChange) this.onQueueChange();
   },
 

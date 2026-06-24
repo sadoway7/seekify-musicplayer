@@ -400,10 +400,16 @@ func DbRejectMatch(id string) bool {
 }
 
 func DbApproveAllMatches() int {
-	res, _ := DB.Exec(`UPDATE metadata_matches SET status = 'approved' WHERE status = 'pending' AND mb_score >= 0.8`)
+	res, err := DB.Exec(`UPDATE metadata_matches SET status = 'approved' WHERE status = 'pending' AND mb_score >= 0.8`)
+	if err != nil {
+		return 0
+	}
 	affected, _ := res.RowsAffected()
 
-	rows, _ := DB.Query(`SELECT track_id FROM metadata_matches WHERE status = 'approved'`)
+	rows, err := DB.Query(`SELECT track_id FROM metadata_matches WHERE status = 'approved'`)
+	if err != nil {
+		return int(affected)
+	}
 	defer rows.Close()
 	seen := map[string]bool{}
 	for rows.Next() {

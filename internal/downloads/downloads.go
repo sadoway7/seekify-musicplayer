@@ -1,6 +1,7 @@
 package downloads
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -465,21 +466,18 @@ func CreateDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 		if title != "" {
 			parts = append(parts, title)
 		}
-		if album != "" {
-			parts = append(parts, album)
-		}
 		searchQuery = strings.Join(parts, " - ")
 	}
 
-	store.Mu.RLock()
-	existing := store.Tracks
-	store.Mu.RUnlock()
 	if artist != "" && title != "" {
-		for _, t := range existing {
+		store.Mu.RLock()
+		for _, t := range store.Tracks {
 			if strings.EqualFold(t.Artist, artist) && strings.EqualFold(t.Title, title) {
+				store.Mu.RUnlock()
 				return nil, fmt.Errorf("already in library")
 			}
 		}
+		store.Mu.RUnlock()
 	}
 
 	job := &DownloadJob{
@@ -787,7 +785,7 @@ func ProcessSingleDownload(job *DownloadJob) {
 			store.Mu.RLock()
 			var albumID string
 			for _, tr := range store.Tracks {
-				if tr.FilePath == audioFile {
+				if scanner.ResolveFilePath(tr.FilePath) == audioFile {
 					albumID = tr.AlbumID
 					break
 				}
@@ -813,21 +811,16 @@ func ProcessSingleDownload(job *DownloadJob) {
 }
 
 func SearchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration) ([]YTSearchCandidate, error) {
-	type result struct {
-		candidates []YTSearchCandidate
-		err        error
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	candidates, err := SearchYouTubeScored(ctx, query, expectedArtist, expectedTitle)
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("search timed out after %v", timeout)
+		}
+		return nil, err
 	}
-	ch := make(chan result, 1)
-	go func() {
-		c, err := SearchYouTubeScored(query, expectedArtist, expectedTitle)
-		ch <- result{c, err}
-	}()
-	select {
-	case r := <-ch:
-		return r.candidates, r.err
-	case <-time.After(timeout):
-		return nil, fmt.Errorf("search timed out after %v", timeout)
-	}
+	return candidates, nil
 }
 
 type YTSearchCandidate struct {
@@ -838,7 +831,7 @@ type YTSearchCandidate struct {
 	Score    float64 `json:"score"`
 }
 
-func SearchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearchCandidate, error) {
+func SearchYouTubeScored(ctx context.Context, query, expectedArtist, expectedTitle string) ([]YTSearchCandidate, error) {
 	ytdlpPath := FindYtDlp()
 	if ytdlpPath == "" {
 		return nil, fmt.Errorf("yt-dlp not found")
@@ -846,7 +839,7 @@ func SearchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearc
 
 	sleepIfBotted()
 
-	cmd := exec.Command(ytdlpPath,
+	cmd := exec.CommandContext(ctx, ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",
@@ -857,7 +850,7 @@ func SearchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearc
 		return nil, fmt.Errorf("yt-dlp search failed: %w", err)
 	}
 
-	musicOutput, musicErr := exec.Command(ytdlpPath,
+	musicOutput, musicErr := exec.CommandContext(ctx, ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",
@@ -948,7 +941,7 @@ func SearchYouTubeScored(query, expectedArtist, expectedTitle string) ([]YTSearc
 }
 
 func SearchYouTube(query, expectedArtist, expectedTitle string) (string, error) {
-	candidates, err := SearchYouTubeScored(query, expectedArtist, expectedTitle)
+	candidates, err := SearchYouTubeScored(context.Background(), query, expectedArtist, expectedTitle)
 	if err != nil {
 		return "", err
 	}

@@ -196,8 +196,25 @@ func MbSearchRelease(artist, album string) (string, error) {
 	return searchResp.Releases[0].ID, nil
 }
 
+// The MBID passed in may be a release-group or a release id: download jobs and
+// the metadata editor receive whichever the Finder surfaced (the artist-releases
+// browser yields a release-group id, the recording search a release id). Cover
+// Art Archive exposes art under both entities, so try release-group first then
+// fall back to release.
 func MbFetchCoverArt(mbid string) ([]byte, string, error) {
-	reqURL := fmt.Sprintf("%s/release/%s/front-500", CoverArtBaseURL, mbid)
+	var lastErr error
+	for _, entity := range []string{"release-group", "release"} {
+		data, ct, err := mbFetchCoverArtFromEntity(entity, mbid)
+		if err == nil {
+			return data, ct, nil
+		}
+		lastErr = err
+	}
+	return nil, "", lastErr
+}
+
+func mbFetchCoverArtFromEntity(entity, mbid string) ([]byte, string, error) {
+	reqURL := fmt.Sprintf("%s/%s/%s/front-500", CoverArtBaseURL, entity, mbid)
 
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {

@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@skybluejacket/opencode-context-compress": "^0.4.3"
+  }
+}
