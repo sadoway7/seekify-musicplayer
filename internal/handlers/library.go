@@ -30,11 +30,12 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func LibraryHandler(w http.ResponseWriter, r *http.Request) {
-	store.Mu.RLock()
-	defer store.Mu.RUnlock()
-
+	// Review statuses live in their own DB table; no map lock needed to read them.
 	reviewStatuses := review.DbLoadAllReviewStatuses()
 
+	// Snapshot the maps under the read lock; sort and encode after release so a
+	// slow client draining the response cannot block writers.
+	store.Mu.RLock()
 	trackList := make([]models.Track, 0, len(store.Tracks))
 	for _, t := range store.Tracks {
 		copy := *t
@@ -44,17 +45,11 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		trackList = append(trackList, copy)
 	}
-	sort.Slice(trackList, func(i, j int) bool {
-		return trackList[i].Title < trackList[j].Title
-	})
 
 	albumList := make([]models.Album, 0, len(store.Albums))
 	for _, a := range store.Albums {
 		albumList = append(albumList, *a)
 	}
-	sort.Slice(albumList, func(i, j int) bool {
-		return albumList[i].Name < albumList[j].Name
-	})
 
 	artistMap := make(map[string]*models.Artist)
 	for _, t := range store.Tracks {
@@ -70,6 +65,10 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 			artistMap[name].AlbumCount++
 		}
 	}
+	store.Mu.RUnlock()
+
+	sort.Slice(trackList, func(i, j int) bool { return trackList[i].Title < trackList[j].Title })
+	sort.Slice(albumList, func(i, j int) bool { return albumList[i].Name < albumList[j].Name })
 
 	artistList := make([]models.Artist, 0, len(artistMap))
 	for _, a := range artistMap {
