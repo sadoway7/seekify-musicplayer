@@ -1,9 +1,11 @@
 package main
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"musicapp/internal/downloads"
 	"musicapp/internal/handlers"
@@ -320,6 +322,7 @@ func main() {
 
 	var handler http.Handler = mux
 	handler = loggingMiddleware(recoveryMiddleware(handler))
+	handler = gzipMiddleware(handler)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -372,5 +375,40 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			log.Printf("[http] %s %s — %s", r.Method, r.URL.Path, time.Since(start))
 		}
+	})
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	io.Writer
+}
+
+func (g *gzipResponseWriter) Write(b []byte) (int, error) {
+	if g.Header().Get("Content-Type") == "" {
+		g.Header().Set("Content-Type", http.DetectContentType(b))
+	}
+	return g.Writer.Write(b)
+}
+
+// gzipMiddleware compresses /api/ JSON responses for clients that accept gzip.
+// It deliberately skips binary streams (audio + images) and all non-/api/ paths
+// so HTTP Range seeking on audio and Content-Length on static files are unaffected.
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		gzipable := strings.HasPrefix(p, "/api/") &&
+			!strings.HasPrefix(p, "/api/stream/") &&
+			!strings.HasPrefix(p, "/api/cover/") &&
+			!strings.HasPrefix(p, "/api/artist-art/")
+		if !gzipable || !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+		w.Header().Del("Content-Length")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, Writer: gz}, r)
 	})
 }
