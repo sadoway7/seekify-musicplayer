@@ -113,44 +113,47 @@ func main() {
 		log.Printf("WARNING: ffmpeg not found — audio conversion will fail. Install: apt install ffmpeg")
 	}
 
-	// Check if file counts match DB — skip full scan if nothing changed
-	needScan := len(dbTracks) == 0
-	if !needScan {
-		for prefix, dir := range store.MusicDirs {
-			if prefix != "" {
-				continue
-			}
-			count := scanner.CountAudioFiles(dir)
-			if count != len(dbTracks) {
-				log.Printf("Primary dir file count changed (%d in DB vs %d on disk), rescanning", len(dbTracks), count)
-				needScan = true
-			}
-			break
-		}
+	go func() {
+		// Check if file counts match DB — skip full scan if nothing changed.
+		// Done here (in the goroutine) rather than in main() so startup is not
+		// blocked by a full tree walk on every boot; the DB-loaded library is
+		// already available to serve requests immediately.
+		needScan := len(dbTracks) == 0
 		if !needScan {
 			for prefix, dir := range store.MusicDirs {
-				if prefix == "" {
+				if prefix != "" {
 					continue
 				}
 				count := scanner.CountAudioFiles(dir)
-				mediaDBCount := 0
-				store.Mu.RLock()
-				for _, t := range store.Tracks {
-					if strings.HasPrefix(t.FilePath, prefix+":") {
-						mediaDBCount++
-					}
-				}
-				store.Mu.RUnlock()
-				if count != mediaDBCount {
-					log.Printf("Media dir [%s] file count changed (%d in DB vs %d on disk), rescanning", prefix, mediaDBCount, count)
+				if count != len(dbTracks) {
+					log.Printf("Primary dir file count changed (%d in DB vs %d on disk), rescanning", len(dbTracks), count)
 					needScan = true
 				}
 				break
 			}
+			if !needScan {
+				for prefix, dir := range store.MusicDirs {
+					if prefix == "" {
+						continue
+					}
+					count := scanner.CountAudioFiles(dir)
+					mediaDBCount := 0
+					store.Mu.RLock()
+					for _, t := range store.Tracks {
+						if strings.HasPrefix(t.FilePath, prefix+":") {
+							mediaDBCount++
+						}
+					}
+					store.Mu.RUnlock()
+					if count != mediaDBCount {
+						log.Printf("Media dir [%s] file count changed (%d in DB vs %d on disk), rescanning", prefix, mediaDBCount, count)
+						needScan = true
+					}
+					break
+				}
+			}
 		}
-	}
 
-	go func() {
 		if needScan {
 			log.Printf("Scanning music directory: %s", store.MusicDir)
 			stats := scanner.ScanMusicDir(store.MusicDir)
