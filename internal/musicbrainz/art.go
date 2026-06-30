@@ -257,6 +257,11 @@ func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
 		data, err := os.ReadFile(coverPath)
 		if err == nil {
 			store.CacheCover(albumID, data)
+			store.Mu.Lock()
+			if a, ok := store.Albums[albumID]; ok {
+				a.HasCover = true
+			}
+			store.Mu.Unlock()
 			return true
 		}
 	}
@@ -295,6 +300,11 @@ func FetchAndCacheCover(albumID, artist, album string) bool {
 		data, err := os.ReadFile(coverPath)
 		if err == nil {
 			store.CacheCover(albumID, data)
+			store.Mu.Lock()
+			if a, ok := store.Albums[albumID]; ok {
+				a.HasCover = true
+			}
+			store.Mu.Unlock()
 			return true
 		}
 	}

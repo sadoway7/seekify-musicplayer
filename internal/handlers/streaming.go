@@ -169,7 +169,7 @@ func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {
 
 	artDir := filepath.Join(store.MusicDir, "images", "artists")
 	artFile := filepath.Join(artDir, key+".jpg")
-	if diskData, err := os.ReadFile(artFile); err == nil {
+	if diskData, err := os.ReadFile(artFile); err == nil && len(diskData) > 0 {
 		musicbrainz.ArtistArtMu.Lock()
 		musicbrainz.ArtistArtCache[key] = diskData
 		musicbrainz.ArtistArtMu.Unlock()

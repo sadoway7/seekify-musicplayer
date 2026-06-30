@@ -13,10 +13,12 @@ import (
 var (
 	watcherMu      sync.Mutex
 	lastFileCounts map[string]int
+	lastPrune      time.Time
 )
 
 func init() {
 	lastFileCounts = make(map[string]int)
+	lastPrune = time.Now()
 }
 
 // CountAudioFiles counts audio files in a directory tree.
@@ -138,5 +140,15 @@ func CheckAndRescan() {
 		if LibraryVersionAdd != nil {
 			LibraryVersionAdd(1)
 		}
+	}
+
+	watcherMu.Lock()
+	runPrune := time.Since(lastPrune) > 5*time.Minute
+	if runPrune {
+		lastPrune = time.Now()
+	}
+	watcherMu.Unlock()
+	if runPrune {
+		PruneMissingTracks()
 	}
 }

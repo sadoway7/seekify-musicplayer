@@ -1,5 +1,5 @@
 @echo off
 echo Starting Music (Windows)...
-go build -o server.exe server.go scanner.go handlers.go models.go state.go
+go build -mod=vendor -o server.exe .
 server.exe
 pause

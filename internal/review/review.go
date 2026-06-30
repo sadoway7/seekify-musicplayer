@@ -541,7 +541,11 @@ func CheckMetadataCompleteness(t *models.Track) []string {
 	}
 	if store.GetSettingBool("review_flag_missing_album", true) {
 		if album == "" || IsGenericName(album, []string{"unknown album"}) {
-			flags = append(flags, "missing_album")
+			titlePresent := title != "" && !IsGenericName(title, []string{"unknown title", "untitled", "title"})
+			artistPresent := artist != "" && !IsGenericName(artist, []string{"unknown artist", "unknown"})
+			if !(titlePresent && artistPresent && t.HasCover) {
+				flags = append(flags, "missing_album")
+			}
 		}
 	}
 	if store.GetSettingBool("review_flag_missing_genre", true) {

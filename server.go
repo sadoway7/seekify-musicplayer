@@ -170,6 +170,10 @@ func main() {
 			log.Printf("File counts match DB, skipping full scan")
 		}
 
+		if pruned := scanner.PruneMissingTracks(); pruned > 0 {
+			log.Printf("Pruned %d tracks with missing files", pruned)
+		}
+
 		applied := musicbrainz.ApplyApprovedMatches()
 		if applied > 0 {
 			log.Printf("Applied %d metadata overrides from database", applied)
@@ -296,10 +300,11 @@ func main() {
 		}
 	})
 
-	mux.HandleFunc("/api/cookies/upload", handlers.UploadCookiesHandler)
+	mux.HandleFunc("/api/cookies/upload", handlers.CorsAny(handlers.UploadCookiesHandler))
 	mux.HandleFunc("/api/cookies/clear", handlers.ClearCookiesHandler)
 	mux.HandleFunc("/api/cookies/extract", handlers.ExtractCookiesHandler)
 	mux.HandleFunc("/api/cookies/status", handlers.CookiesStatusHandler)
+	mux.HandleFunc("/api/cookies/extension.zip", ExtensionZipHandler)
 
 	mux.HandleFunc("/api/review/tracks", review.ReviewTracksHandler)
 	mux.HandleFunc("/api/review/counts", review.ReviewCountsHandler)

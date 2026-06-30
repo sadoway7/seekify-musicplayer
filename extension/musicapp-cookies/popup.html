@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MusicApp Cookie Sync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>MusicApp Cookie Sync</h1>
+  </header>
+  <main>
+    <p class="help">Enter your MusicApp server address, then click Send. Your YouTube cookies will be copied to that server.</p>
+    <label for="server-url">Server address</label>
+    <input type="url" id="server-url" placeholder="http://192.168.1.10:8081" autocomplete="off" spellcheck="false">
+    <button id="send-btn" type="button">Send YouTube cookies</button>
+    <div id="status" role="status" aria-live="polite"></div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

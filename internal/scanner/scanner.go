@@ -358,6 +358,63 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	return stats
 }
 
+// PruneMissingTracks removes tracks whose underlying audio file no longer
+// exists on disk (moved, renamed, or deleted outside the app). The count-based
+// scan triggers cannot detect moves/renames, so this stat-based pass is the
+// reliable way to reconcile the library. Only provably-missing files
+// (os.IsNotExist) are removed; transient filesystem errors are left alone.
+func PruneMissingTracks() int {
+	store.Mu.RLock()
+	type entry struct {
+		id, filePath string
+	}
+	all := make([]entry, 0, len(store.Tracks))
+	for id, t := range store.Tracks {
+		all = append(all, entry{id: id, filePath: t.FilePath})
+	}
+	store.Mu.RUnlock()
+
+	var orphans []string
+	for _, e := range all {
+		if _, err := os.Stat(ResolveFilePath(e.filePath)); os.IsNotExist(err) {
+			orphans = append(orphans, e.id)
+		}
+	}
+
+	if len(orphans) == 0 {
+		return 0
+	}
+
+	store.ScanMu.Lock()
+	defer store.ScanMu.Unlock()
+	store.Mu.Lock()
+	removed := 0
+	for _, id := range orphans {
+		t, ok := store.Tracks[id]
+		if !ok {
+			continue
+		}
+		if _, err := os.Stat(ResolveFilePath(t.FilePath)); !os.IsNotExist(err) {
+			continue
+		}
+		store.DbDeleteTrack(id)
+		if DeleteReview != nil {
+			DeleteReview(id)
+		}
+		delete(store.Tracks, id)
+		removed++
+	}
+	store.Mu.Unlock()
+
+	if removed > 0 {
+		log.Printf("[scan] Pruned %d tracks whose files no longer exist", removed)
+		if LibraryVersionAdd != nil {
+			LibraryVersionAdd(1)
+		}
+	}
+	return removed
+}
+
 func GeneratePlaceholderSVG(name string, id string) string {
 	initial := "?"
 	if len(name) > 0 {

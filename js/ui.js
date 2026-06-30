@@ -2549,7 +2549,8 @@ const UI = {
       + '<button class="lib-tab' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Rip Search</button>'
       + '<button class="lib-tab' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">YT Import</button>'
       + '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
-      + '</div>';
+      + '</div>'
+      + (this._finderTab === 'downloads' ? '<button class="lib-tab" id="btn-dl-settings" style="margin-left:auto;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>' : '');
 
     if (this._finderTab === 'downloads') {
       html += '</div>'
@@ -2601,6 +2602,8 @@ const UI = {
     });
 
     if (this._finderTab === 'downloads') {
+      const dlSettingsBtn = document.getElementById('btn-dl-settings');
+      if (dlSettingsBtn) dlSettingsBtn.addEventListener('click', () => this._openDownloadsSettings());
       this._loadDownloads();
       this._downloadPollTimer = setInterval(() => this._loadDownloads(), 3000);
       return;
@@ -4221,6 +4224,100 @@ const UI = {
     } catch (e) {
       this._showToast('Failed to save settings');
     }
+  },
+
+  _openDownloadsSettings() {
+    const existing = document.querySelector('.dl-settings-overlay');
+    if (existing) existing.remove();
+    const st = (id, label, hint) => '<div class="settings-toggle-row">'
+      + '<div><div class="settings-toggle-label">' + label + '</div>'
+      + (hint ? '<div class="settings-toggle-hint">' + hint + '</div>' : '') + '</div>'
+      + '<div class="stoggle" id="' + id + '"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>';
+    const fields = '<div class="settings-subsection-label">Download Format</div>'
+      + '<div class="settings-field"><label>Audio Format</label>'
+      + '<select id="setting-download-format" class="settings-select">'
+      + '<option value="flac">FLAC (lossless)</option><option value="mp3">MP3</option><option value="opus">Opus</option><option value="m4a">M4A/AAC</option><option value="best">Original (no conversion)</option>'
+      + '</select></div>'
+      + '<div id="mp3-quality-group" class="settings-field"><label>MP3 Quality</label>'
+      + '<select id="setting-mp3-bitrate" class="settings-select">'
+      + '<option value="v2">V2 ~192kbps (recommended)</option><option value="v0">V0 ~245kbps</option><option value="320k">320kbps CBR</option><option value="256k">256kbps CBR</option><option value="192k">192kbps CBR</option><option value="128k">128kbps CBR</option>'
+      + '</select></div>'
+      + '<div id="opus-quality-group" class="settings-field" style="display:none"><label>Opus Bitrate</label>'
+      + '<select id="setting-opus-bitrate" class="settings-select">'
+      + '<option value="320k">320kbps</option><option value="256k">256kbps</option><option value="192k">192kbps</option><option value="128k">128kbps</option><option value="96k">96kbps</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
+      + '<input type="text" id="setting-download-min-bitrate" class="settings-input" placeholder="0 (no minimum)"></div>'
+      + st('setting-download-convert-to-flac', 'Convert to FLAC', 'Re-encode imported files as FLAC')
+      + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders')
+      + '<div class="settings-subsection-label" style="margin-top:16px">YouTube Authentication</div>'
+      + '<div class="settings-section-desc">Pick a browser to extract cookies once, upload a cookies.txt file, or use the Chrome extension below.</div>'
+      + '<div class="settings-field" style="margin-bottom:12px">'
+      + '<label style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Extract cookies from browser</label>'
+      + '<select id="setting-yt-cookies-from-browser" class="settings-select" style="width:100%;padding:10px 12px;font-size:14px">'
+      + '<option value="">— Disabled —</option><option value="chrome">Chrome</option><option value="chromium">Chromium</option><option value="firefox">Firefox</option><option value="edge">Edge</option><option value="brave">Brave</option><option value="opera">Opera</option><option value="safari">Safari</option><option value="vivaldi">Vivaldi</option><option value="whale">Whale</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Player Client</label>'
+      + '<select id="setting-yt-player-client" class="settings-select">'
+      + '<option value="default">Default — recommended</option><option value="web">Web</option><option value="mweb">Mobile Web</option><option value="tv">TV</option><option value="web_embedded">Web Embedded</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Cookies File</label>'
+      + '<div id="yt-cookies-status" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">Checking…</div>'
+      + '<div class="settings-actions" style="margin-top:6px">'
+      + '<input type="file" id="yt-cookies-file-input" accept=".txt,text/plain" hidden>'
+      + '<button class="settings-btn settings-btn-primary" id="btn-upload-cookies" type="button">' + Icons.upload() + '<span>Upload cookies.txt</span></button>'
+      + '<button class="settings-btn settings-btn-danger" id="btn-clear-cookies" type="button">' + Icons.trash() + '<span>Remove</span></button>'
+      + '</div></div>'
+      + '<div class="settings-subsection-label" style="margin-top:16px">Browser Extension</div>'
+      + '<div class="settings-section-desc">Install the Chrome extension to send your YouTube cookies here with one click.</div>'
+      + '<div class="settings-actions" style="margin-top:8px;flex-wrap:wrap">'
+      + '<a class="settings-btn settings-btn-primary" id="dl-extension-store-link" style="display:none;text-decoration:none" target="_blank" rel="noopener">Add to Chrome</a>'
+      + '<button class="settings-btn" id="btn-dl-extension">' + Icons.download() + '<span>Download (.zip)</span></button>'
+      + '</div>'
+      + '<div class="settings-field" style="margin-top:8px"><label style="font-size:12px">Chrome Web Store URL (optional)</label>'
+      + '<input type="url" id="setting-cookies-store-url" class="settings-input" placeholder="https://chromewebstore.google.com/..." style="width:100%"></div>'
+      + '<div class="settings-section-desc" style="margin-top:8px;font-size:12px">Using the .zip: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder. Then open the extension, enter this server address, and click Send.</div>';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'candidate-modal-overlay dl-settings-overlay';
+    overlay.innerHTML = '<div class="candidate-modal" style="max-width:560px">'
+      + '<div class="candidate-modal-header"><div class="candidate-modal-title">Download Settings</div><button class="candidate-modal-close">&times;</button></div>'
+      + '<div class="candidate-modal-list" style="padding:20px">' + fields
+      + '<div class="settings-actions" style="margin-top:14px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save</span></button>'
+      + '</div></div></div>';
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+    overlay.querySelector('.candidate-modal-close').addEventListener('click', () => this._fadeOutRemove(overlay, 200));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) this._fadeOutRemove(overlay, 200); });
+    overlay.querySelectorAll('.stoggle').forEach(el => el.addEventListener('click', () => el.classList.toggle('active')));
+    this._loadFinderSettings();
+    const saveBtn = overlay.querySelector('#btn-save-finder-settings');
+    if (saveBtn) saveBtn.addEventListener('click', () => this._saveFinderSettings());
+    this._bindExtensionSection();
+  },
+
+  _bindExtensionSection() {
+    const dlBtn = document.getElementById('btn-dl-extension');
+    if (dlBtn) dlBtn.addEventListener('click', () => { window.location.href = '/api/cookies/extension.zip'; });
+    const storeInput = document.getElementById('setting-cookies-store-url');
+    Api.getSettings().then(s => {
+      const url = (s && s.cookies_store_url) || '';
+      if (storeInput) storeInput.value = url;
+      const link = document.getElementById('dl-extension-store-link');
+      if (link && url) { link.href = url; link.style.display = ''; }
+      if (storeInput && !storeInput._bound) {
+        storeInput._bound = true;
+        storeInput.addEventListener('change', () => {
+          const v = storeInput.value.trim();
+          Api.saveSettings({ cookies_store_url: v }).then(() => {
+            const l = document.getElementById('dl-extension-store-link');
+            if (l) { if (v) { l.href = v; l.style.display = ''; } else { l.style.display = 'none'; } }
+            this._showToast('Saved');
+          }).catch(() => {});
+        });
+      }
+    }).catch(() => {});
   },
 
   async _refreshCookiesStatus() {
