@@ -135,15 +135,18 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, fmt.Errorf("soulseek search timed out after %v", SearchTimeout)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("soulseek search failed: %s", strings.TrimSpace(string(out)))
-	}
-
+	trimmed := strings.TrimSpace(string(out))
 	var cands []slskRawCandidate
-	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &cands); err != nil {
-		return nil, fmt.Errorf("soulseek search: bad JSON: %v", err)
+	// The script prints a JSON array (possibly empty) on success even when it
+	// exits non-zero for "no results"; only treat non-parseable output as error.
+	jerr := json.Unmarshal([]byte(trimmed), &cands)
+	if jerr == nil {
+		return cands, nil
 	}
-	return cands, nil
+	if err != nil {
+		return nil, fmt.Errorf("soulseek search failed: %s", trimmed)
+	}
+	return nil, fmt.Errorf("soulseek search: bad JSON: %v", jerr)
 }
 
 // slskCandidateUI is the shape the existing YouTube picker modal reads
@@ -339,6 +342,11 @@ func runSlskDownload(job *DownloadJob, selectedIdx int) (string, error) {
 // a user picks a Soulseek candidate from the picker. It runs the download then
 // the shared post-download finalization (validate/tag/scan/playlist).
 func ProcessSlskSelection(job *DownloadJob, idx int) {
+	// Honor the same concurrency cap as the download queue (cap(DownloadSem) == 3)
+	// so manual Soulseek picks can't exceed the global download limit.
+	DownloadSem <- struct{}{}
+	defer func() { <-DownloadSem }()
+
 	job.Status = "downloading"
 	job.Source = "soulseek"
 	job.ProgressStage = "Downloading via Soulseek"

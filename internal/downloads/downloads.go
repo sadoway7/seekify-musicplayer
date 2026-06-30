@@ -714,6 +714,7 @@ func ProcessSingleDownload(job *DownloadJob) {
 	job.Source = "soulseek"
 	job.Error = ""
 	job.ProgressStage = ""
+	job.CompletedAt = ""
 	downloadFromSoulseek(job, -1)
 }
 
