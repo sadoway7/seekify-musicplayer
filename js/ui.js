@@ -4264,6 +4264,39 @@ const UI = {
     }
   },
 
+  async _connectSlsk(btn) {
+    const msgEl = document.getElementById('slsk-connect-msg');
+    const showMsg = (text, color) => {
+      if (!msgEl) { this._showToast(text); return; }
+      msgEl.textContent = text;
+      msgEl.style.color = color || '';
+    };
+    const username = (document.getElementById('setting-slsk-username') || {}).value || '';
+    const password = (document.getElementById('setting-slsk-password') || {}).value || '';
+    const shareDir = (document.getElementById('setting-slsk-share-dir') || {}).value || '';
+    if (!username || !password) {
+      showMsg('Enter username and password first');
+      return;
+    }
+    const origLabel = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>Connecting…</span>';
+    try {
+      const res = await Api.testSlskConnect({ username, password, share_dir: shareDir || undefined });
+      if (res.ok) {
+        this._stoggleOn('setting-slsk-enabled', true);
+        showMsg(res.seeded ? 'Connected — seeded ' + res.seeded + ' file(s)' : 'Connected', '#22c55e');
+      } else {
+        showMsg('Connection failed: ' + (res.message || res.error || 'unknown error'), '#ef4444');
+      }
+    } catch (e) {
+      showMsg('Connection failed: ' + (e.message || 'network error'), '#ef4444');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origLabel;
+    }
+  },
+
   _openDownloadsSettings() {
     const existing = document.querySelector('.dl-settings-overlay');
     if (existing) existing.remove();
@@ -4326,6 +4359,10 @@ const UI = {
       + '<input type="text" id="setting-slsk-username" class="settings-input" placeholder="your soulseek username"></div>'
       + '<div class="settings-field"><label>Soulseek Password</label>'
       + '<input type="password" id="setting-slsk-password" class="settings-input" placeholder="your soulseek password" autocomplete="new-password"></div>'
+      + '<div class="settings-field" style="margin-top:4px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-slsk-connect" type="button"><span>Connect Soulseek</span></button>'
+      + '<div id="slsk-connect-msg" class="settings-section-desc" style="margin-top:6px;font-size:12px">Creates the account if it\'s new, verifies it works, and seeds your share folder (up to 30 files) so you aren\'t throttled. Just enter username + password and click.</div>'
+      + '</div>'
       + '<div class="settings-field"><label>Shared Folder</label>'
       + '<input type="text" id="setting-slsk-share-dir" class="settings-input" placeholder="music/shared"></div>'
       + '<div class="settings-section-desc" style="font-size:12px">Put some music files in this folder — accounts that share nothing get throttled by the Soulseek network.</div>'
@@ -4352,6 +4389,8 @@ const UI = {
     this._loadFinderSettings();
     const saveBtn = overlay.querySelector('#btn-save-finder-settings');
     if (saveBtn) saveBtn.addEventListener('click', () => this._saveFinderSettings());
+    const slskConnectBtn = overlay.querySelector('#btn-slsk-connect');
+    if (slskConnectBtn) slskConnectBtn.addEventListener('click', () => this._connectSlsk(slskConnectBtn));
     this._bindExtensionSection();
   },
 

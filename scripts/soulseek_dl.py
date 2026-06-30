@@ -6,6 +6,7 @@ Modes
 * default (auto): search -> auto-pick best candidate -> download -> print JSON
 * --search-only  : search -> print a JSON array of candidates -> exit 0
 * --select <idx> : re-run the same search -> download candidate[idx] -> print JSON
+* --test         : start + login only -> print {"ok": true, ...} or {"error": ...}
 
 Contract
 --------
@@ -276,6 +277,32 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
     return 0
 
 
+async def run_test(args) -> int:
+    """Login-only mode used by the one-click onboarding.
+
+    Builds the client with the share (so the scan path is exercised, matching
+    real usage), starts it and logs in. Prints ``{"ok": true, "username": ...}``
+    on success (exit 0) or ``{"error": ...}`` (exit 3). ``client.stop()`` always
+    runs in the finally. No search/download is performed.
+    """
+    os.makedirs(args.share, exist_ok=True)
+    client = build_client(args)
+    try:
+        try:
+            await client.start()
+            await client.login()
+        except Exception as e:
+            emit_error(str(e))
+            return 3
+        emit({"ok": True, "username": args.username})
+        return 0
+    finally:
+        try:
+            await client.stop()
+        except Exception:
+            pass
+
+
 async def run(args) -> int:
     os.makedirs(args.share, exist_ok=True)
     if not args.search_only:
@@ -322,36 +349,41 @@ async def run(args) -> int:
             pass
 
 
-def build_argparser() -> argparse.ArgumentParser:
+def build_argparser(test_mode: bool = False) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="One-shot Soulseek downloader (aioslsk). Exec'd per-download."
     )
     p.add_argument("--username", required=True, help="Soulseek username")
     p.add_argument("--password", required=True, help="Soulseek password")
     p.add_argument("--share", required=True, help="Directory to share (must exist/be shareable)")
-    p.add_argument("--query", required=True, help='Search query, e.g. "Artist - Title"')
-    p.add_argument("--out", required=True, help="Output directory for downloaded files")
+    required = not test_mode
+    p.add_argument("--query", required=required, help='Search query, e.g. "Artist - Title"')
+    p.add_argument("--out", required=required, help="Output directory for downloaded files")
     p.add_argument("--search-only", action="store_true", help="Only search; print candidate array and exit")
     p.add_argument("--select", type=int, default=None, help="0-based index of candidate to download (re-searches)")
     p.add_argument("--min-bitrate", type=int, default=192, help="Minimum bitrate for auto-pick MP3s (default 192)")
     p.add_argument("--format", choices=["flac", "mp3", "any"], default="any", help="Preferred format filter for auto-pick (default any)")
     p.add_argument("--timeout", type=int, default=None, help="Overall timeout in seconds (overrides defaults)")
+    p.add_argument("--test", action="store_true", help="Login-only smoke test (no search/download)")
     return p
 
 
 def main() -> None:
-    args = build_argparser().parse_args()
+    args = build_argparser("--test" in sys.argv).parse_args()
 
-    # Default timeouts: search-only is quick, downloads can be slow.
+    # Default timeouts: test is quick, search-only is quick, downloads can be slow.
     if args.timeout is not None:
         timeout = float(args.timeout)
+    elif args.test:
+        timeout = 60.0
     elif args.search_only:
         timeout = 120.0
     else:
         timeout = 600.0
 
+    coro = run_test(args) if args.test else run(args)
     try:
-        rc = asyncio.run(asyncio.wait_for(run(args), timeout=timeout))
+        rc = asyncio.run(asyncio.wait_for(coro, timeout=timeout))
     except asyncio.TimeoutError:
         emit_error("timeout")
         sys.exit(3)

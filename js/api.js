@@ -473,6 +473,15 @@ const Api = {
     return res.json();
   },
 
+  async testSlskConnect(payload) {
+    const res = await fetch('/api/soulseek/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return res.json();
+  },
+
   async bulkImport(lines) {
     const res = await fetch('/api/bulk-import', {
       method: 'POST',

@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 )
 
@@ -81,9 +84,9 @@ func slskScriptPath() string {
 	return ""
 }
 
-// slskShareDir returns the configured Soulseek share directory, defaulting to
+// SlskShareDir returns the configured Soulseek share directory, defaulting to
 // <MusicDir>/shared when unset.
-func slskShareDir() string {
+func SlskShareDir() string {
 	if d := store.GetSetting("slsk_share_dir", ""); d != "" {
 		return d
 	}
@@ -118,7 +121,7 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 	args := []string{
 		script, "--search-only",
 		"--username", user, "--password", pass,
-		"--share", slskShareDir(),
+		"--share", SlskShareDir(),
 		"--query", query,
 		"--out", store.MusicDir,
 	}
@@ -285,7 +288,7 @@ func runSlskDownload(job *DownloadJob, selectedIdx int) (string, error) {
 	args := []string{
 		script,
 		"--username", user, "--password", pass,
-		"--share", slskShareDir(),
+		"--share", SlskShareDir(),
 		"--query", slskQuery(job),
 		"--out", destDir,
 	}
@@ -362,4 +365,181 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 		return
 	}
 	finalizeDownload(job, audioFile)
+}
+
+// slskSeedTarget is the minimum number of files the share folder should hold so
+// the Soulseek network doesn't throttle a freshly-created account.
+const slskSeedTarget = 30
+
+// SeedSlskShare ensures shareDir exists and, if it contains fewer than
+// slskSeedTarget files, top-ups it with copies of the smallest audio files from
+// the in-memory library until it reaches the target. It is idempotent: when the
+// folder already has >= target files nothing is copied. Only the count of files
+// copied during THIS call is returned. An error is returned only when shareDir
+// cannot be created or listed (partial copy failures just reduce the count).
+func SeedSlskShare(shareDir string) (int, error) {
+	if err := os.MkdirAll(shareDir, 0755); err != nil {
+		return 0, err
+	}
+	entries, err := os.ReadDir(shareDir)
+	if err != nil {
+		return 0, err
+	}
+
+	existingCount := 0
+	preExisting := make(map[string]bool)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		existingCount++
+		preExisting[e.Name()] = true
+	}
+	if existingCount >= slskSeedTarget {
+		return 0, nil
+	}
+
+	// Gather candidate metadata under the read lock only. File IO (stat/copy)
+	// happens after the lock is released so we never block library access.
+	type candInfo struct {
+		path string
+		stem string
+		ext  string
+	}
+	var infos []candInfo
+	store.Mu.RLock()
+	for _, t := range store.Tracks {
+		resolved := scanner.ResolveFilePath(t.FilePath)
+		ext := strings.ToLower(filepath.Ext(resolved))
+		if _, ok := store.AudioExtensions[ext]; !ok {
+			continue
+		}
+		stem := strings.TrimSpace(t.Artist + " - " + t.Title)
+		if stem == "" || stem == "-" {
+			stem = strings.TrimSuffix(filepath.Base(resolved), filepath.Ext(resolved))
+		}
+		infos = append(infos, candInfo{path: resolved, stem: stem, ext: ext})
+	}
+	store.Mu.RUnlock()
+
+	type sized struct {
+		info candInfo
+		size int64
+	}
+	var sized2 []sized
+	for _, ci := range infos {
+		fi, err := os.Stat(ci.path)
+		if err != nil || fi.IsDir() {
+			continue
+		}
+		sized2 = append(sized2, sized{ci, fi.Size()})
+	}
+	sort.Slice(sized2, func(i, j int) bool { return sized2[i].size < sized2[j].size })
+
+	taken := make(map[string]bool)
+	copied := 0
+	for _, s := range sized2 {
+		if existingCount+copied >= slskSeedTarget {
+			break
+		}
+		base := scanner.SanitizePath(s.info.stem) + s.info.ext
+		if preExisting[base] {
+			continue
+		}
+		final := base
+		n := 2
+		for taken[final] {
+			final = scanner.SanitizePath(s.info.stem) + "_" + strconv.Itoa(n) + s.info.ext
+			n++
+		}
+		target := filepath.Join(shareDir, final)
+		if err := slskCopyFile(s.info.path, target); err != nil {
+			continue
+		}
+		taken[final] = true
+		copied++
+	}
+	return copied, nil
+}
+
+// slskCopyFile copies src to dst, returning an error if either open or the copy
+// itself fails. The destination is truncated.
+func slskCopyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// slskTestResult mirrors the single JSON object printed by soulseek_dl.py --test.
+type slskTestResult struct {
+	Ok       bool   `json:"ok"`
+	Username string `json:"username,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// TestSlskConnection runs the script in --test mode. On success returns
+// (true, "connected", nil). When the script ran but reported a failure (e.g.
+// wrong password / username taken) returns (false, errorMsg, nil). A real exec
+// failure (binary missing, context timeout, non-JSON output) returns a non-nil
+// error so the caller can surface it distinctly from a login rejection.
+func TestSlskConnection(username, password, shareDir string) (bool, string, error) {
+	python := findSlsk()
+	if python == "" {
+		return false, "python3 not found", nil
+	}
+	script := slskScriptPath()
+	if script == "" {
+		return false, "soulseek script not found", nil
+	}
+
+	args := []string{
+		script, "--test",
+		"--username", username, "--password", password,
+		"--share", shareDir,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+	defer cancel()
+	out, runErr := exec.CommandContext(ctx, python, args...).Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return false, "", fmt.Errorf("soulseek test timed out after 75s")
+	}
+
+	// The script prints exactly one JSON object to stdout. Tolerate leading
+	// log lines by scanning for the first line that starts with '{'.
+	var res slskTestResult
+	decoded := false
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasPrefix(line, "{") {
+			continue
+		}
+		if json.Unmarshal([]byte(line), &res) == nil {
+			decoded = true
+			break
+		}
+	}
+	if decoded {
+		if res.Ok {
+			return true, "connected", nil
+		}
+		msg := res.Error
+		if msg == "" {
+			msg = "login failed"
+		}
+		return false, msg, nil
+	}
+	if runErr != nil {
+		return false, "", fmt.Errorf("soulseek test failed: %s", strings.TrimSpace(string(out)))
+	}
+	return false, "", fmt.Errorf("soulseek test: unexpected output: %s", strings.TrimSpace(string(out)))
 }

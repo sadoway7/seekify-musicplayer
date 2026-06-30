@@ -466,3 +466,83 @@ func PreviewAudioHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"url": streamURL, "videoId": videoID})
 }
+
+// SoulseekConnectHandler implements the one-click "Connect Soulseek" onboarding.
+// It persists the provided credentials, ensures + seeds the share folder, then
+// runs a login smoke test. A successful login also flips slsk_enabled on.
+func SoulseekConnectHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		ShareDir string `json:"share_dir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+	if req.Username == "" || req.Password == "" {
+		http.Error(w, `{"error":"username and password required"}`, http.StatusBadRequest)
+		return
+	}
+
+	store.SetSetting("slsk_username", req.Username)
+	store.SetSetting("slsk_password", req.Password)
+	if req.ShareDir != "" {
+		store.SetSetting("slsk_share_dir", req.ShareDir)
+	}
+
+	shareDir := req.ShareDir
+	if shareDir == "" {
+		shareDir = store.GetSetting("slsk_share_dir", "")
+	}
+	if shareDir == "" {
+		shareDir = downloads.SlskShareDir()
+	}
+	if err := os.MkdirAll(shareDir, 0755); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "could not create share folder: " + err.Error()})
+		return
+	}
+
+	seeded, err := downloads.SeedSlskShare(shareDir)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "could not access share folder: " + err.Error()})
+		return
+	}
+
+	ok, msg, terr := downloads.TestSlskConnection(req.Username, req.Password, shareDir)
+	if terr != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		json.NewEncoder(w).Encode(map[string]string{"error": "soulseek test failed: " + terr.Error()})
+		return
+	}
+
+	if ok {
+		store.SetSetting("slsk_enabled", "true")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":        true,
+			"message":   "Connected — account created if it was new",
+			"share_dir": shareDir,
+			"seeded":    seeded,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok":        false,
+		"message":   msg,
+		"share_dir": shareDir,
+		"seeded":    seeded,
+	})
+}
