@@ -2550,7 +2550,7 @@ const UI = {
       + '<button class="lib-tab' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">YT Import</button>'
       + '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
       + '</div>'
-      + (this._finderTab === 'downloads' ? '<button class="lib-tab" id="btn-dl-settings" style="margin-left:auto;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>' : '');
+      + (this._finderTab === 'downloads' ? '' : '');
 
     if (this._finderTab === 'downloads') {
       html += '</div>'
@@ -2602,8 +2602,6 @@ const UI = {
     });
 
     if (this._finderTab === 'downloads') {
-      const dlSettingsBtn = document.getElementById('btn-dl-settings');
-      if (dlSettingsBtn) dlSettingsBtn.addEventListener('click', () => this._openDownloadsSettings());
       this._loadDownloads();
       this._downloadPollTimer = setInterval(() => this._loadDownloads(), 3000);
       return;
@@ -2773,32 +2771,36 @@ const UI = {
       const counts = await Api.getQueueCounts();
       this._updateDownloadBadge(counts);
 
-      if (!jobs || jobs.length === 0) {
-        container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
-          + '<div class="empty-state-title">No Downloads Yet</div>'
-          + '<div class="empty-state-text">Search for music in the Finder tab and tap download to start.</div></div>';
-        return;
-      }
-
       const activeCount = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0);
       const failedCount = counts.failed || 0;
-      let html = '';
-
       const needsSel = counts.needs_selection || 0;
-      if (activeCount > 0 || counts.completed > 0 || counts.failed > 0 || needsSel > 0) {
-        html += '<div class="queue-stats">'
-          + '<div class="queue-stats-badges">'
+      const hasActivity = activeCount > 0 || counts.completed > 0 || counts.failed > 0 || needsSel > 0;
+
+      let html = '<div class="queue-stats">';
+      if (hasActivity) {
+        html += '<div class="queue-stats-badges">'
           + (counts.queued > 0 ? '<span class="stat-badge stat-queued">' + counts.queued + ' queued</span>' : '')
           + (activeCount > 0 && counts.queued <= 0 ? '<span class="stat-badge stat-active">' + activeCount + ' active</span>' : '')
           + (needsSel > 0 ? '<span class="stat-badge stat-failed">' + needsSel + ' needs pick</span>' : '')
           + (counts.completed > 0 ? '<span class="stat-badge stat-completed">' + counts.completed + ' done</span>' : '')
           + (counts.failed > 0 ? '<span class="stat-badge stat-failed">' + counts.failed + ' failed</span>' : '')
-          + '</div>'
-          + '<div class="queue-stats-actions">'
-          + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
-          + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
-          + '</div>'
           + '</div>';
+      }
+      html += '<div class="queue-stats-actions">'
+        + '<button class="settings-btn" id="btn-dl-settings" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
+        + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
+        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
+        + '</div>'
+        + '</div>';
+
+      if (!jobs || jobs.length === 0) {
+        html += '<div class="empty-state" style="padding:40px 22px">'
+          + '<div class="empty-state-title">No Downloads Yet</div>'
+          + '<div class="empty-state-text">Search for music in the Finder tab and tap download to start.</div></div>';
+        container.innerHTML = html;
+        const sBtn = document.getElementById('btn-dl-settings');
+        if (sBtn) sBtn.addEventListener('click', () => this._openDownloadsSettings());
+        return;
       }
 
       html += '<div class="queue-job-list">';
@@ -2963,6 +2965,9 @@ const UI = {
           });
         });
       }
+
+      const dlSettingsBtn = document.getElementById('btn-dl-settings');
+      if (dlSettingsBtn) dlSettingsBtn.addEventListener('click', () => this._openDownloadsSettings());
     } catch (e) {
       container.innerHTML = '<div class="empty-state-text">Failed to load downloads</div>';
     }
