@@ -542,70 +542,27 @@ func ProcessDownloadQueue() {
 	}
 }
 
-func ProcessSingleDownload(job *DownloadJob) {
-	ytdlpPath := FindYtDlp()
-	if ytdlpPath == "" {
-		job.Status = "failed"
-		job.Error = "yt-dlp not found. Install with: pip install yt-dlp  OR  apt install yt-dlp  OR  apk add yt-dlp"
-		job.CompletedAt = time.Now().Format(time.RFC3339)
-		DbUpdateJob(job)
-		log.Printf("[download] yt-dlp not found on PATH or known locations")
-		return
+// getDownloadSource returns the configured global source mode: "youtube",
+// "soulseek", or "auto" (YouTube with Soulseek fallback on failure).
+func getDownloadSource() string {
+	switch s := store.GetSetting("download_source", "auto"); s {
+	case "youtube", "soulseek", "auto":
+		return s
+	default:
+		return "auto"
 	}
-	log.Printf("[download] using yt-dlp at %s", ytdlpPath)
+}
 
-	job.Status = "searching"
-	job.ProgressStage = "Searching YouTube"
-	DbUpdateJob(job)
-
-	var videoID string
-	if job.VideoID != "" {
-		videoID = job.VideoID
-		log.Printf("[download] Using direct video ID %s for %q", videoID, job.SearchQuery)
-	} else {
-		candidates, serr := SearchYouTubeWithTimeout(job.SearchQuery, job.Artist, job.Title, SearchTimeout)
-		if serr != nil {
-			job.Status = "failed"
-			job.Error = fmt.Sprintf("Search failed: %v", serr)
-			job.CompletedAt = time.Now().Format(time.RFC3339)
-			DbUpdateJob(job)
-			log.Printf("[download] Search failed for %q: %v", job.SearchQuery, serr)
-			return
-		}
-		if len(candidates) == 0 {
-			job.Status = "failed"
-			job.Error = "No results found on YouTube"
-			job.CompletedAt = time.Now().Format(time.RFC3339)
-			DbUpdateJob(job)
-			return
-		}
-
-		const minConfidence = 40.0
-		if candidates[0].Score < minConfidence {
-			max := len(candidates)
-			if max > 8 {
-				max = 8
-			}
-			toSave := candidates[:max]
-			candJSON, _ := json.Marshal(toSave)
-			job.CandidatesJSON = string(candJSON)
-			job.Status = "needs_selection"
-			job.ProgressStage = "Awaiting user selection"
-			DbUpdateJob(job)
-			log.Printf("[download] Low confidence (%.1f) for %q, waiting for user selection", candidates[0].Score, job.SearchQuery)
-			return
-		}
-
-		videoID = candidates[0].VideoID
-		log.Printf("[download] Auto-selected %s (score %.1f) for %q", videoID, candidates[0].Score, job.SearchQuery)
-	}
-
-	destDir := store.MusicDir
+// computeDest returns the destination directory + safe filename for a job,
+// shared by the YouTube and Soulseek paths (extracted verbatim from the former
+// ProcessSingleDownload body so both sources land files in the same layout).
+func computeDest(job *DownloadJob) (destDir, safeTitle string) {
+	destDir = store.MusicDir
 	organise := store.GetSettingBool("download_organise_by_artist", true)
-	albumSubdir := store.GetSetting("download_album_subdir", "Albums")
-	if albumSubdir == "" {
-		albumSubdir = "Albums"
-	}
+	// download_album_subdir is read for parity with the original block; it is
+	// not currently used to alter the path but is preserved to avoid changing
+	// observable behaviour (the value was always fetched).
+	_ = store.GetSetting("download_album_subdir", "Albums")
 
 	if job.OverrideDir != "" {
 		destDir = job.OverrideDir
@@ -616,110 +573,26 @@ func ProcessSingleDownload(job *DownloadJob) {
 	} else {
 		destDir = store.MusicDir
 	}
-	os.MkdirAll(destDir, 0755)
 
-	job.Status = "downloading"
-	job.Source = "youtube"
-	job.ProgressStage = "Downloading audio"
-	DbUpdateJob(job)
-
-	safeTitle := SanitizeFilename(job.Title)
+	safeTitle = SanitizeFilename(job.Title)
 	if safeTitle == "" {
 		safeTitle = SanitizeFilename(job.SearchQuery)
 	}
 	if safeTitle == "" {
 		safeTitle = "track"
 	}
-	outputTemplate := filepath.Join(destDir, safeTitle+".%(ext)s")
+	return destDir, safeTitle
+}
 
-	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
-
-	audioFormat := store.GetSetting("download_format", "flac")
-	audioQuality := "0"
-	switch audioFormat {
-	case "mp3":
-		audioQuality = store.GetSetting("mp3_bitrate", "v2")
-	case "opus":
-		audioQuality = store.GetSetting("opus_bitrate", "320k")
-	case "best", "m4a":
-		audioFormat = "best"
-		audioQuality = "0"
-	default:
-		audioFormat = "flac"
-	}
-
-	if !store.GetSettingBool("download_convert_to_flac", true) {
-		audioFormat = "best"
-	}
-
-	ytArgs := append(YtCommonArgs(),
-		"-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
-		"-x",
-		"--audio-format", audioFormat,
-		"--audio-quality", audioQuality,
-		"--embed-thumbnail",
-		"--convert-thumbnails", "jpg",
-		"--no-warnings",
-		"-o", outputTemplate,
-		url,
-	)
-
-	minBr := store.GetSettingInt("download_min_bitrate", 0)
-
-	sleepIfBotted()
-
-	out, cmdErr, timedOut := runDownloadCmd(job.ID, ytdlpPath, ytArgs)
-	if timedOut {
-		job.Status = "failed"
-		job.Error = "Download timed out after " + DownloadTimeout.String()
-		job.CompletedAt = time.Now().Format(time.RFC3339)
-		DbUpdateJob(job)
-		log.Printf("[download] Timed out after %v for %q", DownloadTimeout, job.SearchQuery)
-		return
-	}
-	if cmdErr != nil {
-		if isYtdlp403(out) {
-			noteBotBlock()
-		}
-		// If cookies are present and the failure looks cookie-caused, retry
-		// once without them. A cookieless success means the cookies were
-		// actively harmful (stale/premium session) — disable them for a while.
-		if argsHaveCookies(ytArgs) && shouldRetryWithoutCookies(out) {
-			log.Printf("[download] cookie-related failure for %q, retrying without cookies", job.SearchQuery)
-			out2, cmdErr2, timedOut2 := runDownloadCmd(job.ID, ytdlpPath, stripCookiesArgs(ytArgs))
-			if timedOut2 {
-				job.Status = "failed"
-				job.Error = "Download timed out after " + DownloadTimeout.String()
-				job.CompletedAt = time.Now().Format(time.RFC3339)
-				DbUpdateJob(job)
-				log.Printf("[download] Timed out after %v for %q", DownloadTimeout, job.SearchQuery)
-				return
-			}
-			if cmdErr2 == nil {
-				noteCookieFailure()
-				log.Printf("[download] cookieless retry succeeded for %q — disabling cookies for %v", job.SearchQuery, cookieFailCooldown)
-			} else {
-				if isYtdlp403(out2) {
-					noteBotBlock()
-				}
-				job.Status = "failed"
-				job.Error = userFriendlyError(out2)
-				job.CompletedAt = time.Now().Format(time.RFC3339)
-				DbUpdateJob(job)
-				log.Printf("[download] yt-dlp failed for %q (with and without cookies): %v", job.SearchQuery, cmdErr2)
-				return
-			}
-		} else {
-			job.Status = "failed"
-			job.Error = userFriendlyError(out)
-			job.CompletedAt = time.Now().Format(time.RFC3339)
-			DbUpdateJob(job)
-			log.Printf("[download] yt-dlp failed for %q: %v", job.SearchQuery, cmdErr)
-			return
-		}
-	}
-
-	audioFile := FindDownloadedFile(destDir, safeTitle)
+// finalizeDownload owns locate → validate → bitrate gate → tag → complete →
+// scan/playlist. Shared by the YouTube and Soulseek download paths (DRY).
+//
+// downloadedPath is the resolved audio file: for YouTube it is the result of
+// FindDownloadedFile(destDir, safeTitle); for Soulseek it is the absolute path
+// reported by the python script. An empty path means the download produced no
+// findable file and is treated as a failure.
+func finalizeDownload(job *DownloadJob, downloadedPath string) {
+	audioFile := downloadedPath
 	if audioFile == "" {
 		job.Status = "failed"
 		job.Error = "Download completed but file not found"
@@ -740,6 +613,7 @@ func ProcessSingleDownload(job *DownloadJob) {
 		return
 	}
 
+	minBr := store.GetSettingInt("download_min_bitrate", 0)
 	quality := ProbeAudioQuality(audioFile)
 	if minBr > 0 && quality != "" {
 		br := ExtractBitrateFromQuality(quality)
@@ -808,6 +682,280 @@ func ProcessSingleDownload(job *DownloadJob) {
 			store.Mu.RUnlock()
 		}
 	}()
+}
+
+// ProcessSingleDownload routes a job to the configured source and handles
+// auto-fallback from YouTube to Soulseek on failure. It is the dispatcher;
+// per-source work lives in downloadFromYouTube / downloadFromSoulseek.
+func ProcessSingleDownload(job *DownloadJob) {
+	source := getDownloadSource()
+
+	// A job already marked Soulseek (e.g. resumed after selection) stays on
+	// the Soulseek path regardless of the global mode.
+	if job.Source == "soulseek" {
+		downloadFromSoulseek(job, -1)
+		return
+	}
+	if source == "soulseek" {
+		downloadFromSoulseek(job, -1)
+		return
+	}
+
+	// "youtube" or "auto".
+	ytOK := downloadFromYouTube(job)
+	if ytOK || source == "youtube" {
+		return
+	}
+	// auto-mode fallback: YouTube failed; try Soulseek on the same job.
+	if !store.GetSettingBool("slsk_enabled", false) || findSlsk() == "" {
+		return
+	}
+	log.Printf("[download] YouTube failed for %q, falling back to Soulseek", job.SearchQuery)
+	job.Source = "soulseek"
+	job.Error = ""
+	job.ProgressStage = ""
+	downloadFromSoulseek(job, -1)
+}
+
+// downloadFromYouTube runs the existing YouTube flow. It returns true when the
+// job reached a terminal non-failed state (completed or needs_selection); on
+// any failed exit it leaves job.Status="failed" set and returns false so the
+// dispatcher can attempt Soulseek fallback.
+func downloadFromYouTube(job *DownloadJob) bool {
+	ytdlpPath := FindYtDlp()
+	if ytdlpPath == "" {
+		job.Status = "failed"
+		job.Error = "yt-dlp not found. Install with: pip install yt-dlp  OR  apt install yt-dlp  OR  apk add yt-dlp"
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		log.Printf("[download] yt-dlp not found on PATH or known locations")
+		return false
+	}
+	log.Printf("[download] using yt-dlp at %s", ytdlpPath)
+
+	job.Status = "searching"
+	job.ProgressStage = "Searching YouTube"
+	DbUpdateJob(job)
+
+	var videoID string
+	if job.VideoID != "" {
+		videoID = job.VideoID
+		log.Printf("[download] Using direct video ID %s for %q", videoID, job.SearchQuery)
+	} else {
+		candidates, serr := SearchYouTubeWithTimeout(job.SearchQuery, job.Artist, job.Title, SearchTimeout)
+		if serr != nil {
+			job.Status = "failed"
+			job.Error = fmt.Sprintf("Search failed: %v", serr)
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			log.Printf("[download] Search failed for %q: %v", job.SearchQuery, serr)
+			return false
+		}
+		if len(candidates) == 0 {
+			job.Status = "failed"
+			job.Error = "No results found on YouTube"
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			return false
+		}
+
+		const minConfidence = 40.0
+		if candidates[0].Score < minConfidence {
+			max := len(candidates)
+			if max > 8 {
+				max = 8
+			}
+			toSave := candidates[:max]
+			candJSON, _ := json.Marshal(toSave)
+			job.CandidatesJSON = string(candJSON)
+			job.Status = "needs_selection"
+			job.ProgressStage = "Awaiting user selection"
+			DbUpdateJob(job)
+			log.Printf("[download] Low confidence (%.1f) for %q, waiting for user selection", candidates[0].Score, job.SearchQuery)
+			return true
+		}
+
+		videoID = candidates[0].VideoID
+		log.Printf("[download] Auto-selected %s (score %.1f) for %q", videoID, candidates[0].Score, job.SearchQuery)
+	}
+
+	destDir, safeTitle := computeDest(job)
+	os.MkdirAll(destDir, 0755)
+
+	job.Status = "downloading"
+	job.Source = "youtube"
+	job.ProgressStage = "Downloading audio"
+	DbUpdateJob(job)
+
+	outputTemplate := filepath.Join(destDir, safeTitle+".%(ext)s")
+
+	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+
+	audioFormat := store.GetSetting("download_format", "flac")
+	audioQuality := "0"
+	switch audioFormat {
+	case "mp3":
+		audioQuality = store.GetSetting("mp3_bitrate", "v2")
+	case "opus":
+		audioQuality = store.GetSetting("opus_bitrate", "320k")
+	case "best", "m4a":
+		audioFormat = "best"
+		audioQuality = "0"
+	default:
+		audioFormat = "flac"
+	}
+
+	if !store.GetSettingBool("download_convert_to_flac", true) {
+		audioFormat = "best"
+	}
+
+	ytArgs := append(YtCommonArgs(),
+		"-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
+		"-x",
+		"--audio-format", audioFormat,
+		"--audio-quality", audioQuality,
+		"--embed-thumbnail",
+		"--convert-thumbnails", "jpg",
+		"--no-warnings",
+		"-o", outputTemplate,
+		url,
+	)
+
+	sleepIfBotted()
+
+	out, cmdErr, timedOut := runDownloadCmd(job.ID, ytdlpPath, ytArgs)
+	if timedOut {
+		job.Status = "failed"
+		job.Error = "Download timed out after " + DownloadTimeout.String()
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		log.Printf("[download] Timed out after %v for %q", DownloadTimeout, job.SearchQuery)
+		return false
+	}
+	if cmdErr != nil {
+		if isYtdlp403(out) {
+			noteBotBlock()
+		}
+		// If cookies are present and the failure looks cookie-caused, retry
+		// once without them. A cookieless success means the cookies were
+		// actively harmful (stale/premium session) — disable them for a while.
+		if argsHaveCookies(ytArgs) && shouldRetryWithoutCookies(out) {
+			log.Printf("[download] cookie-related failure for %q, retrying without cookies", job.SearchQuery)
+			out2, cmdErr2, timedOut2 := runDownloadCmd(job.ID, ytdlpPath, stripCookiesArgs(ytArgs))
+			if timedOut2 {
+				job.Status = "failed"
+				job.Error = "Download timed out after " + DownloadTimeout.String()
+				job.CompletedAt = time.Now().Format(time.RFC3339)
+				DbUpdateJob(job)
+				log.Printf("[download] Timed out after %v for %q", DownloadTimeout, job.SearchQuery)
+				return false
+			}
+			if cmdErr2 == nil {
+				noteCookieFailure()
+				log.Printf("[download] cookieless retry succeeded for %q — disabling cookies for %v", job.SearchQuery, cookieFailCooldown)
+			} else {
+				if isYtdlp403(out2) {
+					noteBotBlock()
+				}
+				job.Status = "failed"
+				job.Error = userFriendlyError(out2)
+				job.CompletedAt = time.Now().Format(time.RFC3339)
+				DbUpdateJob(job)
+				log.Printf("[download] yt-dlp failed for %q (with and without cookies): %v", job.SearchQuery, cmdErr2)
+				return false
+			}
+		} else {
+			job.Status = "failed"
+			job.Error = userFriendlyError(out)
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			log.Printf("[download] yt-dlp failed for %q: %v", job.SearchQuery, cmdErr)
+			return false
+		}
+	}
+
+	finalizeDownload(job, FindDownloadedFile(destDir, safeTitle))
+	return true
+}
+
+// downloadFromSoulseek runs the Soulseek flow. selectedIdx < 0 means auto-pick
+// (search, auto-select on strong match, else surface the picker); >= 0 means a
+// user-selected candidate from the picker.
+func downloadFromSoulseek(job *DownloadJob, selectedIdx int) {
+	if findSlsk() == "" || slskScriptPath() == "" {
+		job.Status = "failed"
+		job.Error = "Soulseek unavailable (python3 or script missing)"
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		return
+	}
+	if store.GetSetting("slsk_username", "") == "" || store.GetSetting("slsk_password", "") == "" {
+		job.Status = "failed"
+		job.Error = "Soulseek credentials not configured"
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		return
+	}
+
+	// Auto-pick path: search and either auto-download a strong match or surface
+	// the existing picker by populating CandidatesJSON in the UI shape.
+	if selectedIdx < 0 {
+		job.Status = "searching"
+		job.Source = "soulseek"
+		job.ProgressStage = "Searching Soulseek"
+		DbUpdateJob(job)
+
+		cands, serr := searchSlsk(slskQuery(job))
+		if serr != nil {
+			job.Status = "failed"
+			job.Error = "Soulseek search failed: " + serr.Error()
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			log.Printf("[download] soulseek search failed for %q: %v", job.SearchQuery, serr)
+			return
+		}
+		if idx, ok := autoPickSlsk(cands, job.Artist, job.Title); ok {
+			selectedIdx = idx
+		} else if len(cands) > 0 {
+			candJSON, jerr := slskCandidatesToJSON(cands)
+			if jerr != nil {
+				job.Status = "failed"
+				job.Error = "Failed to encode Soulseek candidates: " + jerr.Error()
+				job.CompletedAt = time.Now().Format(time.RFC3339)
+				DbUpdateJob(job)
+				return
+			}
+			job.CandidatesJSON = candJSON
+			job.Status = "needs_selection"
+			job.Source = "soulseek"
+			job.ProgressStage = "Awaiting user selection"
+			DbUpdateJob(job)
+			log.Printf("[download] no strong Soulseek match for %q, waiting for user selection", job.SearchQuery)
+			return
+		} else {
+			job.Status = "failed"
+			job.Error = "No Soulseek results"
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			return
+		}
+	}
+
+	job.Status = "downloading"
+	job.Source = "soulseek"
+	job.ProgressStage = "Downloading via Soulseek"
+	DbUpdateJob(job)
+
+	audioFile, err := runSlskDownload(job, selectedIdx)
+	if err != nil {
+		job.Status = "failed"
+		job.Error = err.Error()
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		log.Printf("[download] soulseek download failed for %q: %v", job.SearchQuery, err)
+		return
+	}
+	finalizeDownload(job, audioFile)
 }
 
 func SearchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration) ([]YTSearchCandidate, error) {
