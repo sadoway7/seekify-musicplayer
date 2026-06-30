@@ -2776,6 +2776,13 @@ const UI = {
       const needsSel = counts.needs_selection || 0;
       const hasActivity = activeCount > 0 || counts.completed > 0 || counts.failed > 0 || needsSel > 0;
 
+      // Skip the full DOM rebuild when nothing is active and the queue state is
+      // unchanged — otherwise the 3s poll rewrites #downloads-content constantly,
+      // which blinks the page and steals focus/selection.
+      const sig = JSON.stringify(counts) + '|' + (jobs || []).map(j => j.id + ':' + j.status).join(',');
+      if (activeCount === 0 && this._downloadsSig === sig) return;
+      this._downloadsSig = sig;
+
       let html = '<div class="queue-stats">';
       if (hasActivity) {
         html += '<div class="queue-stats-badges">'

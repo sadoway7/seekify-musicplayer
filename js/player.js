@@ -155,10 +155,14 @@ const Player = {
   },
 
   togglePlay() {
-    if (this.playing) {
-      this.audio.pause();
-    } else {
+    // Branch on the audio element's real paused state, not the `playing` flag,
+    // which lags behind during the async play() promise. Using audio.paused
+    // keeps the toggle decision in sync with ground truth so rapid clicks and
+    // transient stalls don't cause missed/duplicated toggles.
+    if (this.audio.paused) {
       this.audio.play().catch(() => {});
+    } else {
+      this.audio.pause();
     }
   },
 
