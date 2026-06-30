@@ -3992,8 +3992,6 @@ const UI = {
       if (slskUser) slskUser.value = settings.slsk_username || '';
       const slskPass = document.getElementById('setting-slsk-password');
       if (slskPass) slskPass.value = settings.slsk_password || '';
-      const slskShare = document.getElementById('setting-slsk-share-dir');
-      if (slskShare) slskShare.value = settings.slsk_share_dir || '';
       const slskFmt = document.getElementById('setting-slsk-preferred-format');
       if (slskFmt) slskFmt.value = settings.slsk_preferred_format || 'any';
       const slskMinBr = document.getElementById('setting-slsk-min-bitrate');
@@ -4253,7 +4251,6 @@ const UI = {
         payload.slsk_enabled = String(this._stoggleVal('setting-slsk-enabled'));
         payload.slsk_username = (document.getElementById('setting-slsk-username') || {}).value || '';
         payload.slsk_password = (document.getElementById('setting-slsk-password') || {}).value || '';
-        payload.slsk_share_dir = (document.getElementById('setting-slsk-share-dir') || {}).value || '';
         payload.slsk_preferred_format = (document.getElementById('setting-slsk-preferred-format') || {}).value || 'any';
         payload.slsk_min_bitrate = (document.getElementById('setting-slsk-min-bitrate') || {}).value || '192';
       }
@@ -4273,7 +4270,6 @@ const UI = {
     };
     const username = (document.getElementById('setting-slsk-username') || {}).value || '';
     const password = (document.getElementById('setting-slsk-password') || {}).value || '';
-    const shareDir = (document.getElementById('setting-slsk-share-dir') || {}).value || '';
     if (!username || !password) {
       showMsg('Enter username and password first');
       return;
@@ -4282,7 +4278,7 @@ const UI = {
     btn.disabled = true;
     btn.innerHTML = '<span>Connecting…</span>';
     try {
-      const res = await Api.testSlskConnect({ username, password, share_dir: shareDir || undefined });
+      const res = await Api.testSlskConnect({ username, password });
       if (res.ok) {
         this._stoggleOn('setting-slsk-enabled', true);
         showMsg(res.seeded ? 'Connected — seeded ' + res.seeded + ' file(s)' : 'Connected', '#22c55e');
@@ -4363,9 +4359,6 @@ const UI = {
       + '<button class="settings-btn settings-btn-primary" id="btn-slsk-connect" type="button"><span>Connect Soulseek</span></button>'
       + '<div id="slsk-connect-msg" class="settings-section-desc" style="margin-top:6px;font-size:12px">Creates the account if it\'s new, verifies it works, and seeds your share folder (up to 30 files) so you aren\'t throttled. Just enter username + password and click.</div>'
       + '</div>'
-      + '<div class="settings-field"><label>Shared Folder</label>'
-      + '<input type="text" id="setting-slsk-share-dir" class="settings-input" placeholder="music/shared"></div>'
-      + '<div class="settings-section-desc" style="font-size:12px">Put some music files in this folder — accounts that share nothing get throttled by the Soulseek network.</div>'
       + '<div class="settings-field"><label>Preferred Format</label>'
       + '<select id="setting-slsk-preferred-format" class="settings-select">'
       + '<option value="any">Any</option><option value="flac">FLAC (lossless)</option><option value="mp3">MP3</option>'
