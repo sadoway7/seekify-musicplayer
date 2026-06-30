@@ -368,7 +368,16 @@ func DownloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
 	job.Error = ""
 	downloads.DbUpdateJob(job)
 
-	go downloads.ProcessDownloadQueue()
+	if job.Source == "soulseek" {
+		idx, err := strconv.Atoi(req.VideoID)
+		if err != nil || idx < 0 {
+			http.Error(w, `{"error":"invalid selection index"}`, http.StatusBadRequest)
+			return
+		}
+		go downloads.ProcessSlskSelection(job, idx)
+	} else {
+		go downloads.ProcessDownloadQueue()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(job)
