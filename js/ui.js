@@ -3985,6 +3985,19 @@ const UI = {
       const ytPlayerClient = document.getElementById('setting-yt-player-client');
       if (ytCookiesBrowser) ytCookiesBrowser.value = settings.yt_cookies_from_browser || '';
       if (ytPlayerClient) ytPlayerClient.value = settings.yt_player_client || 'default';
+      const dlSrc = document.getElementById('setting-download-source');
+      if (dlSrc) dlSrc.value = settings.download_source || 'auto';
+      this._stoggleOn('setting-slsk-enabled', settings.slsk_enabled === 'true');
+      const slskUser = document.getElementById('setting-slsk-username');
+      if (slskUser) slskUser.value = settings.slsk_username || '';
+      const slskPass = document.getElementById('setting-slsk-password');
+      if (slskPass) slskPass.value = settings.slsk_password || '';
+      const slskShare = document.getElementById('setting-slsk-share-dir');
+      if (slskShare) slskShare.value = settings.slsk_share_dir || '';
+      const slskFmt = document.getElementById('setting-slsk-preferred-format');
+      if (slskFmt) slskFmt.value = settings.slsk_preferred_format || 'any';
+      const slskMinBr = document.getElementById('setting-slsk-min-bitrate');
+      if (slskMinBr) slskMinBr.value = settings.slsk_min_bitrate || '192';
       this._refreshCookiesStatus();
       const ytCookiesFileInput = document.getElementById('yt-cookies-file-input');
       if (ytCookiesFileInput && !ytCookiesFileInput._bound) {
@@ -4223,7 +4236,7 @@ const UI = {
     const opus = document.getElementById('setting-opus-bitrate');
     const minBr = document.getElementById('setting-download-min-bitrate');
     try {
-      await Api.saveSettings({
+      const payload = {
         download_format: fmt ? fmt.value : 'flac',
         download_convert_to_flac: String(this._stoggleVal('setting-download-convert-to-flac')),
         download_organise_by_artist: String(this._stoggleVal('setting-download-organise-by-artist')),
@@ -4231,7 +4244,20 @@ const UI = {
         opus_bitrate: opus ? opus.value : '320k',
         download_min_bitrate: minBr ? minBr.value : '0',
         yt_player_client: (document.getElementById('setting-yt-player-client') || {}).value || 'default'
-      });
+      };
+      // Soulseek keys are only present in the downloads settings panel; include them
+      // only when their elements exist so saving from the legacy panel can't clobber them.
+      const dlSrc = document.getElementById('setting-download-source');
+      if (dlSrc) {
+        payload.download_source = dlSrc.value || 'auto';
+        payload.slsk_enabled = String(this._stoggleVal('setting-slsk-enabled'));
+        payload.slsk_username = (document.getElementById('setting-slsk-username') || {}).value || '';
+        payload.slsk_password = (document.getElementById('setting-slsk-password') || {}).value || '';
+        payload.slsk_share_dir = (document.getElementById('setting-slsk-share-dir') || {}).value || '';
+        payload.slsk_preferred_format = (document.getElementById('setting-slsk-preferred-format') || {}).value || 'any';
+        payload.slsk_min_bitrate = (document.getElementById('setting-slsk-min-bitrate') || {}).value || '192';
+      }
+      await Api.saveSettings(payload);
       this._showToast('Import settings saved');
     } catch (e) {
       this._showToast('Failed to save settings');
@@ -4288,7 +4314,27 @@ const UI = {
       + '</div>'
       + '<div class="settings-field" style="margin-top:8px"><label style="font-size:12px">Chrome Web Store URL (optional)</label>'
       + '<input type="url" id="setting-cookies-store-url" class="settings-input" placeholder="https://chromewebstore.google.com/..." style="width:100%"></div>'
-      + '<div class="settings-section-desc" style="margin-top:8px;font-size:12px">Using the .zip: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder. Then open the extension, enter this server address, and click Send.</div>';
+      + '<div class="settings-section-desc" style="margin-top:8px;font-size:12px">Using the .zip: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder. Then open the extension, enter this server address, and click Send.</div>'
+      + '<div class="settings-subsection-label" style="margin-top:16px">Soulseek Fallback</div>'
+      + '<div class="settings-section-desc">Soulseek is used as a fallback when YouTube fails, or as the only source. Requires a free Soulseek account and a shared folder (give-to-get). Falls back gracefully if disabled or unconfigured.</div>'
+      + '<div class="settings-field"><label>Download Source</label>'
+      + '<select id="setting-download-source" class="settings-select">'
+      + '<option value="auto">Auto — YouTube, then Soulseek</option><option value="youtube">YouTube only</option><option value="soulseek">Soulseek only</option>'
+      + '</select></div>'
+      + st('setting-slsk-enabled', 'Enable Soulseek', 'Use Soulseek as a fallback or primary download source')
+      + '<div class="settings-field"><label>Soulseek Username</label>'
+      + '<input type="text" id="setting-slsk-username" class="settings-input" placeholder="your soulseek username"></div>'
+      + '<div class="settings-field"><label>Soulseek Password</label>'
+      + '<input type="password" id="setting-slsk-password" class="settings-input" placeholder="your soulseek password" autocomplete="new-password"></div>'
+      + '<div class="settings-field"><label>Shared Folder</label>'
+      + '<input type="text" id="setting-slsk-share-dir" class="settings-input" placeholder="music/shared"></div>'
+      + '<div class="settings-section-desc" style="font-size:12px">Put some music files in this folder — accounts that share nothing get throttled by the Soulseek network.</div>'
+      + '<div class="settings-field"><label>Preferred Format</label>'
+      + '<select id="setting-slsk-preferred-format" class="settings-select">'
+      + '<option value="any">Any</option><option value="flac">FLAC (lossless)</option><option value="mp3">MP3</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Soulseek Min Bitrate (kbps)</label>'
+      + '<input type="text" id="setting-slsk-min-bitrate" class="settings-input" placeholder="192"></div>';
 
     const overlay = document.createElement('div');
     overlay.className = 'candidate-modal-overlay dl-settings-overlay';
