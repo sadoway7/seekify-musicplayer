@@ -533,54 +533,69 @@ func ProcessDownloadQueue() {
 		return
 	}
 
-	// H7: acquire the concurrency slot BEFORE bumping the counter. Previously
-	// DownloadActive was incremented first, so concurrent spawners saw an
-	// inflated count and bailed out prematurely.
-	select {
-	case DownloadSem <- struct{}{}:
-	default:
-		return
-	}
-	DownloadMu.Lock()
-	DownloadActive++
-	DownloadMu.Unlock()
-
-	defer func() {
-		<-DownloadSem
-		DownloadMu.Lock()
-		DownloadActive--
-		DownloadMu.Unlock()
-	}()
-
 	for {
+		if store.GetSettingBool("download_paused", false) {
+			return
+		}
+
+		// Try to acquire a concurrency slot. Non-blocking: if all slots are
+		// busy, return and let the watchdog re-trigger when a slot frees.
+		select {
+		case DownloadSem <- struct{}{}:
+		default:
+			return
+		}
+		DownloadMu.Lock()
+		DownloadActive++
+		DownloadMu.Unlock()
+
+		// Find a queued job and atomically claim it.
 		jobs, err := DbGetQueuedJobs()
 		if err != nil || len(jobs) == 0 {
+			// No jobs — release the slot and exit.
+			<-DownloadSem
+			DownloadMu.Lock()
+			DownloadActive--
+			DownloadMu.Unlock()
 			return
 		}
 
 		job := &jobs[0]
-		// H6: atomically claim the job so two concurrent queue goroutines can't
-		// both SELECT the same row. The WHERE status='queued' guard makes the
-		// UPDATE a CAS: only the first caller wins.
 		res, _ := store.DB.Exec(`UPDATE download_jobs SET status='searching' WHERE id=? AND status='queued'`, job.ID)
 		if n, _ := res.RowsAffected(); n == 0 {
-			continue // someone else claimed it; look at the next one
+			// Someone else claimed it — release slot and loop to try next.
+			<-DownloadSem
+			DownloadMu.Lock()
+			DownloadActive--
+			DownloadMu.Unlock()
+			continue
 		}
 
-		func() {
+		// Process this job in a goroutine. The semaphore is released when
+		// the job finishes (success, failure, or panic).
+		go func(j *DownloadJob) {
+			defer func() {
+				<-DownloadSem
+				DownloadMu.Lock()
+				DownloadActive--
+				DownloadMu.Unlock()
+			}()
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("[download] PANIC in ProcessSingleDownload for %s: %v", job.ID, r)
-					job.Status = "failed"
-					job.Error = fmt.Sprintf("Internal error: %v", r)
-					job.CompletedAt = time.Now().Format(time.RFC3339)
-					DbUpdateJob(job)
+					log.Printf("[download] PANIC in ProcessSingleDownload for %s: %v", j.ID, r)
+					j.Status = "failed"
+					j.Error = fmt.Sprintf("Internal error: %v", r)
+					j.CompletedAt = time.Now().Format(time.RFC3339)
+					DbUpdateJob(j)
 				}
 			}()
-			ProcessSingleDownload(job)
-		}()
+			ProcessSingleDownload(j)
 
-		time.Sleep(500 * time.Millisecond)
+			// Job finished — kick the queue in case there are more waiting.
+			store.SafeGo("process-queue", func() { ProcessDownloadQueue() })
+		}(job)
+
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
