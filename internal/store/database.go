@@ -118,9 +118,63 @@ func InitDB(path string) {
 	// Add added_at to favorites for ordering (newest first)
 	DB.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
 
+	dedupTracksByFilePath()
+	DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path)`)
+
 	InitSettingsTable()
 
 	MigrateFromJSON()
+}
+
+// dedupTracksByFilePath merges any tracks sharing the same file_path,
+// keeping the one with the most metadata. References in all related tables
+// are migrated to the survivor before deleting the losers.
+func dedupTracksByFilePath() {
+	rows, err := DB.Query(`SELECT file_path, COUNT(*) as cnt FROM tracks GROUP BY file_path HAVING cnt > 1`)
+	if err != nil {
+		return
+	}
+	var dupPaths []string
+	for rows.Next() {
+		var p string
+		var c int
+		rows.Scan(&p, &c)
+		dupPaths = append(dupPaths, p)
+	}
+	rows.Close()
+	if len(dupPaths) == 0 {
+		return
+	}
+	log.Printf("[db] Found %d duplicate file_paths, deduplicating...", len(dupPaths))
+	for _, path := range dupPaths {
+		rows, err := DB.Query(`SELECT id FROM tracks WHERE file_path = ? ORDER BY has_metadata DESC, mod_time DESC`, path)
+		if err != nil {
+			continue
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			rows.Scan(&id)
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if len(ids) <= 1 {
+			continue
+		}
+		keepID := ids[0]
+		tx, _ := DB.Begin()
+		for _, dupID := range ids[1:] {
+			tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+			tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+			tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+			tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+			tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+			tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+			tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+		}
+		tx.Commit()
+		log.Printf("[db] Deduped %s: kept %s, removed %d", path, keepID, len(ids)-1)
+	}
 }
 
 func MigrateFromJSON() {
@@ -625,13 +679,28 @@ func DbMigrateTrackID(oldID, newID, newPath string) {
 		return
 	}
 	defer tx.Rollback()
-	tx.Exec(`UPDATE tracks SET id=?, file_path=? WHERE id=?`, newID, newPath, oldID)
-	tx.Exec(`UPDATE favorites SET track_id=? WHERE track_id=?`, newID, oldID)
-	tx.Exec(`UPDATE recent SET track_id=? WHERE track_id=?`, newID, oldID)
-	tx.Exec(`UPDATE playlist_tracks SET track_id=? WHERE track_id=?`, newID, oldID)
-	tx.Exec(`UPDATE downloads SET track_id=? WHERE track_id=?`, newID, oldID)
-	tx.Exec(`UPDATE metadata_matches SET track_id=? WHERE track_id=?`, newID, oldID)
-	tx.Exec(`UPDATE track_reviews SET track_id=? WHERE track_id=?`, newID, oldID)
+
+	// If newID already exists (file was already scanned at the new path),
+	// merge: migrate old references to the existing row, delete the old row.
+	var exists int
+	tx.QueryRow(`SELECT COUNT(*) FROM tracks WHERE id = ?`, newID).Scan(&exists)
+	if exists > 0 {
+		tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`DELETE FROM tracks WHERE id = ?`, oldID)
+	} else {
+		tx.Exec(`UPDATE tracks SET id=?, file_path=? WHERE id=?`, newID, newPath, oldID)
+		tx.Exec(`UPDATE favorites SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE recent SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE playlist_tracks SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE downloads SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE metadata_matches SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE track_reviews SET track_id=? WHERE track_id=?`, newID, oldID)
+	}
 	tx.Commit()
 }
 

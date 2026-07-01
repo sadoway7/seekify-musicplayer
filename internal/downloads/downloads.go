@@ -567,7 +567,18 @@ func ProcessDownloadQueue() {
 			continue // someone else claimed it; look at the next one
 		}
 
-		ProcessSingleDownload(job)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[download] PANIC in ProcessSingleDownload for %s: %v", job.ID, r)
+					job.Status = "failed"
+					job.Error = fmt.Sprintf("Internal error: %v", r)
+					job.CompletedAt = time.Now().Format(time.RFC3339)
+					DbUpdateJob(job)
+				}
+			}()
+			ProcessSingleDownload(job)
+		}()
 
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -682,37 +693,36 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) {
 
 	log.Printf("[download] Completed: %s - %s -> %s (%s)", job.Artist, job.Title, audioFile, quality)
 
-	store.SafeGo("finalize-download", func() {
-		time.Sleep(1 * time.Second)
-		scanner.ScanSingleFile(audioFile)
+	// Scan synchronously — we hold a download slot and this eliminates the
+	// race where AutoSort moves the file between the sleep and ScanSingleFile.
+	scanner.ScanSingleFile(audioFile)
 
-		if job.AlbumMBID != "" {
-			store.Mu.RLock()
-			var albumID string
-			for _, tr := range store.Tracks {
-				if scanner.ResolveFilePath(tr.FilePath) == audioFile {
-					albumID = tr.AlbumID
-					break
-				}
-			}
-			store.Mu.RUnlock()
-			if albumID != "" {
-				musicbrainz.FetchAndCacheCoverByMBID(albumID, job.AlbumMBID)
+	if job.AlbumMBID != "" {
+		store.Mu.RLock()
+		var albumID string
+		for _, tr := range store.Tracks {
+			if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+				albumID = tr.AlbumID
+				break
 			}
 		}
-
-		if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
-			store.Mu.RLock()
-			for _, tr := range store.Tracks {
-				if strings.EqualFold(tr.Artist, job.Artist) && strings.EqualFold(tr.Title, job.Title) {
-					store.DbAddTrackToPlaylist(job.PlaylistID, tr.ID)
-					log.Printf("[download] Added %s - %s to playlist %s", tr.Artist, tr.Title, job.PlaylistID)
-					break
-				}
-			}
-			store.Mu.RUnlock()
+		store.Mu.RUnlock()
+		if albumID != "" {
+			musicbrainz.FetchAndCacheCoverByMBID(albumID, job.AlbumMBID)
 		}
-	})
+	}
+
+	if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
+		store.Mu.RLock()
+		for _, tr := range store.Tracks {
+			if strings.EqualFold(tr.Artist, job.Artist) && strings.EqualFold(tr.Title, job.Title) {
+				store.DbAddTrackToPlaylist(job.PlaylistID, tr.ID)
+				log.Printf("[download] Added %s - %s to playlist %s", tr.Artist, tr.Title, job.PlaylistID)
+				break
+			}
+		}
+		store.Mu.RUnlock()
+	}
 }
 
 // ProcessSingleDownload routes a job to the configured source and handles
@@ -1430,7 +1440,10 @@ func TagAudioFile(filePath, artist, title, album string, trackNum, trackTotal in
 		return
 	}
 
-	os.Rename(tmpFile, filePath)
+	if err := os.Rename(tmpFile, filePath); err != nil {
+		log.Printf("[download] WARNING: tag rename failed %s -> %s: %v", tmpFile, filePath, err)
+		os.Remove(tmpFile)
+	}
 }
 
 func SanitizeFilename(name string) string {

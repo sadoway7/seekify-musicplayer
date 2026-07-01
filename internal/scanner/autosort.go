@@ -69,17 +69,31 @@ func AutoSortMusic() {
 
 	moved := 0
 	for _, job := range jobs {
-		// Migrate track ID before moving so favorites/playlists/reviews survive
-		if job.oldID != job.newID {
-			store.DbMigrateTrackID(job.oldID, job.newID, job.newRelPath)
-		}
-
 		os.MkdirAll(filepath.Dir(job.dst), 0755)
 
 		if err := os.Rename(job.src, job.dst); err != nil {
 			log.Printf("Failed to move %s -> %s: %v", job.src, job.dst, err)
 			continue
 		}
+
+		// Migrate track ID AFTER successful rename so a failed move
+		// doesn't orphan favorites/playlists/reviews.
+		if job.oldID != job.newID {
+			store.DbMigrateTrackID(job.oldID, job.newID, job.newRelPath)
+		}
+
+		// Update in-memory map immediately so the old path isn't served
+		// (404) between the rename and the rescan.
+		store.Mu.Lock()
+		if old, ok := store.Tracks[job.oldID]; ok {
+			deleted := old
+			deleted.FilePath = job.newRelPath
+			deleted.ID = job.newID
+			delete(store.Tracks, job.oldID)
+			store.Tracks[job.newID] = deleted
+		}
+		store.Mu.Unlock()
+
 		moved++
 	}
 
