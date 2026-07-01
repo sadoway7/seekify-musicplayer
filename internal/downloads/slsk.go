@@ -281,30 +281,63 @@ func slskStrongMatch(cand slskRawCandidate, artist, title string) bool {
 	return true
 }
 
+// slskVersionKeywords are terms that distinguish alternate versions of a track.
+var slskVersionKeywords = []string{"live", "remix", "acoustic", "demo", "instrumental", "extended", "acapella", "karaoke", "cover", "bootleg", "reworked"}
+
+// slskVersionTags returns the set of version keywords found in s (lowercased).
+func slskVersionTags(s string) map[string]bool {
+	tags := map[string]bool{}
+	l := strings.ToLower(s)
+	for _, kw := range slskVersionKeywords {
+		if strings.Contains(l, kw) {
+			tags[kw] = true
+		}
+	}
+	return tags
+}
+
+// slskVersionScore rates how well a candidate's version matches the desired
+// version. Higher = better. +2 for each matching tag, -3 for each undesired tag.
+func slskVersionScore(filename string, wantTags map[string]bool) int {
+	candTags := slskVersionTags(filename)
+	score := 0
+	for kw := range candTags {
+		if wantTags[kw] {
+			score += 2
+		} else {
+			score -= 3
+		}
+	}
+	return score
+}
+
 // autoPickSlsk picks the best healthy candidate using progressive relaxation.
 // Candidates are already ranked (FLAC first, then highest bitrate). We apply
 // quality gates from strict to loose, stopping at the first tier that yields
 // a strong match. This avoids being so strict we never pick anything while
 // still preferring high-quality, non-junk files.
 //
+// rawTitle is the user's original (uncleaned) title, used to detect version
+// intent (live, remix, etc.). If the title has no version keywords, studio
+// versions are preferred. If it does, matching versions are preferred.
+//
 // Tiers:
-//   1. Strong match + FLAC + size > 2MB + duration > 60s (if known)
-//   2. Strong match + MP3 ≥ minBitrate + size > 1MB
-//   3. Strong match + any format + size > 1MB
-//   4. Fall through to picker (return false)
-func autoPickSlsk(cands []slskRawCandidate, artist, title string, minBitrate int) (int, bool) {
-	type pick struct {
-		index int
-		score int // higher = better, for tie-breaking within a tier
-	}
+//  1. Strong match + FLAC + size > 2MB + duration > 60s (if known)
+//  2. Strong match + MP3 ≥ minBitrate + size > 1MB
+//  3. Strong match + any format + size > 1MB
+//  4. Fall through to picker (return false)
+func autoPickSlsk(cands []slskRawCandidate, artist, title string, rawTitle string, minBitrate int) (int, bool) {
+	wantTags := slskVersionTags(rawTitle)
 
 	// Filter to strong matches first, compute health metrics.
 	type candidate struct {
-		idx     int
-		size    int64
-		bitrate int
-		dur     int
-		format  string
+		idx       int
+		size      int64
+		bitrate   int
+		dur       int
+		format    string
+		filename  string
+		verScore  int
 	}
 	var strong []candidate
 	for _, c := range cands {
@@ -329,11 +362,18 @@ func autoPickSlsk(cands []slskRawCandidate, artist, title string, minBitrate int
 		}
 		strong = append(strong, candidate{
 			idx: c.Index, size: c.Size, bitrate: br, dur: dur, format: fmt,
+			filename: c.Filename, verScore: slskVersionScore(c.Filename, wantTags),
 		})
 	}
 	if len(strong) == 0 {
 		return -1, false
 	}
+
+	// Sort strong by version score descending so version-appropriate candidates
+	// are tried first within each quality tier.
+	sort.SliceStable(strong, func(i, j int) bool {
+		return strong[i].verScore > strong[j].verScore
+	})
 
 	// Helper: find first candidate in a tier
 	findFirst := func(filter func(c candidate) bool) (int, bool) {

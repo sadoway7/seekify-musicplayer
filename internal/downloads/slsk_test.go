@@ -206,7 +206,7 @@ func TestAutoPickSlsk(t *testing.T) {
 	const title = "Title"
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotIdx, gotFound := autoPickSlsk(tt.cands, artist, title, 0)
+			gotIdx, gotFound := autoPickSlsk(tt.cands, artist, title, title, 0)
 			if gotIdx != tt.wantIdx || gotFound != tt.wantFound {
 				t.Errorf("autoPickSlsk(...) = (%d, %v), want (%d, %v)",
 					gotIdx, gotFound, tt.wantIdx, tt.wantFound)
@@ -222,7 +222,7 @@ func TestAutoPickSlsk_returnsCandidateIndexNotSlicePosition(t *testing.T) {
 	cands := []slskRawCandidate{
 		{Index: 10, Format: "mp3", Filename: "Artist - Title.mp3", Size: 5_000_000, Bitrate: intPtr(320)},
 	}
-	idx, found := autoPickSlsk(cands, "Artist", "Title", 0)
+	idx, found := autoPickSlsk(cands, "Artist", "Title", "Title", 0)
 	if !found {
 		t.Fatalf("expected found=true, got false")
 	}

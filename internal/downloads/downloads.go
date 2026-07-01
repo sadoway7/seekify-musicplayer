@@ -991,7 +991,7 @@ func downloadFromSoulseek(job *DownloadJob) {
 	// slskQuery builds the search, so "Money (Remastered 2011)" still matches the
 	// "Money" results the search actually returned.
 	minBr := store.GetSettingInt("slsk_min_bitrate", 0)
-	pickIdx, pickOK := autoPickSlsk(cands, job.Artist, slskCleanTitle(job.Title), minBr)
+	pickIdx, pickOK := autoPickSlsk(cands, job.Artist, slskCleanTitle(job.Title), job.Title, minBr)
 	if !pickOK {
 		if len(cands) > 0 {
 			candJSON, jerr := slskCandidatesToJSON(cands)
@@ -1049,15 +1049,8 @@ func downloadFromSoulseek(job *DownloadJob) {
 			}
 		}
 	}
-	// Append remaining non-strong candidates as fallback
-	for _, c := range cands {
-		if c.Index == pickIdx {
-			continue
-		}
-		if !slskStrongMatch(c, job.Artist, slskCleanTitle(job.Title)) {
-			ordered = append(ordered, c)
-		}
-	}
+	// Only try strong matches — non-strong candidates risk downloading
+	// completely wrong songs.
 	// Cap at 8 candidates
 	maxCands := 8
 	if len(ordered) > maxCands {
