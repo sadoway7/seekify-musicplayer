@@ -485,8 +485,10 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 		return "", fmt.Errorf("soulseek start failed: %w", err)
 	}
 
-	// Read stderr line by line for progress updates
+	// Read stderr line by line for progress updates. Also accumulate the
+	// last few lines so we can include them in error messages.
 	progressDone := make(chan struct{})
+	var stderrTail []string
 	go func() {
 		defer close(progressDone)
 		scanner := bufio.NewScanner(stderrPipe)
@@ -505,6 +507,10 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 				}
 			} else {
 				log.Printf("[slsk-stderr] %s", line)
+			}
+			stderrTail = append(stderrTail, line)
+			if len(stderrTail) > 10 {
+				stderrTail = stderrTail[1:]
 			}
 		}
 	}()
@@ -541,7 +547,11 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 	}
 	if waitErr != nil {
 		slskCleanupIncomplete(destDir, preSnap)
-		return "", fmt.Errorf("soulseek failed: %s", strings.TrimSpace(string(out)))
+		detail := strings.TrimSpace(string(out))
+		if detail == "" && len(stderrTail) > 0 {
+			detail = strings.Join(stderrTail, "; ")
+		}
+		return "", fmt.Errorf("soulseek failed: %s", detail)
 	}
 
 	// The script prints exactly one JSON object on stdout describing the

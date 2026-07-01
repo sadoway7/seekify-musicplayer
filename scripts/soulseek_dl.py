@@ -63,12 +63,12 @@ except ImportError:
 
 def emit_error(message: str) -> None:
     """Print a single JSON error object to stdout (Go caller reads stdout)."""
-    print(json.dumps({"error": message}))
+    print(json.dumps({"error": message}), flush=True)
 
 
 def emit(obj) -> None:
     """Print a single JSON object/array to stdout."""
-    print(json.dumps(obj))
+    print(json.dumps(obj), flush=True)
 
 
 def remove_local(transfer) -> None:
