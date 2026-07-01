@@ -129,52 +129,106 @@ func InitDB(path string) {
 // dedupTracksByFilePath merges any tracks sharing the same file_path,
 // keeping the one with the most metadata. References in all related tables
 // are migrated to the survivor before deleting the losers.
+// Also deduplicates across media: prefix (same file in primary + media dirs).
 func dedupTracksByFilePath() {
+	// Pass 1: exact file_path duplicates
 	rows, err := DB.Query(`SELECT file_path, COUNT(*) as cnt FROM tracks GROUP BY file_path HAVING cnt > 1`)
+	if err == nil {
+		var dupPaths []string
+		for rows.Next() {
+			var p string
+			var c int
+			rows.Scan(&p, &c)
+			dupPaths = append(dupPaths, p)
+		}
+		rows.Close()
+		if len(dupPaths) > 0 {
+			log.Printf("[db] Found %d exact duplicate file_paths, deduplicating...", len(dupPaths))
+			for _, path := range dupPaths {
+				dedupByFilePath(path)
+			}
+		}
+	}
+
+	// Pass 2: cross-prefix duplicates (same relative path, one with media: prefix, one without)
+	rows, err = DB.Query(`SELECT REPLACE(file_path, 'media:', '') as norm, COUNT(*) as cnt FROM tracks GROUP BY norm HAVING cnt > 1`)
+	if err == nil {
+		type crossPair struct{ normPath string }
+		var pairs []crossPair
+		for rows.Next() {
+			var p string
+			var c int
+			rows.Scan(&p, &c)
+			pairs = append(pairs, crossPair{normPath: p})
+		}
+		rows.Close()
+		if len(pairs) > 0 {
+			log.Printf("[db] Found %d cross-prefix duplicate paths, deduplicating...", len(pairs))
+			for _, pair := range pairs {
+				// Find all tracks whose normalized path matches
+				r, err := DB.Query(`SELECT id, file_path, has_metadata, mod_time FROM tracks WHERE file_path = ? OR file_path = ? ORDER BY has_metadata DESC, mod_time DESC`,
+					pair.normPath, "media:"+pair.normPath)
+				if err != nil {
+					continue
+				}
+				var ids []string
+				for r.Next() {
+					var id, fp string
+					var hm int
+					var mt int64
+					r.Scan(&id, &fp, &hm, &mt)
+					ids = append(ids, id)
+				}
+				r.Close()
+				if len(ids) <= 1 {
+					continue
+				}
+				keepID := ids[0]
+				tx, _ := DB.Begin()
+				for _, dupID := range ids[1:] {
+					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+				}
+				tx.Commit()
+				log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
+			}
+		}
+	}
+}
+
+func dedupByFilePath(path string) {
+	rows, err := DB.Query(`SELECT id FROM tracks WHERE file_path = ? ORDER BY has_metadata DESC, mod_time DESC`, path)
 	if err != nil {
 		return
 	}
-	var dupPaths []string
+	var ids []string
 	for rows.Next() {
-		var p string
-		var c int
-		rows.Scan(&p, &c)
-		dupPaths = append(dupPaths, p)
+		var id string
+		rows.Scan(&id)
+		ids = append(ids, id)
 	}
 	rows.Close()
-	if len(dupPaths) == 0 {
+	if len(ids) <= 1 {
 		return
 	}
-	log.Printf("[db] Found %d duplicate file_paths, deduplicating...", len(dupPaths))
-	for _, path := range dupPaths {
-		rows, err := DB.Query(`SELECT id FROM tracks WHERE file_path = ? ORDER BY has_metadata DESC, mod_time DESC`, path)
-		if err != nil {
-			continue
-		}
-		var ids []string
-		for rows.Next() {
-			var id string
-			rows.Scan(&id)
-			ids = append(ids, id)
-		}
-		rows.Close()
-		if len(ids) <= 1 {
-			continue
-		}
-		keepID := ids[0]
-		tx, _ := DB.Begin()
-		for _, dupID := range ids[1:] {
-			tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-			tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-			tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-			tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-			tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-			tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-			tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
-		}
-		tx.Commit()
-		log.Printf("[db] Deduped %s: kept %s, removed %d", path, keepID, len(ids)-1)
+	keepID := ids[0]
+	tx, _ := DB.Begin()
+	for _, dupID := range ids[1:] {
+		tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
 	}
+	tx.Commit()
+	log.Printf("[db] Deduped %s: kept %s, removed %d", path, keepID, len(ids)-1)
 }
 
 func MigrateFromJSON() {

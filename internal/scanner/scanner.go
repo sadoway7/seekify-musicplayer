@@ -413,7 +413,7 @@ func PruneSharedDirTracks() int {
 	var toDelete []string
 	store.Mu.RLock()
 	for id, t := range store.Tracks {
-		full := filepath.Join(store.MusicDir, t.FilePath)
+		full := ResolveFilePath(t.FilePath)
 		if full == skipDir || strings.HasPrefix(full, skipDir+string(filepath.Separator)) {
 			toDelete = append(toDelete, id)
 		}
