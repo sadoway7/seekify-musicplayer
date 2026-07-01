@@ -285,8 +285,27 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	if err != nil {
 		log.Printf("[scan] ERROR: DB.Begin failed: %v", err)
 	} else {
+		// For media-dir scans: build primary path set so we can skip
+		// DB upserts for tracks that duplicate a primary-dir file.
+		// Without this, every media scan re-inserts cross-prefix
+		// duplicates that the startup dedup just cleaned.
+		primaryPaths := make(map[string]bool)
+		if prefix != "" {
+			prefixKey := prefix + ":"
+			for _, t := range store.Tracks {
+				if !strings.HasPrefix(t.FilePath, prefixKey) && !strings.Contains(t.FilePath, ":") {
+					primaryPaths[t.FilePath] = true
+				}
+			}
+		}
 		for _, t := range newTracks {
 			if _, changed := changedTracks[t.ID]; changed {
+				if prefix != "" {
+					relPath := strings.TrimPrefix(t.FilePath, prefix+":")
+					if primaryPaths[relPath] {
+						continue // primary-dir copy wins, skip DB insert
+					}
+				}
 				store.DbUpsertTrackTx(tx, t)
 			}
 		}
