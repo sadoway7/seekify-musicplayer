@@ -305,26 +305,30 @@ async def await_completion(transfer, expected_size: int = 0, poll: float = 0.5) 
 
 
 async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
-    """Download ``chosen`` into ``args.out`` and print the result JSON."""
+    """Download ``chosen`` into ``args.out`` and print the result JSON.
+
+    Returns 0 on success (result JSON printed), 2 on failure (error stored in
+    chosen['_error'] for multi-candidate mode, or emitted for single-candidate).
+    """
     username = chosen.get("username", "")
     filename = chosen.get("filename", "")
     try:
         transfer = await client.transfers.download(username, filename)
     except Exception as e:
-        emit_error(f"download request failed: {e}")
+        chosen["_error"] = f"download request failed: {e}"
         return 2
 
     try:
         ok = await await_completion(transfer, chosen.get("size", 0))
     except Exception as e:
         remove_local(transfer)
-        emit_error(f"download failed: {e}")
+        chosen["_error"] = f"download failed: {e}"
         return 2
 
     if not ok:
         remove_local(transfer)
         reason = getattr(transfer, "fail_reason", None) or getattr(transfer, "abort_reason", None) or "transfer did not complete"
-        emit_error(f"download failed: {reason}")
+        chosen["_error"] = f"download failed: {reason}"
         return 2
 
     local_path = getattr(transfer, "local_path", None)
@@ -405,7 +409,34 @@ async def run(args) -> int:
                 "username": args.dl_username,
                 "filename": args.dl_filename,
             }
-            return await do_download(client, chosen, args)
+            rc = await do_download(client, chosen, args)
+            if rc != 0:
+                emit_error(chosen.get("_error", "download failed"))
+            return rc
+
+        # Multi-candidate download mode: try each candidate in order until one
+        # succeeds. Peers are frequently unreachable (firewall/NAT), so trying
+        # multiple candidates dramatically improves success rate.
+        if args.dl_candidates:
+            import json as _json
+            try:
+                candidates = _json.loads(args.dl_candidates)
+            except Exception:
+                emit_error("invalid --dl-candidates JSON")
+                return 3
+            errors = []
+            for cand in candidates:
+                u = cand.get("username", "")
+                f = cand.get("filename", "")
+                if not u or not f:
+                    continue
+                print(f"[dl] trying {u}...", file=sys.stderr, flush=True)
+                rc = await do_download(client, cand, args)
+                if rc == 0:
+                    return 0
+                errors.append(f"{u}: {cand.get('_error', 'failed')}")
+            emit_error("all candidates failed: " + "; ".join(errors))
+            return 3
 
         try:
             results = await gather_search(client, args.query)
@@ -431,7 +462,10 @@ async def run(args) -> int:
             emit_error("no matching Soulseek result")
             return 1
 
-        return await do_download(client, chosen, args)
+        rc = await do_download(client, chosen, args)
+        if rc != 0:
+            emit_error(chosen.get("_error", "download failed"))
+        return rc
     finally:
         try:
             await client.stop()
@@ -453,6 +487,7 @@ def build_argparser(test_mode: bool = False) -> argparse.ArgumentParser:
     p.add_argument("--select", type=int, default=None, help="(Deprecated) 0-based index of candidate to download (re-searches)")
     p.add_argument("--dl-username", default=None, help="Direct download: sharer's username (downloads that exact file, no re-search)")
     p.add_argument("--dl-filename", default=None, help="Direct download: remote filename path to download")
+    p.add_argument("--dl-candidates", default=None, help="Multi-candidate download: JSON array of {username, filename, size} objects to try in order")
     p.add_argument("--min-bitrate", type=int, default=192, help="Minimum bitrate for auto-pick MP3s (default 192)")
     p.add_argument("--format", choices=["flac", "mp3", "any"], default="any", help="Preferred format filter for auto-pick (default any)")
     p.add_argument("--timeout", type=int, default=None, help="Overall timeout in seconds (overrides defaults)")

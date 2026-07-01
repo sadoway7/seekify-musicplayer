@@ -991,32 +991,25 @@ func downloadFromSoulseek(job *DownloadJob) {
 	// slskQuery builds the search, so "Money (Remastered 2011)" still matches the
 	// "Money" results the search actually returned.
 	minBr := store.GetSettingInt("slsk_min_bitrate", 0)
-	var dlUsername, dlFilename string
-	if idx, ok := autoPickSlsk(cands, job.Artist, slskCleanTitle(job.Title), minBr); ok {
-		for _, c := range cands {
-			if c.Index == idx {
-				dlUsername = c.Username
-				dlFilename = c.Filename
-				break
+	pickIdx, pickOK := autoPickSlsk(cands, job.Artist, slskCleanTitle(job.Title), minBr)
+	if !pickOK {
+		if len(cands) > 0 {
+			candJSON, jerr := slskCandidatesToJSON(cands)
+			if jerr != nil {
+				job.Status = "failed"
+				job.Error = "Failed to encode Soulseek candidates: " + jerr.Error()
+				job.CompletedAt = time.Now().Format(time.RFC3339)
+				DbUpdateJob(job)
+				return
 			}
-		}
-	} else if len(cands) > 0 {
-		candJSON, jerr := slskCandidatesToJSON(cands)
-		if jerr != nil {
-			job.Status = "failed"
-			job.Error = "Failed to encode Soulseek candidates: " + jerr.Error()
-			job.CompletedAt = time.Now().Format(time.RFC3339)
+			job.CandidatesJSON = candJSON
+			job.Status = "needs_selection"
+			job.Source = "soulseek"
+			job.ProgressStage = "Awaiting user selection"
 			DbUpdateJob(job)
+			log.Printf("[download] no strong Soulseek match for %q, waiting for user selection", job.SearchQuery)
 			return
 		}
-		job.CandidatesJSON = candJSON
-		job.Status = "needs_selection"
-		job.Source = "soulseek"
-		job.ProgressStage = "Awaiting user selection"
-		DbUpdateJob(job)
-		log.Printf("[download] no strong Soulseek match for %q, waiting for user selection", job.SearchQuery)
-		return
-	} else {
 		job.Status = "failed"
 		job.Error = "No Soulseek results"
 		job.CompletedAt = time.Now().Format(time.RFC3339)
@@ -1024,12 +1017,49 @@ func downloadFromSoulseek(job *DownloadJob) {
 		return
 	}
 
+	// Build multi-candidate list: strong matches ranked by the same tiers
+	// autoPickSlsk uses. Try up to 5 candidates (peers are frequently
+	// unreachable behind NAT/firewall, so trying multiple improves success).
+	type dlCand struct {
+		Username string `json:"username"`
+		Filename string `json:"filename"`
+		Size     int64  `json:"size,omitempty"`
+	}
+	var topCands []dlCand
+	displayName := ""
+	for _, c := range cands {
+		if !slskStrongMatch(c, job.Artist, slskCleanTitle(job.Title)) {
+			continue
+		}
+		dc := dlCand{Username: c.Username, Filename: c.Filename, Size: c.Size}
+		if c.Index == pickIdx {
+			displayName = c.Username
+			topCands = append([]dlCand{dc}, topCands...)
+		} else {
+			topCands = append(topCands, dc)
+		}
+		if len(topCands) >= 5 {
+			break
+		}
+	}
+	if len(topCands) == 0 {
+		// Fallback: single-candidate direct download
+		for _, c := range cands {
+			if c.Index == pickIdx {
+				topCands = append(topCands, dlCand{Username: c.Username, Filename: c.Filename, Size: c.Size})
+				displayName = c.Username
+				break
+			}
+		}
+	}
+	candListJSON, _ := json.Marshal(topCands)
+
 	job.Status = "downloading"
 	job.Source = "soulseek"
-	job.ProgressStage = "Downloading from " + dlUsername
+	job.ProgressStage = "Downloading from " + displayName
 	DbUpdateJob(job)
 
-	audioFile, err := runSlskDownload(job, dlUsername, dlFilename)
+	audioFile, err := runSlskDownloadMulti(job, string(candListJSON), displayName)
 	if err != nil {
 		job.Status = "failed"
 		job.Error = err.Error()

@@ -408,6 +408,16 @@ func autoPickSlsk(cands []slskRawCandidate, artist, title string, minBitrate int
 // The running *exec.Cmd is registered in ActiveJobs under DownloadMu exactly
 // like runDownloadCmd, so the download is cancellable/introspectable.
 func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, error) {
+	return runSlskDownloadArgs(job, dlUsername, dlFilename, "")
+}
+
+// runSlskDownloadMulti tries multiple candidates in a single Soulseek session.
+// candidatesJSON is a JSON array of {username, filename, size} objects.
+func runSlskDownloadMulti(job *DownloadJob, candidatesJSON, displayName string) (string, error) {
+	return runSlskDownloadArgs(job, "", "", candidatesJSON)
+}
+
+func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSON string) (string, error) {
 	python := findSlsk()
 	if python == "" {
 		return "", fmt.Errorf("python3 not found")
@@ -439,6 +449,9 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 	if dlUsername != "" && dlFilename != "" {
 		// Direct download (C6): download the exact file the caller already chose.
 		args = append(args, "--dl-username", dlUsername, "--dl-filename", dlFilename)
+	} else if candidatesJSON != "" {
+		// Multi-candidate mode: try each candidate until one succeeds.
+		args = append(args, "--dl-candidates", candidatesJSON)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DownloadTimeout)
