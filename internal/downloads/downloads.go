@@ -519,6 +519,10 @@ func CreateDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 }
 
 func ProcessDownloadQueue() {
+	if store.GetSettingBool("download_paused", false) {
+		return
+	}
+
 	// H7: acquire the concurrency slot BEFORE bumping the counter. Previously
 	// DownloadActive was incremented first, so concurrent spawners saw an
 	// inflated count and bailed out prematurely.

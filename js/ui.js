@@ -2858,6 +2858,7 @@ const UI = {
       const jobs = await Api.getQueue(1000);
       const counts = await Api.getQueueCounts();
       this._updateDownloadBadge(counts);
+      this._downloadPaused = counts.paused === 1;
 
       const activeCount = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0);
       const failedCount = counts.failed || 0;
@@ -2882,6 +2883,7 @@ const UI = {
           + '</div>';
       }
       html += '<div class="queue-stats-actions">'
+        + '<button class="settings-btn" id="btn-dl-pause" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + (this._downloadPaused ? '&#x25b6; Resume' : '&#x23f8; Pause') + '</button>'
         + '<button class="settings-btn" id="btn-dl-settings" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
         + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
         + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
@@ -3064,6 +3066,19 @@ const UI = {
 
       const dlSettingsBtn = document.getElementById('btn-dl-settings');
       if (dlSettingsBtn) dlSettingsBtn.addEventListener('click', () => this._openDownloadsSettings());
+
+      const pauseBtn = document.getElementById('btn-dl-pause');
+      if (pauseBtn) {
+        pauseBtn.addEventListener('click', async () => {
+          try {
+            const res = await Api.toggleDownloadPause();
+            this._downloadPaused = res.paused;
+            pauseBtn.innerHTML = res.paused ? '&#x25b6; Resume' : '&#x23f8; Pause';
+          } catch (e) {
+            this.showToast('Failed to toggle pause');
+          }
+        });
+      }
     } catch (e) {
       container.innerHTML = '<div class="empty-state-text">Failed to load downloads</div>';
     }

@@ -753,5 +753,11 @@ const Api = {
       if (!res.ok) return '';
       return res.text();
     } catch { return ''; }
+  },
+
+  async toggleDownloadPause() {
+    const res = await fetch('/api/queue/toggle-pause', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to toggle pause');
+    return res.json();
   }
 };

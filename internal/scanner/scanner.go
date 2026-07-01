@@ -405,6 +405,33 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	return stats
 }
 
+// PruneSharedDirTracks removes any tracks whose file path resolves inside the
+// Soulseek share directory. These are copies seeded for sharing and should
+// never appear in the library.
+func PruneSharedDirTracks() int {
+	skipDir := filepath.Clean(slskShareDir())
+	var toDelete []string
+	store.Mu.RLock()
+	for id, t := range store.Tracks {
+		full := filepath.Join(store.MusicDir, t.FilePath)
+		if full == skipDir || strings.HasPrefix(full, skipDir+string(filepath.Separator)) {
+			toDelete = append(toDelete, id)
+		}
+	}
+	store.Mu.RUnlock()
+
+	for _, id := range toDelete {
+		store.DbDeleteTrack(id)
+		store.Mu.Lock()
+		delete(store.Tracks, id)
+		store.Mu.Unlock()
+	}
+	if len(toDelete) > 0 {
+		log.Printf("[scanner] Pruned %d tracks from Soulseek share dir", len(toDelete))
+	}
+	return len(toDelete)
+}
+
 // PruneMissingTracks removes tracks whose underlying audio file no longer
 // exists on disk (moved, renamed, or deleted outside the app). The count-based
 // scan triggers cannot detect moves/renames, so this stat-based pass is the
@@ -571,6 +598,13 @@ func ExtractEmbeddedCovers() {
 func ScanSingleFile(filePath string) {
 	store.ScanMu.Lock()
 	defer store.ScanMu.Unlock()
+
+	// Never scan files in the Soulseek share dir
+	skipDir := filepath.Clean(slskShareDir())
+	absPath, _ := filepath.Abs(filePath)
+	if absPath == skipDir || strings.HasPrefix(absPath, skipDir+string(filepath.Separator)) {
+		return
+	}
 
 	fpath := filePath
 	relPath, err := filepath.Rel(store.MusicDir, fpath)

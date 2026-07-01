@@ -427,9 +427,25 @@ func QueueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"cleared": cleared})
 }
 
+func DownloadTogglePauseHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	paused := !store.GetSettingBool("download_paused", false)
+	store.SetSetting("download_paused", strconv.FormatBool(paused))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"paused": paused})
+}
+
 func QueueCountsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(downloads.DbGetJobCounts())
+	result := downloads.DbGetJobCounts()
+	result["paused"] = 0
+	if store.GetSettingBool("download_paused", false) {
+		result["paused"] = 1
+	}
+	json.NewEncoder(w).Encode(result)
 }
 
 func PreviewAudioHandler(w http.ResponseWriter, r *http.Request) {

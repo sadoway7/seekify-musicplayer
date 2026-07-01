@@ -192,6 +192,7 @@ func main() {
 		}
 
 		scanner.ExtractEmbeddedCovers()
+		scanner.PruneSharedDirTracks()
 		watched.SyncWatchedPlaylistsToLibrary()
 		downloads.RecoverStalledDownloads()
 		review.SeedMissingReviewTracks()
@@ -285,6 +286,7 @@ func main() {
 	mux.HandleFunc("/api/queue/add-batch", handlers.DownloadQueueAddBatchHandler)
 	mux.HandleFunc("/api/queue/counts", handlers.QueueCountsHandler)
 	mux.HandleFunc("/api/queue/clear-completed", handlers.QueueClearCompletedHandler)
+	mux.HandleFunc("/api/queue/toggle-pause", handlers.DownloadTogglePauseHandler)
 	mux.HandleFunc("/api/soulseek/connect", handlers.SoulseekConnectHandler)
 	mux.HandleFunc("/api/queue/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
