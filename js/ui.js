@@ -1207,32 +1207,45 @@ const UI = {
   renderPage() {
     this._clearPollTimers();
     this.els.header.innerHTML = '';
-    try {
-      switch (Store.currentView) {
-        case 'home': this.renderHome(); break;
-        case 'search': this.renderSearch(); break;
-        case 'library': this.renderLibrary(); break;
-        case 'album': this.renderAlbum(Store.viewData.albumId); break;
-        case 'artist': this.renderArtist(Store.viewData.artistName); break;
-        case 'playlist': this.renderPlaylist(Store.viewData.playlistId); break;
-        case 'favorites': this.renderFavorites(); break;
-        case 'all-music': this.renderAllMusic(); break;
-        case 'needs-review': this.renderNeedsReview(); break;
-        case 'finder': this.renderFinder(); break;
-        case 'finder-artist': this.renderFinderArtist(Store.viewData); break;
-        case 'finder-release': this.renderFinderRelease(Store.viewData); break;
-        case 'ripper2': RipperV2.render(this.els.content); break;
-        case 'downloads': this.renderSettings(); break;
-        case 'settings': this.renderSettings(); break;
-        case 'metadata-review': this.renderMetadataReview(); break;
-        case 'metadata-history': this.renderMetadataHistory(); break;
-        default: this.renderHome();
+    var self = this;
+    var doRender = function() {
+      try {
+        switch (Store.currentView) {
+          case 'home': self.renderHome(); break;
+          case 'search': self.renderSearch(); break;
+          case 'library': self.renderLibrary(); break;
+          case 'album': self.renderAlbum(Store.viewData.albumId); break;
+          case 'artist': self.renderArtist(Store.viewData.artistName); break;
+          case 'playlist': self.renderPlaylist(Store.viewData.playlistId); break;
+          case 'favorites': self.renderFavorites(); break;
+          case 'all-music': self.renderAllMusic(); break;
+          case 'needs-review': self.renderNeedsReview(); break;
+          case 'finder': self.renderFinder(); break;
+          case 'finder-artist': self.renderFinderArtist(Store.viewData); break;
+          case 'finder-release': self.renderFinderRelease(Store.viewData); break;
+          case 'ripper2': RipperV2.render(self.els.content); break;
+          case 'downloads': self.renderSettings(); break;
+          case 'settings': self.renderSettings(); break;
+          case 'metadata-review': self.renderMetadataReview(); break;
+          case 'metadata-history': self.renderMetadataHistory(); break;
+          default: self.renderHome();
+        }
+      } catch (e) {
+        console.error('renderPage error for view', Store.currentView, e);
+        self.els.content.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b"><div style="font-size:16px;font-weight:600">Error loading page</div><div style="font-size:12px;margin-top:8px;color:#aaa">' + (e.message || e) + '</div></div>';
       }
-    } catch (e) {
-      console.error('renderPage error for view', Store.currentView, e);
-      this.els.content.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b"><div style="font-size:16px;font-weight:600">Error loading page</div><div style="font-size:12px;margin-top:8px;color:#aaa">' + (e.message || e) + '</div></div>';
+    };
+    if (document.startViewTransition) {
+      self._useViewTransitions = true;
+      var vt = document.startViewTransition(doRender);
+      if (vt && vt.finished) {
+        vt.finished.finally(function() { self._useViewTransitions = false; });
+      }
+    } else {
+      self._useViewTransitions = false;
+      doRender();
+      self._fadeIn(self.els.content);
     }
-    this._fadeIn(this.els.content);
   },
 
   homeSkeleton() {
@@ -2431,7 +2444,7 @@ const UI = {
       + '<div class="review-page-meta">' + this._reviewTotal + ' tracks flagged</div>'
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
-      + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + '<button class="detail-action-btn" id="review-recheck-btn">' + Icons.refresh() + '<span>Recheck</span></button>'
       + (tracks.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-all">' + Icons.trash() + '<span>Delete All</span></button>' : '')
       + '</div>'
       + '</div>';
@@ -2448,6 +2461,35 @@ const UI = {
     this.els.content.innerHTML = html;
     this._fadeIn(this.els.content);
     this._setupReviewScrollLoader();
+
+    const recheckBtn = document.getElementById('review-recheck-btn');
+    if (recheckBtn) recheckBtn.addEventListener('click', async () => {
+      recheckBtn.disabled = true;
+      recheckBtn.querySelector('span').textContent = 'Rechecking...';
+      try {
+        await Api.reviewRecheckAll();
+        var self = this;
+        var pollCount = 0;
+        var poll = async function() {
+          pollCount++;
+          try {
+            var p = await Api.getReviewProgress();
+            if (p && p.active) {
+              if (p.total) {
+                recheckBtn.querySelector('span').textContent = 'Rechecking ' + (p.done || 0) + '/' + p.total + '...';
+              }
+              if (pollCount < 300) { setTimeout(poll, 1500); return; }
+            }
+          } catch (e) {}
+          self.navigateTo('needs-review');
+        };
+        setTimeout(poll, 1000);
+      } catch (e) {
+        this._showToast('Recheck failed');
+        recheckBtn.disabled = false;
+        recheckBtn.querySelector('span').textContent = 'Recheck';
+      }
+    });
   },
 
   _setupReviewScrollLoader() {
@@ -4301,8 +4343,12 @@ const UI = {
       + '<div><div class="settings-toggle-label">' + label + '</div>'
       + (hint ? '<div class="settings-toggle-hint">' + hint + '</div>' : '') + '</div>'
       + '<div class="stoggle" id="' + id + '"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>';
-    const fields = '<div class="settings-subsection-label">Download Format</div>'
-      + '<div class="settings-field"><label>Audio Format</label>'
+
+    const sec = (label, body) => '<section class="dl-settings-section">'
+      + '<div class="dl-settings-section-label">' + label + '</div>'
+      + body + '</section>';
+
+    const fmtFields = '<div class="settings-field"><label>Audio Format</label>'
       + '<select id="setting-download-format" class="settings-select">'
       + '<option value="flac">FLAC (lossless)</option><option value="mp3">MP3</option><option value="opus">Opus</option><option value="m4a">M4A/AAC</option><option value="best">Original (no conversion)</option>'
       + '</select></div>'
@@ -4317,12 +4363,12 @@ const UI = {
       + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
       + '<input type="text" id="setting-download-min-bitrate" class="settings-input" placeholder="0 (no minimum)"></div>'
       + st('setting-download-convert-to-flac', 'Convert to FLAC', 'Re-encode imported files as FLAC')
-      + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders')
-      + '<div class="settings-subsection-label" style="margin-top:16px">YouTube Authentication</div>'
-      + '<div class="settings-section-desc">Pick a browser to extract cookies once, upload a cookies.txt file, or use the Chrome extension below.</div>'
-      + '<div class="settings-field" style="margin-bottom:12px">'
-      + '<label style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Extract cookies from browser</label>'
-      + '<select id="setting-yt-cookies-from-browser" class="settings-select" style="width:100%;padding:10px 12px;font-size:14px">'
+      + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders');
+
+    const ytFields = '<div class="settings-section-desc">Pick a browser to extract cookies once, upload a cookies.txt file, or use the Chrome extension below.</div>'
+      + '<div class="settings-field">'
+      + '<label>Extract cookies from browser</label>'
+      + '<select id="setting-yt-cookies-from-browser" class="settings-select">'
       + '<option value="">— Disabled —</option><option value="chrome">Chrome</option><option value="chromium">Chromium</option><option value="firefox">Firefox</option><option value="edge">Edge</option><option value="brave">Brave</option><option value="opera">Opera</option><option value="safari">Safari</option><option value="vivaldi">Vivaldi</option><option value="whale">Whale</option>'
       + '</select></div>'
       + '<div class="settings-field"><label>Player Client</label>'
@@ -4331,22 +4377,22 @@ const UI = {
       + '</select></div>'
       + '<div class="settings-field"><label>Cookies File</label>'
       + '<div id="yt-cookies-status" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">Checking…</div>'
-      + '<div class="settings-actions" style="margin-top:6px">'
+      + '<div class="settings-actions">'
       + '<input type="file" id="yt-cookies-file-input" accept=".txt,text/plain" hidden>'
       + '<button class="settings-btn settings-btn-primary" id="btn-upload-cookies" type="button">' + Icons.upload() + '<span>Upload cookies.txt</span></button>'
       + '<button class="settings-btn settings-btn-danger" id="btn-clear-cookies" type="button">' + Icons.trash() + '<span>Remove</span></button>'
-      + '</div></div>'
-      + '<div class="settings-subsection-label" style="margin-top:16px">Browser Extension</div>'
-      + '<div class="settings-section-desc">Install the Chrome extension to send your YouTube cookies here with one click.</div>'
-      + '<div class="settings-actions" style="margin-top:8px;flex-wrap:wrap">'
+      + '</div></div>';
+
+    const extFields = '<div class="settings-section-desc">Install the Chrome extension to send your YouTube cookies here with one click.</div>'
+      + '<div class="settings-actions" style="flex-wrap:wrap">'
       + '<a class="settings-btn settings-btn-primary" id="dl-extension-store-link" style="display:none;text-decoration:none" target="_blank" rel="noopener">Add to Chrome</a>'
       + '<button class="settings-btn" id="btn-dl-extension">' + Icons.download() + '<span>Download (.zip)</span></button>'
       + '</div>'
-      + '<div class="settings-field" style="margin-top:8px"><label style="font-size:12px">Chrome Web Store URL (optional)</label>'
+      + '<div class="settings-field"><label>Chrome Web Store URL (optional)</label>'
       + '<input type="url" id="setting-cookies-store-url" class="settings-input" placeholder="https://chromewebstore.google.com/..." style="width:100%"></div>'
-      + '<div class="settings-section-desc" style="margin-top:8px;font-size:12px">Using the .zip: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder. Then open the extension, enter this server address, and click Send.</div>'
-      + '<div class="settings-subsection-label" style="margin-top:16px">Soulseek Fallback</div>'
-      + '<div class="settings-section-desc">Soulseek is used as a fallback when YouTube fails, or as the only source. Requires a free Soulseek account and a shared folder (give-to-get). Falls back gracefully if disabled or unconfigured.</div>'
+      + '<div class="settings-section-desc" style="font-size:12px">Using the .zip: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder. Then open the extension, enter this server address, and click Send.</div>';
+
+    const slskFields = '<div class="settings-section-desc">Soulseek is used as a fallback when YouTube fails, or as the only source. Requires a free Soulseek account and a shared folder (give-to-get). Falls back gracefully if disabled or unconfigured.</div>'
       + '<div class="settings-field"><label>Download Source</label>'
       + '<select id="setting-download-source" class="settings-select">'
       + '<option value="auto">Auto — YouTube, then Soulseek</option><option value="youtube">YouTube only</option><option value="soulseek">Soulseek only</option>'
@@ -4356,7 +4402,7 @@ const UI = {
       + '<input type="text" id="setting-slsk-username" class="settings-input" placeholder="your soulseek username"></div>'
       + '<div class="settings-field"><label>Soulseek Password</label>'
       + '<input type="password" id="setting-slsk-password" class="settings-input" placeholder="your soulseek password" autocomplete="new-password"></div>'
-      + '<div class="settings-field" style="margin-top:4px">'
+      + '<div class="settings-field">'
       + '<button class="settings-btn settings-btn-primary" id="btn-slsk-connect" type="button"><span>Connect Soulseek</span></button>'
       + '<div id="slsk-connect-msg" class="settings-section-desc" style="margin-top:6px;font-size:12px">Creates the account if it\'s new, verifies it works, and seeds your share folder (up to 30 files) so you aren\'t throttled. Just enter username + password and click.</div>'
       + '</div>'
@@ -4364,17 +4410,22 @@ const UI = {
       + '<select id="setting-slsk-preferred-format" class="settings-select">'
       + '<option value="any">Any</option><option value="flac">FLAC (lossless)</option><option value="mp3">MP3</option>'
       + '</select></div>'
-      + '<div class="settings-field"><label>Soulseek Min Bitrate (kbps)</label>'
+      + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
       + '<input type="text" id="setting-slsk-min-bitrate" class="settings-input" placeholder="192"></div>';
+
+    const fields = sec('Download Format', fmtFields)
+      + sec('YouTube Authentication', ytFields)
+      + sec('Browser Extension', extFields)
+      + sec('Soulseek', slskFields);
 
     const overlay = document.createElement('div');
     overlay.className = 'candidate-modal-overlay dl-settings-overlay';
-    overlay.innerHTML = '<div class="candidate-modal" style="max-width:560px">'
+    overlay.innerHTML = '<div class="candidate-modal dl-settings-modal">'
       + '<div class="candidate-modal-header"><div class="candidate-modal-title">Download Settings</div><button class="candidate-modal-close">&times;</button></div>'
-      + '<div class="candidate-modal-list" style="padding:20px">' + fields
-      + '<div class="settings-actions" style="margin-top:14px">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save</span></button>'
-      + '</div></div></div>';
+      + '<div class="candidate-modal-list dl-settings-body">' + fields + '</div>'
+      + '<div class="dl-settings-footer">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Settings</span></button>'
+      + '</div></div>';
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('show'));
     overlay.querySelector('.candidate-modal-close').addEventListener('click', () => this._fadeOutRemove(overlay, 200));
@@ -6540,6 +6591,7 @@ const UI = {
 
   _fadeIn(el) {
     if (!el) return;
+    if (this._useViewTransitions) return;
     el.style.animation = 'none';
     void el.offsetHeight;
     el.style.animation = 'pageFadeIn 0.22s var(--ease-out) forwards';

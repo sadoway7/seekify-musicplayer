@@ -190,7 +190,11 @@ func parseVideoTitle(title, channel string) (string, string) {
 	}
 
 	if channel != "" {
-		return cleanChannelArtist(channel), title
+		cleaned := cleanChannelArtist(channel)
+		if cleaned == "" {
+			cleaned = strings.TrimSpace(channel)
+		}
+		return cleaned, title
 	}
 
 	return channel, title

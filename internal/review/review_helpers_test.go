@@ -128,3 +128,29 @@ func TestBoolToInt(t *testing.T) {
 		t.Error("store.BoolToInt(false) should be 0")
 	}
 }
+
+func TestTrackHasEffectiveCover(t *testing.T) {
+	trackNoCover := &models.Track{HasCover: false, AlbumID: "nosuchalbum"}
+	if trackHasEffectiveCover(trackNoCover) {
+		t.Error("track with no cover and no album should be false")
+	}
+
+	trackEmbedded := &models.Track{HasCover: true, AlbumID: "album1"}
+	if !trackHasEffectiveCover(trackEmbedded) {
+		t.Error("track with embedded cover should be true")
+	}
+
+	store.Mu.Lock()
+	if store.Albums == nil {
+		store.Albums = make(map[string]*models.Album)
+	}
+	store.Albums["album-mb"] = &models.Album{ID: "album-mb", HasCover: true}
+	store.Mu.Unlock()
+	trackAlbumCover := &models.Track{HasCover: false, AlbumID: "album-mb"}
+	if !trackHasEffectiveCover(trackAlbumCover) {
+		t.Error("track whose album has cover should be true")
+	}
+	store.Mu.Lock()
+	delete(store.Albums, "album-mb")
+	store.Mu.Unlock()
+}

@@ -523,6 +523,41 @@ func ReviewDeleteAllFlagged() (int, error) {
 
 // --- Review check functions ---
 
+// trackHasEffectiveCover reports whether a track would display cover art in
+// the UI. Cover art is resolved at the ALBUM level (keyed by AlbumID) from
+// multiple sources, so checking only the per-track t.HasCover flag (which is
+// true only when the individual file has an embedded picture tag) produces
+// false-positive "no_cover" flags for tracks whose album has art from a
+// sibling track, MusicBrainz, Cover Art Archive, Deezer, or a custom upload.
+func trackHasEffectiveCover(t *models.Track) bool {
+	if t.HasCover {
+		return true
+	}
+	if t.AlbumID == "" {
+		return false
+	}
+	if store.IsCustomCover(t.AlbumID) {
+		return true
+	}
+	store.CoverMu.RLock()
+	_, cached := store.CoverCache[t.AlbumID]
+	store.CoverMu.RUnlock()
+	if cached {
+		return true
+	}
+	store.Mu.RLock()
+	a, ok := store.Albums[t.AlbumID]
+	store.Mu.RUnlock()
+	if ok && a.HasCover {
+		return true
+	}
+	coverPath := filepath.Join(store.MusicDir, "images", t.AlbumID+".jpg")
+	if _, err := os.Stat(coverPath); err == nil {
+		return true
+	}
+	return false
+}
+
 func CheckMetadataCompleteness(t *models.Track) []string {
 	var flags []string
 	title := strings.TrimSpace(t.Title)
@@ -543,7 +578,7 @@ func CheckMetadataCompleteness(t *models.Track) []string {
 		if album == "" || IsGenericName(album, []string{"unknown album"}) {
 			titlePresent := title != "" && !IsGenericName(title, []string{"unknown title", "untitled", "title"})
 			artistPresent := artist != "" && !IsGenericName(artist, []string{"unknown artist", "unknown"})
-			if !(titlePresent && artistPresent && t.HasCover) {
+			if !(titlePresent && artistPresent && trackHasEffectiveCover(t)) {
 				flags = append(flags, "missing_album")
 			}
 		}
@@ -554,7 +589,7 @@ func CheckMetadataCompleteness(t *models.Track) []string {
 		}
 	}
 	if store.GetSettingBool("review_flag_no_cover", true) {
-		if !t.HasCover {
+		if !trackHasEffectiveCover(t) {
 			flags = append(flags, "no_cover")
 		}
 	}

@@ -94,11 +94,41 @@ func SlskShareDir() string {
 }
 
 // slskQuery builds the search query passed to the script from the job metadata.
+// Parenthetical qualifiers and common suffixes are stripped because Soulseek
+// search is a substring match — "Song (Acapulco Version)" would only match
+// files containing "acapulco" in their path, missing the standard album track.
 func slskQuery(job *DownloadJob) string {
-	if job.Artist != "" && job.Title != "" {
-		return fmt.Sprintf("%s - %s", job.Artist, job.Title)
+	artist := strings.TrimSpace(job.Artist)
+	title := slskCleanTitle(job.Title)
+	if artist != "" && title != "" {
+		return fmt.Sprintf("%s - %s", artist, title)
 	}
 	return job.SearchQuery
+}
+
+// slskCleanTitle strips parenthetical content and common suffixes that make
+// Soulseek's substring search too narrow.
+func slskCleanTitle(title string) string {
+	t := strings.TrimSpace(title)
+	for {
+		start := strings.Index(t, "(")
+		end := strings.Index(t, ")")
+		if start >= 0 && end > start {
+			t = strings.TrimSpace(t[:start] + " " + t[end+1:])
+		} else {
+			break
+		}
+	}
+	t = strings.TrimSpace(t)
+	for _, suffix := range []string{" remaster", " remastered", " remix", " hd", " official audio", " official video", " lyrics"} {
+		if idx := strings.Index(strings.ToLower(t), suffix); idx > 0 {
+			t = strings.TrimSpace(t[:idx])
+		}
+	}
+	if t == "" {
+		return title
+	}
+	return t
 }
 
 // searchSlsk runs the script in --search-only mode and returns the raw

@@ -205,12 +205,12 @@ def build_client(args) -> SoulSeekClient:
     return SoulSeekClient(settings)
 
 
-async def gather_search(client: SoulSeekClient, query: str, window: float = 15.0) -> list:
+async def gather_search(client: SoulSeekClient, query: str, window: float = 30.0) -> list:
     """Run a search and accumulate results for a bounded window.
 
     Soulseek results trickle in over several seconds, so we collect everything
     that arrives within ``window`` rather than blocking on a completion signal.
-    We stop early once the result count has been stable for two consecutive
+    We stop early once the result count has been stable for three consecutive
     polls (so quick/definitive searches don't wait the full window).
     """
     req = await client.searches.search(query)
@@ -226,8 +226,8 @@ async def gather_search(client: SoulSeekClient, query: str, window: float = 15.0
         else:
             stable = 0
         prev_count = count
-        # Early exit: results have stopped arriving for ~2s.
-        if count > 0 and stable >= 2:
+        # Early exit: results have stopped arriving for ~3s.
+        if count > 0 and stable >= 3:
             break
         if loop.time() >= deadline:
             break
