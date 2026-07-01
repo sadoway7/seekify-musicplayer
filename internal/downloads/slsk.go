@@ -14,12 +14,18 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 )
+
+// slskLoginMu serializes Soulseek sessions. Each python process logs in
+// independently — multiple concurrent logins from one IP get the server to
+// reset the connection. Only one Soulseek session at a time.
+var slskLoginMu sync.Mutex
 
 // slskRawCandidate mirrors ONE candidate object printed by
 // `soulseek_dl.py --search-only` on stdout (a JSON array of these).
@@ -166,6 +172,9 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 	c := exec.CommandContext(ctx, python, args...)
 	// H8: password via env, not argv.
 	c.Env = append(os.Environ(), "SLSK_PASSWORD="+pass)
+	// Serialize Soulseek logins — concurrent sessions from one IP get reset by the server.
+	slskLoginMu.Lock()
+	defer slskLoginMu.Unlock()
 	out, err := c.Output()
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, fmt.Errorf("soulseek search timed out after %v", SearchTimeout)
@@ -454,6 +463,10 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 
 	// H2: snapshot destDir before download so we can clean new files on failure
 	preSnap := dirSnapshot(destDir)
+
+	// Serialize Soulseek logins — concurrent sessions from one IP get reset by the server.
+	slskLoginMu.Lock()
+	defer slskLoginMu.Unlock()
 
 	// Use pipes instead of buffered Output() so we can parse live progress
 	// from stderr (PROGRESS:pct:done:total) and update the job in the DB.
