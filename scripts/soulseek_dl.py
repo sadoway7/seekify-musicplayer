@@ -43,6 +43,9 @@ from aioslsk.client import SoulSeekClient
 from aioslsk.settings import (
     Settings,
     CredentialsSettings,
+    NetworkSettings,
+    ListeningSettings,
+    ListeningConnectionErrorMode,
     SharesSettings,
     SharedDirectorySettingEntry,
 )
@@ -184,6 +187,13 @@ def build_client(args) -> SoulSeekClient:
     download_dir = getattr(args, "out", None) or args.share
     settings = Settings(
         credentials=CredentialsSettings(username=args.username, password=args.password),
+        network=NetworkSettings(
+            listening=ListeningSettings(
+                port=0,
+                obfuscated_port=0,
+                error_mode=ListeningConnectionErrorMode.ANY,
+            ),
+        ),
         shares=SharesSettings(
             scan_on_start=True,
             download=download_dir,
