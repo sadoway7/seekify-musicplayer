@@ -24,6 +24,10 @@ import (
 )
 
 func main() {
+	// Capture logs into a ring buffer for the /api/admin/logs endpoint.
+	logBuf := store.InitLogCapture()
+	log.SetOutput(io.MultiWriter(os.Stderr, logBuf))
+
 	dirFlag := flag.String("dir", "", "Path to music directory")
 	flag.Parse()
 
@@ -268,6 +272,17 @@ func main() {
 	mux.HandleFunc("/api/admin/downloads", handlers.RequireAdmin(handlers.DownloadsListHandler))
 	mux.HandleFunc("/api/admin/download-toggle/", handlers.RequireAdmin(handlers.DownloadToggleHandler))
 	mux.HandleFunc("/api/admin/downloads-enable-all", handlers.RequireAdmin(handlers.DownloadsEnableAllHandler))
+
+	// Debug: view production server logs (admin-protected).
+	mux.HandleFunc("/api/admin/logs", handlers.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		if r.URL.Query().Get("tracks") != "" {
+			w.Write(store.FilterTrackLogs())
+		} else {
+			w.Write(store.GetLogBuffer())
+		}
+	}))
 
 	mux.HandleFunc("/api/waveform/", handlers.WaveformHandler)
 	mux.HandleFunc("/api/track-duration/", handlers.TrackDurationHandler)

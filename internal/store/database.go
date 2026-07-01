@@ -3,10 +3,12 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"musicapp/internal/models"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/google/uuid"
@@ -657,6 +659,18 @@ func DbUpsertTrackWith(e DbExecer, t *models.Track) {
 	// Ultimate backstop: never persist tracks from the Soulseek share folder.
 	if IsInSlskShareDir(t.FilePath) {
 		return
+	}
+	// Provenance: log new track insertions so we can trace duplicate origins.
+	var existed int
+	DB.QueryRow("SELECT 1 FROM tracks WHERE id=?", t.ID).Scan(&existed)
+	if existed == 0 {
+		// runtime.Caller(2) skips DbUpsertTrackWith + DbUpsertTrack/DbUpsertTrackTx
+		// to name the actual caller (e.g. ScanMusicDirWithPrefixLocked, ScanSingleFile).
+		caller := "?"
+		if pc, file, line, ok := runtime.Caller(2); ok {
+			caller = fmt.Sprintf("%s:%d %s", filepath.Base(file), line, runtime.FuncForPC(pc).Name())
+		}
+		log.Printf("[track-new] id=%s path=%s caller=%s", t.ID, t.FilePath, caller)
 	}
 	e.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
