@@ -267,6 +267,83 @@ func dedupTracksByFilePath() {
 			}
 		}
 	}
+
+	// Pass 4: same song (artist+title) where one copy has duration=0 — common
+	// when a freshly-downloaded file hasn't been probed yet, or the same song
+	// exists in both media:shared and the primary library with incomplete
+	// metadata. Keep the entry with the best metadata, delete incomplete copies.
+	rows, err = DB.Query(`SELECT LOWER(artist), LOWER(title), COUNT(*) as cnt
+		FROM tracks
+		WHERE artist != '' AND title != ''
+		GROUP BY LOWER(artist), LOWER(title)
+		HAVING cnt > 1`)
+	if err == nil {
+		type nameKey struct{ artist, title string }
+		var nameDupes []nameKey
+		for rows.Next() {
+			var a, t string
+			var c int
+			rows.Scan(&a, &t, &c)
+			nameDupes = append(nameDupes, nameKey{a, t})
+		}
+		rows.Close()
+		if len(nameDupes) > 0 {
+			deduped := 0
+			for _, nk := range nameDupes {
+				r, err := DB.Query(`SELECT id, duration FROM tracks WHERE LOWER(artist)=? AND LOWER(title)=? ORDER BY has_metadata DESC, duration DESC, mod_time DESC`, nk.artist, nk.title)
+				if err != nil {
+					continue
+				}
+				var ids []string
+				durations := map[string]int{}
+				for r.Next() {
+					var id string
+					var dur int
+					r.Scan(&id, &dur)
+					ids = append(ids, id)
+					durations[id] = dur
+				}
+				r.Close()
+				if len(ids) <= 1 {
+					continue
+				}
+				hasNonZero := false
+				for _, id := range ids {
+					if durations[id] > 0 {
+						hasNonZero = true
+						break
+					}
+				}
+				if !hasNonZero {
+					continue
+				}
+				keepID := ids[0]
+				removed := 0
+				tx, _ := DB.Begin()
+				for _, dupID := range ids[1:] {
+					if durations[dupID] > 0 && durations[dupID] != durations[keepID] {
+						continue
+					}
+					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+					removed++
+				}
+				tx.Commit()
+				if removed > 0 {
+					deduped += removed
+					log.Printf("[db] Name deduped %s - %s: kept %s (dur=%d), removed %d incomplete", nk.artist, nk.title, keepID, durations[keepID], removed)
+				}
+			}
+			if deduped > 0 {
+				log.Printf("[db] Pass 4: removed %d incomplete duplicates", deduped)
+			}
+		}
+	}
 }
 }
 
