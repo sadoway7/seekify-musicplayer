@@ -1068,6 +1068,7 @@ func downloadFromSoulseek(job *DownloadJob) {
 		topCands[i] = dlCand{Username: c.Username, Filename: c.Filename, Size: c.Size}
 	}
 	candListJSON, _ := json.Marshal(topCands)
+	log.Printf("[download] soulseek multi-candidate for %q: %d candidates (of %d search results)", job.SearchQuery, len(topCands), len(cands))
 
 	job.Status = "downloading"
 	job.Source = "soulseek"
