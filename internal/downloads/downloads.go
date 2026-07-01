@@ -1470,6 +1470,9 @@ func ValidateAudioIntegrity(filePath string) (bool, string) {
 	if err != nil || dur <= 0 {
 		return false, "invalid duration"
 	}
+	if dur < 10 {
+		return false, fmt.Sprintf("duration too short: %.0fs (likely truncated)", dur)
+	}
 
 	return true, ""
 }

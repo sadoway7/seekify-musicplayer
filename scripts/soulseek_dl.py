@@ -281,7 +281,7 @@ async def gather_search(client: SoulSeekClient, query: str, window: float = 30.0
     return getattr(req, "results", []) or []
 
 
-async def await_completion(transfer, expected_size: int = 0, poll: float = 0.5, max_wait: float = 60) -> bool:
+async def await_completion(transfer, expected_size: int = 0, poll: float = 0.5, max_wait: float = 180) -> bool:
     """Poll until the transfer reaches a finalized state.
 
     Emits progress lines to stderr as ``PROGRESS:pct:done_bytes:total_bytes``
@@ -342,8 +342,17 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
     dest = os.path.join(args.out, basename)
 
     if not local_path or not os.path.exists(local_path):
-        emit_error("completed file not found")
+        chosen["_error"] = "completed file not found"
         return 2
+
+    # Validate file size against expected — reject truncated files.
+    expected = chosen.get("size", 0)
+    if expected > 0:
+        actual = os.path.getsize(local_path)
+        if actual < expected * 0.8:
+            remove_local(transfer)
+            chosen["_error"] = f"file truncated: {actual} bytes vs {expected} expected"
+            return 2
 
     if os.path.abspath(local_path) != os.path.abspath(dest):
         try:
