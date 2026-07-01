@@ -616,6 +616,25 @@ func DbCleanupPlaylistTracks() {
 	DB.Exec(`DELETE FROM playlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }
 
+// DbMigrateTrackID updates a track's ID and file_path and cascades the new ID
+// to every referencing table. Used by AutoSort when moving files to preserve
+// user data (favorites, playlists, reviews) across path changes.
+func DbMigrateTrackID(oldID, newID, newPath string) {
+	tx, err := DB.Begin()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+	tx.Exec(`UPDATE tracks SET id=?, file_path=? WHERE id=?`, newID, newPath, oldID)
+	tx.Exec(`UPDATE favorites SET track_id=? WHERE track_id=?`, newID, oldID)
+	tx.Exec(`UPDATE recent SET track_id=? WHERE track_id=?`, newID, oldID)
+	tx.Exec(`UPDATE playlist_tracks SET track_id=? WHERE track_id=?`, newID, oldID)
+	tx.Exec(`UPDATE downloads SET track_id=? WHERE track_id=?`, newID, oldID)
+	tx.Exec(`UPDATE metadata_matches SET track_id=? WHERE track_id=?`, newID, oldID)
+	tx.Exec(`UPDATE track_reviews SET track_id=? WHERE track_id=?`, newID, oldID)
+	tx.Commit()
+}
+
 // --- Download management ---
 
 func DbToggleDownload(trackID string) bool {

@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"log"
+	"musicapp/internal/models"
 	"musicapp/internal/store"
 	"os"
 	"path/filepath"
@@ -11,8 +12,11 @@ import (
 func AutoSortMusic() {
 	store.Mu.RLock()
 	type moveJob struct {
-		src string
-		dst string
+		src      string
+		dst      string
+		oldID    string
+		newID    string
+		newRelPath string
 	}
 	var jobs []moveJob
 
@@ -22,7 +26,6 @@ func AutoSortMusic() {
 		}
 
 		// Only auto-sort files in the primary musicDir
-		// (media dir is read-only, no prefix in FilePath means primary dir)
 		if MusicDirForPath(t.FilePath) != store.MusicDir {
 			continue
 		}
@@ -45,7 +48,16 @@ func AutoSortMusic() {
 			continue
 		}
 
-		jobs = append(jobs, moveJob{src: currentPath, dst: expectedPath})
+		newRelPath := strings.TrimPrefix(expectedPath, store.MusicDir+string(filepath.Separator))
+		newID := models.GenerateID(newRelPath)
+
+		jobs = append(jobs, moveJob{
+			src:        currentPath,
+			dst:        expectedPath,
+			oldID:      t.ID,
+			newID:      newID,
+			newRelPath: newRelPath,
+		})
 	}
 	store.Mu.RUnlock()
 
@@ -57,6 +69,11 @@ func AutoSortMusic() {
 
 	moved := 0
 	for _, job := range jobs {
+		// Migrate track ID before moving so favorites/playlists/reviews survive
+		if job.oldID != job.newID {
+			store.DbMigrateTrackID(job.oldID, job.newID, job.newRelPath)
+		}
+
 		os.MkdirAll(filepath.Dir(job.dst), 0755)
 
 		if err := os.Rename(job.src, job.dst); err != nil {
