@@ -348,8 +348,20 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			}
 		}
 	} else {
-		// Additional directory: merge into existing maps
+		// Additional directory: merge into existing maps.
+		// Skip media-dir tracks whose normalized path already exists as a
+		// primary-dir track (prevents cross-prefix duplicates).
+		primaryPaths := make(map[string]bool)
+		for _, t := range store.Tracks {
+			if !strings.HasPrefix(t.FilePath, "media:") && !strings.Contains(t.FilePath, ":") {
+				primaryPaths[t.FilePath] = true
+			}
+		}
 		for id, t := range newTracks {
+			relPath := strings.TrimPrefix(t.FilePath, prefix+":")
+			if primaryPaths[relPath] {
+				continue // primary-dir copy wins
+			}
 			store.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
