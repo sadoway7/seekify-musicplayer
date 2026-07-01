@@ -85,13 +85,9 @@ func slskScriptPath() string {
 	return ""
 }
 
-// SlskShareDir returns the configured Soulseek share directory, defaulting to
-// <MusicDir>/shared when unset.
+// SlskShareDir delegates to store.SlskShareDir (single source of truth).
 func SlskShareDir() string {
-	if d := store.GetSetting("slsk_share_dir", ""); d != "" {
-		return d
-	}
-	return filepath.Join(store.MusicDir, "shared")
+	return store.SlskShareDir()
 }
 
 // slskQuery builds the search query passed to the script from the job metadata.
@@ -503,7 +499,7 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 
 	job.Status = "downloading"
 	job.Source = "soulseek"
-	job.ProgressStage = "Downloading via Soulseek"
+	job.ProgressStage = "Downloading from " + dlUsername
 	DbUpdateJob(job)
 
 	audioFile, err := runSlskDownload(job, dlUsername, dlFilename)

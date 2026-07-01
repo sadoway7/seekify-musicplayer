@@ -2964,7 +2964,7 @@ const UI = {
       + '<div class="queue-job-detail">'
       + (completed ? (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '<span>Completed</span>') : (active ? '<span class="queue-elapsed">' + elapsed + '</span>' : (isQueued ? queuePos + '<span class="queue-elapsed">' + elapsed + '</span>' : '<span>' + j.status + '</span>')))
       + (j.source ? '<span class="source-tag source-tag-' + this._esc(j.source) + '">' + (j.source === 'soulseek' ? 'SLSK' : 'YT') + '</span>' : '')
-      + (j.progressStage && !isQueued && !completed ? '<span>' + this._esc(j.progressStage) + '</span>' : '')
+      + (j.progressStage && !isQueued && !completed ? '<span class="queue-stage">' + this._esc(j.progressStage) + '</span>' : '')
       + (!completed && j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
       + (failed && j.error ? '<span class="queue-job-error">' + this._esc(j.error) + '</span>' : '')
       + '</div>'

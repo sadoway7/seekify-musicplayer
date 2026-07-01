@@ -920,6 +920,30 @@
   align-items: center;
   gap: 12px;
   padding: 10px 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.queue-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 200% 100%;
+  animation: queue-progress 1.5s ease-in-out infinite;
+  opacity: 0.6;
+}
+
+@keyframes queue-progress {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-active::after { animation: none; opacity: 0.3; }
 }
 
 .queue-job-clickable {
@@ -992,6 +1016,12 @@
 .queue-job-quality {
   color: var(--accent);
   font-weight: 500;
+}
+
+.queue-stage {
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 11px;
 }
 
 .source-tag {

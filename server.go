@@ -201,6 +201,23 @@ func main() {
 		store.DbCleanupFavorites()
 		store.DbCleanupRecent()
 		store.DbCleanupPlaylistTracks()
+
+		// Auto-connect Soulseek: if credentials are saved, ensure the share
+		// folder is seeded and slsk is enabled. No login test needed — that
+		// only matters for first-time setup via the Connect button.
+		if u := store.GetSetting("slsk_username", ""); u != "" {
+			if p := store.GetSetting("slsk_password", ""); p != "" {
+				shareDir := store.SlskShareDir()
+				os.MkdirAll(shareDir, 0755)
+				if n, err := downloads.SeedSlskShare(shareDir); err != nil {
+					log.Printf("[startup] soulseek share seed error: %v", err)
+				} else if n > 0 {
+					log.Printf("[startup] soulseek: seeded %d files into share folder", n)
+				}
+				store.SetSetting("slsk_enabled", "true")
+				log.Printf("[startup] soulseek: auto-connected as %s", u)
+			}
+		}
 	}()
 
 	store.SafeGo("fetch-covers", func() { musicbrainz.FetchMissingCovers() })

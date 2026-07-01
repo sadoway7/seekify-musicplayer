@@ -587,6 +587,10 @@ func DbUpsertTrackTx(tx *sql.Tx, t *models.Track) {
 }
 
 func DbUpsertTrackWith(e DbExecer, t *models.Track) {
+	// Ultimate backstop: never persist tracks from the Soulseek share folder.
+	if IsInSlskShareDir(t.FilePath) {
+		return
+	}
 	e.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET

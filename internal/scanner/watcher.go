@@ -22,11 +22,20 @@ func init() {
 	lastPrune = time.Now()
 }
 
-// CountAudioFiles counts audio files in a directory tree.
+// CountAudioFiles counts audio files in a directory tree, excluding the
+// Soulseek share folder so it doesn't trigger rescans or defeat the
+// startup scan-skip optimization.
 func CountAudioFiles(dir string) int {
+	skipDir := filepath.Clean(store.SlskShareDir())
 	count := 0
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if path == skipDir || strings.HasPrefix(path, skipDir+string(filepath.Separator)) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
@@ -164,5 +173,6 @@ func CheckAndRescan() {
 	watcherMu.Unlock()
 	if runPrune {
 		PruneMissingTracks()
+		PruneSharedDirTracks()
 	}
 }

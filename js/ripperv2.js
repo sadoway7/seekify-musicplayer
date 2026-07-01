@@ -502,7 +502,7 @@ const RipperV2 = {
         + '<div class="queue-job-title">' + v2Badge + this._esc(j.artist || '') + (j.artist && j.title ? ' - ' : '') + this._esc(j.title || j.query || 'Unknown') + '</div>'
         + '<div class="queue-job-detail">'
         + (active ? '<span>' + elapsed + '</span>' : isQ ? pos + '<span>' + elapsed + '</span>' : '<span>' + j.status + '</span>')
-        + (j.progressStage && !isQ ? '<span>' + this._esc(j.progressStage) + '</span>' : '')
+        + (j.progressStage && !isQ ? '<span class="queue-stage">' + this._esc(j.progressStage) + '</span>' : '')
         + (j.source ? '<span class="source-tag source-tag-' + this._esc(j.source) + '">' + (j.source === 'soulseek' ? 'SLSK' : 'YT') + '</span>' : '')
         + (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
         + (genreTag ? '<span>' + genreTag + '</span>' : '')

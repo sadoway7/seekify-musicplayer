@@ -65,13 +65,9 @@ func TitleFromFilename(path string) string {
 	return strings.TrimSuffix(name, ext)
 }
 
-// slskShareDir mirrors downloads.SlskShareDir without importing downloads
-// (scanner → downloads would be a circular dependency).
+// slskShareDir delegates to store.SlskShareDir (single source of truth).
 func slskShareDir() string {
-	if d := store.GetSetting("slsk_share_dir", ""); d != "" {
-		return d
-	}
-	return filepath.Join(store.MusicDir, "shared")
+	return store.SlskShareDir()
 }
 
 func ScanMusicDir(dir string) models.ScanStats {

@@ -828,6 +828,9 @@ func downloadFromYouTube(job *DownloadJob) bool {
 		log.Printf("[download] Auto-selected %s (score %.1f) for %q", videoID, candidates[0].Score, job.SearchQuery)
 	}
 
+	job.ProgressStage = "Found video, preparing download"
+	DbUpdateJob(job)
+
 	destDir, safeTitle := computeDest(job)
 	os.MkdirAll(destDir, 0755)
 
@@ -964,6 +967,11 @@ func downloadFromSoulseek(job *DownloadJob) {
 		return
 	}
 
+	if len(cands) > 0 {
+		job.ProgressStage = fmt.Sprintf("Found %d results, matching", len(cands))
+		DbUpdateJob(job)
+	}
+
 	// H2: match against the cleaned title (parentheticals stripped) the same way
 	// slskQuery builds the search, so "Money (Remastered 2011)" still matches the
 	// "Money" results the search actually returned.
@@ -1003,7 +1011,7 @@ func downloadFromSoulseek(job *DownloadJob) {
 
 	job.Status = "downloading"
 	job.Source = "soulseek"
-	job.ProgressStage = "Downloading via Soulseek"
+	job.ProgressStage = "Downloading from " + dlUsername
 	DbUpdateJob(job)
 
 	audioFile, err := runSlskDownload(job, dlUsername, dlFilename)

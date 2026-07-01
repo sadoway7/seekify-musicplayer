@@ -30,6 +30,11 @@ func AutoSortMusic() {
 			continue
 		}
 
+		// Never touch files in the Soulseek share folder
+		if store.IsInSlskShareDir(t.FilePath) {
+			continue
+		}
+
 		expectedDir := filepath.Join(store.MusicDir, SanitizePath(t.Artist))
 		if t.Album != "" {
 			expectedDir = filepath.Join(expectedDir, SanitizePath(t.Album))

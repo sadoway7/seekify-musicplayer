@@ -215,7 +215,7 @@ def build_client(args) -> SoulSeekClient:
             ),
         ),
         shares=SharesSettings(
-            scan_on_start=False,
+            scan_on_start=True,
             download=download_dir,
             directories=[
                 SharedDirectorySettingEntry(path=args.share, share_mode=DirectoryShareMode.EVERYONE)
