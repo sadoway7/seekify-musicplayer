@@ -177,12 +177,18 @@ def pick_candidate(items: list, fmt: str, min_bitrate: int):
 # --- aioslsk workflow -------------------------------------------------------
 
 def build_client(args) -> SoulSeekClient:
+    # aioslsk writes downloaded files to settings.shares.download (defaults to
+    # CWD!). Pin it to --out so partial/completed files never land in the
+    # caller's working directory. Test mode has no --out; the share dir is a
+    # harmless placeholder there (no download is performed).
+    download_dir = getattr(args, "out", None) or args.share
     settings = Settings(
         credentials=CredentialsSettings(username=args.username, password=args.password),
         shares=SharesSettings(
             scan_on_start=True,
+            download=download_dir,
             directories=[
-                SharedDirectorySettingEntry(args.share, share_mode=DirectoryShareMode.EVERYONE)
+                SharedDirectorySettingEntry(path=args.share, share_mode=DirectoryShareMode.EVERYONE)
             ],
         ),
     )
@@ -252,10 +258,16 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
         return 2
 
     local_path = getattr(transfer, "local_path", None)
-    basename = os.path.basename(filename)
+    # Soulseek peers use Windows-style backslash paths (e.g. "Music\Artist\...").
+    # On Unix, os.path.basename doesn't split on '\', so normalize first.
+    basename = filename.replace("\\", "/").split("/")[-1] or "download"
     dest = os.path.join(args.out, basename)
 
-    if local_path and os.path.abspath(local_path) != os.path.abspath(dest):
+    if not local_path or not os.path.exists(local_path):
+        emit_error("completed file not found")
+        return 2
+
+    if os.path.abspath(local_path) != os.path.abspath(dest):
         try:
             os.makedirs(args.out, exist_ok=True)
             os.replace(local_path, dest)
@@ -267,9 +279,6 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
             except Exception as e:
                 emit_error(f"could not move downloaded file: {e}")
                 return 2
-    elif not local_path or not os.path.exists(dest):
-        emit_error("completed file not found")
-        return 2
 
     result = dict(chosen)
     result["path"] = dest
