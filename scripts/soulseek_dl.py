@@ -281,29 +281,33 @@ async def gather_search(client: SoulSeekClient, query: str, window: float = 30.0
     return getattr(req, "results", []) or []
 
 
-async def await_completion(transfer, expected_size: int = 0, poll: float = 0.5, max_wait: float = 180) -> bool:
+async def await_completion(transfer, expected_size: int = 0, poll: float = 0.5, stall_timeout: float = 30) -> bool:
     """Poll until the transfer reaches a finalized state.
 
-    Emits progress lines to stderr as ``PROGRESS:pct:done_bytes:total_bytes``
-    so the Go side can parse and surface them in the UI.
+    Bails out if no progress for stall_timeout seconds (peer disconnected),
+    but waits indefinitely as long as bytes keep flowing (DJ sets, large FLAC).
     """
     loop = asyncio.get_event_loop()
-    deadline = loop.time() + max_wait
     total = getattr(transfer, 'filesize', 0) or expected_size
     local_path = getattr(transfer, 'local_path', None)
     last_pct = -1
+    last_size = -1
+    last_progress = loop.time()
     while not transfer.is_finalized():
-        if loop.time() > deadline:
-            return False
         if total > 0 and local_path:
             try:
                 done = os.path.getsize(local_path)
+                if done != last_size:
+                    last_size = done
+                    last_progress = loop.time()
                 pct = min(100, int(done * 100 / total))
                 if pct != last_pct:
                     print(f"PROGRESS:{pct}:{done}:{total}", file=sys.stderr, flush=True)
                     last_pct = pct
             except OSError:
                 pass
+        if loop.time() - last_progress > stall_timeout:
+            return False
         await asyncio.sleep(poll)
     return transfer.state.VALUE == TransferState.COMPLETE
 
