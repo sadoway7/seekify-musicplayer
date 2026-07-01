@@ -425,16 +425,23 @@ async def run(args) -> int:
                 emit_error("invalid --dl-candidates JSON")
                 return 3
             errors = []
-            for cand in candidates:
+            for i, cand in enumerate(candidates):
                 u = cand.get("username", "")
                 f = cand.get("filename", "")
                 if not u or not f:
+                    print(f"[dl] skipping candidate {i}: empty user/filename", file=sys.stderr, flush=True)
                     continue
-                print(f"[dl] trying {u}...", file=sys.stderr, flush=True)
-                rc = await do_download(client, cand, args)
+                print(f"[dl] trying candidate {i+1}/{len(candidates)}: {u}...", file=sys.stderr, flush=True)
+                try:
+                    rc = await do_download(client, cand, args)
+                except Exception as e:
+                    print(f"[dl] candidate {i+1} raised exception: {e}", file=sys.stderr, flush=True)
+                    cand["_error"] = str(e)
+                    rc = 2
                 if rc == 0:
                     return 0
                 errors.append(f"{u}: {cand.get('_error', 'failed')}")
+                print(f"[dl] candidate {i+1} failed: {cand.get('_error', 'failed')}", file=sys.stderr, flush=True)
             emit_error("all candidates failed: " + "; ".join(errors))
             print(f"[slsk-result] all candidates failed: {'; '.join(errors)}", file=sys.stderr, flush=True)
             return 3
