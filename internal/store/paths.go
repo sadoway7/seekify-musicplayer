@@ -19,7 +19,18 @@ func SlskShareDir() string {
 // MusicDir, or absolute) resolves inside the Soulseek share folder.
 // Used as the ultimate backstop: no shared-folder track should ever be
 // persisted to the database.
+// Handles both primary ("shared/...") and media ("media:shared/...") paths.
 func IsInSlskShareDir(filePath string) bool {
+	// Strip media: prefix so we check the relative path consistently
+	rel := strings.TrimPrefix(filePath, "media:")
+	rel = strings.TrimPrefix(rel, "media")
+	// Check if any path component is "shared"
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "shared" {
+			return true
+		}
+	}
+	// Also check the configured absolute share dir
 	shareDir := filepath.Clean(SlskShareDir())
 	full := filePath
 	if !filepath.IsAbs(full) {
