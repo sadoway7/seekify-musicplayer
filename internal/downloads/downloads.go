@@ -1662,7 +1662,9 @@ func DownloadWatchdog() {
 				if r := recover(); r != nil {
 					log.Printf("[download-watchdog] panic recovered: %v\n%s", r, debug.Stack())
 				}
+				store.WorkerDone("download-watchdog", nil)
 			}()
+			store.WorkerStart("download-watchdog")
 
 			DownloadMu.Lock()
 			now := time.Now()

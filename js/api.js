@@ -759,5 +759,16 @@ const Api = {
     const res = await fetch('/api/queue/toggle-pause', { method: 'POST' });
     if (!res.ok) throw new Error('Failed to toggle pause');
     return res.json();
+  },
+
+  async getWorkers() {
+    const res = await fetch('/api/workers', { credentials: 'include' });
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async runWorker(name) {
+    const res = await fetch('/api/workers/run?name=' + encodeURIComponent(name), { method: 'POST', credentials: 'include' });
+    return res.json();
   }
 };

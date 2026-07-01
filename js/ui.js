@@ -1179,6 +1179,7 @@ const UI = {
     if (this._downloadPollInterval) { clearInterval(this._downloadPollInterval); this._downloadPollInterval = null; }
     if (this._reviewScrollObserver) { this._reviewScrollObserver.disconnect(); this._reviewScrollObserver = null; }
     if (this._finderStatusPoll) { clearTimeout(this._finderStatusPoll); this._finderStatusPoll = null; }
+    if (this._workerPoll) { clearInterval(this._workerPoll); this._workerPoll = null; }
     if (typeof RipperV2 !== 'undefined' && RipperV2._pollTimer) { clearInterval(RipperV2._pollTimer); RipperV2._pollTimer = null; }
   },
 
@@ -3976,6 +3977,14 @@ const UI = {
       + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Worker Settings</span></button>'
       + '</div></div></div>';
 
+    // Section 5b: Background Tasks
+    html += '<div class="settings-section collapsed">'
+      + '<div class="settings-section-title" data-collapse>' + Icons.settings() + ' Background Tasks' + Icons.chevronDown() + '</div>'
+      + '<div class="settings-section-body">'
+      + '<div class="settings-section-desc">Background workers keep the library in sync. Click Run Now to trigger a worker manually.</div>'
+      + '<div id="workers-list"></div>'
+      + '</div></div>';
+
     // Section 6: About
     html += '<div class="settings-section collapsed">'
       + '<div class="settings-section-title" data-collapse>' + Icons.settings() + ' About' + Icons.chevronDown() + '</div>'
@@ -3988,6 +3997,7 @@ const UI = {
     this.els.content.innerHTML = html;
 
     this._loadMetadataStatus();
+    this._loadWorkers();
 
     this.els.content.querySelectorAll('.stoggle').forEach(el => {
       el.addEventListener('click', () => el.classList.toggle('active'));
@@ -4682,6 +4692,68 @@ const UI = {
       if (e.key === 'Enter') tryUnlock();
       error.classList.add('hidden');
     });
+  },
+
+  _timeAgo(rfc3339) {
+    if (!rfc3339) return 'Never';
+    const diff = Date.now() - new Date(rfc3339).getTime();
+    if (diff < 0) return 'Just now';
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return 'Just now';
+    if (min < 60) return min + ' min ago';
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return hr + ' hr ago';
+    return Math.floor(hr / 24) + ' days ago';
+  },
+
+  async _loadWorkers() {
+    if (this._workerPoll) { clearInterval(this._workerPoll); this._workerPoll = null; }
+    const container = document.getElementById('workers-list');
+    if (!container) return;
+
+    const render = async () => {
+      let workers = [];
+      try { workers = await Api.getWorkers(); } catch (e) { return; }
+      if (!document.getElementById('workers-list')) {
+        if (this._workerPoll) { clearInterval(this._workerPoll); this._workerPoll = null; }
+        return;
+      }
+      container.innerHTML = workers.map(w => {
+        const dotClass = w.running ? 'worker-status-dot running' : 'worker-status-dot';
+        const lastText = w.running ? 'Running...' : this._timeAgo(w.lastRun);
+        const canRun = w.canTrigger && !w.running;
+        const btn = canRun
+          ? '<button class="settings-btn worker-run-btn" data-worker="' + this._esc(w.name) + '"><span>Run Now</span></button>'
+          : (w.running
+            ? '<button class="settings-btn worker-run-btn" disabled><span>Running</span></button>'
+            : '<button class="settings-btn worker-run-btn" disabled><span>—</span></button>');
+        const errRow = w.error ? '<div class="worker-error">' + this._esc(w.error) + '</div>' : '';
+        return '<div class="worker-row">'
+          + '<div class="' + dotClass + '"></div>'
+          + '<div class="worker-info">'
+          + '<div class="worker-name">' + this._esc(w.name) + '</div>'
+          + '<div class="worker-desc">' + this._esc(w.description) + '</div>'
+          + (w.error ? errRow : '')
+          + '</div>'
+          + '<div class="worker-freq">' + this._esc(w.frequency) + '</div>'
+          + '<div class="worker-last">' + lastText + '</div>'
+          + btn
+          + '</div>';
+      }).join('');
+
+      container.querySelectorAll('.worker-run-btn[data-worker]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const name = btn.dataset.worker;
+          btn.disabled = true;
+          btn.querySelector('span').textContent = 'Triggered';
+          try { await Api.runWorker(name); } catch (e) { this.showToast('Failed to trigger worker'); }
+          setTimeout(render, 500);
+        });
+      });
+    };
+
+    render();
+    this._workerPoll = setInterval(render, 5000);
   },
 
   async _loadMetadataStatus() {

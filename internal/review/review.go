@@ -977,10 +977,12 @@ func StartReviewScheduler() {
 				if r := recover(); r != nil {
 					log.Printf("[review] panic recovered: %v\n%s", r, debug.Stack())
 				}
+				store.WorkerDone("review", nil)
 				ReviewMu.Lock()
 				ReviewActive = false
 				ReviewMu.Unlock()
 			}()
+			store.WorkerStart("review")
 			return RunReviewBatch()
 		}()
 

@@ -245,7 +245,9 @@ func StartWatchScheduler() {
 						log.Printf("[watched] panic recovered: %v\n%s", r, debug.Stack())
 					}
 				}()
-				RefreshAllWatchedPlaylists()
+				store.WorkerStart("watched-playlists")
+			RefreshAllWatchedPlaylists()
+			store.WorkerDone("watched-playlists", nil)
 			}()
 		}
 	}()

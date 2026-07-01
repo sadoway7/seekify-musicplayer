@@ -225,8 +225,41 @@ func main() {
 		}
 	}()
 
-	store.SafeGo("fetch-covers", func() { musicbrainz.FetchMissingCovers() })
-	store.SafeGo("fetch-artist-art", func() { musicbrainz.FetchMissingArtistArt() })
+	// Register all background workers with the registry so the settings
+	// panel can display status and (where possible) trigger them on demand.
+	store.RegisterWorker("scanner", "Scans music directories for new/changed files", "Every 30s (configurable)", func() {
+		scanner.CheckAndRescan()
+	})
+	store.RegisterWorker("cleanup", "Prunes missing/shared/truncated tracks + dedup", "Every 5 min", func() {
+		scanner.PruneMissingTracks()
+		scanner.PruneSharedDirTracks()
+		scanner.PruneTruncatedTracks()
+		store.DedupTracks()
+	})
+	store.RegisterWorker("download-watchdog", "Kills stalled downloads, resets orphaned jobs", "Every 2 min", nil)
+	store.RegisterWorker("review", "Flags tracks with missing metadata, duplicates, anomalies", "Every 24h (configurable)", func() {
+		review.WakeReviewWorker()
+	})
+	store.RegisterWorker("watched-playlists", "Syncs YouTube watched playlists to library", "Every 1 hour", func() {
+		store.SafeGo("watched-refresh-all", func() { watched.RefreshAllWatchedPlaylists() })
+	})
+	store.RegisterWorker("cover-fetch", "Fetches missing album covers from MusicBrainz", "Startup only", func() {
+		musicbrainz.FetchMissingCovers()
+	})
+	store.RegisterWorker("artist-art-fetch", "Fetches missing artist art from Deezer", "Startup only", func() {
+		musicbrainz.FetchMissingArtistArt()
+	})
+
+	store.SafeGo("fetch-covers", func() {
+		store.WorkerStart("cover-fetch")
+		musicbrainz.FetchMissingCovers()
+		store.WorkerDone("cover-fetch", nil)
+	})
+	store.SafeGo("fetch-artist-art", func() {
+		store.WorkerStart("artist-art-fetch")
+		musicbrainz.FetchMissingArtistArt()
+		store.WorkerDone("artist-art-fetch", nil)
+	})
 	go scanner.StartWatcher()
 	go watched.StartWatchScheduler()
 	go downloads.DownloadWatchdog()
@@ -273,6 +306,8 @@ func main() {
 	mux.HandleFunc("/api/admin/downloads", handlers.RequireAdmin(handlers.DownloadsListHandler))
 	mux.HandleFunc("/api/admin/download-toggle/", handlers.RequireAdmin(handlers.DownloadToggleHandler))
 	mux.HandleFunc("/api/admin/downloads-enable-all", handlers.RequireAdmin(handlers.DownloadsEnableAllHandler))
+	mux.HandleFunc("/api/workers", handlers.RequireAdmin(handlers.WorkersHandler))
+	mux.HandleFunc("/api/workers/run", handlers.RequireAdmin(handlers.WorkerRunHandler))
 
 	// Debug: view production server logs (admin-protected).
 	mux.HandleFunc("/api/admin/logs", handlers.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {

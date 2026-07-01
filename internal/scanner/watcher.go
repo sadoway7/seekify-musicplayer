@@ -86,6 +86,9 @@ func StartWatcher() {
 }
 
 func CheckAndRescan() {
+	store.WorkerStart("scanner")
+	defer store.WorkerDone("scanner", nil)
+
 	// Don't rescan while a scan is already running (e.g. startup scan still
 	// in progress); the next watcher tick will pick up the changes.
 	if scanning.Load() {
@@ -172,9 +175,11 @@ func CheckAndRescan() {
 	}
 	watcherMu.Unlock()
 	if runPrune {
+		store.WorkerStart("cleanup")
 		PruneMissingTracks()
 		PruneSharedDirTracks()
 		PruneTruncatedTracks()
 		store.DedupTracks()
+		store.WorkerDone("cleanup", nil)
 	}
 }
