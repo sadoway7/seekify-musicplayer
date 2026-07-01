@@ -1534,6 +1534,39 @@ func ExtractBitrateFromQuality(quality string) int {
 	return 0
 }
 
+// orphanReset resets jobs stuck in active states that have no running command.
+// Called from the watchdog (every 2 min) to recover jobs orphaned by panics,
+// crashes, or process kills that left the status without updating it.
+func orphanReset() {
+	DownloadMu.Lock()
+	activeIDs := make(map[string]bool, len(ActiveJobs))
+	for id := range ActiveJobs {
+		activeIDs[id] = true
+	}
+	DownloadMu.Unlock()
+
+	stuck := []string{"searching", "downloading", "tagging"}
+	for _, status := range stuck {
+		rows, err := store.DB.Query("SELECT id FROM download_jobs WHERE status = ?", status)
+		if err != nil {
+			continue
+		}
+		var orphans []string
+		for rows.Next() {
+			var id string
+			rows.Scan(&id)
+			if !activeIDs[id] {
+				orphans = append(orphans, id)
+			}
+		}
+		rows.Close()
+		for _, id := range orphans {
+			store.DB.Exec("UPDATE download_jobs SET status='queued', progress_stage='' WHERE id=?", id)
+			log.Printf("[download-watchdog] Reset orphaned job %s from %s to queued", id, status)
+		}
+	}
+}
+
 func RecoverStalledDownloads() {
 	stalled := []string{"searching", "downloading", "tagging"}
 	for _, status := range stalled {
@@ -1592,6 +1625,11 @@ func DownloadWatchdog() {
 				}
 			}
 			DownloadMu.Unlock()
+
+			// Reset orphaned jobs: stuck in searching/downloading/tagging with
+			// no active command processing them. This happens when a goroutine
+			// exits (panic, crash) without updating the job status.
+			orphanReset()
 
 			jobs, _ := DbGetQueuedJobs()
 			if len(jobs) > 0 {

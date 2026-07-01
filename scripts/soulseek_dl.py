@@ -260,8 +260,19 @@ async def await_completion(transfer, poll: float = 0.5) -> bool:
     aioslsk 1.6.3 has no wait helper / completion event, so we poll
     ``transfer.is_finalized()`` (COMPLETE/ABORTED/FAILED). Returns True on
     COMPLETE, False otherwise.
+
+    Emits progress lines to stderr as ``PROGRESS:pct:done_bytes:total_bytes``
+    so the Go side can parse and surface them in the UI.
     """
+    total = getattr(transfer, 'filesize', 0) or 0
+    last_pct = -1
     while not transfer.is_finalized():
+        if total > 0:
+            done = getattr(transfer, 'bytes_transfered', 0) or 0
+            pct = min(100, int(done * 100 / total))
+            if pct != last_pct:
+                print(f"PROGRESS:{pct}:{done}:{total}", file=sys.stderr, flush=True)
+                last_pct = pct
         await asyncio.sleep(poll)
     return transfer.state.VALUE == TransferState.COMPLETE
 

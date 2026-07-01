@@ -1,6 +1,7 @@
 package downloads
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -439,12 +440,58 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 	// H2: snapshot destDir before download so we can clean new files on failure
 	preSnap := dirSnapshot(destDir)
 
-	out, err := cmd.Output()
+	// Use pipes instead of buffered Output() so we can parse live progress
+	// from stderr (PROGRESS:pct:done:total) and update the job in the DB.
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		slskCleanupIncomplete(destDir, preSnap)
+		return "", fmt.Errorf("soulseek stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		slskCleanupIncomplete(destDir, preSnap)
+		return "", fmt.Errorf("soulseek stderr pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		slskCleanupIncomplete(destDir, preSnap)
+		return "", fmt.Errorf("soulseek start failed: %w", err)
+	}
+
+	// Read stderr line by line for progress updates
+	progressDone := make(chan struct{})
+	go func() {
+		defer close(progressDone)
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "PROGRESS:") {
+				parts := strings.SplitN(strings.TrimPrefix(line, "PROGRESS:"), ":", 3)
+				if len(parts) >= 2 {
+					stage := parts[0] + "%"
+					if len(parts) == 3 {
+						done, _ := strconv.ParseInt(parts[1], 10, 64)
+						total, _ := strconv.ParseInt(parts[2], 10, 64)
+						stage = fmt.Sprintf("%s%% (%s / %s)", parts[0], humanBytes(done), humanBytes(total))
+					}
+					store.DB.Exec("UPDATE download_jobs SET progress_stage=? WHERE id=?", stage, job.ID)
+				}
+			} else {
+				log.Printf("[slsk-stderr] %s", line)
+			}
+		}
+	}()
+
+	// Collect stdout for the JSON result
+	stdoutBytes, _ := io.ReadAll(stdoutPipe)
+	waitErr := cmd.Wait()
+	<-progressDone
+	out := stdoutBytes
+
 	if ctx.Err() == context.DeadlineExceeded {
 		slskCleanupIncomplete(destDir, preSnap)
 		return "", fmt.Errorf("soulseek timed out after %v", DownloadTimeout)
 	}
-	if err != nil {
+	if waitErr != nil {
 		slskCleanupIncomplete(destDir, preSnap)
 		return "", fmt.Errorf("soulseek failed: %s", strings.TrimSpace(string(out)))
 	}
@@ -777,4 +824,15 @@ func TestSlskConnection(username, password, shareDir string) (bool, string, erro
 		return false, "", fmt.Errorf("%s", detail)
 	}
 	return false, "", fmt.Errorf("soulseek test: unexpected output: %s", detail)
+}
+
+func humanBytes(b int64) string {
+	switch {
+	case b >= 1<<20:
+		return fmt.Sprintf("%.1fMB", float64(b)/float64(1<<20))
+	case b >= 1<<10:
+		return fmt.Sprintf("%.1fKB", float64(b)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%dB", b)
+	}
 }
