@@ -126,6 +126,9 @@ func InitDB(path string) {
 	MigrateFromJSON()
 }
 
+// DedupTracks runs all dedup passes. Safe to call periodically.
+func DedupTracks() { dedupTracksByFilePath() }
+
 // dedupTracksByFilePath merges any tracks sharing the same file_path,
 // keeping the one with the most metadata. References in all related tables
 // are migrated to the survivor before deleting the losers.
@@ -195,10 +198,62 @@ func dedupTracksByFilePath() {
 					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
 				}
 				tx.Commit()
-				log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
+			log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
+		}
+	}
+
+	// Pass 3: same song (artist+title) at different file paths with same
+	// duration — likely a download + AutoSort move that left a stale entry.
+	// Only merge when duration matches (avoids merging different versions).
+	rows, err = DB.Query(`SELECT LOWER(artist), LOWER(title), duration, COUNT(*) as cnt
+		FROM tracks
+		WHERE artist != '' AND title != '' AND duration > 0
+		GROUP BY LOWER(artist), LOWER(title), duration
+		HAVING cnt > 1`)
+	if err == nil {
+		type songKey struct{ artist, title string; duration int }
+		var dups []songKey
+		for rows.Next() {
+			var a, t string
+			var d, c int
+			rows.Scan(&a, &t, &d, &c)
+			dups = append(dups, songKey{a, t, d})
+		}
+		rows.Close()
+		if len(dups) > 0 {
+			log.Printf("[db] Found %d same-song duplicate groups, deduplicating...", len(dups))
+			for _, dk := range dups {
+				r, err := DB.Query(`SELECT id FROM tracks WHERE LOWER(artist)=? AND LOWER(title)=? AND duration=? ORDER BY has_metadata DESC, mod_time DESC`, dk.artist, dk.title, dk.duration)
+				if err != nil {
+					continue
+				}
+				var ids []string
+				for r.Next() {
+					var id string
+					r.Scan(&id)
+					ids = append(ids, id)
+				}
+				r.Close()
+				if len(ids) <= 1 {
+					continue
+				}
+				keepID := ids[0]
+				tx, _ := DB.Begin()
+				for _, dupID := range ids[1:] {
+					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+				}
+				tx.Commit()
+				log.Printf("[db] Song deduped %s - %s (%ds): kept %s, removed %d", dk.artist, dk.title, dk.duration, keepID, len(ids)-1)
 			}
 		}
 	}
+}
 }
 
 func dedupByFilePath(path string) {
