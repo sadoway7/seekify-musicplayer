@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"musicapp/internal/scanner"
@@ -424,6 +425,8 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 	cmd := exec.CommandContext(ctx, python, args...)
 	// H8: password via env, not argv.
 	cmd.Env = append(os.Environ(), "SLSK_PASSWORD="+pass)
+	// C2: process-group so timeout kills aioslsk's children too.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// Register the cmd so watchdog/cancel can see it (mirrors runDownloadCmd).
 	DownloadMu.Lock()
@@ -481,10 +484,30 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 		}
 	}()
 
-	// Collect stdout for the JSON result
-	stdoutBytes, _ := io.ReadAll(stdoutPipe)
+	// Collect stdout for the JSON result. Use a goroutine so we can timeout
+	// if pipes don't close after the process is killed (orphaned children).
+	stdoutCh := make(chan []byte)
+	go func() { b, _ := io.ReadAll(stdoutPipe); stdoutCh <- b }()
+
+	var stdoutBytes []byte
+	select {
+	case stdoutBytes = <-stdoutCh:
+	case <-time.After(15 * time.Second):
+		// Process was killed but stdout pipe stuck open (orphaned child).
+		// Kill the process group forcefully.
+		if cmd.Process != nil {
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		stdoutBytes = <-stdoutCh
+	}
+
 	waitErr := cmd.Wait()
-	<-progressDone
+
+	// Don't wait forever for the stderr goroutine if it's stuck.
+	select {
+	case <-progressDone:
+	case <-time.After(5 * time.Second):
+	}
 	out := stdoutBytes
 
 	if ctx.Err() == context.DeadlineExceeded {
