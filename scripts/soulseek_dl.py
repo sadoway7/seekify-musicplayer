@@ -254,25 +254,25 @@ async def gather_search(client: SoulSeekClient, query: str, window: float = 30.0
     return getattr(req, "results", []) or []
 
 
-async def await_completion(transfer, poll: float = 0.5) -> bool:
+async def await_completion(transfer, expected_size: int = 0, poll: float = 0.5) -> bool:
     """Poll until the transfer reaches a finalized state.
-
-    aioslsk 1.6.3 has no wait helper / completion event, so we poll
-    ``transfer.is_finalized()`` (COMPLETE/ABORTED/FAILED). Returns True on
-    COMPLETE, False otherwise.
 
     Emits progress lines to stderr as ``PROGRESS:pct:done_bytes:total_bytes``
     so the Go side can parse and surface them in the UI.
     """
-    total = getattr(transfer, 'filesize', 0) or 0
+    total = getattr(transfer, 'filesize', 0) or expected_size
+    local_path = getattr(transfer, 'local_path', None)
     last_pct = -1
     while not transfer.is_finalized():
-        if total > 0:
-            done = getattr(transfer, 'bytes_transfered', 0) or 0
-            pct = min(100, int(done * 100 / total))
-            if pct != last_pct:
-                print(f"PROGRESS:{pct}:{done}:{total}", file=sys.stderr, flush=True)
-                last_pct = pct
+        if total > 0 and local_path:
+            try:
+                done = os.path.getsize(local_path)
+                pct = min(100, int(done * 100 / total))
+                if pct != last_pct:
+                    print(f"PROGRESS:{pct}:{done}:{total}", file=sys.stderr, flush=True)
+                    last_pct = pct
+            except OSError:
+                pass
         await asyncio.sleep(poll)
     return transfer.state.VALUE == TransferState.COMPLETE
 
@@ -288,7 +288,7 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
         return 2
 
     try:
-        ok = await await_completion(transfer)
+        ok = await await_completion(transfer, chosen.get("size", 0))
     except Exception as e:
         remove_local(transfer)
         emit_error(f"download failed: {e}")
