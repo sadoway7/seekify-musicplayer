@@ -897,11 +897,25 @@ Object.assign(UI, {
     const btn = document.getElementById('settings-unlock-btn');
     const error = document.getElementById('settings-lock-error');
 
-    const tryUnlock = () => {
-      if (input.value === 'pancake') {
-        this._settingsUnlocked = true;
-        this.renderSettings();
-      } else {
+    const tryUnlock = async () => {
+      // Set the admin cookie so admin-protected API endpoints (like
+      // /api/workers) work from the SPA.
+      try {
+        const res = await fetch('/api/admin-login', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({code: input.value})
+        });
+        const data = await res.json();
+        if (data.ok) {
+          this._settingsUnlocked = true;
+          this.renderSettings();
+        } else {
+          error.classList.remove('hidden');
+          input.value = '';
+          input.focus();
+        }
+      } catch (e) {
         error.classList.remove('hidden');
         input.value = '';
         input.focus();
