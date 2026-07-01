@@ -74,16 +74,13 @@ func AutoSortMusic() {
 
 func SanitizePath(name string) string {
 	name = strings.TrimSpace(name)
-	replacer := strings.NewReplacer(
-		"/", "-",
-		"\\", "-",
-		":", "-",
-		"*", "",
-		"?", "",
-		"<", "",
-		">", "",
-		"|", "",
-		"\"", "'",
-	)
-	return replacer.Replace(name)
+	invalid := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+	for _, ch := range invalid {
+		name = strings.ReplaceAll(name, ch, "_")
+	}
+	name = strings.TrimSpace(name)
+	for strings.HasSuffix(name, ".") {
+		name = name[:len(name)-1]
+	}
+	return name
 }

@@ -307,17 +307,25 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 				delete(store.Tracks, id)
 			}
 		}
-		for id := range store.Albums {
-			if !strings.Contains(store.Albums[id].ID, ":") && !strings.HasPrefix(id, "single:") {
-				// keep non-primary albums only if they came from a prefixed dir
-			}
-		}
 		// Then merge new primary tracks in
 		for id, t := range newTracks {
 			store.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
 			store.Albums[id] = a
+		}
+		// Clean up orphaned albums (no tracks reference them)
+		usedAlbums := make(map[string]bool)
+		for _, t := range store.Tracks {
+			if t.AlbumID != "" {
+				usedAlbums[t.AlbumID] = true
+			}
+		}
+		for id := range store.Albums {
+			if !usedAlbums[id] {
+				store.DbDeleteAlbum(id)
+				delete(store.Albums, id)
+			}
 		}
 	} else {
 		// Additional directory: merge into existing maps

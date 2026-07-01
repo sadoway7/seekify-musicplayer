@@ -1032,15 +1032,15 @@
 }
 
 .dl-settings-modal {
-  max-width: 520px;
+  max-width: 600px;
   max-height: 85vh;
 }
 @media (min-width: 768px) {
-  .dl-settings-modal { max-width: 620px; }
+  .dl-settings-modal { max-width: 720px; }
 }
 
 .dl-settings-body {
-  padding: 16px 22px;
+  padding: 18px 28px;
 }
 
 .dl-settings-section {
@@ -1060,7 +1060,7 @@
 }
 
 .dl-settings-footer {
-  padding: 12px 22px;
+  padding: 14px 28px;
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
