@@ -436,12 +436,10 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 // Soulseek share directory. These are copies seeded for sharing and should
 // never appear in the library.
 func PruneSharedDirTracks() int {
-	skipDir := filepath.Clean(slskShareDir())
 	var toDelete []string
 	store.Mu.RLock()
 	for id, t := range store.Tracks {
-		full := ResolveFilePath(t.FilePath)
-		if full == skipDir || strings.HasPrefix(full, skipDir+string(filepath.Separator)) {
+		if store.IsInSlskShareDir(t.FilePath) {
 			toDelete = append(toDelete, id)
 		}
 	}
