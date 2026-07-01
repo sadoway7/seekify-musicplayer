@@ -493,6 +493,16 @@ func CreateDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 		store.Mu.RUnlock()
 	}
 
+	// Dedup: reject if there's already a non-failed job for the same track.
+	if artist != "" && title != "" {
+		key := strings.ToLower(artist + "|" + title)
+		var count int
+		store.DB.QueryRow(`SELECT COUNT(*) FROM download_jobs WHERE LOWER(artist)||'|'||LOWER(title) = ? AND status != 'failed'`, key).Scan(&count)
+		if count > 0 {
+			return nil, fmt.Errorf("already in download queue")
+		}
+	}
+
 	job := &DownloadJob{
 		ID:            id,
 		Query:         query,

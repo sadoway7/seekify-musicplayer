@@ -2593,8 +2593,8 @@ const UI = {
       newTrigger.textContent = 'Scroll for more...';
       this.els.content.appendChild(newTrigger);
     this._setupReviewScrollLoader();
-    this._setupReviewFilters();
     }
+    this._setupReviewFilters();
   },
 
   _renderReviewTrackList(reviewTracks) {
