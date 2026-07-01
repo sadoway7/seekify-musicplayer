@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log"
 	"musicapp/internal/downloads"
-	"musicapp/internal/musicbrainz"
-	"musicapp/internal/store"
 	"net/http"
 	"net/url"
 	"os"
@@ -128,19 +126,6 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 		"url":        req.URL,
 		"coverUrl":   info.Thumbnail,
 		"confidence": 0,
-	}
-
-	if title != "" && artist != "" {
-		store.SafeGo("resolve-mb-lookup", func() {
-			results, err := musicbrainz.MbSearchRecordings(artist, title, 5)
-			if err == nil && len(results) > 0 {
-				best := results[0]
-				score := scoreMatchV2(best.Title, best.Artist, artist, title)
-				if score > 60 {
-					log.Printf("[v2-resolve] MusicBrainz match: %s - %s (score %.0f)", best.Artist, best.Title, score)
-				}
-			}
-		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

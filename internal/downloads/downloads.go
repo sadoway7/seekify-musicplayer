@@ -1287,14 +1287,17 @@ func cleanupFailedDownload(dir, safeTitle string) {
 	if err != nil {
 		return
 	}
-	prefix := strings.ToLower(safeTitle)
+	stem := strings.ToLower(safeTitle)
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
 		lower := strings.ToLower(name)
-		if strings.HasPrefix(lower, prefix) ||
+		// H7: only delete files whose stem EXACTLY matches safeTitle (not prefix)
+		// plus known partial-file suffixes.
+		fileStem := strings.TrimSuffix(lower, filepath.Ext(lower))
+		if fileStem == stem ||
 			strings.HasSuffix(lower, ".part") ||
 			strings.HasSuffix(lower, ".tmp") ||
 			strings.HasSuffix(lower, ".incomplete") ||
@@ -1526,6 +1529,25 @@ func ExtractBitrateFromQuality(quality string) int {
 func RecoverStalledDownloads() {
 	stalled := []string{"searching", "downloading", "tagging"}
 	for _, status := range stalled {
+		// M5: if a job's file already exists on disk, mark it completed instead of re-queuing.
+		rows, err := store.DB.Query("SELECT id, file_path FROM download_jobs WHERE status = ?", status)
+		if err == nil {
+			var completedIDs []string
+			for rows.Next() {
+				var id, fp string
+				rows.Scan(&id, &fp)
+				if fp != "" {
+					if _, statErr := os.Stat(fp); statErr == nil {
+						completedIDs = append(completedIDs, id)
+					}
+				}
+			}
+			rows.Close()
+			for _, id := range completedIDs {
+				store.DB.Exec("UPDATE download_jobs SET status = 'completed', progress_stage = '', error = '' WHERE id = ?", id)
+				log.Printf("[download] Recovered stalled job %s as completed (file exists on disk)", id)
+			}
+		}
 		result, _ := store.DB.Exec("UPDATE download_jobs SET status = 'queued', progress_stage = '', error = '' WHERE status = ?", status)
 		if affected, _ := result.RowsAffected(); affected > 0 {
 			log.Printf("[download] Recovered %d stalled %s jobs back to queued", affected, status)

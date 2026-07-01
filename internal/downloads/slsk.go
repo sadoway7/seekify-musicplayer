@@ -154,7 +154,7 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 		"--username", user,
 		"--share", SlskShareDir(),
 		"--query", query,
-		"--out", store.MusicDir,
+		"--out", filepath.Join(os.TempDir(), "slsk-search"),
 	}
 	if fmtPref := store.GetSetting("slsk_preferred_format", "any"); fmtPref != "" && fmtPref != "any" {
 		args = append(args, "--format", fmtPref)
@@ -373,13 +373,16 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 		DownloadMu.Unlock()
 	}()
 
+	// H2: snapshot destDir before download so we can clean new files on failure
+	preSnap := dirSnapshot(destDir)
+
 	out, err := cmd.Output()
 	if ctx.Err() == context.DeadlineExceeded {
-		slskCleanupIncomplete(destDir)
+		slskCleanupIncomplete(destDir, preSnap)
 		return "", fmt.Errorf("soulseek timed out after %v", DownloadTimeout)
 	}
 	if err != nil {
-		slskCleanupIncomplete(destDir)
+		slskCleanupIncomplete(destDir, preSnap)
 		return "", fmt.Errorf("soulseek failed: %s", strings.TrimSpace(string(out)))
 	}
 
@@ -399,18 +402,56 @@ func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, e
 		}
 	}
 	if !decoded || res.Path == "" {
-		slskCleanupIncomplete(destDir)
+		slskCleanupIncomplete(destDir, preSnap)
 		return "", fmt.Errorf("soulseek reported no downloaded file")
 	}
 	return res.Path, nil
 }
 
-// slskCleanupIncomplete removes .incomplete files aioslsk leaves in destDir.
-// It is best-effort: glob/list errors are ignored.
-func slskCleanupIncomplete(destDir string) {
-	matches, _ := filepath.Glob(filepath.Join(destDir, "*.incomplete"))
-	for _, m := range matches {
-		os.Remove(m)
+// dirSnapshot returns a set of filenames in dir (best-effort).
+func dirSnapshot(dir string) map[string]bool {
+	snap := make(map[string]bool)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return snap
+	}
+	for _, e := range entries {
+		snap[e.Name()] = true
+	}
+	return snap
+}
+
+// slskCleanupIncomplete removes leftover partial files aioslsk leaves in destDir.
+// Also removes new audio files created during the job window if snapshot is non-empty.
+func slskCleanupIncomplete(destDir string, preSnapshot ...map[string]bool) {
+	// Always clean known partial-file suffixes
+	for _, suffix := range []string{"*.incomplete", "*.partial", "*.part"} {
+		matches, _ := filepath.Glob(filepath.Join(destDir, suffix))
+		for _, m := range matches {
+			os.Remove(m)
+		}
+	}
+	// H2: if a pre-snapshot was provided, remove audio files that weren't there before
+	if len(preSnapshot) > 0 && len(preSnapshot[0]) > 0 {
+		snap := preSnapshot[0]
+		entries, err := os.ReadDir(destDir)
+		if err != nil {
+			return
+		}
+		audioExts := map[string]bool{".flac": true, ".mp3": true, ".m4a": true, ".ogg": true, ".opus": true, ".wav": true}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if snap[name] {
+				continue
+			}
+			ext := filepath.Ext(name)
+			if audioExts[ext] {
+				os.Remove(filepath.Join(destDir, name))
+			}
+		}
 	}
 }
 
@@ -424,6 +465,16 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 	// so manual Soulseek picks can't exceed the global download limit.
 	DownloadSem <- struct{}{}
 	defer func() { <-DownloadSem }()
+
+	// H3: keep DownloadActive counter in sync so the watchdog doesn't over-spawn.
+	DownloadMu.Lock()
+	DownloadActive++
+	DownloadMu.Unlock()
+	defer func() {
+		DownloadMu.Lock()
+		DownloadActive--
+		DownloadMu.Unlock()
+	}()
 
 	// C6: download the exact file the user picked. The picker stores candidates
 	// in job.CandidatesJSON (slskCandidateUI shape); resolve the picked index to
