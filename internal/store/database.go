@@ -126,8 +126,20 @@ func InitDB(path string) {
 	MigrateFromJSON()
 }
 
-// DedupTracks runs all dedup passes. Safe to call periodically.
-func DedupTracks() { dedupTracksByFilePath() }
+// DedupTracks runs all dedup passes and reloads store.Tracks from the clean DB.
+// Safe to call periodically.
+func DedupTracks() {
+	dedupTracksByFilePath()
+	// Sync in-memory state with the freshly-cleaned DB so the UI doesn't
+	// show stale duplicates between dedup runs.
+	Mu.Lock()
+	Tracks = DbLoadTracks()
+	albums := DbLoadAlbums()
+	if albums != nil {
+		Albums = albums
+	}
+	Mu.Unlock()
+}
 
 // dedupTracksByFilePath merges any tracks sharing the same file_path,
 // keeping the one with the most metadata. References in all related tables
