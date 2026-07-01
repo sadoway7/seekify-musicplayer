@@ -390,6 +390,14 @@ def main() -> None:
     except KeyboardInterrupt:
         emit_error("interrupted")
         sys.exit(3)
+    except BaseException as e:
+        # Any uncaught exception (incl. CancelledError from wait_for cancellation,
+        # or an aioslsk internal error that escapes the per-mode try/except) would
+        # otherwise leave stdout empty and only print a traceback to stderr — the
+        # Go caller reads stdout and would see no JSON. Emit a JSON error so the
+        # real exception type+message always reaches the caller.
+        emit_error(f"{type(e).__name__}: {e}")
+        sys.exit(3)
     sys.exit(rc)
 
 

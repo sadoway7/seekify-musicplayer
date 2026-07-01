@@ -520,9 +520,10 @@ func SoulseekConnectHandler(w http.ResponseWriter, r *http.Request) {
 
 	ok, msg, terr := downloads.TestSlskConnection(req.Username, req.Password, shareDir)
 	if terr != nil {
+		log.Printf("[soulseek] connect test error: %v", terr)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
-		json.NewEncoder(w).Encode(map[string]string{"error": "soulseek test failed: " + terr.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": terr.Error()})
 		return
 	}
 

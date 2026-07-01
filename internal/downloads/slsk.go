@@ -509,7 +509,10 @@ func TestSlskConnection(username, password, shareDir string) (bool, string, erro
 
 	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
 	defer cancel()
-	out, runErr := exec.CommandContext(ctx, python, args...).Output()
+	var stderr strings.Builder
+	cmd := exec.CommandContext(ctx, python, args...)
+	cmd.Stderr = &stderr
+	out, runErr := cmd.Output()
 	if ctx.Err() == context.DeadlineExceeded {
 		return false, "", fmt.Errorf("soulseek test timed out after 75s")
 	}
@@ -528,6 +531,7 @@ func TestSlskConnection(username, password, shareDir string) (bool, string, erro
 			break
 		}
 	}
+	stderrTrim := strings.TrimSpace(stderr.String())
 	if decoded {
 		if res.Ok {
 			return true, "connected", nil
@@ -536,10 +540,25 @@ func TestSlskConnection(username, password, shareDir string) (bool, string, erro
 		if msg == "" {
 			msg = "login failed"
 		}
+		// Append a short stderr tail when present so the caller/UI sees the
+		// real aioslsk diagnostic rather than a sparse exception message.
+		if stderrTrim != "" {
+			tail := stderrTrim
+			if len(tail) > 300 {
+				tail = "..." + tail[len(tail)-300:]
+			}
+			msg = msg + "\n" + tail
+		}
 		return false, msg, nil
 	}
-	if runErr != nil {
-		return false, "", fmt.Errorf("soulseek test failed: %s", strings.TrimSpace(string(out)))
+	// No decodable JSON on stdout — surface stderr (the real traceback) so the
+	// user can diagnose import errors, share-scan failures, etc.
+	detail := stderrTrim
+	if detail == "" {
+		detail = strings.TrimSpace(string(out))
 	}
-	return false, "", fmt.Errorf("soulseek test: unexpected output: %s", strings.TrimSpace(string(out)))
+	if runErr != nil {
+		return false, "", fmt.Errorf("%s", detail)
+	}
+	return false, "", fmt.Errorf("soulseek test: unexpected output: %s", detail)
 }
