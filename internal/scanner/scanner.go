@@ -741,9 +741,10 @@ func ScanSingleFile(filePath string) {
 	if SetReviewStatus != nil {
 		SetReviewStatus(trackID, "unchecked", "[]", "")
 	}
-	if WakeReviewWorker != nil {
-		WakeReviewWorker()
-	}
+	// Don't wake the review worker immediately — cover art fetching
+	// (MusicBrainz/Deezer/ExtractEmbeddedCovers) hasn't run yet, so the
+	// track would get false-positive "no_cover" flags. The periodic review
+	// cycle (default 24h) or manual recheck will pick it up.
 
 	log.Printf("[scan] Added single file: %s - %s -> %s", track.Artist, track.Title, relPath)
 }
