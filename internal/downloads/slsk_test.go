@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+func intPtr(v int) *int { return &v }
+
 // TestSlskNormalize verifies the comparison key produced by slskNormalize:
 // lowercasing, punctuation/space collapsing, and trimming. The implementation
 // replaces every non-[a-z0-9] rune with a space and joins the remaining
@@ -125,12 +127,12 @@ func TestSlskStrongMatch(t *testing.T) {
 // FLAC preferred over MP3, returns the candidate's Index field (not slice
 // position), and (-1, false) when nothing matches.
 func TestAutoPickSlsk(t *testing.T) {
-	flac := slskRawCandidate{Index: 0, Format: "flac", Filename: "Artist - Title.flac"}
-	mp3 := slskRawCandidate{Index: 1, Format: "mp3", Filename: "Artist - Title.mp3"}
-	unrelated := slskRawCandidate{Index: 2, Format: "flac", Filename: "Someone Else - Other.flac"}
-	m4a := slskRawCandidate{Index: 3, Format: "m4a", Filename: "Artist - Title.m4a"}
-	flacNoFormat := slskRawCandidate{Index: 4, Format: "", Filename: "Artist - Title.flac"}
-	mp3NoFormat := slskRawCandidate{Index: 5, Format: "", Filename: "Artist - Title.mp3"}
+	flac := slskRawCandidate{Index: 0, Format: "flac", Filename: "Artist - Title.flac", Size: 30_000_000}
+	mp3 := slskRawCandidate{Index: 1, Format: "mp3", Filename: "Artist - Title.mp3", Size: 5_000_000, Bitrate: intPtr(320)}
+	unrelated := slskRawCandidate{Index: 2, Format: "flac", Filename: "Someone Else - Other.flac", Size: 30_000_000}
+	m4a := slskRawCandidate{Index: 3, Format: "m4a", Filename: "Artist - Title.m4a", Size: 5_000_000}
+	flacNoFormat := slskRawCandidate{Index: 4, Format: "", Filename: "Artist - Title.flac", Size: 30_000_000}
+	mp3NoFormat := slskRawCandidate{Index: 5, Format: "", Filename: "Artist - Title.mp3", Size: 5_000_000, Bitrate: intPtr(320)}
 
 	tests := []struct {
 		name      string
@@ -171,14 +173,14 @@ func TestAutoPickSlsk(t *testing.T) {
 		{
 			name:      "non-strong candidates ignored",
 			cands:     []slskRawCandidate{unrelated, m4a},
-			wantIdx:   -1,
-			wantFound: false,
+			wantIdx:   3,
+			wantFound: true,
 		},
 		{
-			name:      "strong match of unsupported format ignored",
+			name:      "strong match of unsupported format accepted via relaxation",
 			cands:     []slskRawCandidate{m4a},
-			wantIdx:   -1,
-			wantFound: false,
+			wantIdx:   3,
+			wantFound: true,
 		},
 		{
 			name:      "flac inferred from filename when Format empty",
@@ -218,7 +220,7 @@ func TestAutoPickSlsk(t *testing.T) {
 // position within the input slice.
 func TestAutoPickSlsk_returnsCandidateIndexNotSlicePosition(t *testing.T) {
 	cands := []slskRawCandidate{
-		{Index: 10, Format: "mp3", Filename: "Artist - Title.mp3"},
+		{Index: 10, Format: "mp3", Filename: "Artist - Title.mp3", Size: 5_000_000, Bitrate: intPtr(320)},
 	}
 	idx, found := autoPickSlsk(cands, "Artist", "Title", 0)
 	if !found {

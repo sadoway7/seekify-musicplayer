@@ -2871,6 +2871,14 @@ const UI = {
       this._updateDownloadBadge(counts);
       this._downloadPaused = counts.paused === 1;
 
+      // Refresh library when new downloads complete so album art shows up
+      // without requiring a page reload.
+      const completedCount = counts.completed || 0;
+      if (completedCount > (this._lastCompletedCount || 0)) {
+        Store.refreshLibrary().catch(() => {});
+      }
+      this._lastCompletedCount = completedCount;
+
       const activeCount = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0);
       const failedCount = counts.failed || 0;
       const needsSel = counts.needs_selection || 0;

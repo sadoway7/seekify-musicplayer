@@ -258,52 +258,119 @@ func slskStrongMatch(cand slskRawCandidate, artist, title string) bool {
 	return true
 }
 
-// autoPickSlsk returns the index of the first strong-match candidate, preferring
-// FLAC over MP3 when both match. MP3 candidates below minBitrate are skipped
-// (set minBitrate<=0 to disable the bitrate filter). Returns (-1, false) when
-// no strong match exists (the caller should then surface the manual picker).
+// autoPickSlsk picks the best healthy candidate using progressive relaxation.
+// Candidates are already ranked (FLAC first, then highest bitrate). We apply
+// quality gates from strict to loose, stopping at the first tier that yields
+// a strong match. This avoids being so strict we never pick anything while
+// still preferring high-quality, non-junk files.
+//
+// Tiers:
+//   1. Strong match + FLAC + size > 2MB + duration > 60s (if known)
+//   2. Strong match + MP3 ≥ minBitrate + size > 1MB
+//   3. Strong match + any format + size > 1MB
+//   4. Fall through to picker (return false)
 func autoPickSlsk(cands []slskRawCandidate, artist, title string, minBitrate int) (int, bool) {
-	firstFlac := -1
-	firstMp3 := -1
+	type pick struct {
+		index int
+		score int // higher = better, for tie-breaking within a tier
+	}
+
+	// Filter to strong matches first, compute health metrics.
+	type candidate struct {
+		idx     int
+		size    int64
+		bitrate int
+		dur     int
+		format  string
+	}
+	var strong []candidate
 	for _, c := range cands {
 		if !slskStrongMatch(c, artist, title) {
 			continue
 		}
-		fmtLower := strings.ToLower(c.Format)
-		// Fall back to filename extension when python left Format empty.
-		if fmtLower == "" {
+		br := 0
+		if c.Bitrate != nil {
+			br = *c.Bitrate
+		}
+		dur := 0
+		if c.Duration != nil {
+			dur = *c.Duration
+		}
+		fmt := strings.ToLower(c.Format)
+		if fmt == "" {
 			if strings.HasSuffix(strings.ToLower(c.Filename), ".flac") {
-				fmtLower = "flac"
+				fmt = "flac"
 			} else if strings.HasSuffix(strings.ToLower(c.Filename), ".mp3") {
-				fmtLower = "mp3"
+				fmt = "mp3"
 			}
 		}
-		switch fmtLower {
-		case "flac":
-			if firstFlac == -1 {
-				firstFlac = c.Index
-			}
-		case "mp3":
-			// Honor the configured minimum bitrate. A missing bitrate is treated
-			// as 0, matching the python picker's `(bitrate or 0) >= min` filter.
-			br := 0
-			if c.Bitrate != nil {
-				br = *c.Bitrate
-			}
-			if minBitrate > 0 && br < minBitrate {
-				continue
-			}
-			if firstMp3 == -1 {
-				firstMp3 = c.Index
+		strong = append(strong, candidate{
+			idx: c.Index, size: c.Size, bitrate: br, dur: dur, format: fmt,
+		})
+	}
+	if len(strong) == 0 {
+		return -1, false
+	}
+
+	// Helper: find first candidate in a tier
+	findFirst := func(filter func(c candidate) bool) (int, bool) {
+		for _, c := range strong {
+			if filter(c) {
+				return c.idx, true
 			}
 		}
+		return -1, false
 	}
-	if firstFlac != -1 {
-		return firstFlac, true
+
+	// Tier 1: FLAC, size > 2MB, duration > 60s (if known)
+	if idx, ok := findFirst(func(c candidate) bool {
+		if c.format != "flac" {
+			return false
+		}
+		if c.size < 2_000_000 {
+			return false
+		}
+		if c.dur > 0 && c.dur < 60 {
+			return false
+		}
+		return true
+	}); ok {
+		return idx, true
 	}
-	if firstMp3 != -1 {
-		return firstMp3, true
+
+	// Tier 2: MP3 ≥ minBitrate, size > 1MB, duration > 60s (if known)
+	if idx, ok := findFirst(func(c candidate) bool {
+		if c.format != "mp3" {
+			return false
+		}
+		if minBitrate > 0 && c.bitrate < minBitrate {
+			return false
+		}
+		if c.size < 1_000_000 {
+			return false
+		}
+		if c.dur > 0 && c.dur < 60 {
+			return false
+		}
+		return true
+	}); ok {
+		return idx, true
 	}
+
+	// Tier 3: FLAC of any size (small FLAC might still be a legit short track)
+	if idx, ok := findFirst(func(c candidate) bool {
+		return c.format == "flac" && c.size > 1_000_000
+	}); ok {
+		return idx, true
+	}
+
+	// Tier 4: Any format, size > 1MB
+	if idx, ok := findFirst(func(c candidate) bool {
+		return c.size > 1_000_000
+	}); ok {
+		return idx, true
+	}
+
 	return -1, false
 }
 

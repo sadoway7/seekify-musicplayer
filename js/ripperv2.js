@@ -439,6 +439,13 @@ const RipperV2 = {
     try {
       const [jobs, counts] = await Promise.all([Api.getQueue(100), Api.getQueueCounts()]);
       this._downloadJobs = jobs || [];
+      // Refresh library when new downloads complete so album art and
+      // click-through navigation work without a page reload.
+      const completedCount = counts.completed || 0;
+      if (completedCount > (this._lastCompletedCount || 0)) {
+        Store.refreshLibrary().catch(() => {});
+      }
+      this._lastCompletedCount = completedCount;
       const statsEl = this.els.content.querySelector('#v2-queue-stats');
       const listEl = this.els.content.querySelector('#v2-queue-list');
       if (statsEl) this._renderQueueStats(statsEl, counts);
