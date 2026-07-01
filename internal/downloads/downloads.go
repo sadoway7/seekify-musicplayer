@@ -828,7 +828,7 @@ func downloadFromYouTube(job *DownloadJob) bool {
 		log.Printf("[download] Auto-selected %s (score %.1f) for %q", videoID, candidates[0].Score, job.SearchQuery)
 	}
 
-	job.ProgressStage = "Found video, preparing download"
+	job.ProgressStage = "Found match, preparing download"
 	DbUpdateJob(job)
 
 	destDir, safeTitle := computeDest(job)
