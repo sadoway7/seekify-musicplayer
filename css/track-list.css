@@ -110,6 +110,37 @@
   height: 22px;
 }
 
+.track-pin {
+  width: 32px;
+  min-width: 32px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.track-row:hover .track-pin {
+  opacity: 1;
+}
+
+.track-pin.active {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.track-pin:active {
+  transform: scale(0.85);
+}
+
+.track-pin svg {
+  width: 18px;
+  height: 18px;
+}
+
 .eq {
   display: flex;
   gap: 2px;

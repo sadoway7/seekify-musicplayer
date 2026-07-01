@@ -891,6 +891,17 @@ const UI = {
         return;
       }
 
+      const tpin = e.target.closest('.track-pin');
+      if (tpin) {
+        e.stopPropagation();
+        const trackId = tpin.dataset.trackId;
+        const wasActive = tpin.classList.contains('active');
+        tpin.classList.toggle('active', !wasActive);
+        tpin.innerHTML = wasActive ? Icons.pin() : Icons.pinFilled();
+        Store.toggleRotation(trackId);
+        return;
+      }
+
       const rmore = e.target.closest('.track-review-more');
       if (rmore) {
         const trackId = rmore.dataset.reviewTrackId;
@@ -2883,7 +2894,6 @@ const UI = {
           + '</div>';
       }
       html += '<div class="queue-stats-actions">'
-        + '<button class="settings-btn" id="btn-dl-pause" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + (this._downloadPaused ? '&#x25b6; Resume' : '&#x23f8; Pause') + '</button>'
         + '<button class="settings-btn" id="btn-dl-settings" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
         + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
         + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
@@ -6007,6 +6017,7 @@ const UI = {
         + '<div class="track-artist">' + artistAlbum + '</div>'
         + '</div>'
         + rightHtml
+        + '<button class="track-pin' + (Store.isInRotation(track.id) ? ' active' : '') + '" data-track-id="' + track.id + '" aria-label="Add to rotation">' + (Store.isInRotation(track.id) ? Icons.pinFilled() : Icons.pin()) + '</button>'
         + '<button class="track-more" aria-label="More">' + Icons.dots() + '</button>'
         + '</div>';
     }).join('') + '</div>';

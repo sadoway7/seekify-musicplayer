@@ -732,6 +732,10 @@ func ProcessSingleDownload(job *DownloadJob) {
 		return
 	}
 	log.Printf("[download] YouTube failed for %q, falling back to Soulseek", job.SearchQuery)
+	// Clean up any partial/failed YouTube output before Soulseek writes to the
+	// same destDir — otherwise both files survive and the scanner imports duplicates.
+	destDir, safeTitle := computeDest(job)
+	cleanupFailedDownload(destDir, safeTitle)
 	// NOTE: do NOT set job.Source = "soulseek" here. Persisting it would pin the
 	// job to Soulseek, so a retry (after this fallback also fails) would skip
 	// YouTube entirely. Leaving Source unset lets ProcessSingleDownload
@@ -1253,6 +1257,31 @@ func LevenshteinContains(s, sub string) bool {
 		}
 	}
 	return matched >= len(words)/2+1
+}
+
+// cleanupFailedDownload removes any audio files + yt-dlp temp artifacts in dir
+// matching safeTitle. Called before a Soulseek fallback so the two downloads
+// don't leave duplicate files.
+func cleanupFailedDownload(dir, safeTitle string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	prefix := strings.ToLower(safeTitle)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		lower := strings.ToLower(name)
+		if strings.HasPrefix(lower, prefix) ||
+			strings.HasSuffix(lower, ".part") ||
+			strings.HasSuffix(lower, ".tmp") ||
+			strings.HasSuffix(lower, ".incomplete") ||
+			strings.HasSuffix(lower, ".ytdl") {
+			os.Remove(filepath.Join(dir, name))
+		}
+	}
 }
 
 func FindDownloadedFile(dir, expectedTitle string) string {
