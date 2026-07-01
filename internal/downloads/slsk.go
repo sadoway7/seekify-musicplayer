@@ -533,19 +533,33 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 	stdoutCh := make(chan []byte)
 	go func() { b, _ := io.ReadAll(stdoutPipe); stdoutCh <- b }()
 
+	// Wait for the process to exit first (could be up to DownloadTimeout).
+	// The context handles the hard kill; we only need the stdout escape for
+	// orphaned children that keep pipes open AFTER the main process exits.
+	waitCh := make(chan error)
+	go func() { waitCh <- cmd.Wait() }()
+
+	var waitErr error
+	select {
+	case waitErr = <-waitCh:
+		// Process exited normally (or was killed by context). Now read stdout
+		// with a short escape for orphaned children holding pipe write-ends.
+	case <-ctx.Done():
+		// Context timeout — process should have been killed by CommandContext.
+		<-waitCh
+		waitErr = ctx.Err()
+	}
+
 	var stdoutBytes []byte
 	select {
 	case stdoutBytes = <-stdoutCh:
-	case <-time.After(15 * time.Second):
-		// Process was killed but stdout pipe stuck open (orphaned child).
-		// Kill the process group forcefully.
+	case <-time.After(5 * time.Second):
+		// Orphaned child still holds the pipe open. Force kill and read.
 		if cmd.Process != nil {
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 		stdoutBytes = <-stdoutCh
 	}
-
-	waitErr := cmd.Wait()
 
 	// Don't wait forever for the stderr goroutine if it's stuck.
 	select {
