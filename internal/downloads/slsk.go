@@ -189,11 +189,14 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 // its candidates onto these fields.
 type slskCandidateUI struct {
 	VideoID  string `json:"videoId"`  // strconv.Itoa(index) — UI treats it as an opaque id
-	Title    string `json:"title"`    // basename of the Soulseek filename
+	Title    string `json:"title"`    // clean filename for display
 	Channel  string `json:"channel"`  // Soulseek username
 	Filename string `json:"filename"` // full remote filename (used for direct download)
 	Duration int    `json:"duration"`
 	Score    int    `json:"score"`
+	Format   string `json:"format,omitempty"` // flac, mp3, etc.
+	SizeMB   string `json:"sizeMB,omitempty"` // human-readable size
+	Bitrate  int    `json:"bitrate,omitempty"`
 }
 
 // slskCandidatesToJSON maps raw python candidates onto the picker UI shape and
@@ -205,13 +208,22 @@ func slskCandidatesToJSON(cands []slskRawCandidate) (string, error) {
 		if c.Duration != nil {
 			dur = *c.Duration
 		}
+		br := 0
+		if c.Bitrate != nil {
+			br = *c.Bitrate
+		}
+		// Normalize Windows backslashes so filepath.Base works correctly
+		cleanName := strings.ReplaceAll(c.Filename, "\\", "/")
 		ui = append(ui, slskCandidateUI{
 			VideoID:  strconv.Itoa(c.Index),
-			Title:    filepath.Base(c.Filename),
+			Title:    filepath.Base(cleanName),
 			Channel:  c.Username,
 			Filename: c.Filename,
 			Duration: dur,
 			Score:    50,
+			Format:   c.Format,
+			SizeMB:   humanBytes(c.Size),
+			Bitrate:  br,
 		})
 	}
 	b, err := json.Marshal(ui)

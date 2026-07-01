@@ -3159,11 +3159,23 @@ const UI = {
       const dur = c.duration > 0 ? Math.floor(c.duration / 60) + ':' + String(c.duration % 60).padStart(2, '0') : '';
       const scoreLabel = c.score >= 60 ? 'Good' : c.score >= 30 ? 'Fair' : 'Weak';
       const scoreClass = c.score >= 60 ? 'score-good' : c.score >= 30 ? 'score-fair' : 'score-weak';
+      const isSlsk = !!c.format || !!c.filename;
+      let artHtml, subtitleParts = [this._esc(c.channel)];
+      if (isSlsk) {
+        const fmtBadge = c.format ? '<span class="cand-badge">' + this._esc(c.format.toUpperCase()) + '</span>' : '';
+        const sizeBadge = c.sizeMB ? '<span class="cand-badge">' + this._esc(c.sizeMB) + '</span>' : '';
+        const brBadge = c.bitrate ? '<span class="cand-badge">' + c.bitrate + 'k</span>' : '';
+        artHtml = '<div class="candidate-item-icon">' + fmtBadge + sizeBadge + brBadge + '</div>';
+        if (dur) subtitleParts.push(dur);
+      } else {
+        artHtml = '<div class="candidate-item-art"><img src="https://i.ytimg.com/vi/' + this._esc(c.videoId) + '/default.jpg" alt="" onerror="this.style.display=\'none\'"></div>';
+        if (dur) subtitleParts.push(dur);
+      }
       listHtml += '<div class="candidate-item" data-video-id="' + this._esc(c.videoId) + '">'
-        + '<div class="candidate-item-art"><img src="https://i.ytimg.com/vi/' + this._esc(c.videoId) + '/default.jpg" alt="" onerror="this.style.display=\'none\'"></div>'
+        + artHtml
         + '<div class="candidate-item-info">'
         + '<div class="candidate-item-title">' + this._esc(c.title) + '</div>'
-        + '<div class="candidate-item-subtitle">' + this._esc(c.channel) + (dur ? ' &middot; ' + dur : '') + '</div>'
+        + '<div class="candidate-item-subtitle">' + subtitleParts.join(' &middot; ') + '</div>'
         + '</div>'
         + '<span class="candidate-score ' + scoreClass + '">' + scoreLabel + '</span>'
         + '</div>';

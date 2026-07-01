@@ -199,6 +199,33 @@ def pick_candidate(items: list, fmt: str, min_bitrate: int):
 
 # --- aioslsk workflow -------------------------------------------------------
 
+def clean_corrupt_shares(share_dir: str):
+    """Remove corrupt audio files from the share folder that would crash
+    aioslsk's mutagen-based share scanner during login."""
+    import glob
+    for fpath in glob.glob(os.path.join(share_dir, "**", "*"), recursive=True):
+        if not os.path.isfile(fpath):
+            continue
+        ext = os.path.splitext(fpath)[1].lower()
+        if ext not in (".flac", ".mp3", ".ogg", ".m4a", ".opus"):
+            continue
+        try:
+            # Quick size check — files under 100KB are almost certainly junk
+            if os.path.getsize(fpath) < 10240:
+                os.remove(fpath)
+                print(f"[share-cleanup] removed tiny file: {fpath}", file=sys.stderr, flush=True)
+                continue
+            # mutagen validation (same library aioslsk uses)
+            from mutagen import File as MutagenFile
+            m = MutagenFile(fpath)
+            if m is None:
+                os.remove(fpath)
+                print(f"[share-cleanup] removed unreadable file: {fpath}", file=sys.stderr, flush=True)
+        except Exception as e:
+            os.remove(fpath)
+            print(f"[share-cleanup] removed corrupt file {fpath}: {e}", file=sys.stderr, flush=True)
+
+
 def build_client(args) -> SoulSeekClient:
     # aioslsk writes downloaded files to settings.shares.download (defaults to
     # CWD!). Pin it to --out so partial/completed files never land in the
@@ -455,6 +482,14 @@ def main() -> None:
         timeout = 600.0
 
     coro = run_test(args) if args.test else run(args)
+
+    # Clean corrupt share files before connecting — a single bad FLAC crashes
+    # aioslsk's mutagen scanner and prevents login entirely.
+    try:
+        clean_corrupt_shares(args.share)
+    except Exception as e:
+        print(f"[share-cleanup] warning: {e}", file=sys.stderr, flush=True)
+
     try:
         rc = asyncio.run(asyncio.wait_for(coro, timeout=timeout))
     except asyncio.TimeoutError:

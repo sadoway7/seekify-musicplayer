@@ -157,6 +157,10 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 		if ct := mime.TypeByExtension(ext); ct != "" {
 			w.Header().Set("Content-Type", ct)
 		}
+		// ponytail: Safari caches JS/CSS aggressively; force revalidation
+		if ext == ".js" || ext == ".css" {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		http.ServeFile(w, r, fullPath)
 		return
 	}
