@@ -174,6 +174,7 @@ func CheckAndRescan() {
 	if runPrune {
 		PruneMissingTracks()
 		PruneSharedDirTracks()
+		PruneTruncatedTracks()
 		store.DedupTracks()
 	}
 }

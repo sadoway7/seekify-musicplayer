@@ -432,6 +432,36 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	return stats
 }
 
+// PruneTruncatedTracks removes tracks with 0 duration — these are truncated
+// or corrupt downloads that slipped through before completeness validation
+// was added. Also removes the file from disk if it still exists.
+func PruneTruncatedTracks() int {
+	store.Mu.RLock()
+	var toDelete []string
+	for id, t := range store.Tracks {
+		if t.Duration == 0 {
+			toDelete = append(toDelete, id)
+		}
+	}
+	store.Mu.RUnlock()
+
+	for _, id := range toDelete {
+		t, ok := store.Tracks[id]
+		if ok {
+			fp := ResolveFilePath(t.FilePath)
+			os.Remove(fp) // best-effort
+		}
+		store.DbDeleteTrack(id)
+		store.Mu.Lock()
+		delete(store.Tracks, id)
+		store.Mu.Unlock()
+	}
+	if len(toDelete) > 0 {
+		log.Printf("[scanner] Pruned %d truncated tracks (0 duration)", len(toDelete))
+	}
+	return len(toDelete)
+}
+
 // PruneSharedDirTracks removes any tracks whose file path resolves inside the
 // Soulseek share directory. These are copies seeded for sharing and should
 // never appear in the library.

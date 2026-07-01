@@ -197,6 +197,7 @@ func main() {
 
 		scanner.ExtractEmbeddedCovers()
 		scanner.PruneSharedDirTracks()
+		scanner.PruneTruncatedTracks()
 		watched.SyncWatchedPlaylistsToLibrary()
 		downloads.RecoverStalledDownloads()
 		review.SeedMissingReviewTracks()
