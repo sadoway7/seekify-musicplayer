@@ -1017,40 +1017,55 @@ func downloadFromSoulseek(job *DownloadJob) {
 		return
 	}
 
-	// Build multi-candidate list: strong matches ranked by the same tiers
-	// autoPickSlsk uses. Try up to 5 candidates (peers are frequently
-	// unreachable behind NAT/firewall, so trying multiple improves success).
+	// Build multi-candidate list. Include ALL candidates (not just strong
+	// matches) ranked by size/quality. autoPickSlsk's pick is first, then
+	// strong matches, then others. Peers are frequently unreachable behind
+	// NAT/firewall, so trying multiple improves success rate dramatically.
 	type dlCand struct {
 		Username string `json:"username"`
 		Filename string `json:"filename"`
 		Size     int64  `json:"size,omitempty"`
 	}
-	var topCands []dlCand
 	displayName := ""
+	// Pick the autoPick first, then strong matches, then everything else.
+	var ordered []slskRawCandidate
+	picked := false
 	for _, c := range cands {
-		if !slskStrongMatch(c, job.Artist, slskCleanTitle(job.Title)) {
-			continue
-		}
-		dc := dlCand{Username: c.Username, Filename: c.Filename, Size: c.Size}
 		if c.Index == pickIdx {
+			ordered = append([]slskRawCandidate{c}, ordered...)
 			displayName = c.Username
-			topCands = append([]dlCand{dc}, topCands...)
-		} else {
-			topCands = append(topCands, dc)
-		}
-		if len(topCands) >= 5 {
-			break
+			picked = true
+		} else if slskStrongMatch(c, job.Artist, slskCleanTitle(job.Title)) {
+			ordered = append(ordered, c)
 		}
 	}
-	if len(topCands) == 0 {
-		// Fallback: single-candidate direct download
+	// If autoPick wasn't in cands (shouldn't happen), still proceed
+	if !picked {
 		for _, c := range cands {
 			if c.Index == pickIdx {
-				topCands = append(topCands, dlCand{Username: c.Username, Filename: c.Filename, Size: c.Size})
+				ordered = append([]slskRawCandidate{c}, ordered...)
 				displayName = c.Username
 				break
 			}
 		}
+	}
+	// Append remaining non-strong candidates as fallback
+	for _, c := range cands {
+		if c.Index == pickIdx {
+			continue
+		}
+		if !slskStrongMatch(c, job.Artist, slskCleanTitle(job.Title)) {
+			ordered = append(ordered, c)
+		}
+	}
+	// Cap at 8 candidates
+	maxCands := 8
+	if len(ordered) > maxCands {
+		ordered = ordered[:maxCands]
+	}
+	topCands := make([]dlCand, len(ordered))
+	for i, c := range ordered {
+		topCands[i] = dlCand{Username: c.Username, Filename: c.Filename, Size: c.Size}
 	}
 	candListJSON, _ := json.Marshal(topCands)
 

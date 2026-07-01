@@ -436,6 +436,7 @@ async def run(args) -> int:
                     return 0
                 errors.append(f"{u}: {cand.get('_error', 'failed')}")
             emit_error("all candidates failed: " + "; ".join(errors))
+            print(f"[slsk-result] all candidates failed: {'; '.join(errors)}", file=sys.stderr, flush=True)
             return 3
 
         try:
