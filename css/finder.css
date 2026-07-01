@@ -994,6 +994,24 @@
   font-weight: 500;
 }
 
+.source-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.source-tag-youtube {
+  background: rgba(255, 0, 0, 0.15);
+  color: #ff6b6b;
+}
+
+.source-tag-soulseek {
+  background: rgba(95, 184, 255, 0.15);
+  color: #5fb8ff;
+}
+
 .queue-job-error {
   color: #f87171;
   font-size: 11px;

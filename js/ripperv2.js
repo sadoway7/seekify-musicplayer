@@ -503,6 +503,7 @@ const RipperV2 = {
         + '<div class="queue-job-detail">'
         + (active ? '<span>' + elapsed + '</span>' : isQ ? pos + '<span>' + elapsed + '</span>' : '<span>' + j.status + '</span>')
         + (j.progressStage && !isQ ? '<span>' + this._esc(j.progressStage) + '</span>' : '')
+        + (j.source ? '<span class="source-tag source-tag-' + this._esc(j.source) + '">' + (j.source === 'soulseek' ? 'SLSK' : 'YT') + '</span>' : '')
         + (j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
         + (genreTag ? '<span>' + genreTag + '</span>' : '')
         + (failed && j.error ? '<span class="queue-job-error">' + this._esc(j.error) + '</span>' : '')
