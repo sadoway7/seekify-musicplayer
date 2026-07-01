@@ -1,6 +1,7 @@
 package waveform
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"log"
@@ -12,9 +13,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 const WaveformMaxPeaks = 300
+
+// waveSem bounds concurrent ffmpeg waveform generations to avoid forking an
+// unbounded number of processes under heavy async load.
+var waveSem = make(chan struct{}, 2)
 
 var (
 	pendingMu sync.Mutex
@@ -27,7 +33,9 @@ func GenerateWaveformPeaks(filePath string) ([]float64, error) {
 		return nil, nil
 	}
 
-	cmd := exec.Command(ffmpeg,
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffmpeg,
 		"-i", filePath,
 		"-ac", "1",
 		"-ar", "8000",
@@ -200,12 +208,15 @@ func GenerateAsync(trackID string) {
 	pending[trackID] = true
 	pendingMu.Unlock()
 
-	go func() {
+	store.SafeGo("waveform", func() {
 		defer func() {
 			pendingMu.Lock()
 			delete(pending, trackID)
 			pendingMu.Unlock()
 		}()
+
+		waveSem <- struct{}{}
+		defer func() { <-waveSem }()
 
 		store.Mu.RLock()
 		track, exists := store.Tracks[trackID]
@@ -227,5 +238,5 @@ func GenerateAsync(trackID string) {
 		os.WriteFile(WaveformPath(trackID), jsonData, 0644)
 
 		log.Printf("[waveform] Generated and cached %d peaks for %s", len(peaks), trackID)
-	}()
+	})
 }

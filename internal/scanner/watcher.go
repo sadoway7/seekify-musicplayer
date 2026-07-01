@@ -5,6 +5,7 @@ import (
 	"musicapp/internal/store"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -64,11 +65,24 @@ func StartWatcher() {
 		}
 		time.Sleep(time.Duration(interval) * time.Second)
 
-		CheckAndRescan()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[watcher] panic recovered: %v\n%s", r, debug.Stack())
+				}
+			}()
+			CheckAndRescan()
+		}()
 	}
 }
 
 func CheckAndRescan() {
+	// Don't rescan while a scan is already running (e.g. startup scan still
+	// in progress); the next watcher tick will pick up the changes.
+	if scanning.Load() {
+		return
+	}
+
 	dirs := []struct {
 		dir    string
 		prefix string

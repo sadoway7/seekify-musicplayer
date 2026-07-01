@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -176,6 +177,11 @@ func ScanMetadataForTracks() models.MetadataScanResult {
 
 	worker := func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[metadata-scan] worker panic recovered: %v\n%s", r, debug.Stack())
+			}
+		}()
 		for info := range trackCh {
 			MetaScanLock.Lock()
 			MetaScan.Scanned++
@@ -394,11 +400,11 @@ func ApplyApprovedMatches() int {
 	}
 
 	if applied > 0 {
-		RebuildAlbumsFromTracks()
+		rebuildAlbumsFromTracksLocked()
 	}
 	store.Mu.Unlock()
 
-	go func() {
+	store.SafeGo("apply-covers", func() {
 		for _, job := range coverJobs {
 			if store.IsCustomCover(job.trackAlbumID) {
 				continue
@@ -453,15 +459,26 @@ func ApplyApprovedMatches() int {
 				}
 			}
 
-			FetchAndCacheCover(job.trackAlbumID, job.artist, job.album)
-			time.Sleep(800 * time.Millisecond)
+		FetchAndCacheCover(job.trackAlbumID, job.artist, job.album)
+		time.Sleep(800 * time.Millisecond)
 		}
-	}()
+	})
 
 	return applied
 }
 
-func RebuildAlbumsFromTracks() {
+// RebuildAlbumsFromTracksLocked rebuilds store.Albums from the current
+// store.Tracks map and persists each album via DbUpsertAlbum.
+//
+// MUST be called under store.Mu.Lock() — it reads store.Tracks and rewrites
+// store.Albums without taking the lock itself.
+func RebuildAlbumsFromTracksLocked() {
+	rebuildAlbumsFromTracksLocked()
+}
+
+// rebuildAlbumsFromTracksLocked is the unexported implementation; see
+// RebuildAlbumsFromTracksLocked for the contract.
+func rebuildAlbumsFromTracksLocked() {
 	newAlbums := make(map[string]*models.Album)
 	coverDir := filepath.Join(store.MusicDir, "images")
 	for _, t := range store.Tracks {

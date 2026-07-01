@@ -138,6 +138,9 @@ const Player = {
     }
 
     if (this._consecutiveErrors >= this.queue.length) {
+      if (typeof UI !== 'undefined' && UI.showToast) {
+        UI.showToast('All tracks in queue unavailable — playback stopped');
+      }
       if (this.onStateChange) this.onStateChange();
       return;
     }

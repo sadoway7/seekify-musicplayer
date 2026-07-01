@@ -33,7 +33,7 @@ func MetadataScanHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	musicbrainz.MetaScanLock.Unlock()
 
-	go musicbrainz.ScanMetadataForTracks()
+	store.SafeGo("meta-scan", func() { musicbrainz.ScanMetadataForTracks() })
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -58,7 +58,7 @@ func MetadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 
 	store.DB.Exec("DELETE FROM metadata_matches WHERE track_id = ?", trackID)
 
-	go func() {
+	store.SafeGo("meta-rescan", func() {
 		searchTitle := track.Title
 		searchArtist := track.Artist
 		if searchTitle == "" || strings.ToLower(searchTitle) == strings.ToLower(scanner.TitleFromFilename(track.FilePath)) {
@@ -107,7 +107,7 @@ func MetadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 			inserted++
 		}
 		log.Printf("[metadata] Rescan complete: %d candidates found for %s - %s", inserted, searchArtist, searchTitle)
-	}()
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -412,7 +412,7 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
 		track.HasCover = false
 	}
-	musicbrainz.RebuildAlbumsFromTracks()
+	musicbrainz.RebuildAlbumsFromTracksLocked()
 	store.Mu.Unlock()
 
 	albumIDForCover := body.AlbumID

@@ -14,10 +14,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -235,6 +237,10 @@ func YtCommonArgs() []string {
 // whether it timed out (and was killed).
 func runDownloadCmd(jobID, ytdlpPath string, args []string) (output string, err error, timedOut bool) {
 	cmd := exec.Command(ytdlpPath, args...)
+	// Put yt-dlp in its own process group so we can kill the whole tree
+	// (ffmpeg/aria2c children). Without this, killing yt-dlp orphans its
+	// children which hold the stdout pipe open and block CombinedOutput forever.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	DownloadMu.Lock()
 	ActiveJobs[jobID] = cmd
 	ActiveJobTime[jobID] = time.Now()
@@ -249,15 +255,22 @@ func runDownloadCmd(jobID, ytdlpPath string, args []string) (output string, err 
 	done := make(chan struct{})
 	var out []byte
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[download-cmd] panic recovered: %v\n%s", r, debug.Stack())
+			}
+			close(done)
+		}()
 		out, err = cmd.CombinedOutput()
-		close(done)
 	}()
 	select {
 	case <-done:
 		return string(out), err, false
 	case <-time.After(DownloadTimeout):
 		if cmd.Process != nil {
-			cmd.Process.Kill()
+			// Kill the entire process group (negative pid) so yt-dlp's
+			// children (ffmpeg/aria2c) die with it instead of orphaning.
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 		<-done
 		return string(out), err, true
@@ -501,20 +514,25 @@ func CreateDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 		return nil, err
 	}
 
-	go ProcessDownloadQueue()
+	store.SafeGo("process-queue", func() { ProcessDownloadQueue() })
 	return job, nil
 }
 
 func ProcessDownloadQueue() {
-	DownloadMu.Lock()
-	if DownloadActive >= cap(DownloadSem) {
-		DownloadMu.Unlock()
+	// H7: acquire the concurrency slot BEFORE bumping the counter. Previously
+	// DownloadActive was incremented first, so concurrent spawners saw an
+	// inflated count and bailed out prematurely.
+	select {
+	case DownloadSem <- struct{}{}:
+	default:
 		return
 	}
+	DownloadMu.Lock()
 	DownloadActive++
 	DownloadMu.Unlock()
 
 	defer func() {
+		<-DownloadSem
 		DownloadMu.Lock()
 		DownloadActive--
 		DownloadMu.Unlock()
@@ -526,17 +544,16 @@ func ProcessDownloadQueue() {
 			return
 		}
 
-		DownloadMu.Lock()
-		if DownloadActive > cap(DownloadSem) {
-			DownloadMu.Unlock()
-			return
-		}
-		DownloadMu.Unlock()
-
 		job := &jobs[0]
-		DownloadSem <- struct{}{}
+		// H6: atomically claim the job so two concurrent queue goroutines can't
+		// both SELECT the same row. The WHERE status='queued' guard makes the
+		// UPDATE a CAS: only the first caller wins.
+		res, _ := store.DB.Exec(`UPDATE download_jobs SET status='searching' WHERE id=? AND status='queued'`, job.ID)
+		if n, _ := res.RowsAffected(); n == 0 {
+			continue // someone else claimed it; look at the next one
+		}
+
 		ProcessSingleDownload(job)
-		<-DownloadSem
 
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -651,7 +668,7 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) {
 
 	log.Printf("[download] Completed: %s - %s -> %s (%s)", job.Artist, job.Title, audioFile, quality)
 
-	go func() {
+	store.SafeGo("finalize-download", func() {
 		time.Sleep(1 * time.Second)
 		scanner.ScanSingleFile(audioFile)
 
@@ -681,7 +698,7 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) {
 			}
 			store.Mu.RUnlock()
 		}
-	}()
+	})
 }
 
 // ProcessSingleDownload routes a job to the configured source and handles
@@ -693,11 +710,11 @@ func ProcessSingleDownload(job *DownloadJob) {
 	// A job already marked Soulseek (e.g. resumed after selection) stays on
 	// the Soulseek path regardless of the global mode.
 	if job.Source == "soulseek" {
-		downloadFromSoulseek(job, -1)
+		downloadFromSoulseek(job)
 		return
 	}
 	if source == "soulseek" {
-		downloadFromSoulseek(job, -1)
+		downloadFromSoulseek(job)
 		return
 	}
 
@@ -711,11 +728,14 @@ func ProcessSingleDownload(job *DownloadJob) {
 		return
 	}
 	log.Printf("[download] YouTube failed for %q, falling back to Soulseek", job.SearchQuery)
-	job.Source = "soulseek"
+	// NOTE: do NOT set job.Source = "soulseek" here. Persisting it would pin the
+	// job to Soulseek, so a retry (after this fallback also fails) would skip
+	// YouTube entirely. Leaving Source unset lets ProcessSingleDownload
+	// re-evaluate getDownloadSource() on each attempt.
 	job.Error = ""
 	job.ProgressStage = ""
 	job.CompletedAt = ""
-	downloadFromSoulseek(job, -1)
+	downloadFromSoulseek(job)
 }
 
 // downloadFromYouTube runs the existing YouTube flow. It returns true when the
@@ -879,10 +899,11 @@ func downloadFromYouTube(job *DownloadJob) bool {
 	return true
 }
 
-// downloadFromSoulseek runs the Soulseek flow. selectedIdx < 0 means auto-pick
-// (search, auto-select on strong match, else surface the picker); >= 0 means a
-// user-selected candidate from the picker.
-func downloadFromSoulseek(job *DownloadJob, selectedIdx int) {
+// downloadFromSoulseek runs the Soulseek flow (auto-pick only; manual picks go
+// through ProcessSlskSelection). It searches, auto-selects on a strong match
+// and downloads that exact candidate by username+filename, else surfaces the
+// picker by populating CandidatesJSON.
+func downloadFromSoulseek(job *DownloadJob) {
 	if findSlsk() == "" || slskScriptPath() == "" {
 		job.Status = "failed"
 		job.Error = "Soulseek unavailable (python3 or script missing)"
@@ -900,46 +921,56 @@ func downloadFromSoulseek(job *DownloadJob, selectedIdx int) {
 
 	// Auto-pick path: search and either auto-download a strong match or surface
 	// the existing picker by populating CandidatesJSON in the UI shape.
-	if selectedIdx < 0 {
-		job.Status = "searching"
-		job.Source = "soulseek"
-		job.ProgressStage = "Searching Soulseek"
-		DbUpdateJob(job)
+	job.Status = "searching"
+	job.Source = "soulseek"
+	job.ProgressStage = "Searching Soulseek"
+	DbUpdateJob(job)
 
-		cands, serr := searchSlsk(slskQuery(job))
-		if serr != nil {
-			job.Status = "failed"
-			job.Error = "Soulseek search failed: " + serr.Error()
-			job.CompletedAt = time.Now().Format(time.RFC3339)
-			DbUpdateJob(job)
-			log.Printf("[download] soulseek search failed for %q: %v", job.SearchQuery, serr)
-			return
-		}
-		if idx, ok := autoPickSlsk(cands, job.Artist, job.Title); ok {
-			selectedIdx = idx
-		} else if len(cands) > 0 {
-			candJSON, jerr := slskCandidatesToJSON(cands)
-			if jerr != nil {
-				job.Status = "failed"
-				job.Error = "Failed to encode Soulseek candidates: " + jerr.Error()
-				job.CompletedAt = time.Now().Format(time.RFC3339)
-				DbUpdateJob(job)
-				return
+	cands, serr := searchSlsk(slskQuery(job))
+	if serr != nil {
+		job.Status = "failed"
+		job.Error = "Soulseek search failed: " + serr.Error()
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		log.Printf("[download] soulseek search failed for %q: %v", job.SearchQuery, serr)
+		return
+	}
+
+	// H2: match against the cleaned title (parentheticals stripped) the same way
+	// slskQuery builds the search, so "Money (Remastered 2011)" still matches the
+	// "Money" results the search actually returned.
+	minBr := store.GetSettingInt("slsk_min_bitrate", 0)
+	var dlUsername, dlFilename string
+	if idx, ok := autoPickSlsk(cands, job.Artist, slskCleanTitle(job.Title), minBr); ok {
+		for _, c := range cands {
+			if c.Index == idx {
+				dlUsername = c.Username
+				dlFilename = c.Filename
+				break
 			}
-			job.CandidatesJSON = candJSON
-			job.Status = "needs_selection"
-			job.Source = "soulseek"
-			job.ProgressStage = "Awaiting user selection"
-			DbUpdateJob(job)
-			log.Printf("[download] no strong Soulseek match for %q, waiting for user selection", job.SearchQuery)
-			return
-		} else {
+		}
+	} else if len(cands) > 0 {
+		candJSON, jerr := slskCandidatesToJSON(cands)
+		if jerr != nil {
 			job.Status = "failed"
-			job.Error = "No Soulseek results"
+			job.Error = "Failed to encode Soulseek candidates: " + jerr.Error()
 			job.CompletedAt = time.Now().Format(time.RFC3339)
 			DbUpdateJob(job)
 			return
 		}
+		job.CandidatesJSON = candJSON
+		job.Status = "needs_selection"
+		job.Source = "soulseek"
+		job.ProgressStage = "Awaiting user selection"
+		DbUpdateJob(job)
+		log.Printf("[download] no strong Soulseek match for %q, waiting for user selection", job.SearchQuery)
+		return
+	} else {
+		job.Status = "failed"
+		job.Error = "No Soulseek results"
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		return
 	}
 
 	job.Status = "downloading"
@@ -947,7 +978,7 @@ func downloadFromSoulseek(job *DownloadJob, selectedIdx int) {
 	job.ProgressStage = "Downloading via Soulseek"
 	DbUpdateJob(job)
 
-	audioFile, err := runSlskDownload(job, selectedIdx)
+	audioFile, err := runSlskDownload(job, dlUsername, dlFilename)
 	if err != nil {
 		job.Status = "failed"
 		job.Error = err.Error()
@@ -1272,7 +1303,9 @@ func ValidateAudioIntegrity(filePath string) (bool, string) {
 		return true, ""
 	}
 
-	cmd := exec.Command(ffprobePath,
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffprobePath,
 		"-v", "error",
 		"-show_entries", "format=duration,size:stream=codec_type",
 		"-of", "json",
@@ -1339,8 +1372,11 @@ func TagAudioFile(filePath, artist, title, album string, trackNum, trackTotal in
 	}
 	args = append(args, "-c", "copy", tmpFile)
 
-	cmd := exec.Command(ffmpegPath, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
 	if err := cmd.Run(); err != nil {
+		log.Printf("[download] WARNING: tag write failed for %s: %v", filePath, err)
 		os.Remove(tmpFile)
 		return
 	}
@@ -1373,7 +1409,9 @@ func ProbeAudioQuality(filePath string) string {
 		return ""
 	}
 
-	cmd := exec.Command(ffprobePath,
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffprobePath,
 		"-v", "quiet",
 		"-select_streams", "a:0",
 		"-show_entries", "stream=codec_name,bit_rate,sample_rate,bits_per_raw_sample",
@@ -1444,27 +1482,41 @@ func DownloadWatchdog() {
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		DownloadMu.Lock()
-		now := time.Now()
-		for jobID, startTime := range ActiveJobTime {
-			if now.Sub(startTime) > DownloadTimeout+time.Minute {
-				if cmd, ok := ActiveJobs[jobID]; ok && cmd.Process != nil {
-					log.Printf("[download-watchdog] Killing stalled job %s (running %v)", jobID, now.Sub(startTime))
-					cmd.Process.Kill()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[download-watchdog] panic recovered: %v\n%s", r, debug.Stack())
+				}
+			}()
+
+			DownloadMu.Lock()
+			now := time.Now()
+			for jobID, startTime := range ActiveJobTime {
+				if now.Sub(startTime) > DownloadTimeout+time.Minute {
+					if cmd, ok := ActiveJobs[jobID]; ok && cmd.Process != nil {
+						log.Printf("[download-watchdog] Killing stalled job %s (running %v)", jobID, now.Sub(startTime))
+						cmd.Process.Kill()
+					}
+					// H11: remove the killed job so the watchdog doesn't re-kill
+					// it every tick forever. The owning runDownloadCmd/runSlskDownload
+					// defer also cleans up, but those may be blocked on the killed
+					// process's IO; clearing here is belt-and-suspenders.
+					delete(ActiveJobs, jobID)
+					delete(ActiveJobTime, jobID)
 				}
 			}
-		}
-		DownloadMu.Unlock()
-
-		jobs, _ := DbGetQueuedJobs()
-		if len(jobs) > 0 {
-			DownloadMu.Lock()
-			active := DownloadActive
 			DownloadMu.Unlock()
-			if active < cap(DownloadSem) {
-				go ProcessDownloadQueue()
+
+			jobs, _ := DbGetQueuedJobs()
+			if len(jobs) > 0 {
+				DownloadMu.Lock()
+				active := DownloadActive
+				DownloadMu.Unlock()
+				if active < cap(DownloadSem) {
+					store.SafeGo("process-queue", func() { ProcessDownloadQueue() })
+				}
 			}
-		}
+		}()
 	}
 }
 

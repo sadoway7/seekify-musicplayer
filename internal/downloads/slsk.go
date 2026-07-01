@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -150,7 +151,7 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 
 	args := []string{
 		script, "--search-only",
-		"--username", user, "--password", pass,
+		"--username", user,
 		"--share", SlskShareDir(),
 		"--query", query,
 		"--out", store.MusicDir,
@@ -164,7 +165,10 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), SearchTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, python, args...).Output()
+	c := exec.CommandContext(ctx, python, args...)
+	// H8: password via env, not argv.
+	c.Env = append(os.Environ(), "SLSK_PASSWORD="+pass)
+	out, err := c.Output()
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, fmt.Errorf("soulseek search timed out after %v", SearchTimeout)
 	}
@@ -186,9 +190,10 @@ func searchSlsk(query string) ([]slskRawCandidate, error) {
 // (see js/ui.js _showCandidateModal). Soulseek reuses that modal by mapping
 // its candidates onto these fields.
 type slskCandidateUI struct {
-	VideoID  string `json:"videoId"` // strconv.Itoa(index) — UI treats it as an opaque id
-	Title    string `json:"title"`   // basename of the Soulseek filename
-	Channel  string `json:"channel"` // Soulseek username
+	VideoID  string `json:"videoId"`  // strconv.Itoa(index) — UI treats it as an opaque id
+	Title    string `json:"title"`    // basename of the Soulseek filename
+	Channel  string `json:"channel"`  // Soulseek username
+	Filename string `json:"filename"` // full remote filename (used for direct download)
 	Duration int    `json:"duration"`
 	Score    int    `json:"score"`
 }
@@ -206,6 +211,7 @@ func slskCandidatesToJSON(cands []slskRawCandidate) (string, error) {
 			VideoID:  strconv.Itoa(c.Index),
 			Title:    filepath.Base(c.Filename),
 			Channel:  c.Username,
+			Filename: c.Filename,
 			Duration: dur,
 			Score:    50,
 		})
@@ -234,7 +240,9 @@ func slskNormalize(s string) string {
 }
 
 // slskStrongMatch reports whether cand's filename contains both the (normalized)
-// artist and title. Used to decide auto-download vs surfacing the picker.
+// artist and title. The title is matched on word boundaries so that a short
+// title like "It" does not match inside the word "Hit" in some filename.
+// Used to decide auto-download vs surfacing the picker.
 func slskStrongMatch(cand slskRawCandidate, artist, title string) bool {
 	nf := slskNormalize(cand.Filename)
 	na := slskNormalize(artist)
@@ -242,16 +250,23 @@ func slskStrongMatch(cand slskRawCandidate, artist, title string) bool {
 	if na != "" && !strings.Contains(nf, na) {
 		return false
 	}
-	if nt != "" && !strings.Contains(nf, nt) {
-		return false
+	if nt != "" {
+		// ponytail: regexp.MatchString recompiles per call; fine here since
+		// strong-match runs over a small candidate list, not a hot path. Upgrade
+		// to a precompiled pool if matching ever shows up in a profile.
+		pattern := `(?:^|\s)` + regexp.QuoteMeta(nt) + `(?:\s|$)`
+		if ok, _ := regexp.MatchString(pattern, nf); !ok {
+			return false
+		}
 	}
 	return true
 }
 
 // autoPickSlsk returns the index of the first strong-match candidate, preferring
-// FLAC over MP3 when both match. Returns (-1, false) when no strong match exists
-// (the caller should then surface the manual picker).
-func autoPickSlsk(cands []slskRawCandidate, artist, title string) (int, bool) {
+// FLAC over MP3 when both match. MP3 candidates below minBitrate are skipped
+// (set minBitrate<=0 to disable the bitrate filter). Returns (-1, false) when
+// no strong match exists (the caller should then surface the manual picker).
+func autoPickSlsk(cands []slskRawCandidate, artist, title string, minBitrate int) (int, bool) {
 	firstFlac := -1
 	firstMp3 := -1
 	for _, c := range cands {
@@ -273,6 +288,15 @@ func autoPickSlsk(cands []slskRawCandidate, artist, title string) (int, bool) {
 				firstFlac = c.Index
 			}
 		case "mp3":
+			// Honor the configured minimum bitrate. A missing bitrate is treated
+			// as 0, matching the python picker's `(bitrate or 0) >= min` filter.
+			br := 0
+			if c.Bitrate != nil {
+				br = *c.Bitrate
+			}
+			if minBitrate > 0 && br < minBitrate {
+				continue
+			}
 			if firstMp3 == -1 {
 				firstMp3 = c.Index
 			}
@@ -287,13 +311,17 @@ func autoPickSlsk(cands []slskRawCandidate, artist, title string) (int, bool) {
 	return -1, false
 }
 
-// runSlskDownload execs the script in download mode. When selectedIdx >= 0 the
-// chosen candidate is downloaded via --select; otherwise (auto) the script
-// picks internally. Returns the absolute path of the downloaded file.
+// runSlskDownload execs the script in download mode. When dlUsername and
+// dlFilename are both non-empty the script downloads that exact file directly
+// (no re-search); otherwise the script auto-picks internally. Returns the
+// absolute path of the downloaded file.
+//
+// The password is passed via the SLSK_PASSWORD env var (never argv) so it is
+// not visible in `ps`.
 //
 // The running *exec.Cmd is registered in ActiveJobs under DownloadMu exactly
 // like runDownloadCmd, so the download is cancellable/introspectable.
-func runSlskDownload(job *DownloadJob, selectedIdx int) (string, error) {
+func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, error) {
 	python := findSlsk()
 	if python == "" {
 		return "", fmt.Errorf("python3 not found")
@@ -317,18 +345,21 @@ func runSlskDownload(job *DownloadJob, selectedIdx int) (string, error) {
 
 	args := []string{
 		script,
-		"--username", user, "--password", pass,
+		"--username", user,
 		"--share", SlskShareDir(),
 		"--query", slskQuery(job),
 		"--out", destDir,
 	}
-	if selectedIdx >= 0 {
-		args = append(args, "--select", strconv.Itoa(selectedIdx))
+	if dlUsername != "" && dlFilename != "" {
+		// Direct download (C6): download the exact file the caller already chose.
+		args = append(args, "--dl-username", dlUsername, "--dl-filename", dlFilename)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), DownloadTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, python, args...)
+	// H8: password via env, not argv.
+	cmd.Env = append(os.Environ(), "SLSK_PASSWORD="+pass)
 
 	// Register the cmd so watchdog/cancel can see it (mirrors runDownloadCmd).
 	DownloadMu.Lock()
@@ -344,9 +375,11 @@ func runSlskDownload(job *DownloadJob, selectedIdx int) (string, error) {
 
 	out, err := cmd.Output()
 	if ctx.Err() == context.DeadlineExceeded {
+		slskCleanupIncomplete(destDir)
 		return "", fmt.Errorf("soulseek timed out after %v", DownloadTimeout)
 	}
 	if err != nil {
+		slskCleanupIncomplete(destDir)
 		return "", fmt.Errorf("soulseek failed: %s", strings.TrimSpace(string(out)))
 	}
 
@@ -366,26 +399,63 @@ func runSlskDownload(job *DownloadJob, selectedIdx int) (string, error) {
 		}
 	}
 	if !decoded || res.Path == "" {
+		slskCleanupIncomplete(destDir)
 		return "", fmt.Errorf("soulseek reported no downloaded file")
 	}
 	return res.Path, nil
 }
 
+// slskCleanupIncomplete removes .incomplete files aioslsk leaves in destDir.
+// It is best-effort: glob/list errors are ignored.
+func slskCleanupIncomplete(destDir string) {
+	matches, _ := filepath.Glob(filepath.Join(destDir, "*.incomplete"))
+	for _, m := range matches {
+		os.Remove(m)
+	}
+}
+
 // ProcessSlskSelection is the entry point invoked by the selection handler when
-// a user picks a Soulseek candidate from the picker. It runs the download then
-// the shared post-download finalization (validate/tag/scan/playlist).
+// a user picks a Soulseek candidate from the picker. It resolves the chosen
+// candidate (by index) from job.CandidatesJSON so the exact username/filename
+// can be downloaded directly (no re-search), then runs the shared post-download
+// finalization (validate/tag/scan/playlist).
 func ProcessSlskSelection(job *DownloadJob, idx int) {
 	// Honor the same concurrency cap as the download queue (cap(DownloadSem) == 3)
 	// so manual Soulseek picks can't exceed the global download limit.
 	DownloadSem <- struct{}{}
 	defer func() { <-DownloadSem }()
 
+	// C6: download the exact file the user picked. The picker stores candidates
+	// in job.CandidatesJSON (slskCandidateUI shape); resolve the picked index to
+	// its username + filename so the python script downloads directly without a
+	// non-deterministic re-search that could map the index to a different file.
+	var dlUsername, dlFilename string
+	var entries []slskCandidateUI
+	if json.Unmarshal([]byte(job.CandidatesJSON), &entries) == nil {
+		want := strconv.Itoa(idx)
+		for _, e := range entries {
+			if e.VideoID == want {
+				dlUsername = e.Channel
+				dlFilename = e.Filename
+				break
+			}
+		}
+	}
+	if dlUsername == "" || dlFilename == "" {
+		job.Status = "failed"
+		job.Error = "Selected candidate no longer available"
+		job.CompletedAt = time.Now().Format(time.RFC3339)
+		DbUpdateJob(job)
+		log.Printf("[download] soulseek selection %d for %q could not be resolved from stored candidates", idx, job.SearchQuery)
+		return
+	}
+
 	job.Status = "downloading"
 	job.Source = "soulseek"
 	job.ProgressStage = "Downloading via Soulseek"
 	DbUpdateJob(job)
 
-	audioFile, err := runSlskDownload(job, idx)
+	audioFile, err := runSlskDownload(job, dlUsername, dlFilename)
 	if err != nil {
 		job.Status = "failed"
 		job.Error = err.Error()
@@ -533,7 +603,7 @@ func TestSlskConnection(username, password, shareDir string) (bool, string, erro
 
 	args := []string{
 		script, "--test",
-		"--username", username, "--password", password,
+		"--username", username,
 		"--share", shareDir,
 	}
 
@@ -541,6 +611,8 @@ func TestSlskConnection(username, password, shareDir string) (bool, string, erro
 	defer cancel()
 	var stderr strings.Builder
 	cmd := exec.CommandContext(ctx, python, args...)
+	// H8: password via env, not argv.
+	cmd.Env = append(os.Environ(), "SLSK_PASSWORD="+password)
 	cmd.Stderr = &stderr
 	out, runErr := cmd.Output()
 	if ctx.Err() == context.DeadlineExceeded {

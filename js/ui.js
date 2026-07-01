@@ -1202,6 +1202,7 @@ const UI = {
     if (this._downloadPollInterval) { clearInterval(this._downloadPollInterval); this._downloadPollInterval = null; }
     if (this._reviewScrollObserver) { this._reviewScrollObserver.disconnect(); this._reviewScrollObserver = null; }
     if (this._finderStatusPoll) { clearTimeout(this._finderStatusPoll); this._finderStatusPoll = null; }
+    if (typeof RipperV2 !== 'undefined' && RipperV2._pollTimer) { clearInterval(RipperV2._pollTimer); RipperV2._pollTimer = null; }
   },
 
   renderPage() {
@@ -2424,11 +2425,13 @@ const UI = {
     this._viewTrackList = [];
     this._reviewOffset = 0;
     this._reviewTotal = 0;
+    this._reviewUnfilteredTotal = 0;
     this.els.content.innerHTML = '<div class="loading-spinner"></div>';
 
+    const flags = this._reviewFlags || [];
     let data;
     try {
-      data = await Api.getReviewTracks(0, 200);
+      data = await Api.getReviewTracks(0, 200, flags);
     } catch (e) { data = { tracks: [], total: 0 }; }
     const tracks = data.tracks || [];
     this._reviewTotal = data.total || 0;
@@ -2445,12 +2448,15 @@ const UI = {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" id="review-recheck-btn">' + Icons.refresh() + '<span>Recheck</span></button>'
-      + (tracks.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-all">' + Icons.trash() + '<span>Delete All</span></button>' : '')
+      + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn" data-action="approve-review-shown">' + Icons.check() + '<span>Approve Shown</span></button>' : '')
+      + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-shown">' + Icons.trash() + '<span>Delete Shown</span></button>' : '')
       + '</div>'
       + '</div>';
 
+    html += this._renderReviewFilters(flags);
+
     if (tracks.length === 0) {
-      html += this._emptyState('All clear', 'No tracks need review right now', Icons.checkCircle());
+      html += this._emptyState('All clear', flags.length > 0 ? 'No tracks match the selected filters' : 'No tracks need review right now', Icons.checkCircle());
     } else {
       html += '<div id="review-track-list-container">' + this._renderReviewTrackList(tracks) + '</div>';
       if (this._reviewOffset < this._reviewTotal) {
@@ -2492,6 +2498,45 @@ const UI = {
     });
   },
 
+  _renderReviewFilters(activeFlags) {
+    const active = activeFlags || [];
+    const flags = [
+      'missing_title', 'missing_artist', 'missing_album', 'missing_track_number',
+      'missing_genre', 'no_cover', 'suspicious_title', 'suspicious_video',
+      'suspicious_cover', 'filename_derived', 'artist_equals_title',
+      'very_short_title', 'very_long_title', 'short_duration', 'long_duration',
+      'potential_duplicate'
+    ];
+    let html = '<div class="review-filter-chips">';
+    const allActive = active.length === 0;
+    html += '<button class="review-filter-chip' + (allActive ? ' active' : '') + '" data-flag="">All</button>';
+    for (const f of flags) {
+      const isOn = active.indexOf(f) !== -1;
+      html += '<button class="review-filter-chip' + (isOn ? ' active' : '') + '" data-flag="' + f + '">' + ReviewUI.flagLabel(f) + '</button>';
+    }
+    html += '</div>';
+    return html;
+  },
+
+  _setupReviewFilters() {
+    const container = this.els.content.querySelector('.review-filter-chips');
+    if (!container) return;
+    container.addEventListener('click', (e) => {
+      const chip = e.target.closest('.review-filter-chip');
+      if (!chip) return;
+      const flag = chip.getAttribute('data-flag');
+      let current = (this._reviewFlags || []).slice();
+      if (!flag) {
+        current = [];
+      } else {
+        const idx = current.indexOf(flag);
+        if (idx === -1) current.push(flag); else current.splice(idx, 1);
+      }
+      this._reviewFlags = current;
+      this.renderNeedsReview();
+    });
+  },
+
   _setupReviewScrollLoader() {
     const trigger = document.getElementById('review-load-trigger');
     if (!trigger) return;
@@ -2511,7 +2556,7 @@ const UI = {
 
     let data;
     try {
-      data = await Api.getReviewTracks(this._reviewOffset, 200);
+      data = await Api.getReviewTracks(this._reviewOffset, 200, this._reviewFlags || []);
     } catch (e) { data = { tracks: [], total: 0 }; }
     const more = data.tracks || [];
     this._reviewTotal = data.total || this._reviewTotal;
@@ -2536,7 +2581,8 @@ const UI = {
       newTrigger.style.cssText = 'text-align:center;padding:24px;color:var(--text-muted)';
       newTrigger.textContent = 'Scroll for more...';
       this.els.content.appendChild(newTrigger);
-      this._setupReviewScrollLoader();
+    this._setupReviewScrollLoader();
+    this._setupReviewFilters();
     }
   },
 
@@ -4392,11 +4438,12 @@ const UI = {
       + '<input type="url" id="setting-cookies-store-url" class="settings-input" placeholder="https://chromewebstore.google.com/..." style="width:100%"></div>'
       + '<div class="settings-section-desc" style="font-size:12px">Using the .zip: unzip it, open chrome://extensions, enable Developer mode, click Load unpacked, and select the folder. Then open the extension, enter this server address, and click Send.</div>';
 
-    const slskFields = '<div class="settings-section-desc">Soulseek is used as a fallback when YouTube fails, or as the only source. Requires a free Soulseek account and a shared folder (give-to-get). Falls back gracefully if disabled or unconfigured.</div>'
-      + '<div class="settings-field"><label>Download Source</label>'
+    const srcFields = '<div class="settings-field"><label>Download Source</label>'
       + '<select id="setting-download-source" class="settings-select">'
       + '<option value="auto">Auto — YouTube, then Soulseek</option><option value="youtube">YouTube only</option><option value="soulseek">Soulseek only</option>'
-      + '</select></div>'
+      + '</select></div>';
+
+    const slskFields = '<div class="settings-section-desc">Soulseek is used as a fallback when YouTube fails, or as the only source. Requires a free Soulseek account and a shared folder (give-to-get). Falls back gracefully if disabled or unconfigured.</div>'
       + st('setting-slsk-enabled', 'Enable Soulseek', 'Use Soulseek as a fallback or primary download source')
       + '<div class="settings-field"><label>Soulseek Username</label>'
       + '<input type="text" id="setting-slsk-username" class="settings-input" placeholder="your soulseek username"></div>'
@@ -4413,7 +4460,8 @@ const UI = {
       + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
       + '<input type="text" id="setting-slsk-min-bitrate" class="settings-input" placeholder="192"></div>';
 
-    const fields = sec('Download Format', fmtFields)
+    const fields = sec('Download Source', srcFields)
+      + sec('Download Format', fmtFields)
       + sec('YouTube Authentication', ytFields)
       + sec('Browser Extension', extFields)
       + sec('Soulseek', slskFields);
@@ -7082,8 +7130,26 @@ const UI = {
       this.navigateTo('needs-review');
       return;
     }
-    if (action === 'delete-review-all') {
-      ReviewUI.deleteAllFlagged(() => this.renderNeedsReview());
+    if (action === 'approve-review-shown') {
+      const flags = this._reviewFlags || [];
+      Api.reviewBulkApprove(flags).then(() => {
+        this._showToast('Approved ' + this._reviewTotal + ' tracks');
+        this.navigateTo('needs-review');
+      }).catch(() => this._showToast('Approve failed'));
+      return;
+    }
+    if (action === 'delete-review-shown') {
+      const flags = this._reviewFlags || [];
+      const count = this._reviewTotal;
+      this.showConfirm('Delete ' + count + ' shown tracks? This cannot be undone.', async () => {
+        try {
+          await Api.reviewBulkDelete(flags);
+          this._showToast('Deleted ' + count + ' tracks');
+          this.navigateTo('needs-review');
+        } catch (e) {
+          this._showToast('Delete failed');
+        }
+      });
       return;
     }
     if (action === 'shuffle' || action === 'shuffle-all') {

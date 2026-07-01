@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 )
 
 func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
@@ -229,12 +232,18 @@ func YoutubeSearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command(ytdlpPath,
+	ytDlpSem <- struct{}{}
+	defer func() { <-ytDlpSem }()
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",
 		fmt.Sprintf("ytsearch10:%s", q),
 	)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	output, err := cmd.Output()
 	if err != nil {
 		json.NewEncoder(w).Encode([]interface{}{})

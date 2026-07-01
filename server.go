@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -114,6 +115,12 @@ func main() {
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[startup] panic recovered: %v\n%s", r, debug.Stack())
+			}
+		}()
+
 		// Check if file counts match DB — skip full scan if nothing changed.
 		// Done here (in the goroutine) rather than in main() so startup is not
 		// blocked by a full tree walk on every boot; the DB-loaded library is
@@ -190,10 +197,13 @@ func main() {
 		review.SeedMissingReviewTracks()
 		review.CleanupOldReviewFlags()
 		review.CleanupOrphanedReviews()
+		store.DbCleanupFavorites()
+		store.DbCleanupRecent()
+		store.DbCleanupPlaylistTracks()
 	}()
 
-	go musicbrainz.FetchMissingCovers()
-	go musicbrainz.FetchMissingArtistArt()
+	store.SafeGo("fetch-covers", func() { musicbrainz.FetchMissingCovers() })
+	store.SafeGo("fetch-artist-art", func() { musicbrainz.FetchMissingArtistArt() })
 	go scanner.StartWatcher()
 	go watched.StartWatchScheduler()
 	go downloads.DownloadWatchdog()
@@ -320,6 +330,8 @@ func main() {
 	mux.HandleFunc("/api/review/clear-cover", handlers.ClearCustomCoverHandler)
 	mux.HandleFunc("/api/review/delete", review.ReviewDeleteHandler)
 	mux.HandleFunc("/api/review/delete-all", review.ReviewDeleteAllHandler)
+	mux.HandleFunc("/api/review/bulk-delete", review.ReviewBulkDeleteHandler)
+	mux.HandleFunc("/api/review/bulk-approve", review.ReviewBulkApproveHandler)
 	mux.HandleFunc("/api/review/recheck-all", review.ReviewRecheckAllHandler)
 	mux.HandleFunc("/api/review/progress", review.ReviewProgressHandler)
 	mux.HandleFunc("/api/review/log", review.ReviewLogHandler)
@@ -347,10 +359,10 @@ func main() {
 	log.Printf("Starting server on %s", addr)
 	log.Printf("Open %s in your browser", url)
 
-	go func() {
+	store.SafeGo("open-browser", func() {
 		time.Sleep(500 * time.Millisecond)
 		handlers.OpenBrowser(url)
-	}()
+	})
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server error: %v", err)

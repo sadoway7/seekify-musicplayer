@@ -474,12 +474,21 @@ const Api = {
   },
 
   async testSlskConnect(payload) {
-    const res = await fetch('/api/soulseek/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    return res.json();
+    try {
+      const res = await fetch('/api/soulseek/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        let msg = 'Connection test failed';
+        try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+        return { error: msg };
+      }
+      return res.json();
+    } catch (e) {
+      return { error: 'Network error: ' + e.message };
+    }
   },
 
   async bulkImport(lines) {
@@ -626,9 +635,11 @@ const Api = {
     return res.json();
   },
 
-  async getReviewTracks(offset = 0, limit = 200) {
+  async getReviewTracks(offset = 0, limit = 200, flags = []) {
     try {
-      const res = await fetch('/api/review/tracks?offset=' + offset + '&limit=' + limit);
+      let url = '/api/review/tracks?offset=' + offset + '&limit=' + limit;
+      for (const f of flags) { url += '&flag=' + encodeURIComponent(f); }
+      const res = await fetch(url);
       if (!res.ok) return { tracks: [], total: 0 };
       const data = await res.json();
       if (!data || !Array.isArray(data.tracks)) return { tracks: [], total: 0 };
@@ -699,6 +710,26 @@ const Api = {
   async reviewDeleteAll() {
     const res = await fetch('/api/review/delete-all', { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete');
+    return res.json();
+  },
+
+  async reviewBulkDelete(flags = []) {
+    const res = await fetch('/api/review/bulk-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flags })
+    });
+    if (!res.ok) throw new Error('Failed to delete');
+    return res.json();
+  },
+
+  async reviewBulkApprove(flags = []) {
+    const res = await fetch('/api/review/bulk-approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flags })
+    });
+    if (!res.ok) throw new Error('Failed to approve');
     return res.json();
   },
 

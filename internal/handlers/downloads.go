@@ -309,7 +309,7 @@ func DownloadJobRetryHandler(w http.ResponseWriter, r *http.Request) {
 	job.CompletedAt = ""
 	downloads.DbUpdateJob(job)
 
-	go downloads.ProcessDownloadQueue()
+	store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(job)
@@ -374,9 +374,9 @@ func DownloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"invalid selection index"}`, http.StatusBadRequest)
 			return
 		}
-		go downloads.ProcessSlskSelection(job, idx)
+		store.SafeGo("slsk-selection", func() { downloads.ProcessSlskSelection(job, idx) })
 	} else {
-		go downloads.ProcessDownloadQueue()
+		store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
 	}
 
 	w.Header().Set("Content-Type", "application/json")

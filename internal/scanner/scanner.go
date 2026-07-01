@@ -9,9 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/dhowden/tag"
 )
+
+// scanning is true while a ScanMusicDirWithPrefixLocked pass is running.
+// The watcher checks it to avoid overlapping the startup scan.
+var scanning atomic.Bool
 
 // Callbacks set by main to avoid circular imports
 var (
@@ -60,6 +65,15 @@ func TitleFromFilename(path string) string {
 	return strings.TrimSuffix(name, ext)
 }
 
+// slskShareDir mirrors downloads.SlskShareDir without importing downloads
+// (scanner → downloads would be a circular dependency).
+func slskShareDir() string {
+	if d := store.GetSetting("slsk_share_dir", ""); d != "" {
+		return d
+	}
+	return filepath.Join(store.MusicDir, "shared")
+}
+
 func ScanMusicDir(dir string) models.ScanStats {
 	return ScanMusicDirWithPrefix(dir, "")
 }
@@ -71,6 +85,8 @@ func ScanMusicDirWithPrefix(dir string, prefix string) models.ScanStats {
 }
 
 func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
+	scanning.Store(true)
+	defer scanning.Store(false)
 	var stats models.ScanStats
 
 	newTracks := make(map[string]*models.Track)
@@ -78,12 +94,16 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	newCovers := make(map[string][]byte)
 	changedTracks := make(map[string]bool)
 
+	skipDir := filepath.Clean(slskShareDir())
 	var files []string
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
 		if info.IsDir() {
+			if path == skipDir || strings.HasPrefix(path, skipDir+string(filepath.Separator)) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
@@ -334,6 +354,25 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		}
 		for id, a := range newAlbums {
 			store.Albums[id] = a
+		}
+		// Prune media-dir tracks whose files disappeared since the last scan.
+		// The merge above only adds; files removed externally must be cleaned up
+		// here (same os.Stat pattern as the primary prune above).
+		prefixKey := prefix + ":"
+		for oldID, oldTrack := range store.Tracks {
+			if !strings.HasPrefix(oldTrack.FilePath, prefixKey) {
+				continue
+			}
+			if _, exists := newTracks[oldID]; exists {
+				continue
+			}
+			if _, err := os.Stat(ResolveFilePath(oldTrack.FilePath)); os.IsNotExist(err) {
+				store.DbDeleteTrack(oldID)
+				if DeleteReview != nil {
+					DeleteReview(oldID)
+				}
+				delete(store.Tracks, oldID)
+			}
 		}
 	}
 	store.Mu.Unlock()

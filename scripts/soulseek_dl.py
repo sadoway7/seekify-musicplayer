@@ -5,7 +5,8 @@ Modes
 -----
 * default (auto): search -> auto-pick best candidate -> download -> print JSON
 * --search-only  : search -> print a JSON array of candidates -> exit 0
-* --select <idx> : re-run the same search -> download candidate[idx] -> print JSON
+* --dl-username <u> --dl-filename <f> : download that exact file directly (no re-search)
+* --select <idx> : (DEPRECATED) re-run the same search -> download candidate[idx] -> print JSON
 * --test         : start + login only -> print {"ok": true, ...} or {"error": ...}
 
 Contract
@@ -39,19 +40,23 @@ import json
 import os
 import sys
 
-from aioslsk.client import SoulSeekClient
-from aioslsk.settings import (
-    Settings,
-    CredentialsSettings,
-    NetworkSettings,
-    ListeningSettings,
-    ListeningConnectionErrorMode,
-    SharesSettings,
-    SharedDirectorySettingEntry,
-)
-from aioslsk.shares.model import DirectoryShareMode
-from aioslsk.protocol.primitives import AttributeKey
-from aioslsk.transfer.state import TransferState
+try:
+    from aioslsk.client import SoulSeekClient
+    from aioslsk.settings import (
+        Settings,
+        CredentialsSettings,
+        NetworkSettings,
+        ListeningSettings,
+        ListeningConnectionErrorMode,
+        SharesSettings,
+        SharedDirectorySettingEntry,
+    )
+    from aioslsk.shares.model import DirectoryShareMode
+    from aioslsk.protocol.primitives import AttributeKey
+    from aioslsk.transfer.state import TransferState
+except ImportError:
+    print(json.dumps({"error": "aioslsk not installed. Run: pip install aioslsk (or use Docker where it's pre-installed)"}))
+    sys.exit(1)
 
 
 # --- errors / output --------------------------------------------------------
@@ -64,6 +69,21 @@ def emit_error(message: str) -> None:
 def emit(obj) -> None:
     """Print a single JSON object/array to stdout."""
     print(json.dumps(obj))
+
+
+def remove_local(transfer) -> None:
+    """Delete the .incomplete file aioslsk leaves behind on a failed transfer.
+
+    aioslsk writes in-progress downloads to ``settings.shares.download`` (pinned
+    to --out). On failure/abort the partial file is never cleaned up, so we do
+    it here to avoid polluting the real music library.
+    """
+    p = getattr(transfer, "local_path", None)
+    if p:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
 
 
 # --- candidate helpers ------------------------------------------------------
@@ -195,7 +215,7 @@ def build_client(args) -> SoulSeekClient:
             ),
         ),
         shares=SharesSettings(
-            scan_on_start=True,
+            scan_on_start=False,
             download=download_dir,
             directories=[
                 SharedDirectorySettingEntry(path=args.share, share_mode=DirectoryShareMode.EVERYONE)
@@ -259,10 +279,12 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
     try:
         ok = await await_completion(transfer)
     except Exception as e:
+        remove_local(transfer)
         emit_error(f"download failed: {e}")
         return 2
 
     if not ok:
+        remove_local(transfer)
         reason = getattr(transfer, "fail_reason", None) or getattr(transfer, "abort_reason", None) or "transfer did not complete"
         emit_error(f"download failed: {reason}")
         return 2
@@ -336,6 +358,17 @@ async def run(args) -> int:
             emit_error(f"auth/network: {e}")
             return 3
 
+        # Direct download mode (C6): download the exact user+filename the Go
+        # caller already chose, WITHOUT re-running the non-deterministic search.
+        # The search that produced the picker results may return a different
+        # ordering on a second invocation, so an index would map to another file.
+        if args.dl_username and args.dl_filename:
+            chosen = {
+                "username": args.dl_username,
+                "filename": args.dl_filename,
+            }
+            return await do_download(client, chosen, args)
+
         try:
             results = await gather_search(client, args.query)
         except Exception as e:
@@ -373,13 +406,15 @@ def build_argparser(test_mode: bool = False) -> argparse.ArgumentParser:
         description="One-shot Soulseek downloader (aioslsk). Exec'd per-download."
     )
     p.add_argument("--username", required=True, help="Soulseek username")
-    p.add_argument("--password", required=True, help="Soulseek password")
+    p.add_argument("--password", default=None, help="Soulseek password (or set SLSK_PASSWORD env var; env var preferred so it doesn't show in ps)")
     p.add_argument("--share", required=True, help="Directory to share (must exist/be shareable)")
     required = not test_mode
     p.add_argument("--query", required=required, help='Search query, e.g. "Artist - Title"')
     p.add_argument("--out", required=required, help="Output directory for downloaded files")
     p.add_argument("--search-only", action="store_true", help="Only search; print candidate array and exit")
-    p.add_argument("--select", type=int, default=None, help="0-based index of candidate to download (re-searches)")
+    p.add_argument("--select", type=int, default=None, help="(Deprecated) 0-based index of candidate to download (re-searches)")
+    p.add_argument("--dl-username", default=None, help="Direct download: sharer's username (downloads that exact file, no re-search)")
+    p.add_argument("--dl-filename", default=None, help="Direct download: remote filename path to download")
     p.add_argument("--min-bitrate", type=int, default=192, help="Minimum bitrate for auto-pick MP3s (default 192)")
     p.add_argument("--format", choices=["flac", "mp3", "any"], default="any", help="Preferred format filter for auto-pick (default any)")
     p.add_argument("--timeout", type=int, default=None, help="Overall timeout in seconds (overrides defaults)")
@@ -389,6 +424,14 @@ def build_argparser(test_mode: bool = False) -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argparser("--test" in sys.argv).parse_args()
+
+    # H8: password is read from the SLSK_PASSWORD env var (preferred) and falls
+    # back to --password. The env var is preferred because argv is visible in ps.
+    if not args.password:
+        args.password = os.environ.get("SLSK_PASSWORD")
+    if not args.password:
+        emit_error("no Soulseek password provided (set SLSK_PASSWORD env var or pass --password)")
+        sys.exit(3)
 
     # Default timeouts: test is quick, search-only is quick, downloads can be slow.
     if args.timeout is not None:

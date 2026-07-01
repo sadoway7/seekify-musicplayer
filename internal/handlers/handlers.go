@@ -17,6 +17,11 @@ import (
 	"strings"
 )
 
+// ytDlpSem caps concurrent ad-hoc yt-dlp invocations spawned by HTTP handlers
+// (URL resolve, search, cookie extract). Without it, a single request that
+// pastes 20 URLs spawns 20 yt-dlp processes at once.
+var ytDlpSem = make(chan struct{}, 3)
+
 func ScanHandler(w http.ResponseWriter, r *http.Request) {
 	stats := scanner.ScanMusicDir(store.MusicDir)
 
@@ -36,8 +41,8 @@ func ScanHandler(w http.ResponseWriter, r *http.Request) {
 	scanner.ExtractEmbeddedCovers()
 	log.Printf("Scan complete: %d scanned, %d added, %d removed", stats.Scanned, stats.Added, stats.Removed)
 
-	go musicbrainz.FetchMissingCovers()
-	go musicbrainz.FetchMissingArtistArt()
+	store.SafeGo("fetch-covers", func() { musicbrainz.FetchMissingCovers() })
+	store.SafeGo("fetch-artist-art", func() { musicbrainz.FetchMissingArtistArt() })
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)

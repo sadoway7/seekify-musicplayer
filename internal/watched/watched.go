@@ -8,6 +8,7 @@ import (
 	"musicapp/internal/downloads"
 	"musicapp/internal/store"
 	"os/exec"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -238,7 +239,14 @@ func StartWatchScheduler() {
 	go func() {
 		for {
 			time.Sleep(1 * time.Hour)
-			RefreshAllWatchedPlaylists()
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[watched] panic recovered: %v\n%s", r, debug.Stack())
+					}
+				}()
+				RefreshAllWatchedPlaylists()
+			}()
 		}
 	}()
 }

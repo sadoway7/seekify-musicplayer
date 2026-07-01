@@ -180,7 +180,7 @@ func WatchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 		store.DB.Exec("INSERT INTO watched_playlists (id, url, name, track_count, last_refresh, created_at) VALUES (?, ?, ?, 0, ?, ?)",
 			wp.ID, wp.URL, wp.Name, wp.CreatedAt, wp.CreatedAt)
 
-		go watched.RefreshWatchedPlaylist(wp)
+		store.SafeGo("watched-refresh", func() { watched.RefreshWatchedPlaylist(wp) })
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -222,7 +222,7 @@ func WatchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 			row.Scan(&wp.ID, &wp.URL, &wp.Name, &wp.TrackCount, &wp.LastRefresh, &watching, &wp.CreatedAt)
 			wp.Watching = watching == 1
 			if wp.ID != "" {
-				go watched.RefreshWatchedPlaylist(&wp)
+				store.SafeGo("watched-refresh", func() { watched.RefreshWatchedPlaylist(&wp) })
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")

@@ -584,7 +584,20 @@ func DbLoadAlbums() map[string]*models.Album {
 }
 
 func DbDeleteTrack(trackID string) {
-	DB.Exec(`DELETE FROM tracks WHERE id=?`, trackID)
+	tx, err := DB.Begin()
+	if err != nil {
+		DB.Exec(`DELETE FROM tracks WHERE id=?`, trackID)
+		return
+	}
+	defer tx.Rollback()
+	tx.Exec(`DELETE FROM tracks WHERE id=?`, trackID)
+	tx.Exec(`DELETE FROM favorites WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM recent WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM playlist_tracks WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM downloads WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM metadata_matches WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM track_reviews WHERE track_id=?`, trackID)
+	tx.Commit()
 }
 
 func DbDeleteAlbum(albumID string) {
@@ -597,6 +610,10 @@ func DbCleanupFavorites() {
 
 func DbCleanupRecent() {
 	DB.Exec(`DELETE FROM recent WHERE track_id NOT IN (SELECT id FROM tracks)`)
+}
+
+func DbCleanupPlaylistTracks() {
+	DB.Exec(`DELETE FROM playlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }
 
 // --- Download management ---

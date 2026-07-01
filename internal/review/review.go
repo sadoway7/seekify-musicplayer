@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -147,15 +148,29 @@ func DbGetReviewTracks(limit int) []models.Track {
 	}
 	store.Mu.RUnlock()
 	if len(orphanIDs) > 0 {
-		go cleanupOrphanedReviewIDs(orphanIDs)
+		store.SafeGo("review-cleanup", func() { cleanupOrphanedReviewIDs(orphanIDs) })
 	}
 	return result
 }
 
-func DbGetReviewTotal() int {
+func DbGetReviewTotal(flags ...string) int {
+	where, args := reviewFlagWhere(flags)
 	var count int
-	store.DB.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE status = 'needs_review'").Scan(&count)
+	store.DB.QueryRow("SELECT COUNT(*) FROM track_reviews WHERE "+where, args...).Scan(&count)
 	return count
+}
+
+func reviewFlagWhere(flags []string) (string, []interface{}) {
+	where := "status = 'needs_review'"
+	var args []interface{}
+	for _, f := range flags {
+		if f == "" {
+			continue
+		}
+		where += " AND flags LIKE ?"
+		args = append(args, `%"`+f+`"%`)
+	}
+	return where, args
 }
 
 func DbGetReviewForTrack(trackID string) (string, []string) {
@@ -169,8 +184,11 @@ func DbGetReviewForTrack(trackID string) (string, []string) {
 	return status, flags
 }
 
-func DbGetReviewTracksPage(limit, offset int) []models.Track {
-	rows, err := store.DB.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review' LIMIT ? OFFSET ?", limit, offset)
+func DbGetReviewTracksPage(limit, offset int, flags ...string) []models.Track {
+	where, args := reviewFlagWhere(flags)
+	query := "SELECT track_id, flags FROM track_reviews WHERE " + where + " LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+	rows, err := store.DB.Query(query, args...)
 	if err != nil {
 		return []models.Track{}
 	}
@@ -201,7 +219,7 @@ func DbGetReviewTracksPage(limit, offset int) []models.Track {
 	}
 	store.Mu.RUnlock()
 	if len(orphanIDs) > 0 {
-		go cleanupOrphanedReviewIDs(orphanIDs)
+		store.SafeGo("review-cleanup", func() { cleanupOrphanedReviewIDs(orphanIDs) })
 	}
 	return result
 }
@@ -439,7 +457,7 @@ func DbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 		store.DB.Exec("UPDATE tracks SET genre = ? WHERE id = ?", g, track.ID)
 	}
 
-	musicbrainz.RebuildAlbumsFromTracks()
+	musicbrainz.RebuildAlbumsFromTracksLocked()
 	store.Mu.Unlock()
 
 	DbSetReviewStatus(trackID, "reviewed_ok", "[]", "manual")
@@ -475,7 +493,7 @@ func ReviewDeleteTrack(trackID string) error {
 	delete(store.Tracks, trackID)
 	store.DbDeleteTrack(trackID)
 	DbDeleteReview(trackID)
-	musicbrainz.RebuildAlbumsFromTracks()
+	musicbrainz.RebuildAlbumsFromTracksLocked()
 	store.Mu.Unlock()
 
 	return nil
@@ -512,12 +530,83 @@ func ReviewDeleteAllFlagged() (int, error) {
 		store.DbDeleteTrack(it.id)
 		DbDeleteReview(it.id)
 	}
-	musicbrainz.RebuildAlbumsFromTracks()
+	musicbrainz.RebuildAlbumsFromTracksLocked()
 	store.Mu.Unlock()
 
 	if len(items) > 0 {
 		log.Printf("[review] Deleted all flagged tracks: %d removed", len(items))
 	}
+	return len(items), nil
+}
+
+func dbGetReviewIDs(flags []string) []string {
+	where, args := reviewFlagWhere(flags)
+	rows, err := store.DB.Query("SELECT track_id FROM track_reviews WHERE "+where, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func ReviewApproveFlagged(flags []string) (int, error) {
+	ids := dbGetReviewIDs(flags)
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	store.Mu.Lock()
+	for _, id := range ids {
+		DbSetReviewStatus(id, "reviewed_ok", "[]", "bulk-approve")
+		if t, ok := store.Tracks[id]; ok {
+			t.ReviewStatus = "reviewed_ok"
+			t.ReviewFlags = nil
+		}
+	}
+	store.Mu.Unlock()
+	return len(ids), nil
+}
+
+func ReviewDeleteFlagged(flags []string) (int, error) {
+	ids := dbGetReviewIDs(flags)
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	type item struct {
+		id   string
+		path string
+	}
+	items := make([]item, 0, len(ids))
+	store.Mu.RLock()
+	for _, id := range ids {
+		if track, exists := store.Tracks[id]; exists {
+			items = append(items, item{id, ResolveTrackFilePath(track)})
+		}
+	}
+	store.Mu.RUnlock()
+
+	for _, it := range items {
+		if err := os.Remove(it.path); err != nil && !os.IsNotExist(err) {
+			log.Printf("[review] bulk-delete: failed to remove %s: %v", it.path, err)
+		}
+	}
+
+	store.Mu.Lock()
+	for _, it := range items {
+		delete(store.Tracks, it.id)
+		store.DbDeleteTrack(it.id)
+		DbDeleteReview(it.id)
+	}
+	musicbrainz.RebuildAlbumsFromTracksLocked()
+	store.Mu.Unlock()
+
+	log.Printf("[review] Bulk deleted flagged tracks: %d removed", len(items))
 	return len(items), nil
 }
 
@@ -664,13 +753,13 @@ func CheckDuration(t *models.Track, otherFlags []string) []string {
 
 func CheckAllDuplicates() {
 	store.Mu.RLock()
-	byArtist := make(map[string][]*models.Track)
+	byArtist := make(map[string][]models.Track)
 	for _, t := range store.Tracks {
 		artistKey := strings.ToLower(strings.TrimSpace(t.Artist))
 		if artistKey == "" || artistKey == "unknown artist" {
 			continue
 		}
-		byArtist[artistKey] = append(byArtist[artistKey], t)
+		byArtist[artistKey] = append(byArtist[artistKey], *t)
 	}
 	store.Mu.RUnlock()
 
@@ -678,10 +767,11 @@ func CheckAllDuplicates() {
 		if len(artistTracks) < 2 {
 			continue
 		}
-		byTitle := make(map[string][]*models.Track)
-		for _, t := range artistTracks {
+		byTitle := make(map[string][]models.Track)
+		for i := range artistTracks {
+			t := &artistTracks[i]
 			titleKey := NormalizeForCompare(t.Title)
-			byTitle[titleKey] = append(byTitle[titleKey], t)
+			byTitle[titleKey] = append(byTitle[titleKey], *t)
 		}
 		checked := make(map[string]bool)
 		for _, titleGroup := range byTitle {
@@ -692,20 +782,21 @@ func CheckAllDuplicates() {
 				if checked[a.ID] {
 					continue
 				}
-				var group []*models.Track
-				for j, b := range titleGroup {
+				var group []models.Track
+				for j := range titleGroup {
+					b := &titleGroup[j]
 					if i == j || checked[b.ID] {
 						continue
 					}
 					if TitleSimilarity(a.Title, b.Title) >= 0.95 {
-						group = append(group, b)
+						group = append(group, *b)
 						checked[b.ID] = true
 					}
 				}
 				if len(group) > 0 {
 					group = append(group, a)
 					checked[a.ID] = true
-					best := PickBestQuality(group)
+					best := PickBestQuality(toPtrSlice(group))
 					for _, t := range group {
 						if t.ID == best.ID {
 							status, _ := DbGetReviewForTrack(t.ID)
@@ -732,6 +823,14 @@ func CheckAllDuplicates() {
 			}
 		}
 	}
+}
+
+func toPtrSlice(tracks []models.Track) []*models.Track {
+	out := make([]*models.Track, len(tracks))
+	for i := range tracks {
+		out[i] = &tracks[i]
+	}
+	return out
 }
 
 func TitleSimilarity(a, b string) float64 {
@@ -873,11 +972,17 @@ func StartReviewScheduler() {
 		ReviewActive = true
 		ReviewMu.Unlock()
 
-		worked := RunReviewBatch()
-
-		ReviewMu.Lock()
-		ReviewActive = false
-		ReviewMu.Unlock()
+		worked := func() (didWork bool) {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[review] panic recovered: %v\n%s", r, debug.Stack())
+				}
+				ReviewMu.Lock()
+				ReviewActive = false
+				ReviewMu.Unlock()
+			}()
+			return RunReviewBatch()
+		}()
 
 		if !worked {
 			hours := store.GetSettingInt("review_recheck_hours", 24)
@@ -917,15 +1022,16 @@ func RunReviewBatch() bool {
 	ReviewLogData.Unlock()
 
 	store.Mu.RLock()
-	var toCheck []*models.Track
+	var toCheck []models.Track
 	for _, id := range batch {
 		if t, ok := store.Tracks[id]; ok {
-			toCheck = append(toCheck, t)
+			toCheck = append(toCheck, *t)
 		}
 	}
 	store.Mu.RUnlock()
 
-	for _, t := range toCheck {
+	for idx := range toCheck {
+		t := &toCheck[idx]
 		ReviewProgressData.Lock()
 		ReviewProgressData.CurrentTrack = t.Title + " — " + t.Artist
 		ReviewProgressData.CurrentID = t.ID
@@ -1032,8 +1138,9 @@ func ReviewTracksHandler(w http.ResponseWriter, r *http.Request) {
 	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
 		offset = o
 	}
-	tracks := DbGetReviewTracksPage(limit, offset)
-	total := DbGetReviewTotal()
+	flags := r.URL.Query()["flag"]
+	tracks := DbGetReviewTracksPage(limit, offset, flags...)
+	total := DbGetReviewTotal(flags...)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"tracks": tracks,
@@ -1120,6 +1227,34 @@ func ReviewDeleteAllHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"deleted": count})
 }
 
+func ReviewBulkDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Flags []string `json:"flags"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	count, err := ReviewDeleteFlagged(body.Flags)
+	if err != nil {
+		http.Error(w, "Could not delete files", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"deleted": count})
+}
+
+func ReviewBulkApproveHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Flags []string `json:"flags"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	count, err := ReviewApproveFlagged(body.Flags)
+	if err != nil {
+		http.Error(w, "Could not approve", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"approved": count})
+}
+
 func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
 	DbResetAllReviews()
 	ReviewLogData.Lock()
@@ -1129,19 +1264,24 @@ func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"reset": true})
 
-	go func() {
+	store.SafeGo("review-recheck", func() {
 		ReviewMu.Lock()
 		if !ReviewActive {
 			ReviewActive = true
 			ReviewMu.Unlock()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[review-recheck] panic recovered: %v\n%s", r, debug.Stack())
+				}
+				ReviewMu.Lock()
+				ReviewActive = false
+				ReviewMu.Unlock()
+			}()
 			RunReviewBatch()
-			ReviewMu.Lock()
-			ReviewActive = false
-			ReviewMu.Unlock()
 		} else {
 			ReviewMu.Unlock()
 		}
-	}()
+	})
 }
 
 func ReviewProgressHandler(w http.ResponseWriter, r *http.Request) {

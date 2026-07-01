@@ -1,16 +1,21 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"musicapp/internal/downloads"
 	"musicapp/internal/musicbrainz"
+	"musicapp/internal/store"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 func RipperV2Handler(w http.ResponseWriter, r *http.Request) {
@@ -31,27 +36,40 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	parsedURL, err := url.Parse(req.URL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+		http.Error(w, `{"error":"Only HTTP(S) URLs are supported"}`, http.StatusBadRequest)
+		return
+	}
+
 	ytdlpPath := downloads.FindYtDlp()
 	if ytdlpPath == "" {
 		http.Error(w, `{"error":"yt-dlp not found"}`, http.StatusInternalServerError)
 		return
 	}
 
-	cmd := exec.Command(ytdlpPath,
+	ytDlpSem <- struct{}{}
+	defer func() { <-ytDlpSem }()
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",
 		req.URL,
 	)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	output, err := cmd.Output()
 	if err != nil {
-		cmd := exec.Command(ytdlpPath,
+		cmd := exec.CommandContext(ctx, ytdlpPath,
 			append(downloads.YtCommonArgs(),
 				"--dump-json",
 				"--no-warnings",
 				"--no-download",
 				req.URL,
 			)...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		output, err = cmd.Output()
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -113,7 +131,7 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if title != "" && artist != "" {
-		go func() {
+		store.SafeGo("resolve-mb-lookup", func() {
 			results, err := musicbrainz.MbSearchRecordings(artist, title, 5)
 			if err == nil && len(results) > 0 {
 				best := results[0]
@@ -122,7 +140,7 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 					log.Printf("[v2-resolve] MusicBrainz match: %s - %s (score %.0f)", best.Artist, best.Title, score)
 				}
 			}
-		}()
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -308,7 +326,9 @@ func EnrichWithPython(audioFile string, job *downloads.DownloadJob) {
 
 	metaJSON, _ := json.Marshal(meta)
 
-	cmd := exec.Command(pythonPath, scriptPath, "enrich", audioFile, string(metaJSON))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, pythonPath, scriptPath, "enrich", audioFile, string(metaJSON))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("[v2-enrich] Python enrich failed: %v — %s", err, string(output))
@@ -354,18 +374,21 @@ func V2SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var cmd *exec.Cmd
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
 	if req.Raw != "" {
-		cmd = exec.Command(pythonPath, scriptPath, "search", req.Raw)
+		cmd = exec.CommandContext(ctx, pythonPath, scriptPath, "search", req.Raw)
 	} else if req.Artist != "" && req.Title != "" {
 		limit := req.Limit
 		if limit <= 0 {
 			limit = 5
 		}
-		cmd = exec.Command(pythonPath, scriptPath, "search-mb", req.Artist, req.Title, fmt.Sprintf("%d", limit))
+		cmd = exec.CommandContext(ctx, pythonPath, scriptPath, "search-mb", req.Artist, req.Title, fmt.Sprintf("%d", limit))
 	} else {
 		http.Error(w, `{"error":"raw or artist+title required"}`, http.StatusBadRequest)
 		return
 	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -398,7 +421,10 @@ func V2LyricsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command(pythonPath, "scripts/enrich.py", "lyrics", artist, title)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, pythonPath, "scripts/enrich.py", "lyrics", artist, title)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	output, err := cmd.Output()
 	if err != nil {
 		http.Error(w, `{"found":false}`, http.StatusOK)

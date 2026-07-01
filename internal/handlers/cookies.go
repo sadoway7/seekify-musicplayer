@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -10,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 const maxCookiesSize = 1 * 1024 * 1024
@@ -133,15 +136,21 @@ func ExtractCookiesHandler(w http.ResponseWriter, r *http.Request) {
 	tmpFile := cookiesFilePath() + ".tmp"
 	os.Remove(tmpFile)
 
+	ytDlpSem <- struct{}{}
+	defer func() { <-ytDlpSem }()
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
 	// --skip-download triggers cookie extraction + metadata only (no video download).
 	// "Me at the zoo" is the first YouTube video — always available, minimal work.
-	cmd := exec.Command(ytdlpPath,
+	cmd := exec.CommandContext(ctx, ytdlpPath,
 		"--cookies-from-browser", req.Browser,
 		"--cookies", tmpFile,
 		"--skip-download",
 		"--no-warnings",
 		"https://www.youtube.com/watch?v=jNQXAC9IVRw",
 	)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		os.Remove(tmpFile)
