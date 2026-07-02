@@ -134,7 +134,11 @@ const Store = {
   getArtistTracks(name) {
     return this.library.tracks.filter(t =>
       t.artist === name || t.albumArtist === name
-    );
+    ).sort((a, b) => {
+      const albumCmp = (a.album || '').localeCompare(b.album || '');
+      if (albumCmp !== 0) return albumCmp;
+      return (a.trackNumber || 0) - (b.trackNumber || 0);
+    });
   },
 
   getArtistAlbums(name) {

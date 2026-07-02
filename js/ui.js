@@ -973,7 +973,7 @@ const UI = {
     }
     // Push current state to history before navigating
     if (Store.currentView && Store.currentView !== view) {
-      this._navHistory.push({ view: Store.currentView, data: Object.assign({}, Store.viewData) });
+      this._navHistory.push({ view: Store.currentView, data: Object.assign({}, Store.viewData), tab: Store.currentTab });
     }
     Store.currentView = view;
     Store.viewData = data || {};
@@ -988,6 +988,13 @@ const UI = {
       const prev = this._navHistory.pop();
       Store.currentView = prev.view;
       Store.viewData = prev.data;
+      if (prev.tab) {
+        Store.currentTab = prev.tab;
+        document.querySelectorAll('.tab-item').forEach(t => {
+          t.classList.toggle('active', t.dataset.tab === prev.tab);
+        });
+        this._updateTabIcons();
+      }
       this._clearPollTimers();
       this.renderPage();
       this.els.content.scrollTop = 0;

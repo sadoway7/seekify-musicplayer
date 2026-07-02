@@ -70,6 +70,7 @@ Object.assign(UI, {
     });
 
     if (this._finderTab === 'downloads') {
+      this._downloadsSig = null;
       this._loadDownloads();
       this._downloadPollTimer = setInterval(() => this._loadDownloads(), 3000);
       return;
