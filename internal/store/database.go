@@ -333,8 +333,14 @@ func dedupTracksByFilePath() {
 					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
-					// Resolve and delete the physical file
-					if fp != "" {
+					// Resolve and delete the physical file (primary library only).
+					// media: prefixed paths point into the read-only /media-music
+					// Docker mount (mounted as -v $MEDIA_MUSIC_PATH:/media-music),
+					// so the file cannot be deleted — os.Remove() would silently
+					// fail and the scanner would keep re-adding the orphaned track.
+					// For media: duplicates we only remove the DB entry; the shared
+					// file itself must stay for other services that read the mount.
+					if fp != "" && !strings.HasPrefix(fp, "media:") {
 						full := fp
 						if !filepath.IsAbs(full) {
 							full = filepath.Join(MusicDir, full)
@@ -343,6 +349,8 @@ func dedupTracksByFilePath() {
 							full = filepath.Join(MusicDir, fp)
 						}
 						deletedFiles = append(deletedFiles, full)
+					} else if fp != "" {
+						log.Printf("[db] Skipping file deletion for media: path (read-only mount): %s", fp)
 					}
 					removed++
 				}
