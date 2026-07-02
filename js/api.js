@@ -85,7 +85,7 @@ const Api = {
       return d;
     });
   },
-  metadataSearch(query) { return this._req('/api/metadata/search?q=' + encodeURIComponent(query), { fallback: [] }); },
+  metadataSearch(query, offset = 0, limit = 15) { return this._req('/api/metadata/search?q=' + encodeURIComponent(query) + '&offset=' + offset + '&limit=' + limit, { fallback: { candidates: [], total: 0, hasMore: false } }); },
 
   // ── POST/PUT/DELETE (throw on error) ──
   scan() { return this._req('/api/scan', { method: 'POST', errMsg: 'Scan failed' }); },

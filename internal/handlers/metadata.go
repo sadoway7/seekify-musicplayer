@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -212,7 +213,7 @@ func cleanRescanArtist(artist string) string {
 func MetadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
-		writeJSON(w, []interface{}{})
+		writeJSON(w, map[string]interface{}{"candidates": []interface{}{}, "total": 0, "hasMore": false})
 		return
 	}
 
@@ -227,9 +228,58 @@ func MetadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 	searchTitle = cleanRescanTitle(searchTitle)
 	searchArtist = cleanRescanArtist(searchArtist)
 
-	results := searchMBRecordings(searchArtist, searchTitle, 50)
+	// ponytail: small interactive page (fast path — single MB query, inline
+	// releases). "Find More" in the modal raises offset. Default 15 keeps
+	// mega-hits snappy; the old limit=50 + 4-cascade could fire ~200 HTTP calls.
+	limit := 15
+	offset := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
 
-	writeJSON(w, results)
+	candidates, total, err := musicbrainz.MbSearchRecordingsPaged(searchArtist, searchTitle, limit, offset)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"candidates": []interface{}{}, "total": 0, "hasMore": false})
+		return
+	}
+
+	out := make([]rescanCandidate, 0, len(candidates))
+	for _, cand := range candidates {
+		score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
+
+		store.Mu.RLock()
+		hasCover := false
+		if cand.AlbumID != "" {
+			coverPath := filepath.Join(store.MusicDir, "images", cand.AlbumID+".jpg")
+			if _, err := os.Stat(coverPath); err == nil {
+				hasCover = true
+			}
+		}
+		store.Mu.RUnlock()
+
+		out = append(out, rescanCandidate{
+			Title:    cand.Title,
+			Artist:   cand.Artist,
+			Album:    cand.Album,
+			AlbumID:  cand.AlbumID,
+			Score:    score,
+			HasCover: hasCover,
+		})
+	}
+
+	returned := offset + len(out)
+	writeJSON(w, map[string]interface{}{
+		"candidates": out,
+		"total":      total,
+		"hasMore":    returned < total,
+	})
 }
 
 func searchMBRecordings(searchArtist, searchTitle string, limit int) []rescanCandidate {

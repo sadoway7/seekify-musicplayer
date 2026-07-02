@@ -645,3 +645,71 @@ func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, e
 
 	return results, nil
 }
+
+// MbSearchRecordingsPaged is a fast variant of MbSearchRecordings for
+// interactive (modal) searches: it runs ONE Lucene query at the given offset,
+// uses the release list embedded in the search response (skipping the
+// expensive per-recording MbLookupBestRelease round-trip), and returns MB's
+// total hit count so callers can paginate.
+//
+// ponytail: trades "best release-type ranking" (Album vs Compilation) for
+// ~N× fewer HTTP calls; add a release-type picker if that distinction matters
+// in the modal.
+func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecordingResult, int, error) {
+	var results []MbRecordingResult
+
+	var query string
+	if artist != "" && title != "" {
+		query = fmt.Sprintf(`artist:"%s" AND recording:"%s"`, EscapeLucene(artist), EscapeLucene(title))
+	} else if title != "" {
+		query = fmt.Sprintf(`recording:"%s"`, EscapeLucene(title))
+	} else {
+		return results, 0, fmt.Errorf("no search terms")
+	}
+
+	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d&offset=%d", MbBaseURL, url.QueryEscape(query), limit, offset)
+
+	body, err := MbDoRequest(reqURL)
+	if err != nil {
+		return results, 0, err
+	}
+
+	var searchResp struct {
+		Count      int `json:"count"`
+		Recordings []struct {
+			ID           string           `json:"id"`
+			Title        string           `json:"title"`
+			ArtistCredit []MbArtistCredit `json:"artist-credit"`
+			Releases     []struct {
+				ID    string `json:"id"`
+				Title string `json:"title"`
+			} `json:"releases"`
+		} `json:"recordings"`
+	}
+
+	if err := json.Unmarshal(body, &searchResp); err != nil {
+		return results, 0, fmt.Errorf("invalid response from MusicBrainz: %v", err)
+	}
+
+	for _, rec := range searchResp.Recordings {
+		artistName := ""
+		if len(rec.ArtistCredit) > 0 {
+			artistName = rec.ArtistCredit[0].Name
+		}
+		albumName := ""
+		albumID := ""
+		if len(rec.Releases) > 0 {
+			albumName = rec.Releases[0].Title
+			albumID = rec.Releases[0].ID
+		}
+		results = append(results, MbRecordingResult{
+			RecordingID: rec.ID,
+			Title:       rec.Title,
+			Artist:      artistName,
+			Album:       albumName,
+			AlbumID:     albumID,
+		})
+	}
+
+	return results, searchResp.Count, nil
+}

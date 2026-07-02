@@ -364,7 +364,17 @@ Object.assign(UI, {
     searchInput.value = initialQuery;
     title.textContent = this._esc(track.title);
 
-    const renderCandidates = (candidates) => {
+    const renderCandidates = (candidates, hasMore, append) => {
+      // Merge with already-shown candidates (dedup by recording id-ish key).
+      if (append && this._rescanShown) {
+        const seen = new Set(this._rescanShown.map(c => c.title + '|' + c.artist));
+        candidates = candidates.filter(c => !seen.has(c.title + '|' + c.artist));
+        this._rescanShown = this._rescanShown.concat(candidates);
+        candidates = this._rescanShown;
+      } else {
+        this._rescanShown = candidates.slice();
+      }
+
       if (!candidates || candidates.length === 0) {
         list.innerHTML = this._emptyState('No matches found', 'Try a different search', Icons.search());
         return;
@@ -391,6 +401,10 @@ Object.assign(UI, {
           + '<span class="review-score ' + cls + '">' + pct + '%</span>'
           + '</div>';
       });
+
+      if (hasMore) {
+        html += '<button class="finder-load-more-btn" id="btn-rescan-find-more" style="margin:16px auto"><span>Find More</span></button>';
+      }
 
       list.innerHTML = html;
 
@@ -428,16 +442,30 @@ Object.assign(UI, {
           ReviewUI.updateForTrack(trackId);
         });
       });
+
+      const findMoreBtn = list.querySelector('#btn-rescan-find-more');
+      if (findMoreBtn) {
+        findMoreBtn.addEventListener('click', async () => {
+          findMoreBtn.disabled = true;
+          findMoreBtn.innerHTML = '<div class="progress-bar-track" style="width:80px"><div class="progress-bar-fill" style="animation:progress-pulse 1.8s ease-in-out infinite"></div></div>';
+          await doSearch(searchInput.value, true);
+        });
+      }
     };
 
-    const doSearch = async (query) => {
+    const doSearch = async (query, append = false) => {
       if (!query.trim()) return;
-      title.textContent = 'Searching...';
-      list.innerHTML = '<div class="loading-spinner" style="margin:24px auto"></div>';
+      if (!append) {
+        title.textContent = 'Searching...';
+        list.innerHTML = '<div class="loading-spinner" style="margin:24px auto"></div>';
+        this._rescanOffset = 0;
+        this._rescanShown = null;
+      }
       try {
-        const candidates = await Api.metadataSearch(query);
+        const res = await Api.metadataSearch(query, this._rescanOffset || 0);
+        this._rescanOffset = (this._rescanOffset || 0) + (res.candidates ? res.candidates.length : 0);
         title.textContent = this._esc(track.title);
-        renderCandidates(candidates);
+        renderCandidates(res.candidates || [], res.hasMore, append);
       } catch (err) {
         title.textContent = this._esc(track.title);
         list.innerHTML = this._emptyState('Search failed', 'Could not reach MusicBrainz', Icons.xCircle());
