@@ -435,11 +435,21 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 // PruneTruncatedTracks removes tracks with 0 duration — these are truncated
 // or corrupt downloads that slipped through before completeness validation
 // was added. Also removes the file from disk if it still exists.
+// PruneTruncatedTracks removes tracks with duration=0 whose file on disk is
+// very small (< 10KB), indicating a genuinely truncated/corrupt download.
+// Duration=0 alone is not enough — newly downloaded files may not have been
+// probed by ffprobe yet. We must not delete legitimately downloaded music.
 func PruneTruncatedTracks() int {
 	store.Mu.RLock()
 	var toDelete []string
 	for id, t := range store.Tracks {
-		if t.Duration == 0 {
+		if t.Duration != 0 {
+			continue
+		}
+		// Check the actual file size on disk — only prune if tiny
+		fp := ResolveFilePath(t.FilePath)
+		info, err := os.Stat(fp)
+		if err != nil || info.Size() < 10240 {
 			toDelete = append(toDelete, id)
 		}
 	}
