@@ -901,7 +901,7 @@ Object.assign(UI, {
 
   async _doBulkImport() {
     const input = document.getElementById('bulk-import-input');
-    const btn = document.getElementById('bulk-import-btn');
+    const btn = document.getElementById('btn-bulk-import') || document.getElementById('bulk-import-btn');
     if (!input || !input.value.trim()) return;
     if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
     try {

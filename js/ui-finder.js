@@ -121,6 +121,9 @@ Object.assign(UI, {
       });
     });
 
+    const bulkImportBtn = document.getElementById('btn-bulk-import');
+    if (bulkImportBtn) bulkImportBtn.addEventListener('click', () => this._doBulkImport());
+
     const importBtn = document.getElementById('btn-import-playlist');
     const urlInput = document.getElementById('playlist-url-input');
     if (importBtn && urlInput) {
