@@ -307,21 +307,18 @@ func dedupTracksByFilePath() {
 				if len(ids) <= 1 {
 					continue
 				}
-				hasNonZero := false
-				for _, id := range ids {
-					if durations[id] > 0 {
-						hasNonZero = true
-						break
-					}
-				}
-				if !hasNonZero {
-					continue
-				}
+				// Keep the best entry (already sorted: has_metadata DESC, duration
+				// DESC, mod_time DESC). Remove the rest from DB only — do NOT delete
+				// files, as these may be distinct downloads with the same tags.
+				// When all durations are 0 (un-probed Soulseek downloads), still
+				// dedup — keep the one with best metadata / most recent mod_time.
 				keepID := ids[0]
 				removed := 0
 				tx, _ := DB.Begin()
 				for _, dupID := range ids[1:] {
-					if durations[dupID] > 0 && durations[dupID] != durations[keepID] {
+					// If both have non-zero but different durations, keep both
+					// (could be different versions/remixes).
+					if durations[dupID] > 0 && durations[keepID] > 0 && durations[dupID] != durations[keepID] {
 						continue
 					}
 					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -336,7 +333,7 @@ func dedupTracksByFilePath() {
 				tx.Commit()
 				if removed > 0 {
 					deduped += removed
-					log.Printf("[db] Name deduped %s - %s: kept %s (dur=%d), removed %d incomplete", nk.artist, nk.title, keepID, durations[keepID], removed)
+					log.Printf("[db] Name deduped %s - %s: kept %s, removed %d duplicates", nk.artist, nk.title, keepID, removed)
 				}
 			}
 			if deduped > 0 {
