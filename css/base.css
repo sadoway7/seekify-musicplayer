@@ -110,7 +110,8 @@ html {
   text-rendering: optimizeLegibility;
   font-feature-settings: 'kern' 1;
   background: var(--bg);
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
 }
 
 body {
@@ -121,9 +122,14 @@ body {
   line-height: 1.5;
   letter-spacing: -0.01em;
   overflow: hidden;
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
   touch-action: manipulation;
   text-rendering: optimizeLegibility;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 0;
 }
 
 button {

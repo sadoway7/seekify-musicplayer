@@ -1,13 +1,10 @@
 #app {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  min-height: 0;
 }
 
 #app-header {
@@ -28,7 +25,7 @@
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   padding-top: var(--sp-3);
-  padding-bottom: var(--tab-bar-height);
+  padding-bottom: var(--sp-4);
   overscroll-behavior: contain;
   animation: pageFadeIn 0.22s var(--ease-out) both;
   min-height: 0;
@@ -43,7 +40,7 @@
 }
 
 body.mini-player-visible #app-content {
-  padding-bottom: calc(var(--tab-bar-height) + var(--mini-player-height) + 8px);
+  padding-bottom: calc(var(--mini-player-height) + var(--sp-4));
 }
 
 #app-header .header-title {
@@ -74,19 +71,16 @@ body.mini-player-visible #app-content {
 }
 
 #tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  flex-shrink: 0;
   display: flex;
   flex-direction: row;
   align-items: stretch;
   min-height: 50px;
   padding: 4px 12px 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: #0a0b0a;
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);
   z-index: 200;
-  flex-shrink: 0;
 }
 
 .tab-item {
