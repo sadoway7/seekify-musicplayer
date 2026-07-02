@@ -84,12 +84,20 @@
 }
 
 .settings-subsection-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
-  padding: 10px 0 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text1);
+  padding: 16px 0 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 8px;
+}
+
+.settings-subsection-label:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
 }
 
 .settings-section-title {
