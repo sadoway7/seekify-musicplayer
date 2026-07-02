@@ -705,7 +705,9 @@ Object.assign(UI, {
     const srcFields = '<div class="settings-field"><label>Download Source</label>'
       + '<select id="setting-download-source" class="settings-select">'
       + '<option value="auto">Auto — YouTube, then Soulseek</option><option value="youtube">YouTube only</option><option value="soulseek">Soulseek only</option>'
-      + '</select></div>';
+      + '</select></div>'
+      + '<div class="settings-field" style="max-width:120px"><label>Concurrent Downloads (1-10)</label>'
+      + '<input type="text" id="setting-download-concurrency" class="settings-input" placeholder="3" value="3"></div>';
 
     const slskFields = '<div class="settings-section-desc">Soulseek is used as a fallback when YouTube fails, or as the only source. Requires a free Soulseek account and a shared folder (give-to-get). Falls back gracefully if disabled or unconfigured.</div>'
       + st('setting-slsk-enabled', 'Enable Soulseek', 'Use Soulseek as a fallback or primary download source')
