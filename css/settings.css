@@ -464,6 +464,38 @@
   border-radius: var(--radius-xs);
 }
 
+/* Settings tabs */
+.settings-tab-content {
+  padding: 0 16px 24px;
+}
+
+.settings-tab-panel {
+  display: none;
+  background: var(--l2);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.settings-tab-panel.active {
+  display: block;
+}
+
+#settings-tabs {
+  padding-top: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+#settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+#settings-tabs .lib-tab {
+  flex-shrink: 0;
+  min-width: auto;
+}
+
 /* Background Tasks — worker rows */
 .worker-row {
   display: flex;

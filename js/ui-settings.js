@@ -12,9 +12,6 @@ Object.assign(UI, {
       return;
     }
 
-    let html = '<div class="page-header">'
-      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
-
     const st = (id, label, hint) => {
       return '<div class="settings-toggle-row">'
         + '<div><div class="settings-toggle-label">' + label + '</div>'
@@ -24,10 +21,23 @@ Object.assign(UI, {
         + '</div>';
     };
 
-    // Section 1: Playback
-    html += '<div class="settings-section">'
-      + '<div class="settings-section-title" data-collapse>' + Icons.waveform() + ' Playback' + Icons.chevronDown() + '</div>'
-      + '<div class="settings-section-body">'
+    // Tab bar
+    let html = '<div class="page-header">'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
+
+    html += '<div class="lib-tabs" id="settings-tabs">'
+      + '<button class="lib-tab active" data-settings-tab="playback">Playback</button>'
+      + '<button class="lib-tab" data-settings-tab="downloads">Downloads</button>'
+      + '<button class="lib-tab" data-settings-tab="sources">Sources</button>'
+      + '<button class="lib-tab" data-settings-tab="library">Library</button>'
+      + '<button class="lib-tab" data-settings-tab="tasks">Tasks</button>'
+      + '<button class="lib-tab" data-settings-tab="about">About</button>'
+      + '</div>';
+
+    html += '<div class="settings-tab-content" id="settings-tab-content">';
+
+    // --- Tab: Playback ---
+    html += '<div class="settings-tab-panel active" data-panel="playback">'
       + '<div class="settings-section-desc">Customize the waveform style shown during playback.</div>'
       + '<div class="settings-field"><label>Waveform Style</label>'
       + '<select id="setting-waveform-style" class="settings-select">'
@@ -40,24 +50,21 @@ Object.assign(UI, {
       + '<div class="settings-waveform-preview"><canvas id="waveform-preview-canvas"></canvas></div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-waveform-style">' + Icons.check() + '<span>Save</span></button>'
-      + '</div></div></div>';
+      + '</div>'
+      + '</div>';
 
-    // Section 2: User Downloads
-    html += '<div class="settings-section collapsed">'
-      + '<div class="settings-section-title" data-collapse>' + Icons.download() + ' User Downloads' + Icons.chevronDown() + '</div>'
-      + '<div class="settings-section-body">'
+    // --- Tab: Downloads ---
+    html += '<div class="settings-tab-panel" data-panel="downloads">'
+      // Permissions
+      + '<div class="settings-subsection-label">Permissions</div>'
       + st('setting-downloads-enabled', 'Enable Downloads', 'Allow users to download tracks from the player')
-      + '<div class="settings-actions" style="margin-top:16px">'
+      + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-user-downloads">' + Icons.check() + '<span>Save</span></button>'
       + '<button class="settings-btn" id="btn-toggle-download-list">' + Icons.library() + '<span>Manage Per-Track</span></button>'
       + '</div>'
       + '<div id="download-list"></div>'
-      + '</div></div>';
-
-    // Section 3: Import Settings
-    html += '<div class="settings-section collapsed">'
-      + '<div class="settings-section-title" data-collapse>' + Icons.download() + ' Import Settings' + Icons.chevronDown() + '</div>'
-      + '<div class="settings-section-body">'
+      // Engine
+      + '<div class="settings-subsection-label" style="margin-top:20px">Download Engine</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
       + '<div class="settings-form-grid">'
       + '<div class="settings-field"><label>Audio Format</label>'
@@ -90,7 +97,15 @@ Object.assign(UI, {
       + '</div>'
       + st('setting-download-convert-to-flac', 'Convert to FLAC', 'Re-encode imported files as FLAC')
       + st('setting-download-organise-by-artist', 'Organise by Artist', 'Move imported files into Artist/Album/ folders')
-      + '<div class="settings-subsection-label" style="margin-top:16px">YouTube Authentication</div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Engine Settings</span></button>'
+      + '</div>'
+      + '</div>';
+
+    // --- Tab: Sources ---
+    html += '<div class="settings-tab-panel" data-panel="sources">'
+      // YouTube
+      + '<div class="settings-subsection-label">YouTube Authentication</div>'
       + '<div class="settings-section-desc">Pick a browser to extract cookies once — one Keychain prompt, then downloads work forever with zero prompts. Or upload a cookies.txt file below.</div>'
       + '<div class="settings-field" style="margin-bottom:12px">'
       + '<label style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Extract cookies from browser</label>'
@@ -115,29 +130,26 @@ Object.assign(UI, {
       + '<option value="web_embedded">Web Embedded</option>'
       + '</select></div>'
       + '<div class="settings-field"><label>Cookies File</label>'
-      + '<div id="yt-cookies-status" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">Checking…</div>'
+      + '<div id="yt-cookies-status" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">Checking\u2026</div>'
       + '<div class="settings-actions" style="margin-top:6px">'
       + '<input type="file" id="yt-cookies-file-input" accept=".txt,text/plain" hidden>'
       + '<button class="settings-btn settings-btn-primary" id="btn-upload-cookies" type="button">' + Icons.upload() + '<span>Upload cookies.txt</span></button>'
       + '<button class="settings-btn settings-btn-danger" id="btn-clear-cookies" type="button">' + Icons.trash() + '<span>Remove</span></button>'
       + '</div></div>'
-      + '<div class="settings-subsection-label" style="margin-top:16px">Bulk Import</div>'
+      // Bulk Import
+      + '<div class="settings-subsection-label" style="margin-top:20px">Bulk Import</div>'
       + '<div class="settings-section-desc">Paste tracks to download (one per line, "Artist - Title").</div>'
       + '<textarea id="bulk-import-input" class="settings-textarea" rows="4" placeholder="Radiohead - Creep&#10;Arcade Fire - Rebellion"></textarea>'
       + '<div class="settings-actions" style="margin-top:8px">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Import Settings</span></button>'
       + '<button class="settings-btn settings-btn-primary" id="btn-bulk-import">' + Icons.download() + '<span>Import & Download All</span></button>'
-      + '</div></div></div>';
+      + '</div>'
+      + '</div>';
 
-    // Section 4: Library Health
+    // --- Tab: Library Health ---
     const rc = Store.reviewCounts || {};
-    const total = (rc.unchecked || 0) + (rc.needs_review || 0) + (rc.reviewed_ok || 0);
-    const reviewedPct = total > 0 ? Math.round(((rc.reviewed_ok || 0) / total) * 100) : 0;
-    html += '<div class="settings-section collapsed">'
-      + '<div class="settings-section-title" data-collapse style="color:#ff6b6b">'
-      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-      + ' Library Health' + Icons.chevronDown() + '</div>'
-      + '<div class="settings-section-body">'
+    const totalReview = (rc.unchecked || 0) + (rc.needs_review || 0) + (rc.reviewed_ok || 0);
+    const reviewedPct = totalReview > 0 ? Math.round(((rc.reviewed_ok || 0) / totalReview) * 100) : 0;
+    html += '<div class="settings-tab-panel" data-panel="library">'
       + '<div class="settings-actions" style="margin-bottom:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-meta-scan">' + Icons.refresh() + '<span>Scan Metadata</span></button>'
       + '<button class="settings-btn" id="btn-meta-review" style="display:none">' + Icons.check() + '<span>Review Pending</span></button>'
@@ -179,16 +191,18 @@ Object.assign(UI, {
       + '<button class="settings-btn settings-btn-primary" id="btn-review-recheck">' + Icons.refresh() + '<span>Recheck All Tracks</span></button>'
       + '<button class="settings-btn" id="btn-review-copy-log">' + Icons.share() + '<span>Copy Log</span></button>'
       + '</div>'
-      + '</div></div>';
+      + '</div>';
 
-    // Section 5: System
-    html += '<div class="settings-section collapsed">'
-      + '<div class="settings-section-title" data-collapse>' + Icons.settings() + ' System' + Icons.chevronDown() + '</div>'
-      + '<div class="settings-section-body">'
+    // --- Tab: Background Tasks ---
+    html += '<div class="settings-tab-panel" data-panel="tasks">'
+      // Worker status panel (live)
+      + '<div class="settings-section-desc">Background workers keep the library in sync. Click Run Now to trigger a worker manually.</div>'
+      + '<div id="workers-list"></div>'
+      // Config
+      + '<div class="settings-subsection-label" style="margin-top:20px">Worker Configuration</div>'
       + '<div class="settings-actions" style="margin-bottom:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
       + '</div>'
-      + '<div class="settings-subsection-label">Background Workers</div>'
       + st('setting-watcher-enabled', 'File Watcher', 'Poll music directories for changes')
       + st('setting-cover-fetch-enabled', 'Cover Art Fetch', 'Download missing album covers')
       + st('setting-artist-art-fetch-enabled', 'Artist Art Fetch', 'Download artist images')
@@ -196,42 +210,40 @@ Object.assign(UI, {
       + '<input type="text" id="setting-watcher-interval" class="settings-input" placeholder="30"></div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Worker Settings</span></button>'
-      + '</div></div></div>';
+      + '</div>'
+      + '</div>';
 
-    // Section 5b: Background Tasks
-    html += '<div class="settings-section collapsed">'
-      + '<div class="settings-section-title" data-collapse>' + Icons.settings() + ' Background Tasks' + Icons.chevronDown() + '</div>'
-      + '<div class="settings-section-body">'
-      + '<div class="settings-section-desc">Background workers keep the library in sync. Click Run Now to trigger a worker manually.</div>'
-      + '<div id="workers-list"></div>'
-      + '</div></div>';
-
-    // Section 6: About
-    html += '<div class="settings-section collapsed">'
-      + '<div class="settings-section-title" data-collapse>' + Icons.settings() + ' About' + Icons.chevronDown() + '</div>'
-      + '<div class="settings-section-body">'
+    // --- Tab: About ---
+    html += '<div class="settings-tab-panel" data-panel="about">'
       + '<div class="settings-about">'
       + '<div>MusicApp</div>'
       + '<div style="color:var(--text3);font-size:13px">Personal music library with MusicBrainz integration</div>'
-      + '</div></div></div>';
+      + '</div>'
+      + '</div>';
+
+    html += '</div>'; // close settings-tab-content
 
     this.els.content.innerHTML = html;
+
+    // --- Tab switching ---
+    this.els.content.querySelectorAll('[data-settings-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.settingsTab;
+        this.els.content.querySelectorAll('[data-settings-tab]').forEach(t => t.classList.remove('active'));
+        this.els.content.querySelectorAll('.settings-tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        const panel = this.els.content.querySelector('[data-panel="' + target + '"]');
+        if (panel) panel.classList.add('active');
+        // Paint waveform preview when switching to playback tab
+        if (target === 'playback') this._paintWaveformPreview();
+      });
+    });
 
     this._loadMetadataStatus();
     this._loadWorkers();
 
     this.els.content.querySelectorAll('.stoggle').forEach(el => {
       el.addEventListener('click', () => el.classList.toggle('active'));
-    });
-
-    this.els.content.querySelectorAll('.settings-section-title').forEach(el => {
-      const section = el.closest('.settings-section');
-      if (section && section.querySelector('.settings-section-body')) {
-        el.style.cursor = 'pointer';
-        el.addEventListener('click', () => {
-          section.classList.toggle('collapsed');
-        });
-      }
     });
 
     document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());
