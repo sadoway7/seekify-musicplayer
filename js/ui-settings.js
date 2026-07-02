@@ -167,11 +167,6 @@ Object.assign(UI, {
       + '</div>'
       + '<div id="review-progress-text" class="review-progress-text"></div>'
       + '<div id="review-live-log" class="review-live-log"></div>'
-      + '<div style="margin-top:12px">'
-      + st('setting-review-enabled', 'Review Worker', 'Automatically flag tracks with metadata or quality issues')
-      + '<div class="settings-field" style="padding:10px 0"><label style="font-size:14px;color:var(--text1)">Recheck Interval (hours)</label>'
-      + '<input type="text" id="setting-review-recheck-hours" class="settings-input" style="width:60px;display:inline-block;margin-left:6px" placeholder="24"></div>'
-      + '</div>'
       + '<div class="settings-subsection-label">Metadata Checks</div>'
       + '<div class="settings-checks-grid">'
       + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Missing Title</div></div><div class="stoggle" id="setting-review-flag-missing-title"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
@@ -206,8 +201,13 @@ Object.assign(UI, {
       + st('setting-watcher-enabled', 'File Watcher', 'Poll music directories for changes')
       + st('setting-cover-fetch-enabled', 'Cover Art Fetch', 'Download missing album covers')
       + st('setting-artist-art-fetch-enabled', 'Artist Art Fetch', 'Download artist images')
-      + '<div class="settings-field" style="max-width:200px;margin-top:8px"><label>Watcher Interval (seconds)</label>'
+      + st('setting-review-enabled', 'Review Worker', 'Automatically flag tracks with metadata or quality issues')
+      + '<div class="settings-form-grid" style="margin-top:8px">'
+      + '<div class="settings-field"><label>Watcher Interval (sec)</label>'
       + '<input type="text" id="setting-watcher-interval" class="settings-input" placeholder="30"></div>'
+      + '<div class="settings-field"><label>Review Interval (hrs)</label>'
+      + '<input type="text" id="setting-review-recheck-hours" class="settings-input" placeholder="24"></div>'
+      + '</div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Worker Settings</span></button>'
       + '</div>'
@@ -831,12 +831,15 @@ Object.assign(UI, {
 
   async _saveWorkerSettings() {
     const watcherInterval = document.getElementById('setting-watcher-interval');
+    const revRecheckHours = document.getElementById('setting-review-recheck-hours');
     try {
       await Api.saveSettings({
         watcher_enabled: String(this._stoggleVal('setting-watcher-enabled')),
         watcher_interval: watcherInterval ? watcherInterval.value : '30',
         cover_fetch_enabled: String(this._stoggleVal('setting-cover-fetch-enabled')),
-        artist_art_fetch_enabled: String(this._stoggleVal('setting-artist-art-fetch-enabled'))
+        artist_art_fetch_enabled: String(this._stoggleVal('setting-artist-art-fetch-enabled')),
+        review_enabled: String(this._stoggleVal('setting-review-enabled')),
+        review_recheck_hours: revRecheckHours ? revRecheckHours.value : '24'
       });
       this._showToast('Worker settings saved');
     } catch (e) {
