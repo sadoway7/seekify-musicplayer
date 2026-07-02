@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -308,12 +309,13 @@ func dedupTracksByFilePath() {
 					continue
 				}
 				// Keep the best entry (already sorted: has_metadata DESC, duration
-				// DESC, mod_time DESC). Remove the rest from DB only — do NOT delete
-				// files, as these may be distinct downloads with the same tags.
+				// DESC, mod_time DESC). Remove the rest from DB AND delete the
+				// duplicate files from disk so the scanner doesn't re-add them.
 				// When all durations are 0 (un-probed Soulseek downloads), still
 				// dedup — keep the one with best metadata / most recent mod_time.
 				keepID := ids[0]
 				removed := 0
+				var deletedFiles []string
 				tx, _ := DB.Begin()
 				for _, dupID := range ids[1:] {
 					// If both have non-zero but different durations, keep both
@@ -321,6 +323,9 @@ func dedupTracksByFilePath() {
 					if durations[dupID] > 0 && durations[keepID] > 0 && durations[dupID] != durations[keepID] {
 						continue
 					}
+					// Get the file path before deleting the DB row
+					var fp string
+					tx.QueryRow(`SELECT file_path FROM tracks WHERE id = ?`, dupID).Scan(&fp)
 					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -328,9 +333,24 @@ func dedupTracksByFilePath() {
 					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+					// Resolve and delete the physical file
+					if fp != "" {
+						full := fp
+						if !filepath.IsAbs(full) {
+							full = filepath.Join(MusicDir, full)
+						}
+						if !strings.HasPrefix(full, MusicDir) {
+							full = filepath.Join(MusicDir, fp)
+						}
+						deletedFiles = append(deletedFiles, full)
+					}
 					removed++
 				}
 				tx.Commit()
+				// Delete duplicate files after commit (best-effort, ignore errors)
+				for _, fp := range deletedFiles {
+					os.Remove(fp)
+				}
 				if removed > 0 {
 					deduped += removed
 					log.Printf("[db] Name deduped %s - %s: kept %s, removed %d duplicates", nk.artist, nk.title, keepID, removed)
