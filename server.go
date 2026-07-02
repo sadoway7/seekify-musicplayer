@@ -228,7 +228,7 @@ func main() {
 	// Register all background workers with the registry so the settings
 	// panel can display status and (where possible) trigger them on demand.
 	store.RegisterWorker("scanner", "Scans music directories for new/changed files", "Every 30s (configurable)", func() {
-		scanner.CheckAndRescan()
+		scanner.ForceRescan()
 	})
 	store.RegisterWorker("cleanup", "Prunes missing/shared/truncated tracks + dedup", "Every 5 min", func() {
 		scanner.PruneMissingTracks()

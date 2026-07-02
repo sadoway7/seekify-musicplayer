@@ -195,9 +195,6 @@ Object.assign(UI, {
       + '<div id="workers-list"></div>'
       // Config
       + '<div class="settings-subsection-label" style="margin-top:20px">Worker Configuration</div>'
-      + '<div class="settings-actions" style="margin-bottom:12px">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-rescan">' + Icons.refresh() + '<span>Rescan Library</span></button>'
-      + '</div>'
       + st('setting-watcher-enabled', 'File Watcher', 'Poll music directories for changes')
       + st('setting-cover-fetch-enabled', 'Cover Art Fetch', 'Download missing album covers')
       + st('setting-artist-art-fetch-enabled', 'Artist Art Fetch', 'Download artist images')
@@ -248,7 +245,6 @@ Object.assign(UI, {
 
     document.getElementById('btn-meta-scan').addEventListener('click', () => this._startMetadataScan());
     document.getElementById('btn-meta-history').addEventListener('click', () => this.navigateTo('metadata-history'));
-    document.getElementById('btn-rescan').addEventListener('click', () => this._rescanLibrary());
 
     const reviewBtn = document.getElementById('btn-meta-review');
     if (reviewBtn) {

@@ -85,6 +85,42 @@ func StartWatcher() {
 	}
 }
 
+// ForceRescan runs a full scan of all music directories regardless of
+// file count changes. Used by the "Run Now" button on the scanner worker.
+func ForceRescan() {
+	store.WorkerStart("scanner")
+	defer store.WorkerDone("scanner", nil)
+
+	if scanning.Load() {
+		return
+	}
+
+	ScanMusicDir(store.MusicDir)
+	for prefix, dir := range store.MusicDirs {
+		if prefix == "" {
+			continue
+		}
+		ScanMusicDirWithPrefix(dir, prefix)
+	}
+
+	ExtractEmbeddedCovers()
+
+	if LibraryVersionAdd != nil {
+		LibraryVersionAdd(1)
+	}
+
+	// Update file counts so the watcher doesn't immediately re-trigger
+	watcherMu.Lock()
+	lastFileCounts[store.MusicDir] = CountAudioFiles(store.MusicDir)
+	for prefix, dir := range store.MusicDirs {
+		if prefix == "" {
+			continue
+		}
+		lastFileCounts[dir] = CountAudioFiles(dir)
+	}
+	watcherMu.Unlock()
+}
+
 func CheckAndRescan() {
 	store.WorkerStart("scanner")
 	defer store.WorkerDone("scanner", nil)
