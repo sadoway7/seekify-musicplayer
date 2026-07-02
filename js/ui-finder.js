@@ -265,15 +265,22 @@ Object.assign(UI, {
       this._downloadsSig = sig;
 
       let html = '<div class="queue-stats">';
-      if (hasActivity) {
-        html += '<div class="queue-stats-badges">'
-          + (counts.queued > 0 ? '<span class="stat-badge stat-queued">' + counts.queued + ' queued</span>' : '')
-          + (activeCount > 0 && counts.queued <= 0 ? '<span class="stat-badge stat-active">' + activeCount + ' active</span>' : '')
-          + (needsSel > 0 ? '<span class="stat-badge stat-failed">' + needsSel + ' needs pick</span>' : '')
-          + (counts.completed > 0 ? '<span class="stat-badge stat-completed">' + counts.completed + ' done</span>' : '')
-          + (counts.failed > 0 ? '<span class="stat-badge stat-failed">' + counts.failed + ' failed</span>' : '')
-          + '</div>';
-      }
+      // Filter chips: clickable, double as counts. Reuses review-filter-chip styles.
+      const activeOnly = (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
+      const filter = this._downloadFilter || 'all';
+      const chips = [{ key: 'all', label: 'All', count: jobs.length }];
+      if (activeOnly > 0) chips.push({ key: 'active', label: 'Active', count: activeOnly });
+      if (counts.queued > 0) chips.push({ key: 'queued', label: 'Queued', count: counts.queued });
+      if (needsSel > 0) chips.push({ key: 'needs', label: 'Needs Pick', count: needsSel });
+      if (failedCount > 0) chips.push({ key: 'failed', label: 'Failed', count: failedCount });
+      if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
+      let chipsHtml = '<div class="review-filter-chips">';
+      chips.forEach(c => {
+        const on = filter === c.key;
+        chipsHtml += '<button class="review-filter-chip' + (on ? ' active' : '') + '" data-filter="' + c.key + '">' + this._esc(c.label) + ' <span style="opacity:.7">' + c.count + '</span></button>';
+      });
+      chipsHtml += '</div>';
+      html += chipsHtml;
       html += '<div class="queue-stats-actions">'
         + '<button class="settings-btn" id="btn-dl-settings" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
         + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
@@ -292,9 +299,22 @@ Object.assign(UI, {
       }
 
       html += '<div class="queue-job-list">';
+      const shown = jobs.filter(j => {
+        if (filter === 'all') return true;
+        if (filter === 'active') return j.status === 'searching' || j.status === 'downloading' || j.status === 'tagging';
+        if (filter === 'queued') return j.status === 'queued';
+        if (filter === 'needs') return j.status === 'needs_selection';
+        if (filter === 'failed') return j.status === 'failed';
+        if (filter === 'done') return j.status === 'completed';
+        return true;
+      });
+      if (shown.length === 0) {
+        html += '<div class="empty-state" style="padding:30px 18px">'
+          + '<div class="empty-state-title">No ' + (filter === 'all' ? 'Downloads' : chips.find(c => c.key === filter).label) + '</div></div>';
+      }
       const now = Date.now();
       let queuedIndex = 0;
-      jobs.forEach(j => {
+      shown.forEach(j => {
         const active = j.status === 'searching' || j.status === 'downloading' || j.status === 'tagging';
         const isQueued = j.status === 'queued';
         const failed = j.status === 'failed';
@@ -365,6 +385,14 @@ Object.assign(UI, {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           Api.retryJob(btn.dataset.jobId).then(() => this._loadDownloads());
+        });
+      });
+
+      container.querySelectorAll('.review-filter-chip[data-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this._downloadFilter = btn.dataset.filter;
+          this._downloadsSig = ''; // force re-render despite unchanged counts
+          this._loadDownloads();
         });
       });
       container.querySelectorAll('.queue-item-delete').forEach(btn => {
@@ -561,6 +589,10 @@ Object.assign(UI, {
       + '<button class="candidate-modal-close">&times;</button>'
       + '</div>'
       + '<div class="candidate-modal-list">' + listHtml + '</div>'
+      + '<div class="candidate-modal-actions">'
+      + '<button class="btn-secondary" id="cand-search-again">Search Again</button>'
+      + '<button class="btn-danger" id="cand-remove">Remove</button>'
+      + '</div>'
       + '</div>';
 
     document.body.appendChild(overlay);
@@ -568,6 +600,22 @@ Object.assign(UI, {
 
     overlay.querySelector('.candidate-modal-close').addEventListener('click', () => this._fadeOutRemove(overlay, 200));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) this._fadeOutRemove(overlay, 200); });
+
+    overlay.querySelector('#cand-remove').addEventListener('click', () => {
+      Api.deleteJob(job.id).then(() => {
+        this._fadeOutRemove(overlay, 200);
+        this._showToast('Removed from queue');
+        this._loadDownloads();
+      }).catch(() => this._showToast('Failed to remove'));
+    });
+
+    overlay.querySelector('#cand-search-again').addEventListener('click', () => {
+      Api.retryJob(job.id).then(() => {
+        this._fadeOutRemove(overlay, 200);
+        this._showToast('Searching again...');
+        this._loadDownloads();
+      }).catch(() => this._showToast('Failed to retry'));
+    });
 
     overlay.querySelectorAll('.candidate-item').forEach(item => {
       item.addEventListener('click', () => {

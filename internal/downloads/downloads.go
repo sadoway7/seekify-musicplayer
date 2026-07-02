@@ -398,9 +398,10 @@ func DbGetJobs(limit int) ([]DownloadJob, error) {
 				WHEN 'downloading' THEN 1
 				WHEN 'tagging' THEN 2
 				WHEN 'needs_selection' THEN 3
-				WHEN 'completed' THEN 4
-				WHEN 'queued' THEN 5
-				ELSE 6
+				WHEN 'queued' THEN 4
+				WHEN 'failed' THEN 5
+				WHEN 'completed' THEN 6
+				ELSE 7
 			END,
 			completed_at DESC,
 			created_at DESC
@@ -993,7 +994,28 @@ func downloadFromSoulseek(job *DownloadJob) {
 	pickIdx, pickOK := autoPickSlsk(cands, job.Artist, slskCleanTitle(job.Title), job.Title, minBr)
 	if !pickOK {
 		if len(cands) > 0 {
-			candJSON, jerr := slskCandidatesToJSON(cands)
+			// ponytail: only surface strong (artist+title-in-filename) matches to
+			// the picker — dumping every raw search result floods the modal with
+			// unrelated songs. autoPickSlsk already passed over these on quality
+			// gates; show them so the user can override, but never show non-matches.
+			strong := make([]slskRawCandidate, 0, len(cands))
+			for _, c := range cands {
+				if slskStrongMatch(c, job.Artist, slskCleanTitle(job.Title)) {
+					strong = append(strong, c)
+				}
+			}
+			if len(strong) == 0 {
+				job.Status = "failed"
+				job.Error = "No matching Soulseek results (try Search Again)"
+				job.CompletedAt = time.Now().Format(time.RFC3339)
+				DbUpdateJob(job)
+				log.Printf("[download] no strong Soulseek match for %q among %d results", job.SearchQuery, len(cands))
+				return
+			}
+			if len(strong) > 8 {
+				strong = strong[:8]
+			}
+			candJSON, jerr := slskCandidatesToJSON(strong)
 			if jerr != nil {
 				job.Status = "failed"
 				job.Error = "Failed to encode Soulseek candidates: " + jerr.Error()
@@ -1006,7 +1028,7 @@ func downloadFromSoulseek(job *DownloadJob) {
 			job.Source = "soulseek"
 			job.ProgressStage = "Awaiting user selection"
 			DbUpdateJob(job)
-			log.Printf("[download] no strong Soulseek match for %q, waiting for user selection", job.SearchQuery)
+			log.Printf("[download] %d strong Soulseek matches for %q need user pick", len(strong), job.SearchQuery)
 			return
 		}
 		job.Status = "failed"
