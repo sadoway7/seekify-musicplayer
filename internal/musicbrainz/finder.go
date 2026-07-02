@@ -200,14 +200,18 @@ func FinderSearchRecordings(query string, limit int) ([]FinderRecording, error) 
 	return results, nil
 }
 
-func BuildRecordingQuery(raw string) string {
+func buildLuceneQuery(raw, artistField, titleField string) string {
 	parts := strings.SplitN(raw, " - ", 2)
 	if len(parts) == 2 {
 		artist := strings.TrimSpace(parts[0])
 		title := strings.TrimSpace(parts[1])
-		return fmt.Sprintf(`artistname:"%s" AND recording:"%s"`, EscapeLucene(artist), EscapeLucene(title))
+		return fmt.Sprintf(`%s:"%s" AND %s:"%s"`, artistField, EscapeLucene(artist), titleField, EscapeLucene(title))
 	}
 	return raw
+}
+
+func BuildRecordingQuery(raw string) string {
+	return buildLuceneQuery(raw, "artistname", "recording")
 }
 
 func FinderSearchArtists(query string, limit int) ([]FinderArtist, error) {
@@ -367,13 +371,7 @@ func FinderSearchReleases(query string, limit int) ([]FinderRelease, error) {
 }
 
 func BuildReleaseQuery(raw string) string {
-	parts := strings.SplitN(raw, " - ", 2)
-	if len(parts) == 2 {
-		artist := strings.TrimSpace(parts[0])
-		album := strings.TrimSpace(parts[1])
-		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, EscapeLucene(artist), EscapeLucene(album))
-	}
-	return raw
+	return buildLuceneQuery(raw, "artist", "release")
 }
 
 func FinderArtistReleases(mbid string) ([]FinderRelease, error) {

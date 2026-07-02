@@ -271,6 +271,13 @@ const UI = {
     }
   },
 
+  _barFraction(bar, e, fallback) {
+    const rect = bar.getBoundingClientRect();
+    if (rect.width === 0) return fallback !== undefined ? fallback : 0;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  },
+
   _bindSeekBar() {
     const canvas = this.els.waveformCanvas;
     if (!canvas) return;
@@ -278,11 +285,7 @@ const UI = {
     this._waveformData = [];
     this._waveformHoverX = -1;
 
-    const getFraction = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    };
+    const getFraction = (e) => this._barFraction(canvas, e);
 
     const onStart = (e) => {
       this._waveformHoverX = -1;
@@ -352,11 +355,7 @@ const UI = {
     if (!bar) return;
     this.topSeeking = false;
 
-    const getFraction = (e) => {
-      const rect = bar.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    };
+    const getFraction = (e) => this._barFraction(bar, e);
 
     const onStart = (e) => {
       this.topSeeking = true;
@@ -399,12 +398,7 @@ const UI = {
       if (!bar) return;
       const state = { dragging: false };
 
-      const getFraction = (e) => {
-        const rect = bar.getBoundingClientRect();
-        if (rect.width === 0) return Player.volume;
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      };
+      const getFraction = (e) => this._barFraction(bar, e, Player.volume);
 
       const onStart = (e) => {
         state.dragging = true;
@@ -470,12 +464,7 @@ const UI = {
     if (bar) {
       let dragging = false;
 
-      const getFrac = (e) => {
-        const rect = bar.getBoundingClientRect();
-        if (rect.width === 0) return Player.volume;
-        const cx = e.touches ? e.touches[0].clientX : e.clientX;
-        return Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
-      };
+      const getFrac = (e) => this._barFraction(bar, e, Player.volume);
 
       bar.addEventListener('mousedown', (e) => {
         dragging = true;
@@ -826,292 +815,156 @@ const UI = {
   },
 
   _bindContentEvents() {
+    const handlers = [
+      { sel: '.genre-back', fn: () => { this.searchGenre = ''; this._renderSearchResults(); } },
+      { sel: '.back-btn', fn: () => this.navigateBack() },
+      { sel: '.lib-tab[data-filter]', fn: (el) => { this.libFilter = el.dataset.filter; this.renderLibrary(); } },
+      { sel: '.track-more', fn: (el) => { const row = el.closest('.track-row'); if (row) this._showTrackContextMenu(row.dataset.trackId, el); } },
+      { sel: '.track-review-more', fn: (el) => { if (el.dataset.reviewTrackId) this._showReviewTrackMenu(el.dataset.reviewTrackId, el); } },
+      { sel: '.track-row, .new-song-card', fn: (el) => this._playTrackRow(el) },
+      { sel: '[data-type="artist"]', fn: (el) => { if (el.dataset.type === 'artist') this.navigateTo('artist', { artistName: el.dataset.id }); } },
+      { sel: '.card[data-album-id]', fn: (el) => this.navigateTo('album', { albumId: el.dataset.albumId }) },
+      { sel: '.quick-play-card, .quick-play-card-inline', fn: (el, e) => this._handleQuickPlayCard(el) },
+      { sel: '.category-card', fn: (el) => { this.searchGenre = el.dataset.genre; this.searchQuery = ''; this._renderSearchResults(); } },
+      { sel: '.play-all-btn', fn: () => { if (this._viewTrackList.length > 0) { const s = this._getViewSource(); Player.play(this._viewTrackList[0], this._viewTrackList, s); } } },
+      { sel: '.detail-play-btn', fn: () => { if (this._viewTrackList.length > 0) { const s = this._getViewSource(); Player.play(this._viewTrackList[0], this._viewTrackList, s); this.showNowPlaying(); } } },
+      { sel: '[data-action="rip-more"]', fn: (el) => this._handleRipMore(el) },
+      { sel: '.detail-action-btn, .home-review-card', fn: (el) => this._handleAction(el.dataset.action) },
+      { sel: '.hero-action-btn', fn: (el) => this._handleHeroAction(el) },
+      { sel: '.section-header-link', fn: (el) => { if (el.dataset.navigate) this.navigateTo(el.dataset.navigate); } },
+      { sel: '.list-item-more', fn: (el) => this._showPlaylistMoreMenu(el) },
+      { sel: '.list-item', fn: (el) => this._handleListItemClick(el) },
+      { sel: '.show-more-btn', fn: (el) => { if (el.dataset.action === 'show-more-new') { this._newSongsLimit = (this._newSongsLimit || 6) + 12; this.renderHome(); } } },
+    ];
     this.els.content.addEventListener('click', (e) => {
-      const genreBack = e.target.closest('.genre-back');
-      if (genreBack) {
-        this.searchGenre = '';
-        this._renderSearchResults();
-        return;
-      }
-
-      const backBtn = e.target.closest('.back-btn');
-      if (backBtn) {
-        this.navigateBack();
-        return;
-      }
-
-      const seg = e.target.closest('.lib-tab[data-filter]');
-      if (seg) {
-        this.libFilter = seg.dataset.filter;
-        this.renderLibrary();
-        return;
-      }
-
-      const tmore = e.target.closest('.track-more');
-        if (tmore) {
-          const row = tmore.closest('.track-row');
-        if (row) {
-          this._showTrackContextMenu(row.dataset.trackId, tmore);
-        }
-        return;
-      }
-
-      const rmore = e.target.closest('.track-review-more');
-      if (rmore) {
-        const trackId = rmore.dataset.reviewTrackId;
-        if (trackId) {
-          this._showReviewTrackMenu(trackId, rmore);
-        }
-        return;
-      }
-
-      const trow = e.target.closest('.track-row') || e.target.closest('.new-song-card');
-      if (trow) {
-        const trackId = trow.dataset.trackId;
-        const track = Store.getTrack(trackId);
-        if (track) {
-          const favSection = trow.closest('[data-home-section="favorites"]');
-          if (favSection && Store.currentView === 'home') {
-            const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
-            const idx = favTracks.findIndex(t => t.id === trackId);
-            if (idx !== -1 && favTracks.length > 1) {
-              Player.play(track, favTracks, { type: 'favorites', name: 'Favorites' });
-            } else {
-              Player.play(track, null, null);
-            }
-          } else {
-            this._smartPlay(track);
-          }
-          this.showNowPlaying();
-        }
-        return;
-      }
-
-      const apill = e.target.closest('[data-type="artist"]');
-      if (apill) {
-        const type = apill.dataset.type;
-        const id = apill.dataset.id;
-        if (type === 'artist') this.navigateTo('artist', { artistName: id });
-        return;
-      }
-
-      const acard = e.target.closest('.card[data-album-id]');
-      if (acard) {
-        this.navigateTo('album', { albumId: acard.dataset.albumId });
-        return;
-      }
-
-      const qpCard = e.target.closest('.quick-play-card, .quick-play-card-inline');
-      if (qpCard) {
-        if (qpCard.dataset.navigate) {
-          this.navigateTo(qpCard.dataset.navigate);
-          return;
-        }
-        if (qpCard.dataset.action) {
-          this._handleAction(qpCard.dataset.action);
-          return;
-        }
-        if (qpCard.dataset.trackId) {
-          const track = Store.getTrack(qpCard.dataset.trackId);
-          if (track) {
-            if (qpCard.classList.contains('quick-play-card-recent')) {
-              const idx = Store.recent.indexOf(track.id);
-              if (idx !== -1 && idx > 0) {
-                const nextIds = Store.recent.slice(0, idx);
-                const seen = new Set();
-                const queue = [];
-                for (const id of nextIds) {
-                  if (seen.has(id)) continue;
-                  seen.add(id);
-                  const t = Store.getTrack(id);
-                  if (t) queue.push(t);
-                  if (queue.length >= 30) break;
-                }
-                Player.play(track, [track, ...queue], { type: 'recent', name: 'Recently Played' });
-              } else {
-                Player.play(track, null, null);
-              }
-            } else {
-              this._smartPlay(track);
-            }
-            this.showNowPlaying();
-          }
-          return;
-        }
-        if (qpCard.dataset.albumId) {
-          this.navigateTo('album', { albumId: qpCard.dataset.albumId });
-          return;
-        }
-        return;
-      }
-
-      const catCard = e.target.closest('.category-card');
-      if (catCard) {
-        this.searchGenre = catCard.dataset.genre;
-        this.searchQuery = '';
-        this._renderSearchResults();
-        return;
-      }
-
-      const playAllBtn = e.target.closest('.play-all-btn');
-      if (playAllBtn) {
-        if (this._viewTrackList.length > 0) {
-          const source = this._getViewSource();
-          Player.play(this._viewTrackList[0], this._viewTrackList, source);
-        }
-        return;
-      }
-
-      const detailPlayBtn = e.target.closest('.detail-play-btn');
-      if (detailPlayBtn) {
-        if (this._viewTrackList.length > 0) {
-          const source = this._getViewSource();
-          Player.play(this._viewTrackList[0], this._viewTrackList, source);
-          this.showNowPlaying();
-        }
-        return;
-      }
-
-      const ripMoreBtn = e.target.closest('[data-action="rip-more"]');
-      if (ripMoreBtn) {
-        const artistName = ripMoreBtn.dataset.artist;
-        Api.finderSearch(artistName, 'artist').then(data => {
-          if (Array.isArray(data) && data.length > 0) {
-            const mbid = data[0].id;
-            if (mbid) {
-              this.navigateTo('finder-artist', { mbid, name: artistName });
-              return;
-            }
-          }
-          this.showToast('Artist not found on MusicBrainz');
-        }).catch(() => {
-          this.showToast('Failed to search MusicBrainz');
-        });
-        return;
-      }
-
-      const actionBtn = e.target.closest('.detail-action-btn, .home-review-card');
-      if (actionBtn) {
-        this._handleAction(actionBtn.dataset.action);
-        return;
-      }
-
-      const heroActionBtn = e.target.closest('.hero-action-btn');
-      if (heroActionBtn) {
-        const action = heroActionBtn.dataset.heroAction;
-        if (action === 'more-artist') {
-          const artistName = heroActionBtn.dataset.artist;
-          this._showArtistContextMenu(artistName, heroActionBtn);
-        } else if (action === 'more-album') {
-          const albumId = heroActionBtn.dataset.albumId;
-          this._showAlbumContextMenu(albumId, heroActionBtn);
-        } else if (action === 'more-playlist') {
-          const playlistId = heroActionBtn.dataset.playlistId;
-          this._showPlaylistContextMenu(playlistId, heroActionBtn);
-        }
-        return;
-      }
-
-      const headerLink = e.target.closest('.section-header-link');
-      if (headerLink) {
-        const target = headerLink.dataset.navigate;
-        if (target) this.navigateTo(target);
-        return;
-      }
-
-      const plmore = e.target.closest('.list-item-more');
-      if (plmore) {
-        const plrow = plmore.closest('.list-item');
-        if (plrow) {
-          const type = plrow.dataset.type;
-          const id = plrow.dataset.id;
-          if (type === 'playlist') {
-            const playlist = Store.getPlaylist(id);
-            if (playlist) {
-              this.showContextMenu([
-                { label: 'Play', icon: Icons.play(), action: () => {
-                  this.hideContextMenu();
-                  const tracks = playlist.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
-                  if (tracks.length > 0) Player.play(tracks[0], tracks, { type: 'playlist', name: playlist.name, id: id });
-                }},
-                { label: 'Share', icon: Icons.share(), action: async () => {
-                  this.hideContextMenu();
-                  const firstTrack = playlist.trackIds.map(tid => Store.getTrack(tid)).find(Boolean);
-                  const shareUrl = window.location.origin + '/?play=' + (firstTrack ? firstTrack.id : '');
-                  if (navigator.share) {
-                    try {
-                      await navigator.share({ url: shareUrl });
-                    } catch (err) {
-                      if (err.name !== 'AbortError') this.showToast('Share failed');
-                    }
-                  } else {
-                    try {
-                      await navigator.clipboard.writeText(shareUrl);
-                      this.showToast('Link copied');
-                    } catch (err) {
-                      this.showToast('Share not supported');
-                    }
-                  }
-                }},
-                { label: 'Delete', icon: Icons.trash(), action: async () => {
-                  this.hideContextMenu();
-                  if (!confirm('Delete this playlist?')) return;
-                  try {
-                    await Api.deletePlaylist(id);
-                    await Store.refreshPlaylists();
-                    if (Store.currentView === 'library') {
-                      this.renderLibrary();
-                    } else {
-                      this.navigateBack();
-                    }
-                    this.showToast('Playlist deleted');
-                  } catch (err) {
-                    console.error('Delete playlist failed:', err);
-                    this.showToast('Failed to delete playlist');
-                  }
-                }}
-              ], plmore);
-            }
-          }
-        }
-        return;
-      }
-
-      const plrow = e.target.closest('.list-item');
-      if (plrow) {
-        if (plrow.dataset.action === 'create-playlist') {
-          this._showCreatePlaylistInline(plrow);
-          return;
-        }
-        if (plrow.dataset.action === 'favorites') {
-          this.navigateTo('favorites');
-          return;
-        }
-        if (plrow.dataset.action === 'all-music') {
-          this.navigateTo('all-music');
-          return;
-        }
-        if (plrow.dataset.action === 'needs-review') {
-          this.navigateTo('needs-review');
-          return;
-        }
-        const type = plrow.dataset.type;
-        const id = plrow.dataset.id;
-        if (type === 'album') this.navigateTo('album', { albumId: id });
-        else if (type === 'artist') this.navigateTo('artist', { artistName: id });
-        else if (type === 'playlist') this.navigateTo('playlist', { playlistId: id });
-        return;
-      }
-
-      const showMore = e.target.closest('.show-more-btn');
-      if (showMore) {
-        if (showMore.dataset.action === 'show-more-new') {
-          this._newSongsLimit = (this._newSongsLimit || 6) + 12;
-          this.renderHome();
-        }
-        return;
+      for (const h of handlers) {
+        const el = e.target.closest(h.sel);
+        if (el) { h.fn(el, e); return; }
       }
     });
+  },
+
+  _playTrackRow(el) {
+    const trackId = el.dataset.trackId;
+    const track = Store.getTrack(trackId);
+    if (!track) return;
+    const favSection = el.closest('[data-home-section="favorites"]');
+    if (favSection && Store.currentView === 'home') {
+      const favTracks = Store.favorites.map(id => Store.getTrack(id)).filter(Boolean);
+      const idx = favTracks.findIndex(t => t.id === trackId);
+      if (idx !== -1 && favTracks.length > 1) {
+        Player.play(track, favTracks, { type: 'favorites', name: 'Favorites' });
+      } else {
+        Player.play(track, null, null);
+      }
+    } else {
+      this._smartPlay(track);
+    }
+    this.showNowPlaying();
+  },
+
+  _handleQuickPlayCard(el) {
+    if (el.dataset.navigate) { this.navigateTo(el.dataset.navigate); return; }
+    if (el.dataset.action) { this._handleAction(el.dataset.action); return; }
+    if (el.dataset.trackId) {
+      const track = Store.getTrack(el.dataset.trackId);
+      if (track) {
+        if (el.classList.contains('quick-play-card-recent')) {
+          const idx = Store.recent.indexOf(track.id);
+          if (idx !== -1 && idx > 0) {
+            const nextIds = Store.recent.slice(0, idx);
+            const seen = new Set();
+            const queue = [];
+            for (const id of nextIds) {
+              if (seen.has(id)) continue;
+              seen.add(id);
+              const t = Store.getTrack(id);
+              if (t) queue.push(t);
+              if (queue.length >= 30) break;
+            }
+            Player.play(track, [track, ...queue], { type: 'recent', name: 'Recently Played' });
+          } else {
+            Player.play(track, null, null);
+          }
+        } else {
+          this._smartPlay(track);
+        }
+        this.showNowPlaying();
+      }
+      return;
+    }
+    if (el.dataset.albumId) { this.navigateTo('album', { albumId: el.dataset.albumId }); }
+  },
+
+  _handleRipMore(el) {
+    const artistName = el.dataset.artist;
+    Api.finderSearch(artistName, 'artist').then(data => {
+      if (Array.isArray(data) && data.length > 0 && data[0].id) {
+        this.navigateTo('finder-artist', { mbid: data[0].id, name: artistName });
+      } else {
+        this.showToast('Artist not found on MusicBrainz');
+      }
+    }).catch(() => this.showToast('Failed to search MusicBrainz'));
+  },
+
+  _handleHeroAction(el) {
+    const action = el.dataset.heroAction;
+    if (action === 'more-artist') this._showArtistContextMenu(el.dataset.artist, el);
+    else if (action === 'more-album') this._showAlbumContextMenu(el.dataset.albumId, el);
+    else if (action === 'more-playlist') this._showPlaylistContextMenu(el.dataset.playlistId, el);
+  },
+
+  _showPlaylistMoreMenu(el) {
+    const plrow = el.closest('.list-item');
+    if (!plrow || plrow.dataset.type !== 'playlist') return;
+    const id = plrow.dataset.id;
+    const playlist = Store.getPlaylist(id);
+    if (!playlist) return;
+    this.showContextMenu([
+      { label: 'Play', icon: Icons.play(), action: () => {
+        this.hideContextMenu();
+        const tracks = playlist.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
+        if (tracks.length > 0) Player.play(tracks[0], tracks, { type: 'playlist', name: playlist.name, id: id });
+      }},
+      { label: 'Share', icon: Icons.share(), action: async () => {
+        this.hideContextMenu();
+        const firstTrack = playlist.trackIds.map(tid => Store.getTrack(tid)).find(Boolean);
+        const shareUrl = window.location.origin + '/?play=' + (firstTrack ? firstTrack.id : '');
+        if (navigator.share) {
+          try { await navigator.share({ url: shareUrl }); }
+          catch (err) { if (err.name !== 'AbortError') this.showToast('Share failed'); }
+        } else {
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); }
+          catch (err) { this.showToast('Share not supported'); }
+        }
+      }},
+      { label: 'Delete', icon: Icons.trash(), action: async () => {
+        this.hideContextMenu();
+        if (!confirm('Delete this playlist?')) return;
+        try {
+          await Api.deletePlaylist(id);
+          await Store.refreshPlaylists();
+          if (Store.currentView === 'library') this.renderLibrary();
+          else this.navigateBack();
+          this.showToast('Playlist deleted');
+        } catch (err) {
+          console.error('Delete playlist failed:', err);
+          this.showToast('Failed to delete playlist');
+        }
+      }}
+    ], el);
+  },
+
+  _handleListItemClick(el) {
+    if (el.dataset.action === 'create-playlist') { this._showCreatePlaylistInline(el); return; }
+    if (el.dataset.action === 'favorites') { this.navigateTo('favorites'); return; }
+    if (el.dataset.action === 'all-music') { this.navigateTo('all-music'); return; }
+    if (el.dataset.action === 'needs-review') { this.navigateTo('needs-review'); return; }
+    const type = el.dataset.type;
+    const id = el.dataset.id;
+    if (type === 'album') this.navigateTo('album', { albumId: id });
+    else if (type === 'artist') this.navigateTo('artist', { artistName: id });
+    else if (type === 'playlist') this.navigateTo('playlist', { playlistId: id });
   },
 
   navigateTo(view, data) {
@@ -1129,18 +982,8 @@ const UI = {
   },
 
   navigateBack() {
-    if (!this.els.nowPlaying.classList.contains('hidden')) {
-      this.hideNowPlaying();
-      if (this._navHistory.length > 0) {
-        const prev = this._navHistory.pop();
-        Store.currentView = prev.view;
-        Store.viewData = prev.data;
-        this._clearPollTimers();
-        this.renderPage();
-        this.els.content.scrollTop = 0;
-      }
-      return;
-    }
+    const npVisible = !this.els.nowPlaying.classList.contains('hidden');
+    if (npVisible) this.hideNowPlaying();
     if (this._navHistory.length > 0) {
       const prev = this._navHistory.pop();
       Store.currentView = prev.view;
@@ -1150,6 +993,7 @@ const UI = {
       this.els.content.scrollTop = 0;
       return;
     }
+    if (npVisible) return;
     Store.currentView = 'home';
     Store.viewData = {};
     this._navHistory = [];

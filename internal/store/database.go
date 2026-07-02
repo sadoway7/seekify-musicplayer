@@ -556,8 +556,8 @@ func DbAddTrackToPlaylist(playlistID, trackID string) {
 	DB.Exec("INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)", playlistID, trackID, maxPos+1)
 }
 
-func DbFindPlaylistByName(name string) *models.Playlist {
-	row := DB.QueryRow("SELECT id, name, created_at FROM playlists WHERE name = ? LIMIT 1", name)
+func dbFindPlaylist(where, val string) *models.Playlist {
+	row := DB.QueryRow("SELECT id, name, created_at FROM playlists WHERE "+where+" = ? LIMIT 1", val)
 	var p models.Playlist
 	if err := row.Scan(&p.ID, &p.Name, &p.CreatedAt); err != nil {
 		return nil
@@ -566,14 +566,12 @@ func DbFindPlaylistByName(name string) *models.Playlist {
 	return &p
 }
 
+func DbFindPlaylistByName(name string) *models.Playlist {
+	return dbFindPlaylist("name", name)
+}
+
 func DbFindPlaylistByID(id string) *models.Playlist {
-	row := DB.QueryRow("SELECT id, name, created_at FROM playlists WHERE id = ? LIMIT 1", id)
-	var p models.Playlist
-	if err := row.Scan(&p.ID, &p.Name, &p.CreatedAt); err != nil {
-		return nil
-	}
-	p.TrackIDs = DbGetPlaylistTracks(p.ID)
-	return &p
+	return dbFindPlaylist("id", id)
 }
 
 func DbGetOrCreatePlaylistByName(name string) string {
