@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"musicapp/internal/models"
 	"musicapp/internal/review"
 	"musicapp/internal/store"
@@ -20,9 +19,8 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 	albumCount := len(store.Albums)
 	store.Mu.RUnlock()
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"tracks":  trackCount,
 		"albums":  albumCount,
 		"version": LibraryVersion.Load(),
@@ -132,6 +130,5 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }

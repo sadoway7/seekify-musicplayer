@@ -949,7 +949,6 @@ Object.assign(UI, {
         + '<div class="track-artist">' + artistAlbum + '</div>'
         + '</div>'
         + rightHtml
-        + '<button class="track-pin' + (Store.isInRotation(track.id) ? ' active' : '') + '" data-track-id="' + track.id + '" aria-label="Add to rotation">' + (Store.isInRotation(track.id) ? Icons.pinFilled() : Icons.pin()) + '</button>'
         + '<button class="track-more" aria-label="More">' + Icons.dots() + '</button>'
         + '</div>';
     }).join('') + '</div>';

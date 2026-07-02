@@ -3,7 +3,6 @@ const RipperV2 = {
   _downloadJobs: [],
   _pollTimer: null,
   _history: [],
-  _resolveCache: {},
 
   render(container) {
     this.els = { content: container };

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"io"
 	"log"
 	"musicapp/internal/models"
@@ -115,8 +114,7 @@ func LibraryUploadHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[upload] Library add: %d file(s) added, %d error(s)", len(uploaded), len(uploadErrors))
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"tracks":   tracks,
 		"uploaded": uploaded,
 		"errors":   uploadErrors,
@@ -212,8 +210,7 @@ func MetadataPreviewHandler(w http.ResponseWriter, r *http.Request) {
 		results = append(results, info)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"tracks": results,
 	})
 }

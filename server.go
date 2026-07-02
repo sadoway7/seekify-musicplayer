@@ -285,7 +285,6 @@ func main() {
 	mux.HandleFunc("/admin", handlers.AdminHandler)
 	mux.HandleFunc("/api/v2/resolve-url", handlers.ResolveURLHandler)
 	mux.HandleFunc("/api/v2/search", handlers.V2SearchHandler)
-	mux.HandleFunc("/api/v2/lyrics", handlers.V2LyricsHandler)
 	mux.HandleFunc("/ripperv2", handlers.RipperV2Handler)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		ytdlp := downloads.FindYtDlp()

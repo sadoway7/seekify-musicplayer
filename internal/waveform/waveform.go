@@ -139,45 +139,6 @@ func EnsureWaveformDir() {
 	os.MkdirAll(WaveformDir(), 0755)
 }
 
-func GetOrGenerateWaveform(trackID string) ([]float64, error) {
-	path := WaveformPath(trackID)
-	if data, err := os.ReadFile(path); err == nil {
-		var result struct {
-			Peaks []float64 `json:"peaks"`
-		}
-		if json.Unmarshal(data, &result) == nil && len(result.Peaks) > 0 {
-			return result.Peaks, nil
-		}
-	}
-
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-	if !exists {
-		return nil, nil
-	}
-
-	fullPath := scanner.ResolveFilePath(track.FilePath)
-	peaks, err := GenerateWaveformPeaks(fullPath)
-	if err != nil {
-		log.Printf("[waveform] Failed to generate for %s: %v", trackID, err)
-		return nil, err
-	}
-	if peaks == nil {
-		return nil, nil
-	}
-
-	EnsureWaveformDir()
-
-	jsonData, _ := json.Marshal(struct {
-		Peaks []float64 `json:"peaks"`
-	}{Peaks: peaks})
-	os.WriteFile(path, jsonData, 0644)
-
-	log.Printf("[waveform] Generated and cached %d peaks for %s", len(peaks), trackID)
-	return peaks, nil
-}
-
 func GetCachedWaveform(trackID string) ([]float64, error) {
 	path := WaveformPath(trackID)
 	data, err := os.ReadFile(path)
@@ -191,12 +152,6 @@ func GetCachedWaveform(trackID string) ([]float64, error) {
 		return result.Peaks, nil
 	}
 	return nil, nil
-}
-
-func IsPending(trackID string) bool {
-	pendingMu.Lock()
-	defer pendingMu.Unlock()
-	return pending[trackID]
 }
 
 func GenerateAsync(trackID string) {

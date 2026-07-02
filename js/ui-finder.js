@@ -16,7 +16,7 @@ Object.assign(UI, {
     let html = '<div class="lib-sticky-header">'
       + '<div class="lib-tabs">'
       + '<button class="lib-tab' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Rip Search</button>'
-      + '<button class="lib-tab' + (this._finderTab === 'import' ? ' active' : '') + '" data-finder-tab="import">YT Import</button>'
+      + '<button class="lib-tab' + (this._finderTab === 'bulk' ? ' active' : '') + '" data-finder-tab="bulk">Bulk Import</button>'
       + '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
       + '</div>'
       + (this._finderTab === 'downloads' ? '' : '');
@@ -24,17 +24,16 @@ Object.assign(UI, {
     if (this._finderTab === 'downloads') {
       html += '</div>'
         + '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
-    } else if (this._finderTab === 'import') {
+    } else if (this._finderTab === 'bulk') {
       html += '</div>'
-        + '<div class="playlist-import-section">'
-        + '<div class="playlist-import-body">'
-        + '<div class="playlist-import-form">'
-        + '<input class="settings-input" type="text" id="playlist-url-input" placeholder="Paste YouTube playlist URL..." style="flex:1">'
-        + '<button class="settings-btn settings-btn-primary" id="btn-import-playlist">Import</button>'
+        + '<div style="padding:16px">'
+        + '<div class="settings-section-desc">Paste a list of tracks to download. One per line: "Artist - Title"</div>'
+        + '<textarea id="bulk-import-input" class="settings-textarea" rows="10" style="margin-bottom:12px;font-size:14px" placeholder="Daft Punk - Around the World&#10;The Prodigy - Smack My Bitch Up&#10;Joey Valence and Brae - WATCH YO STEP&#10;Sisqo - Thong Song"></textarea>'
+        + '<div class="settings-actions">'
+        + '<button class="settings-btn settings-btn-primary" id="btn-bulk-import">' + Icons.download() + '<span>Download All</span></button>'
+        + '<span id="bulk-import-count" style="font-size:13px;color:var(--text3);margin-left:8px"></span>'
         + '</div>'
-        + '<div id="playlist-import-result"></div>'
-        + '<div id="watched-playlists"></div>'
-        + '</div>'
+        + '<div id="bulk-import-result"></div>'
         + '</div>';
     } else {
       const subChips = '<div class="finder-type-chips finder-sub-chips">'

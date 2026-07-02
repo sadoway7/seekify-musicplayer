@@ -491,15 +491,6 @@ def cmd_enrich(args):
     return results
 
 
-def cmd_lyrics(args):
-    if len(args) < 2:
-        return {"error": "usage: enrich.py lyrics <artist> <title>"}
-    lyrics = fetch_lyrics(args[0], args[1])
-    if lyrics:
-        return {"lyrics": lyrics, "found": True}
-    return {"found": False}
-
-
 def cmd_cover(args):
     if len(args) < 1:
         return {"error": "usage: enrich.py cover <release_id>"}
@@ -513,7 +504,6 @@ COMMANDS = {
     "search": cmd_search,
     "search-mb": cmd_search_mb,
     "enrich": cmd_enrich,
-    "lyrics": cmd_lyrics,
     "cover": cmd_cover,
 }
 

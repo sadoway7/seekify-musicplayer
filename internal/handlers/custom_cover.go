@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"io"
 	"log"
 	"musicapp/internal/scanner"
@@ -90,8 +89,7 @@ func UploadCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[cover] Custom cover uploaded for album %s (%d bytes)", albumID, len(data))
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"updated": "true", "albumId": albumID})
+	writeJSON(w, map[string]string{"updated": "true", "albumId": albumID})
 }
 
 func ClearCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,8 +117,7 @@ func ClearCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !store.IsCustomCover(albumID) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"cleared": false})
+		writeJSON(w, map[string]bool{"cleared": false})
 		return
 	}
 
@@ -137,6 +134,5 @@ func ClearCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[cover] Custom cover cleared for album %s", albumID)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"cleared": true})
+	writeJSON(w, map[string]bool{"cleared": true})
 }

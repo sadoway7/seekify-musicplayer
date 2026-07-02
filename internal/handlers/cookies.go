@@ -62,8 +62,7 @@ func UploadCookiesHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[cookies] uploaded cookies.txt (%d bytes)", len(data))
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"ok":   true,
 		"path": cookiesFilePath(),
 		"size": len(data),
@@ -109,8 +108,7 @@ func ClearCookiesHandler(w http.ResponseWriter, r *http.Request) {
 	store.SetSetting("yt_cookies_file", "")
 	store.SetSetting("yt_cookies_from_browser", "")
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func ExtractCookiesHandler(w http.ResponseWriter, r *http.Request) {
@@ -186,8 +184,7 @@ func ExtractCookiesHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[cookies] extracted from %s — %d bytes saved to %s", req.Browser, info.Size(), cookiesFilePath())
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"ok":      true,
 		"browser": req.Browser,
 		"path":    cookiesFilePath(),
@@ -212,8 +209,7 @@ func CookiesStatusHandler(w http.ResponseWriter, r *http.Request) {
 	if store.GetSetting("yt_cookies_file", "") != "" {
 		resp["active"] = true
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 // CorsAny permits cross-origin requests so the companion browser extension can

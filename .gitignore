@@ -6,3 +6,11 @@ music/
 .DS_Store
 *.db
 node_modules/
+
+# Tool artifacts
+.codebase-memory/
+.hermes/
+
+# Scratch / verification artifacts
+internal/store/tmpverify/
+internal/store/dedup_verify_test.go

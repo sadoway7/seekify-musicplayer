@@ -35,8 +35,7 @@ func MetadataScanHandler(w http.ResponseWriter, r *http.Request) {
 
 	store.SafeGo("meta-scan", func() { musicbrainz.ScanMetadataForTracks() })
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"status": "started",
 	})
 }
@@ -109,8 +108,7 @@ func MetadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[metadata] Rescan complete: %d candidates found for %s - %s", inserted, searchArtist, searchTitle)
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"status": "started",
 	})
 }
@@ -138,8 +136,7 @@ func MetadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	results := searchMBRecordings(searchArtist, searchTitle, 50)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	writeJSON(w, results)
 }
 
 func cleanRescanTitle(title string) string {
@@ -215,8 +212,7 @@ func cleanRescanArtist(artist string) string {
 func MetadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]interface{}{})
+		writeJSON(w, []interface{}{})
 		return
 	}
 
@@ -233,8 +229,7 @@ func MetadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	results := searchMBRecordings(searchArtist, searchTitle, 50)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	writeJSON(w, results)
 }
 
 func searchMBRecordings(searchArtist, searchTitle string, limit int) []rescanCandidate {
@@ -448,14 +443,12 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 
 	review.DbSetReviewStatus(trackID, "reviewed_ok", "[]", "rescrape")
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"updated": true})
+	writeJSON(w, map[string]bool{"updated": true})
 }
 
 func MetadataScanProgressHandler(w http.ResponseWriter, r *http.Request) {
 	p := musicbrainz.GetScanProgress()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(p)
+	writeJSON(w, p)
 }
 
 func MetadataPendingHandler(w http.ResponseWriter, r *http.Request) {
@@ -488,14 +481,12 @@ func MetadataPendingHandler(w http.ResponseWriter, r *http.Request) {
 		enriched = append(enriched, m)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(enriched)
+	writeJSON(w, enriched)
 }
 
 func MetadataAllHandler(w http.ResponseWriter, r *http.Request) {
 	matches := store.DbGetAllMatches()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(matches)
+	writeJSON(w, matches)
 }
 
 func MetadataApproveHandler(w http.ResponseWriter, r *http.Request) {
@@ -513,8 +504,7 @@ func MetadataApproveHandler(w http.ResponseWriter, r *http.Request) {
 	applied := musicbrainz.ApplyApprovedMatches()
 	scanner.AutoSortMusic()
 	scanner.ExtractEmbeddedCovers()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"approved": true,
 		"applied":  applied,
 	})
@@ -532,8 +522,7 @@ func MetadataRejectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"rejected": true})
+	writeJSON(w, map[string]bool{"rejected": true})
 }
 
 func MetadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
@@ -541,8 +530,7 @@ func MetadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
 	applied := musicbrainz.ApplyApprovedMatches()
 	scanner.ExtractEmbeddedCovers()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"approved": count,
 		"applied":  applied,
 	})
@@ -550,14 +538,12 @@ func MetadataApproveAllHandler(w http.ResponseWriter, r *http.Request) {
 
 func MetadataClearHandler(w http.ResponseWriter, r *http.Request) {
 	store.DbClearMatches()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"cleared": true})
+	writeJSON(w, map[string]bool{"cleared": true})
 }
 
 func MetadataCountsHandler(w http.ResponseWriter, r *http.Request) {
 	counts := store.DbGetMatchCount()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(counts)
+	writeJSON(w, counts)
 }
 
 func MetadataUndoHandler(w http.ResponseWriter, r *http.Request) {
@@ -580,6 +566,5 @@ func MetadataUndoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	store.Mu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"undone": true})
+	writeJSON(w, map[string]bool{"undone": true})
 }

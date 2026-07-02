@@ -189,52 +189,34 @@ func stripCookiesArgs(args []string) []string {
 // If nil, TagAudioFile is used as fallback.
 var EnrichFunc func(audioFile string, job *DownloadJob)
 
-func FindYtDlp() string {
-	if p, err := exec.LookPath("yt-dlp"); err == nil {
+// FindBinary locates an executable by name on PATH, falling back to a list of
+// well-known absolute paths (checked via os.Stat). Returns "" if not found.
+func FindBinary(name string, fallbackPaths ...string) string {
+	if p, err := exec.LookPath(name); err == nil {
 		return p
 	}
-	for _, p := range []string{
+	for _, p := range fallbackPaths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func FindYtDlp() string {
+	return FindBinary("yt-dlp",
 		"/opt/homebrew/bin/yt-dlp",
 		"/usr/local/bin/yt-dlp",
 		"/usr/bin/yt-dlp",
-	} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return ""
+	)
 }
 
 func FindFfmpeg() string {
-	if p, err := exec.LookPath("ffmpeg"); err == nil {
-		return p
-	}
-	for _, p := range []string{
+	return FindBinary("ffmpeg",
 		"/opt/homebrew/bin/ffmpeg",
 		"/usr/local/bin/ffmpeg",
 		"/usr/bin/ffmpeg",
-	} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return ""
-}
-
-func FindFfprobe() string {
-	if p, err := exec.LookPath("ffprobe"); err == nil {
-		return p
-	}
-	for _, p := range []string{
-		"/opt/homebrew/bin/ffprobe",
-		"/usr/local/bin/ffprobe",
-		"/usr/bin/ffprobe",
-	} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return ""
+	)
 }
 
 // YtCommonArgs returns yt-dlp flags shared by every stream-resolving command:
@@ -1226,14 +1208,6 @@ func SearchYouTubeScored(ctx context.Context, query, expectedArtist, expectedTit
 	return candidates, nil
 }
 
-func SearchYouTube(query, expectedArtist, expectedTitle string) (string, error) {
-	candidates, err := SearchYouTubeScored(context.Background(), query, expectedArtist, expectedTitle)
-	if err != nil {
-		return "", err
-	}
-	return candidates[0].VideoID, nil
-}
-
 func ScoreSearchResult(title, channel, expectedArtist, expectedTitle string, duration float64) float64 {
 	score := 0.0
 	t := strings.ToLower(title)
@@ -1531,16 +1505,7 @@ func TagAudioFile(filePath, artist, title, album string, trackNum, trackTotal in
 }
 
 func SanitizeFilename(name string) string {
-	name = strings.TrimSpace(name)
-	invalid := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
-	for _, ch := range invalid {
-		name = strings.ReplaceAll(name, ch, "_")
-	}
-	name = strings.TrimSpace(name)
-	for strings.HasSuffix(name, ".") {
-		name = name[:len(name)-1]
-	}
-	return name
+	return scanner.SanitizePath(name)
 }
 
 func ProbeAudioQuality(filePath string) string {

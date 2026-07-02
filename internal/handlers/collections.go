@@ -11,9 +11,7 @@ func PlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		playlists := store.DbGetPlaylists()
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(playlists)
+		writeJSON(w, playlists)
 
 	case http.MethodPost:
 		var body struct {
@@ -31,8 +29,7 @@ func PlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 
 		playlist := store.DbCreatePlaylist(body.Name)
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(playlist)
+		writeJSON(w, playlist)
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -55,11 +52,10 @@ func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
 
 		store.DbUpdatePlaylist(id, body.Name, body.TrackIDs)
 
-		w.Header().Set("Content-Type", "application/json")
 		playlists := store.DbGetPlaylists()
 		for _, p := range playlists {
 			if p.ID == id {
-				json.NewEncoder(w).Encode(p)
+				writeJSON(w, p)
 				return
 			}
 		}
@@ -71,8 +67,7 @@ func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+		writeJSON(w, map[string]bool{"deleted": true})
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -81,9 +76,7 @@ func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
 
 func FavoritesHandler(w http.ResponseWriter, r *http.Request) {
 	favorites := store.DbGetFavorites()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(favorites)
+	writeJSON(w, favorites)
 }
 
 func FavoriteToggleHandler(w http.ResponseWriter, r *http.Request) {
@@ -97,24 +90,18 @@ func FavoriteToggleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	added := store.DbToggleFavorite(trackID)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"added": added})
+	writeJSON(w, map[string]bool{"added": added})
 }
 
 func RecentHandler(w http.ResponseWriter, r *http.Request) {
 	recent := store.DbGetRecent()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(recent)
+	writeJSON(w, recent)
 }
 
 func RecentAddHandler(w http.ResponseWriter, r *http.Request) {
 	trackID := strings.TrimPrefix(r.URL.Path, "/api/recent/")
 	store.DbAddRecent(trackID)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"added": true})
+	writeJSON(w, map[string]bool{"added": true})
 }
 
 func SharedQueueCreateHandler(w http.ResponseWriter, r *http.Request) {
@@ -131,8 +118,7 @@ func SharedQueueCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	trackJSON, _ := json.Marshal(body.TrackIDs)
 	id := store.DbSaveSharedQueue(string(trackJSON))
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"id": id})
+	writeJSON(w, map[string]string{"id": id})
 }
 
 func SharedQueueGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +132,5 @@ func SharedQueueGetHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Queue not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string][]string{"trackIds": ids})
+	writeJSON(w, map[string][]string{"trackIds": ids})
 }

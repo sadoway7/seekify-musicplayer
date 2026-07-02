@@ -93,8 +93,7 @@ func DownloadsListHandler(w http.ResponseWriter, r *http.Request) {
 		result = []downloadTrack{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	writeJSON(w, result)
 }
 
 func DownloadToggleHandler(w http.ResponseWriter, r *http.Request) {
@@ -126,8 +125,7 @@ func DownloadToggleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	store.Mu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"enabled": enabled})
+	writeJSON(w, map[string]bool{"enabled": enabled})
 }
 
 func DownloadsEnableAllHandler(w http.ResponseWriter, r *http.Request) {
@@ -141,8 +139,7 @@ func DownloadsEnableAllHandler(w http.ResponseWriter, r *http.Request) {
 		t.DownloadEnabled = true
 	}
 	store.Mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func DownloadQueueHandler(w http.ResponseWriter, r *http.Request) {
@@ -160,8 +157,7 @@ func DownloadQueueHandler(w http.ResponseWriter, r *http.Request) {
 	if jobs == nil {
 		jobs = []downloads.DownloadJob{}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jobs)
+	writeJSON(w, jobs)
 }
 
 func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
@@ -200,9 +196,7 @@ func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), "already in library") {
 			status = http.StatusConflict
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSONError(w, status, err.Error())
 		return
 	}
 
@@ -216,8 +210,7 @@ func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 		downloads.DbUpdateJob(job)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
+	writeJSON(w, job)
 }
 
 func DownloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
@@ -263,8 +256,7 @@ func DownloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jobs)
+	writeJSON(w, jobs)
 }
 
 func DownloadJobStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -280,8 +272,7 @@ func DownloadJobStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
+	writeJSON(w, job)
 }
 
 func DownloadJobRetryHandler(w http.ResponseWriter, r *http.Request) {
@@ -311,8 +302,7 @@ func DownloadJobRetryHandler(w http.ResponseWriter, r *http.Request) {
 
 	store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
+	writeJSON(w, job)
 }
 
 func DownloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
@@ -330,8 +320,7 @@ func DownloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	store.DB.Exec("DELETE FROM download_jobs WHERE id = ?", id)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+	writeJSON(w, map[string]string{"status": "deleted"})
 }
 
 func DownloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
@@ -379,8 +368,7 @@ func DownloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
 		store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
+	writeJSON(w, job)
 }
 
 func DownloadJobFileHandler(w http.ResponseWriter, r *http.Request) {
@@ -423,8 +411,7 @@ func QueueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
 		cleared = int(affected)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"cleared": cleared})
+	writeJSON(w, map[string]int{"cleared": cleared})
 }
 
 func DownloadTogglePauseHandler(w http.ResponseWriter, r *http.Request) {
@@ -434,18 +421,16 @@ func DownloadTogglePauseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	paused := !store.GetSettingBool("download_paused", false)
 	store.SetSetting("download_paused", strconv.FormatBool(paused))
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"paused": paused})
+	writeJSON(w, map[string]bool{"paused": paused})
 }
 
 func QueueCountsHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	result := downloads.DbGetJobCounts()
 	result["paused"] = 0
 	if store.GetSettingBool("download_paused", false) {
 		result["paused"] = 1
 	}
-	json.NewEncoder(w).Encode(result)
+	writeJSON(w, result)
 }
 
 func PreviewAudioHandler(w http.ResponseWriter, r *http.Request) {
@@ -479,8 +464,7 @@ func PreviewAudioHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"url": streamURL, "videoId": videoID})
+	writeJSON(w, map[string]string{"url": streamURL, "videoId": videoID})
 }
 
 // SoulseekConnectHandler implements the one-click "Connect Soulseek" onboarding.
@@ -520,33 +504,26 @@ func SoulseekConnectHandler(w http.ResponseWriter, r *http.Request) {
 		shareDir = downloads.SlskShareDir()
 	}
 	if err := os.MkdirAll(shareDir, 0755); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "could not create share folder: " + err.Error()})
+		writeJSONError(w, http.StatusInternalServerError, "could not create share folder: "+err.Error())
 		return
 	}
 
 	seeded, err := downloads.SeedSlskShare(shareDir)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "could not access share folder: " + err.Error()})
+		writeJSONError(w, http.StatusInternalServerError, "could not access share folder: "+err.Error())
 		return
 	}
 
 	ok, msg, terr := downloads.TestSlskConnection(req.Username, req.Password, shareDir)
 	if terr != nil {
 		log.Printf("[soulseek] connect test error: %v", terr)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadGateway)
-		json.NewEncoder(w).Encode(map[string]string{"error": terr.Error()})
+		writeJSONError(w, http.StatusBadGateway, terr.Error())
 		return
 	}
 
 	if ok {
 		store.SetSetting("slsk_enabled", "true")
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSON(w, map[string]interface{}{
 			"ok":        true,
 			"message":   "Connected — account created if it was new",
 			"share_dir": shareDir,
@@ -555,8 +532,7 @@ func SoulseekConnectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"ok":        false,
 		"message":   msg,
 		"share_dir": shareDir,

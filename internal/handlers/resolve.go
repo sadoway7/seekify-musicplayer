@@ -17,6 +17,7 @@ import (
 )
 
 func RipperV2Handler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	http.ServeFile(w, r, "ripperv2.html")
 }
 
@@ -70,9 +71,7 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		output, err = cmd.Output()
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "yt-dlp failed: " + string(output)})
+			writeJSONError(w, http.StatusBadRequest, "yt-dlp failed: "+string(output))
 			return
 		}
 	}
@@ -128,8 +127,7 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 		"confidence": 0,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	writeJSON(w, response)
 }
 
 func parseVideoTitle(title, channel string) (string, string) {
@@ -221,29 +219,6 @@ func cleanChannelArtist(artist string) string {
 		}
 	}
 	return strings.TrimSpace(artist)
-}
-
-func scoreMatchV2(mbTitle, mbArtist, expectedArtist, expectedTitle string) float64 {
-	score := 0.0
-	mbt := strings.ToLower(mbTitle)
-	mba := strings.ToLower(mbArtist)
-	a := strings.ToLower(expectedArtist)
-	t := strings.ToLower(expectedTitle)
-
-	if a != "" && strings.Contains(mba, a) {
-		score += 60
-	}
-	if t != "" && strings.Contains(mbt, t) {
-		score += 50
-	}
-	if a != "" && downloads.LevenshteinContains(mbt, a) {
-		score += 30
-	}
-	if t != "" && downloads.LevenshteinContains(mba, t) {
-		score += 20
-	}
-
-	return score
 }
 
 func findPython3() string {
@@ -380,40 +355,10 @@ func V2SearchHandler(w http.ResponseWriter, r *http.Request) {
 		exitErr, ok := err.(*exec.ExitError)
 		errMsg := err.Error()
 		if ok {
-			errMsg = string(exitErr.Stderr)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "search failed: " + errMsg})
-		return
+		errMsg = string(exitErr.Stderr)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(output)
-}
-
-func V2LyricsHandler(w http.ResponseWriter, r *http.Request) {
-	artist := r.URL.Query().Get("artist")
-	title := r.URL.Query().Get("title")
-	if artist == "" || title == "" {
-		http.Error(w, `{"error":"artist and title required"}`, http.StatusBadRequest)
-		return
-	}
-
-	pythonPath := findPython3()
-	if pythonPath == "" {
-		http.Error(w, `{"error":"python3 not found"}`, http.StatusInternalServerError)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, pythonPath, "scripts/enrich.py", "lyrics", artist, title)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	output, err := cmd.Output()
-	if err != nil {
-		http.Error(w, `{"found":false}`, http.StatusOK)
-		return
+	writeJSONError(w, http.StatusInternalServerError, "search failed: "+errMsg)
+	return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

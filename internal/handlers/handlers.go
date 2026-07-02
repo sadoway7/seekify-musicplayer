@@ -17,6 +17,19 @@ import (
 	"strings"
 )
 
+// writeJSON sets the Content-Type and encodes v as JSON to w. Replaces the
+// repeated w.Header().Set("Content-Type","application/json") + json.NewEncoder(w).Encode(v) pair.
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
+}
+
+// writeJSONError writes a status code and a {"error": msg} JSON body.
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 // ytDlpSem caps concurrent ad-hoc yt-dlp invocations spawned by HTTP handlers
 // (URL resolve, search, cookie extract). Without it, a single request that
 // pastes 20 URLs spawns 20 yt-dlp processes at once.
@@ -44,8 +57,7 @@ func ScanHandler(w http.ResponseWriter, r *http.Request) {
 	store.SafeGo("fetch-covers", func() { musicbrainz.FetchMissingCovers() })
 	store.SafeGo("fetch-artist-art", func() { musicbrainz.FetchMissingArtistArt() })
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	writeJSON(w, stats)
 }
 
 func OpenBrowser(url string) {
@@ -146,6 +158,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 		htmlStr = strings.Replace(htmlStr, "</title>", "</title>"+ogTags, 1)
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Write([]byte(htmlStr))
 		return
 	}
@@ -167,6 +180,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 
 	indexPath := filepath.Join(".", "index.html")
 	if _, err := os.Stat(indexPath); err == nil {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		http.ServeFile(w, r, indexPath)
 		return
 	}

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"musicapp/internal/musicbrainz"
@@ -219,8 +218,7 @@ func ArtistArtFetchHandler(w http.ResponseWriter, r *http.Request) {
 
 	fetched := musicbrainz.FetchArtistImage(artistName)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"fetched": fetched})
+	writeJSON(w, map[string]bool{"fetched": fetched})
 }
 
 func extractCoverFromFile(filePath string) ([]byte, error) {

@@ -14,8 +14,7 @@ import (
 )
 
 func SettingsGetHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(store.GetAllSettings())
+	writeJSON(w, store.GetAllSettings())
 }
 
 func SettingsSetHandler(w http.ResponseWriter, r *http.Request) {
@@ -34,8 +33,7 @@ func SettingsSetHandler(w http.ResponseWriter, r *http.Request) {
 		store.SetSetting(k, v)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	writeJSON(w, map[string]string{"status": "ok"})
 }
 
 func BulkImportHandler(w http.ResponseWriter, r *http.Request) {
@@ -75,8 +73,7 @@ func BulkImportHandler(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"queued": len(jobs), "ids": jobs})
+	writeJSON(w, map[string]interface{}{"queued": len(jobs), "ids": jobs})
 }
 
 func PlaylistImportHandler(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +92,7 @@ func PlaylistImportHandler(w http.ResponseWriter, r *http.Request) {
 
 	name, ytTracks, err := watched.ExtractYouTubePlaylistTracks(req.URL)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -145,8 +140,7 @@ func PlaylistImportHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"id":        wp.ID,
 		"name":      name,
 		"total":     len(ytTracks),
@@ -182,8 +176,7 @@ func WatchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 
 		store.SafeGo("watched-refresh", func() { watched.RefreshWatchedPlaylist(wp) })
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSON(w, map[string]interface{}{
 			"id":         wp.ID,
 			"name":       name,
 			"url":        wp.URL,
@@ -207,8 +200,7 @@ func WatchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			store.DB.Exec("UPDATE watched_playlists SET watching = ? WHERE id = ?", watching, id)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		writeJSON(w, map[string]string{"status": "ok"})
 		return
 	}
 
@@ -225,8 +217,7 @@ func WatchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 				store.SafeGo("watched-refresh", func() { watched.RefreshWatchedPlaylist(&wp) })
 			}
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		writeJSON(w, map[string]string{"status": "ok"})
 		return
 	}
 
@@ -234,8 +225,7 @@ func WatchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/api/watch/")
 		store.DB.Exec("DELETE FROM watched_playlist_tracks WHERE playlist_id = ?", id)
 		store.DB.Exec("DELETE FROM watched_playlists WHERE id = ?", id)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		writeJSON(w, map[string]string{"status": "ok"})
 		return
 	}
 
@@ -243,6 +233,5 @@ func WatchedPlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		playlists = []watched.WatchedPlaylist{}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(playlists)
+	writeJSON(w, playlists)
 }

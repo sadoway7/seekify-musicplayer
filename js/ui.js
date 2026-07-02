@@ -1,7 +1,6 @@
 const UI = {
   els: {},
   seeking: false,
-  volumeDragging: false,
   contextTrackId: null,
   playlistModalTrackId: null,
   libFilter: 'playlists',
@@ -854,17 +853,6 @@ const UI = {
         if (row) {
           this._showTrackContextMenu(row.dataset.trackId, tmore);
         }
-        return;
-      }
-
-      const tpin = e.target.closest('.track-pin');
-      if (tpin) {
-        e.stopPropagation();
-        const trackId = tpin.dataset.trackId;
-        const wasActive = tpin.classList.contains('active');
-        tpin.classList.toggle('active', !wasActive);
-        tpin.innerHTML = wasActive ? Icons.pin() : Icons.pinFilled();
-        Store.toggleRotation(trackId);
         return;
       }
 

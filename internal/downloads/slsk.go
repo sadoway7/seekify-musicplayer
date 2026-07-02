@@ -56,20 +56,12 @@ type slskDownloadResult struct {
 // same well-known install locations FindYtDlp checks), or "" if absent.
 // Soulseek is an optional source: callers must treat "" as "disabled".
 func findSlsk() string {
-	if p, err := exec.LookPath("python3"); err == nil {
-		return p
-	}
-	for _, p := range []string{
+	return FindBinary("python3",
 		"/opt/homebrew/bin/python3",
 		"/usr/local/bin/python3",
 		"/usr/bin/python3",
 		"/bin/python3",
-	} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return ""
+	)
 }
 
 // slskScriptPath returns the path to the bundled Soulseek helper script,

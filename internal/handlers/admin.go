@@ -177,8 +177,7 @@ func FileListHandler(w http.ResponseWriter, r *http.Request) {
 
 	result := append(dirs, files...)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	writeJSON(w, result)
 }
 
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -240,8 +239,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		uploaded = append(uploaded, fh.Filename)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"uploaded": uploaded,
 		"errors":   uploadErrors,
 	})
@@ -269,8 +267,7 @@ func DeleteFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	writeJSON(w, map[string]bool{"deleted": true})
 }
 
 func CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
@@ -304,8 +301,7 @@ func CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 
 	relPath := filepath.Join(body.Path, body.Name)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"created": true,
 		"path":    relPath,
 	})
@@ -345,8 +341,7 @@ func TrackDurationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	store.Mu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"updated": true})
+	writeJSON(w, map[string]bool{"updated": true})
 }
 
 func WaveformHandler(w http.ResponseWriter, r *http.Request) {
@@ -358,15 +353,13 @@ func WaveformHandler(w http.ResponseWriter, r *http.Request) {
 
 	peaks, err := waveform.GetCachedWaveform(trackID)
 	if err == nil && peaks != nil {
-		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
-		json.NewEncoder(w).Encode(map[string]interface{}{"peaks": peaks})
+		writeJSON(w, map[string]interface{}{"peaks": peaks})
 		return
 	}
 
 	waveform.GenerateAsync(trackID)
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
-	json.NewEncoder(w).Encode(map[string]interface{}{"peaks": []float64{}, "pending": true})
+	writeJSON(w, map[string]interface{}{"peaks": []float64{}, "pending": true})
 }

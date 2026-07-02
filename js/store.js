@@ -151,37 +151,6 @@ const Store = {
     return this.favorites.includes(trackId);
   },
 
-  _rotationIds: null,
-
-  async _ensureRotation() {
-    if (this._rotationIds) return;
-    if (!this.playlists.length) await this.refreshPlaylists();
-    let rot = this.playlists.find(p => p.name === 'Rotation');
-    if (!rot) {
-      rot = await Api.createPlaylist('Rotation');
-      this.playlists.push(rot);
-    }
-    this._rotationIds = new Set(rot.trackIds || []);
-  },
-
-  isInRotation(trackId) {
-    return this._rotationIds && this._rotationIds.has(trackId);
-  },
-
-  async toggleRotation(trackId) {
-    await this._ensureRotation();
-    const rot = this.playlists.find(p => p.name === 'Rotation');
-    if (!rot) return;
-    if (this._rotationIds.has(trackId)) {
-      this._rotationIds.delete(trackId);
-      rot.trackIds = (rot.trackIds || []).filter(id => id !== trackId);
-    } else {
-      this._rotationIds.add(trackId);
-      rot.trackIds = [...(rot.trackIds || []), trackId];
-    }
-    await Api.updatePlaylist(rot.id, { name: 'Rotation', trackIds: rot.trackIds });
-  },
-
   getPlaylist(id) {
     return this.playlists.find(p => p.id === id) || null;
   }

@@ -439,22 +439,35 @@ func MigrateFromJSON() {
 	}
 }
 
-func DbGetFavorites() []string {
-	rows, err := DB.Query("SELECT track_id FROM favorites ORDER BY added_at DESC")
+// dbQueryTrackIDs runs a single-column track_id query and returns the ids,
+// logging (not swallowing) scan/iteration errors.
+func dbQueryTrackIDs(query string) []string {
+	rows, err := DB.Query(query)
 	if err != nil {
+		log.Printf("dbQueryTrackIDs: %v", err)
 		return []string{}
 	}
 	defer rows.Close()
 	var ids []string
 	for rows.Next() {
 		var id string
-		rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			log.Printf("dbQueryTrackIDs scan: %v", err)
+			continue
+		}
 		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("dbQueryTrackIDs rows: %v", err)
 	}
 	if ids == nil {
 		ids = []string{}
 	}
 	return ids
+}
+
+func DbGetFavorites() []string {
+	return dbQueryTrackIDs("SELECT track_id FROM favorites ORDER BY added_at DESC")
 }
 
 func DbToggleFavorite(trackID string) bool {
@@ -468,28 +481,8 @@ func DbToggleFavorite(trackID string) bool {
 	return true
 }
 
-func DbIsFavorite(trackID string) bool {
-	var exists bool
-	DB.QueryRow("SELECT 1 FROM favorites WHERE track_id = ?", trackID).Scan(&exists)
-	return exists
-}
-
 func DbGetRecent() []string {
-	rows, err := DB.Query("SELECT track_id FROM recent ORDER BY position ASC")
-	if err != nil {
-		return []string{}
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		rows.Scan(&id)
-		ids = append(ids, id)
-	}
-	if ids == nil {
-		ids = []string{}
-	}
-	return ids
+	return dbQueryTrackIDs("SELECT track_id FROM recent ORDER BY position ASC")
 }
 
 func DbAddRecent(trackID string) {
@@ -606,19 +599,34 @@ func DbInsertMetadataMatch(m *models.MetadataMatch) {
 		m.ID, m.TrackID, m.TrackTitle, m.TrackArtist, m.MBTitle, m.MBArtist, m.MBAlbum, m.MBAlbumID, m.MBScore, m.Status)
 }
 
-func DbGetPendingMatches() []models.MetadataMatch {
-	rows, err := DB.Query(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score
-		FROM metadata_matches WHERE status = 'pending' ORDER BY mb_score DESC`)
+// dbQueryMatches runs a metadata_matches query, logging scan/iteration errors
+// instead of silently swallowing them. scanFn is per-row: pass nil to leave
+// status unscanned (pending-only queries select no status column).
+func dbQueryMatches(query string, scanStatus bool) []models.MetadataMatch {
+	rows, err := DB.Query(query)
 	if err != nil {
+		log.Printf("dbQueryMatches: %v", err)
 		return []models.MetadataMatch{}
 	}
 	defer rows.Close()
-
 	var matches []models.MetadataMatch
 	for rows.Next() {
 		var m models.MetadataMatch
-		rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore)
+		if scanStatus {
+			if err := rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore, &m.Status); err != nil {
+				log.Printf("dbQueryMatches scan: %v", err)
+				continue
+			}
+		} else {
+			if err := rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore); err != nil {
+				log.Printf("dbQueryMatches scan: %v", err)
+				continue
+			}
+		}
 		matches = append(matches, m)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("dbQueryMatches rows: %v", err)
 	}
 	if matches == nil {
 		matches = []models.MetadataMatch{}
@@ -626,24 +634,14 @@ func DbGetPendingMatches() []models.MetadataMatch {
 	return matches
 }
 
-func DbGetAllMatches() []models.MetadataMatch {
-	rows, err := DB.Query(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score, status
-		FROM metadata_matches ORDER BY status, mb_score DESC`)
-	if err != nil {
-		return []models.MetadataMatch{}
-	}
-	defer rows.Close()
+func DbGetPendingMatches() []models.MetadataMatch {
+	return dbQueryMatches(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score
+		FROM metadata_matches WHERE status = 'pending' ORDER BY mb_score DESC`, false)
+}
 
-	var matches []models.MetadataMatch
-	for rows.Next() {
-		var m models.MetadataMatch
-		rows.Scan(&m.ID, &m.TrackID, &m.TrackTitle, &m.TrackArtist, &m.MBTitle, &m.MBArtist, &m.MBAlbum, &m.MBAlbumID, &m.MBScore, &m.Status)
-		matches = append(matches, m)
-	}
-	if matches == nil {
-		matches = []models.MetadataMatch{}
-	}
-	return matches
+func DbGetAllMatches() []models.MetadataMatch {
+	return dbQueryMatches(`SELECT id, track_id, track_title, track_artist, mb_title, mb_artist, mb_album, mb_album_id, mb_score, status
+		FROM metadata_matches ORDER BY status, mb_score DESC`, true)
 }
 
 func DbApproveMatch(id string) bool {
@@ -960,43 +958,6 @@ func DbToggleDownload(trackID string) bool {
 	}
 	DB.Exec("UPDATE downloads SET disabled = 1 WHERE track_id = ?", trackID)
 	return false
-}
-
-func DbIsDownloadable(trackID string) bool {
-	var disabled int
-	err := DB.QueryRow("SELECT disabled FROM downloads WHERE track_id = ?", trackID).Scan(&disabled)
-	if err != nil {
-		return true
-	}
-	return disabled == 0
-}
-
-func DbGetDownloadableTracks() []string {
-	rows, err := DB.Query("SELECT track_id, disabled FROM downloads")
-	if err != nil {
-		return []string{}
-	}
-	defer rows.Close()
-	blacklist := map[string]bool{}
-	for rows.Next() {
-		var id string
-		var disabled int
-		if rows.Scan(&id, &disabled) == nil && disabled == 1 {
-			blacklist[id] = true
-		}
-	}
-	Mu.RLock()
-	defer Mu.RUnlock()
-	var ids []string
-	for _, t := range Tracks {
-		if !blacklist[t.ID] {
-			ids = append(ids, t.ID)
-		}
-	}
-	if ids == nil {
-		ids = []string{}
-	}
-	return ids
 }
 
 func DbSaveSharedQueue(trackIDs string) string {

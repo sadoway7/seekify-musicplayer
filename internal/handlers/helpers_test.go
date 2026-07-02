@@ -80,23 +80,4 @@ func TestParseVideoTitle_withSuffix(t *testing.T) {
 	}
 }
 
-func TestScoreMatchV2_exact(t *testing.T) {
-	score := scoreMatchV2("test title", "test artist", "test artist", "test title")
-	if score <= 0 {
-		t.Errorf("expected positive score for exact match, got %f", score)
-	}
-}
 
-func TestScoreMatchV2_noMatch(t *testing.T) {
-	score := scoreMatchV2("something", "someone", "other", "different")
-	if score != 0 {
-		t.Errorf("expected 0 for no match, got %f", score)
-	}
-}
-
-func TestScoreMatchV2_partial(t *testing.T) {
-	score := scoreMatchV2("test title song", "test artist", "test artist", "test title")
-	if score <= 0 {
-		t.Errorf("expected positive score for partial match, got %f", score)
-	}
-}

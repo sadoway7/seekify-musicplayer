@@ -27,14 +27,12 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if q == "" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]interface{}{})
+		writeJSON(w, []interface{}{})
 		return
 	}
 
 	limit := 20
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
 
 	switch searchType {
@@ -42,40 +40,37 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 		results, err := musicbrainz.FinderSearchRecordings(q, limit)
 		if err != nil {
 			log.Printf("[finder] Recording search error: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if results == nil {
 			results = []musicbrainz.FinderRecording{}
 		}
-		json.NewEncoder(w).Encode(results)
+		writeJSON(w, results)
 
 	case "artist":
 		results, err := musicbrainz.FinderSearchArtists(q, limit)
 		if err != nil {
 			log.Printf("[finder] Artist search error: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if results == nil {
 			results = []musicbrainz.FinderArtist{}
 		}
-		json.NewEncoder(w).Encode(results)
+		writeJSON(w, results)
 
 	case "release":
 		results, err := musicbrainz.FinderSearchReleases(q, limit)
 		if err != nil {
 			log.Printf("[finder] Release search error: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if results == nil {
 			results = []musicbrainz.FinderRelease{}
 		}
-		json.NewEncoder(w).Encode(results)
+		writeJSON(w, results)
 
 	default:
 		http.Error(w, `{"error":"invalid type"}`, http.StatusBadRequest)
@@ -97,8 +92,7 @@ func FinderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
 		if page.Tracks == nil {
 			page.Tracks = []musicbrainz.ArtistTrack{}
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(page)
+		writeJSON(w, page)
 		return
 	}
 
@@ -111,17 +105,15 @@ func FinderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
 	results, err := musicbrainz.FinderArtistReleases(mbid)
 	if err != nil {
 		log.Printf("[finder] Artist releases error: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if results == nil {
 		results = []musicbrainz.FinderRelease{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
-	json.NewEncoder(w).Encode(results)
+	writeJSON(w, results)
 }
 
 func FinderReleaseTracksHandler(w http.ResponseWriter, r *http.Request) {
@@ -135,17 +127,15 @@ func FinderReleaseTracksHandler(w http.ResponseWriter, r *http.Request) {
 	results, err := musicbrainz.FinderReleaseTracks(mbid)
 	if err != nil {
 		log.Printf("[finder] Release tracks error: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if results == nil {
 		results = []musicbrainz.FinderReleaseTrack{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
-	json.NewEncoder(w).Encode(results)
+	writeJSON(w, results)
 }
 
 func FinderCoverHandler(w http.ResponseWriter, r *http.Request) {
@@ -222,13 +212,13 @@ type youtubeSearchResult struct {
 func YoutubeSearchHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
-		json.NewEncoder(w).Encode([]interface{}{})
+		writeJSON(w, []interface{}{})
 		return
 	}
 
 	ytdlpPath := downloads.FindYtDlp()
 	if ytdlpPath == "" {
-		json.NewEncoder(w).Encode([]interface{}{})
+		writeJSON(w, []interface{}{})
 		return
 	}
 
@@ -246,7 +236,7 @@ func YoutubeSearchHandler(w http.ResponseWriter, r *http.Request) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	output, err := cmd.Output()
 	if err != nil {
-		json.NewEncoder(w).Encode([]interface{}{})
+		writeJSON(w, []interface{}{})
 		return
 	}
 
@@ -292,11 +282,9 @@ func YoutubeSearchHandler(w http.ResponseWriter, r *http.Request) {
 		results = []youtubeSearchResult{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	writeJSON(w, results)
 }
 
 func ArtistTrackProgressHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(musicbrainz.GetArtistTrackProgress())
+	writeJSON(w, musicbrainz.GetArtistTrackProgress())
 }

@@ -30,10 +30,6 @@ func ArtistArtKey(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
-func ArtistArtPath(name string) string {
-	return filepath.Join(store.MusicDir, "images", "artists", ArtistArtKey(name)+".jpg")
-}
-
 func FetchArtistImage(artistName string) bool {
 	if artistName == "" {
 		return false

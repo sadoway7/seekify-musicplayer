@@ -26,6 +26,10 @@ var (
 
 var LibraryVersionAdd func(delta int64)
 
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	writeJSON(w, v)
+}
+
 type ReviewProgressInfo struct {
 	sync.RWMutex
 	CurrentTrack string
@@ -114,43 +118,6 @@ func DbGetTracksByReviewStatus(status string, limit int) []string {
 		ids = append(ids, id)
 	}
 	return ids
-}
-
-func DbGetReviewTracks(limit int) []models.Track {
-	rows, err := store.DB.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review' LIMIT ?", limit)
-	if err != nil {
-		return []models.Track{}
-	}
-	defer rows.Close()
-	type row struct {
-		id    string
-		flags string
-	}
-	var rowBuf []row
-	for rows.Next() {
-		var trackID, flagsJSON string
-		rows.Scan(&trackID, &flagsJSON)
-		rowBuf = append(rowBuf, row{trackID, flagsJSON})
-	}
-	store.Mu.RLock()
-	result := make([]models.Track, 0, len(rowBuf))
-	var orphanIDs []string
-	for _, r := range rowBuf {
-		t, exists := store.Tracks[r.id]
-		if !exists {
-			orphanIDs = append(orphanIDs, r.id)
-			continue
-		}
-		cp := *t
-		cp.ReviewStatus = "needs_review"
-		json.Unmarshal([]byte(r.flags), &cp.ReviewFlags)
-		result = append(result, cp)
-	}
-	store.Mu.RUnlock()
-	if len(orphanIDs) > 0 {
-		store.SafeGo("review-cleanup", func() { cleanupOrphanedReviewIDs(orphanIDs) })
-	}
-	return result
 }
 
 func DbGetReviewTotal(flags ...string) int {
@@ -1143,8 +1110,7 @@ func ReviewTracksHandler(w http.ResponseWriter, r *http.Request) {
 	flags := r.URL.Query()["flag"]
 	tracks := DbGetReviewTracksPage(limit, offset, flags...)
 	total := DbGetReviewTotal(flags...)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, map[string]interface{}{
 		"tracks": tracks,
 		"total":  total,
 	})
@@ -1152,8 +1118,7 @@ func ReviewTracksHandler(w http.ResponseWriter, r *http.Request) {
 
 func ReviewCountsHandler(w http.ResponseWriter, r *http.Request) {
 	counts := DbGetReviewCounts()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(counts)
+	writeJSON(w, counts)
 }
 
 func ReviewMarkOkHandler(w http.ResponseWriter, r *http.Request) {
@@ -1173,8 +1138,7 @@ func ReviewMarkOkHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	store.Mu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func ReviewEditMetaHandler(w http.ResponseWriter, r *http.Request) {
@@ -1199,8 +1163,7 @@ func ReviewEditMetaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	store.Mu.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"updated": true})
+	writeJSON(w, map[string]bool{"updated": true})
 }
 
 func ReviewDeleteHandler(w http.ResponseWriter, r *http.Request) {
@@ -1215,8 +1178,7 @@ func ReviewDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not delete file", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	writeJSON(w, map[string]bool{"deleted": true})
 }
 
 func ReviewDeleteAllHandler(w http.ResponseWriter, r *http.Request) {
@@ -1225,8 +1187,7 @@ func ReviewDeleteAllHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not delete files", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"deleted": count})
+	writeJSON(w, map[string]int{"deleted": count})
 }
 
 func ReviewBulkDeleteHandler(w http.ResponseWriter, r *http.Request) {
@@ -1239,8 +1200,7 @@ func ReviewBulkDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not delete files", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"deleted": count})
+	writeJSON(w, map[string]int{"deleted": count})
 }
 
 func ReviewBulkApproveHandler(w http.ResponseWriter, r *http.Request) {
@@ -1253,8 +1213,7 @@ func ReviewBulkApproveHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not approve", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"approved": count})
+	writeJSON(w, map[string]int{"approved": count})
 }
 
 func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
@@ -1263,8 +1222,7 @@ func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
 	ReviewLogData.Entries = nil
 	ReviewLogData.Unlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"reset": true})
+	writeJSON(w, map[string]bool{"reset": true})
 
 	store.SafeGo("review-recheck", func() {
 		ReviewMu.Lock()
@@ -1296,8 +1254,7 @@ func ReviewProgressHandler(w http.ResponseWriter, r *http.Request) {
 		"total":        ReviewProgressData.Total,
 	}
 	ReviewProgressData.RUnlock()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp)
 }
 
 func ReviewLogHandler(w http.ResponseWriter, r *http.Request) {

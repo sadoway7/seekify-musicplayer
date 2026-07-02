@@ -37,12 +37,6 @@ type MbArtistCredit struct {
 	Name string `json:"name"`
 }
 
-type MbLookupResponse struct {
-	Title        string          `json:"title"`
-	ArtistCredit []MbArtistCredit `json:"artist-credit"`
-	Date         string          `json:"date"`
-}
-
 type MbRecordingResult struct {
 	RecordingID string
 	Title       string
