@@ -1398,18 +1398,54 @@ const UI = {
       const needsFullRebuild = existingRows.length !== workers.length;
 
       if (needsFullRebuild) {
+        // Map worker names to their setting toggle IDs and interval IDs
+        const workerSettings = {
+          'scanner':           { toggle: 'setting-watcher-enabled', interval: 'setting-watcher-interval', intervalLabel: 'sec' },
+          'cover-fetch':       { toggle: 'setting-cover-fetch-enabled' },
+          'artist-art-fetch':  { toggle: 'setting-artist-art-fetch-enabled' },
+          'review':            { toggle: 'setting-review-enabled', interval: 'setting-review-recheck-hours', intervalLabel: 'hrs' },
+        };
+
+        const s = this._savedWorkerSettings || {};
+        const workerEnabled = {
+          'scanner': s.watcher_enabled !== false,
+          'cover-fetch': s.cover_fetch_enabled !== false,
+          'artist-art-fetch': s.artist_art_fetch_enabled !== false,
+          'review': s.review_enabled !== false,
+        };
+
         container.innerHTML = workers.map(w => {
+          const ws = workerSettings[w.name];
+          const hasToggle = !!ws;
+          const toggleActive = hasToggle ? workerEnabled[w.name] : false;
+          let controls = '';
+
+          if (ws && ws.interval) {
+            const intervalVal = ws.interval === 'setting-watcher-interval' ? (s.watcher_interval || '30') : (s.review_recheck_hours || '24');
+            controls += '<div class="worker-controls">'
+              + '<input type="text" class="settings-input worker-interval-input" id="' + ws.interval + '" value="' + this._esc(intervalVal) + '" style="width:50px;padding:4px 8px;font-size:13px;text-align:center">'
+              + '<span class="worker-interval-label">' + ws.intervalLabel + '</span>'
+              + '</div>';
+          }
+
           return '<div class="worker-row" data-worker="' + this._esc(w.name) + '">'
             + '<div class="worker-status-dot"></div>'
+            + (hasToggle ? '<div class="stoggle worker-toggle' + (toggleActive ? ' active' : '') + '"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div>' : '<div class="worker-toggle-spacer"></div>')
             + '<div class="worker-info">'
             + '<div class="worker-name">' + this._esc(w.name) + '</div>'
             + '<div class="worker-desc">' + this._esc(w.description) + '</div>'
             + '</div>'
             + '<div class="worker-freq">' + this._esc(w.frequency) + '</div>'
+            + controls
             + '<div class="worker-last"></div>'
             + '<button class="settings-btn worker-run-btn"><span></span></button>'
             + '</div>';
         }).join('');
+
+        // Bind toggle clicks
+        container.querySelectorAll('.worker-toggle').forEach(t => {
+          t.addEventListener('click', () => t.classList.toggle('active'));
+        });
       }
 
       // Update each row in place

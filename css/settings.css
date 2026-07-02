@@ -515,6 +515,20 @@
   background: #4ade80;
   animation: worker-pulse 1.5s infinite;
 }
+.worker-toggle-spacer {
+  width: 52px;
+  flex-shrink: 0;
+}
+.worker-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.worker-interval-label {
+  font-size: 12px;
+  color: var(--text3, #888);
+}
 .worker-info { flex: 1; min-width: 0; }
 .worker-name {
   font-weight: 600;

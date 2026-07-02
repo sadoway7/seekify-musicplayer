@@ -28,7 +28,6 @@ Object.assign(UI, {
     html += '<div class="lib-tabs" id="settings-tabs">'
       + '<button class="lib-tab active" data-settings-tab="playback">Playback</button>'
       + '<button class="lib-tab" data-settings-tab="downloads">Downloads</button>'
-      + '<button class="lib-tab" data-settings-tab="sources">Sources</button>'
       + '<button class="lib-tab" data-settings-tab="library">Library</button>'
       + '<button class="lib-tab" data-settings-tab="tasks">Tasks</button>'
       + '<button class="lib-tab" data-settings-tab="about">About</button>'
@@ -53,7 +52,7 @@ Object.assign(UI, {
       + '</div>'
       + '</div>';
 
-    // --- Tab: Downloads ---
+    // --- Tab: Downloads (merged: permissions + engine + sources) ---
     html += '<div class="settings-tab-panel" data-panel="downloads">'
       // Permissions
       + '<div class="settings-subsection-label">Permissions</div>'
@@ -66,6 +65,12 @@ Object.assign(UI, {
       // Engine
       + '<div class="settings-subsection-label" style="margin-top:20px">Download Engine</div>'
       + '<div id="finder-settings" class="settings-status"></div>'
+      + '<div class="settings-field"><label>Download Source</label>'
+      + '<select id="setting-download-source" class="settings-select">'
+      + '<option value="auto">Auto — YouTube, then Soulseek</option>'
+      + '<option value="youtube">YouTube only</option>'
+      + '<option value="soulseek">Soulseek only</option>'
+      + '</select></div>'
       + '<div class="settings-form-grid">'
       + '<div class="settings-field"><label>Audio Format</label>'
       + '<select id="setting-download-format" class="settings-select">'
@@ -100,34 +105,18 @@ Object.assign(UI, {
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-finder-settings">' + Icons.check() + '<span>Save Engine Settings</span></button>'
       + '</div>'
-      + '</div>';
-
-    // --- Tab: Sources ---
-    html += '<div class="settings-tab-panel" data-panel="sources">'
       // YouTube
-      + '<div class="settings-subsection-label">YouTube Authentication</div>'
-      + '<div class="settings-section-desc">Pick a browser to extract cookies once — one Keychain prompt, then downloads work forever with zero prompts. Or upload a cookies.txt file below.</div>'
+      + '<div class="settings-subsection-label" style="margin-top:20px">YouTube Authentication</div>'
+      + '<div class="settings-section-desc">Pick a browser to extract cookies once — one Keychain prompt, then downloads work forever. Or upload a cookies.txt file below.</div>'
       + '<div class="settings-field" style="margin-bottom:12px">'
       + '<label style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;display:block">Extract cookies from browser</label>'
       + '<select id="setting-yt-cookies-from-browser" class="settings-select" style="width:100%;padding:10px 12px;font-size:14px">'
       + '<option value="">— Disabled —</option>'
-      + '<option value="chrome">Chrome</option>'
-      + '<option value="chromium">Chromium</option>'
-      + '<option value="firefox">Firefox</option>'
-      + '<option value="edge">Edge</option>'
-      + '<option value="brave">Brave</option>'
-      + '<option value="opera">Opera</option>'
-      + '<option value="safari">Safari</option>'
-      + '<option value="vivaldi">Vivaldi</option>'
-      + '<option value="whale">Whale</option>'
+      + '<option value="chrome">Chrome</option><option value="chromium">Chromium</option><option value="firefox">Firefox</option><option value="edge">Edge</option><option value="brave">Brave</option><option value="opera">Opera</option><option value="safari">Safari</option><option value="vivaldi">Vivaldi</option><option value="whale">Whale</option>'
       + '</select></div>'
       + '<div class="settings-field"><label>Player Client</label>'
       + '<select id="setting-yt-player-client" class="settings-select">'
-      + '<option value="default">Default — recommended</option>'
-      + '<option value="web">Web</option>'
-      + '<option value="mweb">Mobile Web</option>'
-      + '<option value="tv">TV</option>'
-      + '<option value="web_embedded">Web Embedded</option>'
+      + '<option value="default">Default — recommended</option><option value="web">Web</option><option value="mweb">Mobile Web</option><option value="tv">TV</option><option value="web_embedded">Web Embedded</option>'
       + '</select></div>'
       + '<div class="settings-field"><label>Cookies File</label>'
       + '<div id="yt-cookies-status" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">Checking\u2026</div>'
@@ -136,6 +125,28 @@ Object.assign(UI, {
       + '<button class="settings-btn settings-btn-primary" id="btn-upload-cookies" type="button">' + Icons.upload() + '<span>Upload cookies.txt</span></button>'
       + '<button class="settings-btn settings-btn-danger" id="btn-clear-cookies" type="button">' + Icons.trash() + '<span>Remove</span></button>'
       + '</div></div>'
+      // Soulseek
+      + '<div class="settings-subsection-label" style="margin-top:20px">Soulseek</div>'
+      + '<div class="settings-section-desc">Used as a fallback when YouTube fails, or as the only source. Requires a free Soulseek account and a shared folder (give-to-get).</div>'
+      + st('setting-slsk-enabled', 'Enable Soulseek', 'Use Soulseek as a fallback or primary download source')
+      + '<div class="settings-form-grid">'
+      + '<div class="settings-field"><label>Soulseek Username</label>'
+      + '<input type="text" id="setting-slsk-username" class="settings-input" placeholder="username"></div>'
+      + '<div class="settings-field"><label>Soulseek Password</label>'
+      + '<input type="password" id="setting-slsk-password" class="settings-input" placeholder="password" autocomplete="new-password"></div>'
+      + '</div>'
+      + '<div class="settings-actions" style="margin-top:6px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-slsk-connect" type="button"><span>Connect Soulseek</span></button>'
+      + '</div>'
+      + '<div id="slsk-connect-msg" class="settings-section-desc" style="margin-top:6px;font-size:12px">Creates the account if new, verifies it works, and seeds your share folder.</div>'
+      + '<div class="settings-form-grid" style="margin-top:8px">'
+      + '<div class="settings-field"><label>Preferred Format</label>'
+      + '<select id="setting-slsk-preferred-format" class="settings-select">'
+      + '<option value="any">Any</option><option value="flac">FLAC (lossless)</option><option value="mp3">MP3</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Minimum Bitrate (kbps)</label>'
+      + '<input type="text" id="setting-slsk-min-bitrate" class="settings-input" placeholder="192"></div>'
+      + '</div>'
       // Bulk Import
       + '<div class="settings-subsection-label" style="margin-top:20px">Bulk Import</div>'
       + '<div class="settings-section-desc">Paste tracks to download (one per line, "Artist - Title").</div>'
@@ -190,23 +201,10 @@ Object.assign(UI, {
 
     // --- Tab: Background Tasks ---
     html += '<div class="settings-tab-panel" data-panel="tasks">'
-      // Worker status panel (live)
-      + '<div class="settings-section-desc">Background workers keep the library in sync. Click Run Now to trigger a worker manually.</div>'
+      + '<div class="settings-section-desc">Background workers keep the library in sync. Toggle, set interval, or click Run Now.</div>'
       + '<div id="workers-list"></div>'
-      // Config
-      + '<div class="settings-subsection-label" style="margin-top:20px">Worker Configuration</div>'
-      + st('setting-watcher-enabled', 'File Watcher', 'Poll music directories for changes')
-      + st('setting-cover-fetch-enabled', 'Cover Art Fetch', 'Download missing album covers')
-      + st('setting-artist-art-fetch-enabled', 'Artist Art Fetch', 'Download artist images')
-      + st('setting-review-enabled', 'Review Worker', 'Automatically flag tracks with metadata or quality issues')
-      + '<div class="settings-form-grid" style="margin-top:8px">'
-      + '<div class="settings-field"><label>Watcher Interval (sec)</label>'
-      + '<input type="text" id="setting-watcher-interval" class="settings-input" placeholder="30"></div>'
-      + '<div class="settings-field"><label>Review Interval (hrs)</label>'
-      + '<input type="text" id="setting-review-recheck-hours" class="settings-input" placeholder="24"></div>'
-      + '</div>'
       + '<div class="settings-actions" style="margin-top:12px">'
-      + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Worker Settings</span></button>'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-worker-settings">' + Icons.check() + '<span>Save Settings</span></button>'
       + '</div>'
       + '</div>';
 
@@ -263,6 +261,11 @@ Object.assign(UI, {
     const saveSettingsBtn = document.getElementById('btn-save-finder-settings');
     if (saveSettingsBtn) {
       saveSettingsBtn.addEventListener('click', () => this._saveFinderSettings());
+    }
+
+    const slskConnectBtn = document.getElementById('btn-slsk-connect');
+    if (slskConnectBtn) {
+      slskConnectBtn.addEventListener('click', () => this._connectSlsk(slskConnectBtn));
     }
 
     const saveWorkerBtn = document.getElementById('btn-save-worker-settings');
@@ -377,18 +380,16 @@ Object.assign(UI, {
       this._updateQualityVisibility();
       if (fmt) fmt.addEventListener('change', () => this._updateQualityVisibility());
 
-      this._stoggleOn('setting-watcher-enabled', settings.watcher_enabled !== 'false');
-      const watcherInterval = document.getElementById('setting-watcher-interval');
-      if (watcherInterval && settings.watcher_interval) watcherInterval.value = settings.watcher_interval;
-      this._stoggleOn('setting-cover-fetch-enabled', settings.cover_fetch_enabled !== 'false');
-      this._stoggleOn('setting-artist-art-fetch-enabled', settings.artist_art_fetch_enabled !== 'false');
-
-      this._stoggleOn('setting-review-enabled', settings.review_enabled !== 'false');
-      const revRecheckHours = document.getElementById('setting-review-recheck-hours');
-      if (revRecheckHours && settings.review_recheck_hours) revRecheckHours.value = settings.review_recheck_hours;
-      const revEnabled = document.getElementById('setting-review-enabled');
-      if (revEnabled) revEnabled.addEventListener('click', () => this._saveReviewSettings());
-      if (revRecheckHours) revRecheckHours.addEventListener('change', () => this._saveReviewSettings());
+      // Store worker settings for _loadWorkers to use when rendering rows.
+      // The actual toggle/input elements live inside the workers-list, not here.
+      this._savedWorkerSettings = {
+        watcher_enabled: settings.watcher_enabled !== 'false',
+        watcher_interval: settings.watcher_interval || '30',
+        cover_fetch_enabled: settings.cover_fetch_enabled !== 'false',
+        artist_art_fetch_enabled: settings.artist_art_fetch_enabled !== 'false',
+        review_enabled: settings.review_enabled !== 'false',
+        review_recheck_hours: settings.review_recheck_hours || '24',
+      };
 
       const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
       flagKeys.forEach(key => {
@@ -826,16 +827,24 @@ Object.assign(UI, {
   },
 
   async _saveWorkerSettings() {
-    const watcherInterval = document.getElementById('setting-watcher-interval');
-    const revRecheckHours = document.getElementById('setting-review-recheck-hours');
+    // Read toggle states and interval values from the worker rows
+    const wl = document.getElementById('workers-list');
+    const getToggle = (workerName) => {
+      const row = wl?.querySelector('.worker-row[data-worker="' + workerName + '"]');
+      return row ? row.querySelector('.worker-toggle').classList.contains('active') : true;
+    };
+    const getInterval = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value : '30';
+    };
     try {
       await Api.saveSettings({
-        watcher_enabled: String(this._stoggleVal('setting-watcher-enabled')),
-        watcher_interval: watcherInterval ? watcherInterval.value : '30',
-        cover_fetch_enabled: String(this._stoggleVal('setting-cover-fetch-enabled')),
-        artist_art_fetch_enabled: String(this._stoggleVal('setting-artist-art-fetch-enabled')),
-        review_enabled: String(this._stoggleVal('setting-review-enabled')),
-        review_recheck_hours: revRecheckHours ? revRecheckHours.value : '24'
+        watcher_enabled: String(getToggle('scanner')),
+        watcher_interval: getInterval('setting-watcher-interval'),
+        cover_fetch_enabled: String(getToggle('cover-fetch')),
+        artist_art_fetch_enabled: String(getToggle('artist-art-fetch')),
+        review_enabled: String(getToggle('review')),
+        review_recheck_hours: getInterval('setting-review-recheck-hours')
       });
       this._showToast('Worker settings saved');
     } catch (e) {
