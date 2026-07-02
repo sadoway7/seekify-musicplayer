@@ -1259,23 +1259,6 @@ Object.assign(UI, {
     });
   },
 
-  async _rescanLibrary() {
-    const btn = document.getElementById('btn-rescan');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.innerHTML = '<div class="loading-spinner" style="padding:0"></div><span>Scanning...</span>';
-    try {
-      const stats = await Api.scan();
-      await Store.refreshLibrary();
-      const msg = stats.scanned + ' files scanned' + (stats.added > 0 ? ', ' + stats.added + ' added' : '') + (stats.removed > 0 ? ', ' + stats.removed + ' removed' : '');
-      this._showToast(msg);
-    } catch (err) {
-      this._showToast('Rescan failed');
-    }
-    btn.disabled = false;
-    btn.innerHTML = Icons.refresh() + '<span>Rescan Library</span>';
-  },
-
   async _toggleDownloadPanel() {
     const container = document.getElementById('download-list');
     if (!container) return;
