@@ -114,7 +114,7 @@ const App = {
     let stableCount = 0;
     const poll = async () => {
       const stats = await Api.getStats();
-      if (!stats) { setTimeout(poll, 5000); return; }
+      if (!stats) { setTimeout(poll, 15000); return; }
       if (lastVersion === null) lastVersion = stats.version;
       const empty = !Store.library.tracks || Store.library.tracks.length === 0;
       if (stats.version !== lastVersion || (empty && stats.tracks > 0)) {

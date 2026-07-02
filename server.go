@@ -453,11 +453,13 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		// ponytail: skip logging for high-frequency liveness polls
+		isPoll := r.URL.Path == "/api/stats"
+		if strings.HasPrefix(r.URL.Path, "/api/") && !isPoll {
 			log.Printf("[http] %s %s", r.Method, r.URL.Path)
 		}
 		next.ServeHTTP(w, r)
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") && !isPoll {
 			log.Printf("[http] %s %s — %s", r.Method, r.URL.Path, time.Since(start))
 		}
 	})
