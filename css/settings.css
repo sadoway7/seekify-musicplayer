@@ -517,6 +517,8 @@
   flex-shrink: 0;
   padding: 6px 14px !important;
   font-size: 13px !important;
+  min-width: 80px;
+  text-align: center;
 }
 .worker-run-btn:disabled {
   opacity: 0.5;

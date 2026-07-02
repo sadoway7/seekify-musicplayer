@@ -1391,30 +1391,75 @@ const UI = {
         if (this._workerPoll) { clearInterval(this._workerPoll); this._workerPoll = null; }
         return;
       }
-      container.innerHTML = workers.map(w => {
-        const dotClass = w.running ? 'worker-status-dot running' : 'worker-status-dot';
-        const lastText = w.running ? 'Running...' : this._timeAgo(w.lastRun);
-        const canRun = w.canTrigger && !w.running;
-        const btn = canRun
-          ? '<button class="settings-btn worker-run-btn" data-worker="' + this._esc(w.name) + '"><span>Run Now</span></button>'
-          : (w.running
-            ? '<button class="settings-btn worker-run-btn" disabled><span>Running</span></button>'
-            : '<button class="settings-btn worker-run-btn" disabled><span>—</span></button>');
-        const errRow = w.error ? '<div class="worker-error">' + this._esc(w.error) + '</div>' : '';
-        return '<div class="worker-row">'
-          + '<div class="' + dotClass + '"></div>'
-          + '<div class="worker-info">'
-          + '<div class="worker-name">' + this._esc(w.name) + '</div>'
-          + '<div class="worker-desc">' + this._esc(w.description) + '</div>'
-          + (w.error ? errRow : '')
-          + '</div>'
-          + '<div class="worker-freq">' + this._esc(w.frequency) + '</div>'
-          + '<div class="worker-last">' + lastText + '</div>'
-          + btn
-          + '</div>';
-      }).join('');
 
+      // If the row count changed or container is empty, do a full rebuild.
+      // Otherwise update existing rows in place to avoid layout shift.
+      const existingRows = container.querySelectorAll('.worker-row');
+      const needsFullRebuild = existingRows.length !== workers.length;
+
+      if (needsFullRebuild) {
+        container.innerHTML = workers.map(w => {
+          return '<div class="worker-row" data-worker="' + this._esc(w.name) + '">'
+            + '<div class="worker-status-dot"></div>'
+            + '<div class="worker-info">'
+            + '<div class="worker-name">' + this._esc(w.name) + '</div>'
+            + '<div class="worker-desc">' + this._esc(w.description) + '</div>'
+            + '</div>'
+            + '<div class="worker-freq">' + this._esc(w.frequency) + '</div>'
+            + '<div class="worker-last"></div>'
+            + '<button class="settings-btn worker-run-btn"><span></span></button>'
+            + '</div>';
+        }).join('');
+      }
+
+      // Update each row in place
+      workers.forEach(w => {
+        const row = container.querySelector('.worker-row[data-worker="' + this._esc(w.name) + '"]');
+        if (!row) return;
+
+        const dot = row.querySelector('.worker-status-dot');
+        if (w.running) {
+          dot.classList.add('running');
+        } else {
+          dot.classList.remove('running');
+        }
+
+        row.querySelector('.worker-last').textContent = w.running ? 'Running...' : this._timeAgo(w.lastRun);
+
+        const btn = row.querySelector('.worker-run-btn');
+        const btnSpan = btn.querySelector('span');
+        if (w.running) {
+          btn.disabled = true;
+          btn.removeAttribute('data-worker');
+          btnSpan.textContent = 'Running';
+        } else if (w.canTrigger) {
+          btn.disabled = false;
+          btn.dataset.worker = w.name;
+          btnSpan.textContent = 'Run Now';
+        } else {
+          btn.disabled = true;
+          btn.removeAttribute('data-worker');
+          btnSpan.textContent = '—';
+        }
+
+        if (w.error) {
+          let err = row.querySelector('.worker-error');
+          if (!err) {
+            err = document.createElement('div');
+            err.className = 'worker-error';
+            row.querySelector('.worker-info').appendChild(err);
+          }
+          err.textContent = w.error;
+        } else {
+          const err = row.querySelector('.worker-error');
+          if (err) err.remove();
+        }
+      });
+
+      // Bind click handlers (only on buttons that can trigger)
       container.querySelectorAll('.worker-run-btn[data-worker]').forEach(btn => {
+        if (btn._bound) return;
+        btn._bound = true;
         btn.addEventListener('click', async () => {
           const name = btn.dataset.worker;
           btn.disabled = true;
@@ -1426,7 +1471,7 @@ const UI = {
     };
 
     render();
-    this._workerPoll = setInterval(render, 5000);
+    this._workerPoll = setInterval(render, 3000);
   },
 
   _homeLayoutDrag: { item: null, spacer: null, dragging: false, startX: 0, startY: 0, offsetY: 0, offsetX: 0, listLeft: 0 },
