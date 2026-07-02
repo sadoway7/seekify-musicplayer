@@ -75,7 +75,7 @@ body.mini-player-visible #app-content {
 
 #tab-bar {
   position: fixed;
-  bottom: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
   left: 0;
   right: 0;
   display: flex;
@@ -87,17 +87,6 @@ body.mini-player-visible #app-content {
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);
   z-index: 200;
   flex-shrink: 0;
-}
-
-#tab-bar::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-  height: env(safe-area-inset-bottom, 0px);
-  background: #0a0b0a;
-  z-index: -1;
 }
 
 .tab-item {
