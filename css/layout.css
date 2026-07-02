@@ -75,14 +75,14 @@ body.mini-player-visible #app-content {
 
 #tab-bar {
   position: fixed;
-  bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+  bottom: 0;
   left: 0;
   right: 0;
   display: flex;
   flex-direction: row;
   align-items: stretch;
   min-height: 50px;
-  padding: 4px 12px 8px;
+  padding: 4px 12px 0;
   background: #0a0b0a;
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);
   z-index: 200;
