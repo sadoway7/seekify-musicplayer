@@ -82,7 +82,7 @@ body.mini-player-visible #app-content {
   flex-direction: row;
   align-items: stretch;
   min-height: 50px;
-  padding: 4px 12px 15px;
+  padding: 8px 12px 20px;
   background: #0a0b0a;
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);
   z-index: 200;
