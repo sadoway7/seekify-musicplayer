@@ -326,12 +326,15 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
         chosen["_error"] = f"download request failed: {e}"
         return 2
 
+    loop = asyncio.get_event_loop()
+    t0 = loop.time()
     try:
         ok = await await_completion(transfer, chosen.get("size", 0))
     except Exception as e:
         remove_local(transfer)
         chosen["_error"] = f"download failed: {e}"
         return 2
+    elapsed = max(loop.time() - t0, 0.001)
 
     if not ok:
         remove_local(transfer)
@@ -373,6 +376,11 @@ async def do_download(client: SoulSeekClient, chosen: dict, args) -> int:
 
     result = dict(chosen)
     result["path"] = dest
+    # Observed transfer speed — the Go side records per-username reputation
+    # so future picks prefer peers that delivered fast, validated downloads.
+    size = chosen.get("size", 0) or 0
+    result["elapsed_sec"] = round(elapsed, 3)
+    result["bytes_per_sec"] = int(size / elapsed) if size > 0 else 0
     emit(result)
     return 0
 

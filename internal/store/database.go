@@ -111,6 +111,16 @@ func InitDB(path string) {
 		album_id TEXT PRIMARY KEY
 	)`)
 
+	// Per-username Soulseek transfer-speed reputation. Populated only after a
+	// download passes audio validation, so corrupt-but-fast peers earn nothing.
+	// avg_bps is an exponential moving average over observed bytes/sec.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS slsk_peer_speed (
+		username TEXT PRIMARY KEY,
+		avg_bps  REAL NOT NULL DEFAULT 0,
+		samples  INTEGER NOT NULL DEFAULT 0,
+		last_seen TEXT NOT NULL DEFAULT ''
+	)`)
+
 	// Add orig_* columns for undo support (SQLite ALTER TABLE ADD COLUMN is safe)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN orig_title TEXT NOT NULL DEFAULT ''`)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN orig_artist TEXT NOT NULL DEFAULT ''`)

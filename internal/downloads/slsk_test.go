@@ -1,8 +1,12 @@
 package downloads
 
 import (
+	"database/sql"
 	"encoding/json"
 	"testing"
+
+	"musicapp/internal/store"
+	_ "modernc.org/sqlite"
 )
 
 func intPtr(v int) *int { return &v }
@@ -337,5 +341,80 @@ func TestSlskCandidatesToJSON_empty(t *testing.T) {
 	}
 	if out2 != "[]" {
 		t.Errorf("slskCandidatesToJSON([]) = %q, want %q", out2, "[]")
+	}
+}
+
+// openTestDB returns an in-memory SQLite with the slsk_peer_speed table,
+// wired as store.DB so the reputation helpers can run against it.
+func openTestDB(t *testing.T) {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS slsk_peer_speed (
+		username TEXT PRIMARY KEY,
+		avg_bps  REAL NOT NULL DEFAULT 0,
+		samples  INTEGER NOT NULL DEFAULT 0,
+		last_seen TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	store.DB = db
+}
+
+func TestSlskSpeedEMA_RoundTrip(t *testing.T) {
+	openTestDB(t)
+	// Three observations: 100, 200, 100. With alpha=0.4:
+	// s1: 100
+	// s2: 100 + 0.4*(200-100) = 140
+	// s3: 140 + 0.4*(100-140) = 124
+	recordSlskSpeed("alice", 100)
+	recordSlskSpeed("alice", 200)
+	recordSlskSpeed("alice", 100)
+	got := slskPeerSpeed("alice")
+	if got < 123.5 || got > 124.5 {
+		t.Errorf("EMA avg after 3 samples = %v, want ~124", got)
+	}
+}
+
+func TestSlskSpeed_IgnoresBadInput(t *testing.T) {
+	openTestDB(t)
+	recordSlskSpeed("", 1000)   // empty username
+	recordSlskSpeed("bob", 0)   // zero bps
+	recordSlskSpeed("bob", -5)  // negative bps
+	if slskPeerSpeed("bob") != 0 {
+		t.Errorf("bad inputs should not record, got %v", slskPeerSpeed("bob"))
+	}
+}
+
+func TestSlskSpeedRanking_BatchLookup(t *testing.T) {
+	openTestDB(t)
+	recordSlskSpeed("fast", 500)
+	recordSlskSpeed("slow", 50)
+	r := slskSpeedRanking([]string{"fast", "slow", "unknown"})
+	if r["fast"] < 499 || r["fast"] > 501 {
+		t.Errorf("fast = %v, want ~500", r["fast"])
+	}
+	if r["slow"] < 49 || r["slow"] > 51 {
+		t.Errorf("slow = %v, want ~50", r["slow"])
+	}
+	if _, ok := r["unknown"]; ok {
+		t.Errorf("unknown peer should be absent from ranking")
+	}
+}
+
+func TestSlskCandidateUsernames_Dedup(t *testing.T) {
+	cands := []slskRawCandidate{
+		{Username: "alice"},
+		{Username: " alice "},
+		{Username: ""},
+		{Username: "bob"},
+		{Username: "alice"},
+	}
+	got := slskCandidateUsernames(cands)
+	if len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
+		t.Errorf("slskCandidateUsernames = %v, want [alice bob]", got)
 	}
 }

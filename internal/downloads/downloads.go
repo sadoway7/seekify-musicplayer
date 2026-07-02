@@ -648,14 +648,14 @@ func computeDest(job *DownloadJob) (destDir, safeTitle string) {
 // FindDownloadedFile(destDir, safeTitle); for Soulseek it is the absolute path
 // reported by the python script. An empty path means the download produced no
 // findable file and is treated as a failure.
-func finalizeDownload(job *DownloadJob, downloadedPath string) {
+func finalizeDownload(job *DownloadJob, downloadedPath string) bool {
 	audioFile := downloadedPath
 	if audioFile == "" {
 		job.Status = "failed"
 		job.Error = "Download completed but file not found"
 		job.CompletedAt = time.Now().Format(time.RFC3339)
 		DbUpdateJob(job)
-		return
+		return false
 	}
 
 	job.ProgressStage = "Validating audio"
@@ -667,7 +667,7 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) {
 		job.Error = fmt.Sprintf("Audio validation failed: %s", reason)
 		job.CompletedAt = time.Now().Format(time.RFC3339)
 		DbUpdateJob(job)
-		return
+		return false
 	}
 
 	minBr := store.GetSettingInt("download_min_bitrate", 0)
@@ -681,7 +681,7 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) {
 			job.CompletedAt = time.Now().Format(time.RFC3339)
 			DbUpdateJob(job)
 			log.Printf("[download] Rejected %q: bitrate %dkbps below minimum %dkbps", job.SearchQuery, br, minBr)
-			return
+			return false
 		}
 	}
 
@@ -738,6 +738,7 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) {
 		}
 		store.Mu.RUnlock()
 	}
+	return true
 }
 
 // ProcessSingleDownload routes a job to the configured source and handles
@@ -1070,6 +1071,18 @@ func downloadFromSoulseek(job *DownloadJob) {
 			}
 		}
 	}
+	// Prefer known-fast peers: stable-sort everything EXCEPT the autoPick
+	// winner (idx 0) by descending reputation. Unknown peers rank equally
+	// (0) and keep their existing order, so this never overrides the quality
+	// pick — it only reorders the fallback queue so faster peers are tried
+	// before slower ones. ponytail: stall_timeout (30s) still cuts anyone
+	// who stalls; this just avoids burning that budget on slow peers first.
+	if len(ordered) > 2 {
+		ranking := slskSpeedRanking(slskCandidateUsernames(ordered[1:]))
+		sort.SliceStable(ordered[1:], func(i, j int) bool {
+			return ranking[ordered[1+i].Username] > ranking[ordered[1+j].Username]
+		})
+	}
 	// Only try strong matches — non-strong candidates risk downloading
 	// completely wrong songs.
 	// Cap at 8 candidates
@@ -1088,7 +1101,7 @@ func downloadFromSoulseek(job *DownloadJob) {
 	job.ProgressStage = "Downloading from " + displayName
 	DbUpdateJob(job)
 
-	audioFile, err := runSlskDownloadMulti(job, string(candListJSON), displayName)
+	audioFile, peer, err := runSlskDownloadMulti(job, string(candListJSON), displayName)
 	if err != nil {
 		job.Status = "failed"
 		job.Error = err.Error()
@@ -1097,7 +1110,9 @@ func downloadFromSoulseek(job *DownloadJob) {
 		log.Printf("[download] soulseek download failed for %q: %v", job.SearchQuery, err)
 		return
 	}
-	finalizeDownload(job, audioFile)
+	if finalizeDownload(job, audioFile) && peer.Username != "" {
+		recordSlskSpeed(peer.Username, peer.BytesPerSec)
+	}
 }
 
 func SearchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration) ([]YTSearchCandidate, error) {

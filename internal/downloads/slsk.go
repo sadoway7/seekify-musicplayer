@@ -43,13 +43,117 @@ type slskRawCandidate struct {
 // slskDownloadResult mirrors the single JSON object printed by the script on a
 // successful download. We only strictly need Path, but parse the rest for logs.
 type slskDownloadResult struct {
-	Username string `json:"username"`
-	Filename string `json:"filename"`
-	Size     int64  `json:"size"`
-	Bitrate  *int   `json:"bitrate,omitempty"`
-	Duration *int   `json:"duration,omitempty"`
-	Format   string `json:"format"`
-	Path     string `json:"path"`
+	Username    string  `json:"username"`
+	Filename    string  `json:"filename"`
+	Size        int64   `json:"size"`
+	Bitrate     *int    `json:"bitrate,omitempty"`
+	Duration    *int    `json:"duration,omitempty"`
+	Format      string  `json:"format"`
+	Path        string  `json:"path"`
+	BytesPerSec float64 `json:"bytes_per_sec,omitempty"`
+	ElapsedSec  float64 `json:"elapsed_sec,omitempty"`
+}
+
+// slskSpeedEMA is the weight applied to each new observation when updating a
+// peer's avg_bps. 0.4 lets recent transfers dominate while smoothing jitter.
+// ponytail: a fixed EMA avoids storing every sample; raise toward 1.0 to track
+// recent behavior more aggressively (noisier), lower to be more conservative.
+const slskSpeedEMA = 0.4
+
+// recordSlskSpeed updates the per-username speed reputation with an observed
+// bytes/sec from a validated download. Safe to call with bps<=0 (ignored).
+// Call this ONLY after ValidateAudioIntegrity passes, so corrupt-fast peers
+// earn no reward.
+func recordSlskSpeed(username string, bps float64) {
+	username = strings.TrimSpace(username)
+	if username == "" || bps <= 0 {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := store.DB.Begin()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+	var avg float64
+	var samples int
+	_ = tx.QueryRow(`SELECT avg_bps, samples FROM slsk_peer_speed WHERE username = ?`, username).Scan(&avg, &samples)
+	if samples == 0 {
+		avg = bps
+	} else {
+		avg = avg + slskSpeedEMA*(bps-avg)
+	}
+	samples++
+	res, _ := tx.Exec(`UPDATE slsk_peer_speed SET avg_bps=?, samples=?, last_seen=? WHERE username=?`, avg, samples, now, username)
+	if n, _ := res.RowsAffected(); n == 0 {
+		if _, err := tx.Exec(`INSERT INTO slsk_peer_speed (username, avg_bps, samples, last_seen) VALUES (?, ?, ?, ?)`, username, avg, samples, now); err != nil {
+			return
+		}
+	}
+	tx.Commit()
+}
+
+// slskPeerSpeed returns the known avg bytes/sec for username, or 0 if unknown.
+func slskPeerSpeed(username string) float64 {
+	var avg float64
+	_ = store.DB.QueryRow(`SELECT avg_bps FROM slsk_peer_speed WHERE username = ?`, strings.TrimSpace(username)).Scan(&avg)
+	return avg
+}
+
+// slskCandidateUsernames returns the unique non-empty usernames from a
+// candidate list, for batch reputation lookup.
+func slskCandidateUsernames(cands []slskRawCandidate) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range cands {
+		u := strings.TrimSpace(c.Username)
+		if u != "" && !seen[u] {
+			seen[u] = true
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// slskSpeedRanking returns username->avg_bps for the given usernames in a
+// single query. Unknown usernames are absent from the map (treated as 0 by the
+// caller). Used to rank a candidate list without N round-trips.
+func slskSpeedRanking(usernames []string) map[string]float64 {
+	ranking := make(map[string]float64, len(usernames))
+	seen := map[string]bool{}
+	var uniq []string
+	for _, u := range usernames {
+		u = strings.TrimSpace(u)
+		if u != "" && !seen[u] {
+			seen[u] = true
+			uniq = append(uniq, u)
+		}
+	}
+	if len(uniq) == 0 {
+		return ranking
+	}
+	// ponytail: build an IN(...) clause; usernames come from our own search
+	// results, not user input, so injection risk is nil. Parameterize anyway.
+	placeholders := make([]string, len(uniq))
+	args := make([]interface{}, len(uniq))
+	for i, u := range uniq {
+		placeholders[i] = "?"
+		args[i] = u
+	}
+	q := `SELECT username, avg_bps FROM slsk_peer_speed WHERE username IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := store.DB.Query(q, args...)
+	if err != nil {
+		return ranking
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var u string
+		var avg float64
+		if rows.Scan(&u, &avg) == nil {
+			ranking[u] = avg
+		}
+	}
+	return ranking
 }
 
 // findSlsk returns the path to a python3 executable (searching PATH and the
@@ -439,36 +543,36 @@ func autoPickSlsk(cands []slskRawCandidate, artist, title string, rawTitle strin
 //
 // The running *exec.Cmd is registered in ActiveJobs under DownloadMu exactly
 // like runDownloadCmd, so the download is cancellable/introspectable.
-func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, error) {
+func runSlskDownload(job *DownloadJob, dlUsername, dlFilename string) (string, slskDownloadResult, error) {
 	return runSlskDownloadArgs(job, dlUsername, dlFilename, "")
 }
 
 // runSlskDownloadMulti tries multiple candidates in a single Soulseek session.
 // candidatesJSON is a JSON array of {username, filename, size} objects.
-func runSlskDownloadMulti(job *DownloadJob, candidatesJSON, displayName string) (string, error) {
+func runSlskDownloadMulti(job *DownloadJob, candidatesJSON, displayName string) (string, slskDownloadResult, error) {
 	return runSlskDownloadArgs(job, "", "", candidatesJSON)
 }
 
-func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSON string) (string, error) {
+func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSON string) (path string, res slskDownloadResult, err error) {
 	python := findSlsk()
 	if python == "" {
-		return "", fmt.Errorf("python3 not found")
+		return "", res, fmt.Errorf("python3 not found")
 	}
 	script := slskScriptPath()
 	if script == "" {
-		return "", fmt.Errorf("soulseek script not found")
+		return "", res, fmt.Errorf("soulseek script not found")
 	}
 	user := store.GetSetting("slsk_username", "")
 	pass := store.GetSetting("slsk_password", "")
 	if user == "" || pass == "" {
-		return "", fmt.Errorf("soulseek credentials not configured")
+		return "", res, fmt.Errorf("soulseek credentials not configured")
 	}
 
 	// Use the same destination directory the finalizer expects so the
 	// downloaded file lands where autosort/scanner will find it.
 	destDir, _ := computeDest(job)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return "", err
+		return "", res, err
 	}
 
 	args := []string{
@@ -518,16 +622,16 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		slskCleanupIncomplete(destDir, preSnap)
-		return "", fmt.Errorf("soulseek stdout pipe: %w", err)
+		return "", res, fmt.Errorf("soulseek stdout pipe: %w", err)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		slskCleanupIncomplete(destDir, preSnap)
-		return "", fmt.Errorf("soulseek stderr pipe: %w", err)
+		return "", res, fmt.Errorf("soulseek stderr pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
 		slskCleanupIncomplete(destDir, preSnap)
-		return "", fmt.Errorf("soulseek start failed: %w", err)
+		return "", res, fmt.Errorf("soulseek start failed: %w", err)
 	}
 
 	// Read stderr line by line for progress updates. Also accumulate the
@@ -602,7 +706,7 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 
 	if ctx.Err() == context.DeadlineExceeded {
 		slskCleanupIncomplete(destDir, preSnap)
-		return "", fmt.Errorf("soulseek timed out after %v", DownloadTimeout)
+		return "", res, fmt.Errorf("soulseek timed out after %v", DownloadTimeout)
 	}
 	if waitErr != nil {
 		slskCleanupIncomplete(destDir, preSnap)
@@ -610,13 +714,12 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 		if detail == "" && len(stderrTail) > 0 {
 			detail = strings.Join(stderrTail, "; ")
 		}
-		return "", fmt.Errorf("soulseek failed: %s", detail)
+		return "", res, fmt.Errorf("soulseek failed: %s", detail)
 	}
 
 	// The script prints exactly one JSON object on stdout describing the
 	// downloaded file. Tolerate leading log lines by scanning for the first
 	// line that unmarshals cleanly into slskDownloadResult with a non-empty Path.
-	var res slskDownloadResult
 	decoded := false
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)
@@ -630,9 +733,9 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 	}
 	if !decoded || res.Path == "" {
 		slskCleanupIncomplete(destDir, preSnap)
-		return "", fmt.Errorf("soulseek reported no downloaded file")
+		return "", res, fmt.Errorf("soulseek reported no downloaded file")
 	}
-	return res.Path, nil
+	return res.Path, res, nil
 }
 
 // dirSnapshot returns a set of filenames in dir (best-effort).
@@ -724,7 +827,7 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 	job.ProgressStage = "Downloading from " + dlUsername
 	DbUpdateJob(job)
 
-	audioFile, err := runSlskDownload(job, dlUsername, dlFilename)
+	audioFile, peer, err := runSlskDownload(job, dlUsername, dlFilename)
 	if err != nil {
 		job.Status = "failed"
 		job.Error = err.Error()
@@ -733,7 +836,9 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 		log.Printf("[download] soulseek select failed for %q: %v", job.SearchQuery, err)
 		return
 	}
-	finalizeDownload(job, audioFile)
+	if finalizeDownload(job, audioFile) && peer.Username != "" {
+		recordSlskSpeed(peer.Username, peer.BytesPerSec)
+	}
 }
 
 // slskSeedTarget is the minimum number of files the share folder should hold so
