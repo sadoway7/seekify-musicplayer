@@ -97,7 +97,15 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			return nil
 		}
 		if info.IsDir() {
+			// Skip the Soulseek share dir in the primary library
 			if path == skipDir || strings.HasPrefix(path, skipDir+string(filepath.Separator)) {
+				return filepath.SkipDir
+			}
+			// Also skip ANY directory named "shared" — covers media:shared
+			// in the secondary (read-only) mount, which should never appear
+			// in the library.
+			base := filepath.Base(path)
+			if base == "shared" {
 				return filepath.SkipDir
 			}
 			return nil
