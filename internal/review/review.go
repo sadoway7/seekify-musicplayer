@@ -27,7 +27,8 @@ var (
 var LibraryVersionAdd func(delta int64)
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
-	writeJSON(w, v)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
 }
 
 type ReviewProgressInfo struct {

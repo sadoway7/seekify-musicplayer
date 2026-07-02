@@ -28,7 +28,7 @@
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   padding-top: var(--sp-3);
-  padding-bottom: var(--tab-bar-height-safe);
+  padding-bottom: var(--sp-4);
   overscroll-behavior: contain;
   animation: pageFadeIn 0.22s var(--ease-out) both;
   min-height: 0;
@@ -43,7 +43,7 @@
 }
 
 body.mini-player-visible #app-content {
-  padding-bottom: calc(var(--tab-bar-height) + var(--mini-player-height) + 8px);
+  padding-bottom: calc(var(--mini-player-height) + 24px);
 }
 
 #app-header .header-title {
@@ -74,10 +74,10 @@ body.mini-player-visible #app-content {
 }
 
 #tab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
   display: flex;
   flex-direction: row;
   align-items: stretch;
