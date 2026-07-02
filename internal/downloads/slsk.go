@@ -696,20 +696,11 @@ func slskCleanupIncomplete(destDir string, preSnapshot ...map[string]bool) {
 // can be downloaded directly (no re-search), then runs the shared post-download
 // finalization (validate/tag/scan/playlist).
 func ProcessSlskSelection(job *DownloadJob, idx int) {
-	// Honor the same concurrency cap as the download queue (cap(DownloadSem) == 3)
-	// so manual Soulseek picks can't exceed the global download limit.
-	DownloadSem <- struct{}{}
-	defer func() { <-DownloadSem }()
-
-	// H3: keep DownloadActive counter in sync so the watchdog doesn't over-spawn.
-	DownloadMu.Lock()
-	DownloadActive++
-	DownloadMu.Unlock()
-	defer func() {
-		DownloadMu.Lock()
-		DownloadActive--
-		DownloadMu.Unlock()
-	}()
+	// Honor the same concurrency limit as the download queue
+	if !tryAcquireSlot() {
+		return
+	}
+	defer releaseSlot()
 
 	// C6: download the exact file the user picked. The picker stores candidates
 	// in job.CandidatesJSON (slskCandidateUI shape); resolve the picked index to

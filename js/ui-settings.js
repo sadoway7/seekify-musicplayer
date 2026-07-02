@@ -63,6 +63,8 @@ Object.assign(UI, {
       + '<option value="soulseek">Soulseek only</option>'
       + '</select></div>'
       + '<div id="finder-settings" class="settings-status"></div>'
+      + '<div class="settings-field" style="max-width:120px"><label>Concurrent Downloads</label>'
+      + '<input type="text" id="setting-download-concurrency" class="settings-input" placeholder="3" value="3"></div>'
       // ── YouTube ──
       + '<div class="settings-subsection-label" style="margin-top:20px">YouTube</div>'
       + '<div class="settings-section-desc">Extract cookies from your browser so YouTube doesn\'t block downloads. One-time setup.</div>'
@@ -384,6 +386,9 @@ Object.assign(UI, {
       this._updateQualityVisibility();
       if (fmt) fmt.addEventListener('change', () => this._updateQualityVisibility());
 
+      const concurrency = document.getElementById('setting-download-concurrency');
+      if (concurrency && settings.download_concurrency) concurrency.value = settings.download_concurrency;
+
       // Store worker settings for _loadWorkers to use when rendering rows.
       // The actual toggle/input elements live inside the workers-list, not here.
       this._savedWorkerSettings = {
@@ -597,6 +602,10 @@ Object.assign(UI, {
         payload.slsk_password = (document.getElementById('setting-slsk-password') || {}).value || '';
         payload.slsk_preferred_format = (document.getElementById('setting-slsk-preferred-format') || {}).value || 'any';
         payload.slsk_min_bitrate = (document.getElementById('setting-slsk-min-bitrate') || {}).value || '192';
+      }
+      const concurrency = document.getElementById('setting-download-concurrency');
+      if (concurrency) {
+        payload.download_concurrency = concurrency.value || '3';
       }
       await Api.saveSettings(payload);
       this._showToast('Import settings saved');

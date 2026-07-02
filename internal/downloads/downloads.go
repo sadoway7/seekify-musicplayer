@@ -60,10 +60,43 @@ type DownloadJob struct {
 var (
 	DownloadMu     sync.Mutex
 	DownloadActive int
-	DownloadSem    = make(chan struct{}, 3)
 	ActiveJobs     = make(map[string]*exec.Cmd)
 	ActiveJobTime  = make(map[string]time.Time)
 )
+
+// MaxConcurrentDownloads returns the configured concurrency limit (default 3).
+func MaxConcurrentDownloads() int {
+	n := store.GetSettingInt("download_concurrency", 3)
+	if n < 1 {
+		n = 1
+	}
+	if n > 10 {
+		n = 10
+	}
+	return n
+}
+
+// tryAcquireSlot returns true if a download slot was acquired.
+// Uses a counting approach instead of a fixed channel so the limit is
+// configurable at runtime.
+func tryAcquireSlot() bool {
+	DownloadMu.Lock()
+	defer DownloadMu.Unlock()
+	if DownloadActive >= MaxConcurrentDownloads() {
+		return false
+	}
+	DownloadActive++
+	return true
+}
+
+func releaseSlot() {
+	DownloadMu.Lock()
+	DownloadActive--
+	if DownloadActive < 0 {
+		DownloadActive = 0
+	}
+	DownloadMu.Unlock()
+}
 
 const DownloadTimeout = 10 * time.Minute
 const SearchTimeout = 2 * time.Minute
@@ -540,23 +573,15 @@ func ProcessDownloadQueue() {
 
 		// Try to acquire a concurrency slot. Non-blocking: if all slots are
 		// busy, return and let the watchdog re-trigger when a slot frees.
-		select {
-		case DownloadSem <- struct{}{}:
-		default:
+		if !tryAcquireSlot() {
 			return
 		}
-		DownloadMu.Lock()
-		DownloadActive++
-		DownloadMu.Unlock()
 
 		// Find a queued job and atomically claim it.
 		jobs, err := DbGetQueuedJobs()
 		if err != nil || len(jobs) == 0 {
 			// No jobs — release the slot and exit.
-			<-DownloadSem
-			DownloadMu.Lock()
-			DownloadActive--
-			DownloadMu.Unlock()
+			releaseSlot()
 			return
 		}
 
@@ -564,22 +589,14 @@ func ProcessDownloadQueue() {
 		res, _ := store.DB.Exec(`UPDATE download_jobs SET status='searching' WHERE id=? AND status='queued'`, job.ID)
 		if n, _ := res.RowsAffected(); n == 0 {
 			// Someone else claimed it — release slot and loop to try next.
-			<-DownloadSem
-			DownloadMu.Lock()
-			DownloadActive--
-			DownloadMu.Unlock()
+			releaseSlot()
 			continue
 		}
 
-		// Process this job in a goroutine. The semaphore is released when
+		// Process this job in a goroutine. The slot is released when
 		// the job finishes (success, failure, or panic).
 		go func(j *DownloadJob) {
-			defer func() {
-				<-DownloadSem
-				DownloadMu.Lock()
-				DownloadActive--
-				DownloadMu.Unlock()
-			}()
+			defer releaseSlot()
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("[download] PANIC in ProcessSingleDownload for %s: %v", j.ID, r)
@@ -1694,7 +1711,7 @@ func DownloadWatchdog() {
 				DownloadMu.Lock()
 				active := DownloadActive
 				DownloadMu.Unlock()
-				if active < cap(DownloadSem) {
+				if active < MaxConcurrentDownloads() {
 					store.SafeGo("process-queue", func() { ProcessDownloadQueue() })
 				}
 			}
