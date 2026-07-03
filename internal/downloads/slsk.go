@@ -802,6 +802,7 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 	// its username + filename so the python script downloads directly without a
 	// non-deterministic re-search that could map the index to a different file.
 	var dlUsername, dlFilename string
+	var dlDuration int
 	var entries []slskCandidateUI
 	if json.Unmarshal([]byte(job.CandidatesJSON), &entries) == nil {
 		want := strconv.Itoa(idx)
@@ -809,6 +810,7 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 			if e.VideoID == want {
 				dlUsername = e.Channel
 				dlFilename = e.Filename
+				dlDuration = e.Duration
 				break
 			}
 		}
@@ -836,7 +838,7 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 		log.Printf("[download] soulseek select failed for %q: %v", job.SearchQuery, err)
 		return
 	}
-	if finalizeDownload(job, audioFile) && peer.Username != "" {
+	if finalizeDownload(job, audioFile, dlDuration) && peer.Username != "" {
 		recordSlskSpeed(peer.Username, peer.BytesPerSec)
 	}
 }

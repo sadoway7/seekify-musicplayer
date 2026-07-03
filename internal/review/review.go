@@ -710,7 +710,12 @@ func CheckSuspiciousNaming(t *models.Track) []string {
 
 func CheckDuration(t *models.Track, otherFlags []string) []string {
 	var flags []string
-	if t.Duration > 0 && t.Duration < 30 {
+	// A zero duration means ffprobe never recorded one and the track has never
+	// been played in-browser. After downloads persist probed duration this is
+	// rare and usually means a corrupt/unreadable file — flag it for review.
+	if t.Duration == 0 {
+		flags = append(flags, "no_duration")
+	} else if t.Duration < 30 {
 		flags = append(flags, "short_duration")
 	}
 	if t.Duration > 540 && len(otherFlags) > 0 {

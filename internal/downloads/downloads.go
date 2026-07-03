@@ -648,7 +648,13 @@ func computeDest(job *DownloadJob) (destDir, safeTitle string) {
 // FindDownloadedFile(destDir, safeTitle); for Soulseek it is the absolute path
 // reported by the python script. An empty path means the download produced no
 // findable file and is treated as a failure.
-func finalizeDownload(job *DownloadJob, downloadedPath string) bool {
+// finalizeDownload validates, tags, and scans a downloaded file. Returns true
+// only on full success (file validated + accepted). expectedDuration is the
+// authoritative song length in seconds from the source (Soulseek candidate's
+// self-reported duration; 0 when unknown). When known, a downloaded file whose
+// real duration is < 80% of expected is rejected as truncated and deleted —
+// the strongest signal against short-but-decodable partials.
+func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration int) bool {
 	audioFile := downloadedPath
 	if audioFile == "" {
 		job.Status = "failed"
@@ -661,13 +667,31 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) bool {
 	job.ProgressStage = "Validating audio"
 	DbUpdateJob(job)
 
-	if ok, reason := ValidateAudioIntegrity(audioFile); !ok {
+	ok, reason, probedDur := ValidateAudioIntegrity(audioFile)
+	if !ok {
 		os.Remove(audioFile)
 		job.Status = "failed"
 		job.Error = fmt.Sprintf("Audio validation failed: %s", reason)
 		job.CompletedAt = time.Now().Format(time.RFC3339)
 		DbUpdateJob(job)
 		return false
+	}
+
+	// Truncation check: the server's only reliable "is this the whole song?"
+	// signal. ffprobe gives the real length; expectedDuration comes from the
+	// source's own metadata (Soulseek candidate Duration). A clean-disconnect
+	// partial reads as COMPLETE to Soulseek but decodes short — this catches it.
+	// ponytail: 0.8 floor matches the python size check; tighten if false-negs.
+	if expectedDuration > 0 && probedDur > 0 {
+		if probedDur < float64(expectedDuration)*0.8 {
+			os.Remove(audioFile)
+			job.Status = "failed"
+			job.Error = fmt.Sprintf("Truncated: %.0fs vs %ds expected (%.0f%%)", probedDur, expectedDuration, probedDur/float64(expectedDuration)*100)
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			log.Printf("[download] Rejected truncated %q: %.0fs < 0.8×%ds", job.SearchQuery, probedDur, expectedDuration)
+			return false
+		}
 	}
 
 	minBr := store.GetSettingInt("download_min_bitrate", 0)
@@ -711,6 +735,26 @@ func finalizeDownload(job *DownloadJob, downloadedPath string) bool {
 	// Scan synchronously — we hold a download slot and this eliminates the
 	// race where AutoSort moves the file between the sleep and ScanSingleFile.
 	scanner.ScanSingleFile(audioFile)
+
+	// Persist the ffprobe-probed duration immediately. The scanner inserts
+	// duration=0 (the tag library doesn't compute it) and duration is otherwise
+	// only filled when a track is *played* in the browser. Recording it here
+	// means unplayed downloads get a real duration, which arms the review
+	// worker's short-duration check and the UI's seek bar.
+	if probedDur > 0 {
+		durSec := int(probedDur)
+		store.Mu.Lock()
+		for _, tr := range store.Tracks {
+			if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+				if tr.Duration == 0 {
+					tr.Duration = durSec
+					store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", durSec, tr.ID)
+				}
+				break
+			}
+		}
+		store.Mu.Unlock()
+	}
 
 	if job.AlbumMBID != "" {
 		store.Mu.RLock()
@@ -942,7 +986,7 @@ func downloadFromYouTube(job *DownloadJob) bool {
 		}
 	}
 
-	finalizeDownload(job, FindDownloadedFile(destDir, safeTitle))
+	finalizeDownload(job, FindDownloadedFile(destDir, safeTitle), 0)
 	return true
 }
 
@@ -1091,8 +1135,15 @@ func downloadFromSoulseek(job *DownloadJob) {
 		ordered = ordered[:maxCands]
 	}
 	topCands := make([]dlCand, len(ordered))
+	// Map winning filename → candidate's self-reported duration so we can pass
+	// an expected length into finalizeDownload's truncation check. Zero/unknown
+	// candidates map to 0 (check is skipped).
+	expectedDurByFile := make(map[string]int, len(ordered))
 	for i, c := range ordered {
 		topCands[i] = dlCand{Username: c.Username, Filename: c.Filename, Size: c.Size}
+		if c.Duration != nil && *c.Duration > 0 {
+			expectedDurByFile[c.Filename] = *c.Duration
+		}
 	}
 	candListJSON, _ := json.Marshal(topCands)
 
@@ -1110,7 +1161,8 @@ func downloadFromSoulseek(job *DownloadJob) {
 		log.Printf("[download] soulseek download failed for %q: %v", job.SearchQuery, err)
 		return
 	}
-	if finalizeDownload(job, audioFile) && peer.Username != "" {
+	expected := expectedDurByFile[peer.Filename]
+	if finalizeDownload(job, audioFile, expected) && peer.Username != "" {
 		recordSlskSpeed(peer.Username, peer.BytesPerSec)
 	}
 }
@@ -1442,10 +1494,10 @@ func FindDownloadedFile(dir, expectedTitle string) string {
 	return newestMatch
 }
 
-func ValidateAudioIntegrity(filePath string) (bool, string) {
+func ValidateAudioIntegrity(filePath string) (bool, string, float64) {
 	ffprobePath, _ := exec.LookPath("ffprobe")
 	if ffprobePath == "" {
-		return true, ""
+		return true, "", 0
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -1458,7 +1510,7 @@ func ValidateAudioIntegrity(filePath string) (bool, string) {
 	)
 	output, err := cmd.Output()
 	if err != nil {
-		return false, fmt.Sprintf("ffprobe failed: %v", err)
+		return false, fmt.Sprintf("ffprobe failed: %v", err), 0
 	}
 
 	var info struct {
@@ -1471,7 +1523,7 @@ func ValidateAudioIntegrity(filePath string) (bool, string) {
 		} `json:"streams"`
 	}
 	if err := json.Unmarshal(output, &info); err != nil {
-		return false, "invalid probe output"
+		return false, "invalid probe output", 0
 	}
 
 	hasAudio := false
@@ -1481,21 +1533,21 @@ func ValidateAudioIntegrity(filePath string) (bool, string) {
 		}
 	}
 	if !hasAudio {
-		return false, "no audio stream found"
+		return false, "no audio stream found", 0
 	}
 
 	if info.Format.Duration == "" || info.Format.Duration == "N/A" {
-		return false, "no duration"
+		return false, "no duration", 0
 	}
 	dur, err := strconv.ParseFloat(info.Format.Duration, 64)
 	if err != nil || dur <= 0 {
-		return false, "invalid duration"
+		return false, "invalid duration", 0
 	}
 	if dur < 10 {
-		return false, fmt.Sprintf("duration too short: %.0fs (likely truncated)", dur)
+		return false, fmt.Sprintf("duration too short: %.0fs (likely truncated)", dur), 0
 	}
 
-	return true, ""
+	return true, "", dur
 }
 
 func TagAudioFile(filePath, artist, title, album string, trackNum, trackTotal int) {
