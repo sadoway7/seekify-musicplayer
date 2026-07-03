@@ -59,7 +59,11 @@ const Api = {
   },
   finderReleaseTracks(mbid) { return this._req('/api/finder/release/' + mbid + '/tracks', { errMsg: 'Failed to load release tracks' }); },
   artistTrackProgress() { return this._req('/api/finder/artist-track-progress', { errMsg: 'Failed to load progress' }); },
-  getQueue(limit) { return this._req('/api/queue?limit=' + (limit || 100), { errMsg: 'Failed to load queue' }); },
+  getQueue(limit, status) {
+    let url = '/api/queue?limit=' + (limit || 100);
+    if (status) url += '&status=' + encodeURIComponent(status);
+    return this._req(url, { errMsg: 'Failed to load queue' });
+  },
   getWatched() { return this._req('/api/watch', { errMsg: 'Failed' }); },
   getSharedQueue(id) { return this._req('/api/shared-queue/' + id, { errMsg: 'Failed to load shared queue' }); },
   previewUrl(videoId) { return this._req('/api/preview/' + videoId, { errMsg: 'Preview failed' }); },

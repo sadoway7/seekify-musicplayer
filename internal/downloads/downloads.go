@@ -383,16 +383,31 @@ func DbGetJob(id string) (*DownloadJob, error) {
 	return ScanJob(row)
 }
 
-func DbGetJobs(limit int) ([]DownloadJob, error) {
+// DbGetJobs returns download jobs. status filters: "" = all (ordered
+// actionable-first), "active" = searching/downloading/tagging, otherwise a
+// literal status value. Per-status filtering avoids the 1000-row cap hiding
+// completed/failed items behind a large queued backlog.
+func DbGetJobs(limit int, status string) ([]DownloadJob, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := store.DB.Query(`SELECT
+	query := `SELECT
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
 		pipeline, recording_id, release_id, artist_id, genre, year, candidates
-		FROM download_jobs ORDER BY
+		FROM download_jobs `
+	var args []interface{}
+	switch status {
+	case "", "all":
+		// no filter
+	case "active":
+		query += ` WHERE status IN ('searching','downloading','tagging') `
+	default:
+		query += ` WHERE status = ? `
+		args = append(args, status)
+	}
+	query += ` ORDER BY
 			CASE status
 				WHEN 'searching' THEN 0
 				WHEN 'downloading' THEN 1
@@ -405,7 +420,9 @@ func DbGetJobs(limit int) ([]DownloadJob, error) {
 			END,
 			completed_at DESC,
 			created_at DESC
-		LIMIT ?`, limit)
+		LIMIT ?`
+	args = append(args, limit)
+	rows, err := store.DB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

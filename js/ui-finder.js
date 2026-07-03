@@ -239,7 +239,12 @@ Object.assign(UI, {
     if (!container) return;
 
     try {
-      const jobs = await Api.getQueue(1000);
+      const filter = this._downloadFilter || 'all';
+      // Map chip → server status so completed/failed aren't hidden behind the
+      // 1000-row cap by the queued backlog. 'all' stays unfiltered (actionable
+      // items sort first; completed history trimmed at the cap is acceptable).
+      const statusFor = (f) => f === 'all' ? '' : f === 'done' ? 'completed' : f === 'needs' ? 'needs_selection' : f;
+      const jobs = await Api.getQueue(1000, statusFor(filter));
       const counts = await Api.getQueueCounts();
       this._updateDownloadBadge(counts);
       this._downloadPaused = counts.paused === 1;
@@ -265,10 +270,10 @@ Object.assign(UI, {
       this._downloadsSig = sig;
 
       let html = '<div class="queue-stats">';
-      // Filter chips: clickable, double as counts. Mobile-first row that wraps.
+      // Filter chips: clickable, double as counts. Single scrollable row.
       const activeOnly = (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
-      const filter = this._downloadFilter || 'all';
-      const chips = [{ key: 'all', label: 'All', count: jobs.length }];
+      const totalCount = activeOnly + (counts.queued || 0) + needsSel + failedCount + (counts.completed || 0);
+      const chips = [{ key: 'all', label: 'All', count: totalCount }];
       if (activeOnly > 0) chips.push({ key: 'active', label: 'Active', count: activeOnly });
       if (counts.queued > 0) chips.push({ key: 'queued', label: 'Queued', count: counts.queued });
       if (needsSel > 0) chips.push({ key: 'needs', label: 'Needs Pick', count: needsSel });

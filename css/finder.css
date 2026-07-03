@@ -919,11 +919,15 @@
    unlike review-filter-chip which is white-on-lime/unreadable. Mobile-first. */
 .dl-chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.dl-chips::-webkit-scrollbar { display: none; }
 .dl-chip {
   display: inline-flex;
   align-items: center;

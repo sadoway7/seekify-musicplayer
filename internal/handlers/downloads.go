@@ -148,8 +148,9 @@ func DownloadQueueHandler(w http.ResponseWriter, r *http.Request) {
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 		limit = l
 	}
+	status := r.URL.Query().Get("status")
 
-	jobs, err := downloads.DbGetJobs(limit)
+	jobs, err := downloads.DbGetJobs(limit, status)
 	if err != nil {
 		http.Error(w, `{"error":"failed to load jobs"}`, http.StatusInternalServerError)
 		return
