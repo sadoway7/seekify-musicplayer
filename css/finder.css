@@ -883,7 +883,7 @@
 .queue-stats {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
   padding: 8px var(--page-margin) 10px;
 }
 

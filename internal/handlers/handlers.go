@@ -13,9 +13,27 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
+
+// assetVersion is stamped once at process start. Because the container
+// restarts on every deploy, every redeploy gets a fresh value, which the
+// server injects into all ?v= asset URLs in index.html. This auto-busts the
+// browser cache for JS/CSS on every deploy without manual version bumps.
+// ponytail: timestamp-not-content-hash; busts on every restart (harmless)
+// rather than tracking file mtimes, which are unreliable inside Docker.
+var assetVersion = time.Now().Format("20060102150405")
+
+var assetVerRe = regexp.MustCompile(`([?&]v=)[0-9A-Za-z]+`)
+
+// bustAssetVersions rewrites every ?v=… / &v=… in index.html to the current
+// assetVersion so browsers fetch fresh JS/CSS after each deploy.
+func bustAssetVersions(html []byte) []byte {
+	return assetVerRe.ReplaceAll(html, []byte("${1}"+assetVersion))
+}
 
 // writeJSON sets the Content-Type and encodes v as JSON to w. Replaces the
 // repeated w.Header().Set("Content-Type","application/json") + json.NewEncoder(w).Encode(v) pair.
@@ -154,7 +172,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 			ogTags += "\n<meta name=\"twitter:image\" content=\"" + htmlpkg.EscapeString(ogImage) + "\">"
 		}
 
-		htmlStr := string(html)
+		htmlStr := string(bustAssetVersions(html))
 		htmlStr = strings.Replace(htmlStr, "</title>", "</title>"+ogTags, 1)
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -179,11 +197,11 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	indexPath := filepath.Join(".", "index.html")
-	if _, err := os.Stat(indexPath); err == nil {
+	if html, err := os.ReadFile(indexPath); err == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		http.ServeFile(w, r, indexPath)
+		w.Write(bustAssetVersions(html))
 		return
 	}
-
 	http.NotFound(w, r)
 }
