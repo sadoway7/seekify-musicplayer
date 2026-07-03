@@ -258,7 +258,10 @@ func DbLoadAllReviewStatuses() map[string]struct {
 }
 
 func DbResetAllReviews() {
-	store.DB.Exec("UPDATE track_reviews SET status = 'unchecked', flags = '[]', checked_at = '', reviewer = ''")
+	// Preserve manually-approved tracks (reviewer='manual') so user
+	// approvals survive rechecks. Short-title tracks like "OK"/"RN" would
+	// otherwise re-flag forever.
+	store.DB.Exec("UPDATE track_reviews SET status = 'unchecked', flags = '[]', checked_at = '', reviewer = '' WHERE NOT (status = 'reviewed_ok' AND reviewer = 'manual')")
 }
 
 func DbDeleteReview(trackID string) {
