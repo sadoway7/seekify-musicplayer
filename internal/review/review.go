@@ -1506,12 +1506,24 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("[review-enrich] done: %d meta applied, %d covers fetched", appliedMeta, fetchedCovers)
 
-		// Phase C: recheck — reset non-manual and run batch
+		// Phase C: re-evaluate ONLY the processed tracks (not all).
+		// Mark them unchecked so RunReviewBatch picks them up, then loop
+		// until all are re-evaluated.
 		ReviewProgressData.Lock()
 		ReviewProgressData.CurrentTrack = "Re-checking..."
-		ReviewProgressData.Checked = len(tracks)
 		ReviewProgressData.Unlock()
-		DbResetAllReviews()
-		RunReviewBatch()
+		for _, t := range tracks {
+			// Preserve manual approvals — don't re-check those
+			status, _ := DbGetReviewForTrack(t.ID)
+			if status != "reviewed_ok" {
+				DbSetReviewStatus(t.ID, "unchecked", "[]", "enrich")
+			}
+		}
+		for {
+			if !RunReviewBatch() {
+				break
+			}
+		}
+		log.Printf("[review-enrich] recheck complete")
 	})
 }
