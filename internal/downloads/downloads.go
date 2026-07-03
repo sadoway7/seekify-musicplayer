@@ -816,6 +816,23 @@ func ProcessSingleDownload(job *DownloadJob) {
 	}
 	if source == "soulseek" {
 		downloadFromSoulseek(job)
+		// Soulseek-preferred mode: if Soulseek failed (no results, all peers
+		// unreachable, search timeout after retry), fall back to YouTube so
+		// soulseek-only mode doesn't hard-fail tracks YT could supply.
+		// Quality-conscious: we only reach here on genuine soulseek failure,
+		// so FLAC-via-soulseek is still preferred on every successful path.
+		// needs_selection/completed are non-failed → we return above-this-check.
+		if job.Status != "failed" || FindYtDlp() == "" {
+			return
+		}
+		log.Printf("[download] Soulseek failed for %q (%s); falling back to YouTube", job.SearchQuery, job.Error)
+		destDir, safeTitle := computeDest(job)
+		cleanupFailedDownload(destDir, safeTitle)
+		job.Error = ""
+		job.ProgressStage = ""
+		job.CompletedAt = ""
+		job.Source = "" // let ProcessSingleDownload re-evaluate on any later retry
+		downloadFromYouTube(job)
 		return
 	}
 
