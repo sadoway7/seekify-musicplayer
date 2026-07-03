@@ -63,8 +63,10 @@
   --radius-full: 999px;
 
   /* ── Layout anchors ── */
-  --tab-bar-height: 58px;
-  --tab-bar-height-safe: calc(58px + env(safe-area-inset-bottom, 0px));
+  /* ponytail: 68px = #tab-bar real footprint (min-height 50 + padding 8 top/20 bottom).
+     Was 58px, which left the mini-player ~10px short and slipping under the tab bar. */
+  --tab-bar-height: 68px;
+  --tab-bar-height-safe: calc(68px + env(safe-area-inset-bottom, 0px));
   --mini-player-height: 66px;
 
   /* ── Page margin ── */

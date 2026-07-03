@@ -280,9 +280,9 @@ Object.assign(UI, {
       if (failedCount > 0) chips.push({ key: 'failed', label: 'Failed', count: failedCount });
       if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
       html += '<div class="queue-stats-actions">'
-        + '<button class="settings-btn" id="btn-dl-settings" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
-        + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
-        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
+        + '<button class="settings-btn" id="btn-dl-settings">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
+        + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed">&#x21bb; Retry All</button>' : '')
+        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history">Clear History</button>' : '')
         + '</div>';
       let chipsHtml = '<div class="dl-chips">';
       chips.forEach(c => {
@@ -642,10 +642,15 @@ Object.assign(UI, {
 
   _updateDownloadBadge(counts) {
     const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
+    const needsSel = counts.needs_selection || 0;
+    const done = counts.completed || 0;
+    const total = done + active + needsSel;
+    const pending = active + needsSel;
     const tab = document.querySelector('[data-tab="finder"] .tab-badge');
     if (tab) {
-      tab.textContent = active > 0 ? active : '';
-      tab.style.display = active > 0 ? '' : 'none';
+      // Show progress as done/total while work remains; hide once drained.
+      tab.textContent = (total > 0 && pending > 0) ? (done + '/' + total) : '';
+      tab.style.display = (total > 0 && pending > 0) ? '' : 'none';
     }
   },
 
