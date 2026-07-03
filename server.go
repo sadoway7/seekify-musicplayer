@@ -403,6 +403,7 @@ func main() {
 	mux.HandleFunc("/api/review/bulk-delete", review.ReviewBulkDeleteHandler)
 	mux.HandleFunc("/api/review/bulk-approve", review.ReviewBulkApproveHandler)
 	mux.HandleFunc("/api/review/recheck-all", review.ReviewRecheckAllHandler)
+	mux.HandleFunc("/api/review/enrich", review.ReviewEnrichHandler)
 	mux.HandleFunc("/api/review/progress", review.ReviewProgressHandler)
 	mux.HandleFunc("/api/review/log", review.ReviewLogHandler)
 

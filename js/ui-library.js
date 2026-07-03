@@ -448,6 +448,7 @@ Object.assign(UI, {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" id="review-recheck-btn">' + Icons.refresh() + '<span>Recheck</span></button>'
+      + '<button class="detail-action-btn" id="review-enrich-btn">' + Icons.search() + '<span>Rescan Meta &amp; Art</span></button>'
       + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn" data-action="approve-review-shown">' + Icons.check() + '<span>Approve Shown</span></button>' : '')
       + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-shown">' + Icons.trash() + '<span>Delete Shown</span></button>' : '')
       + '</div>'
@@ -468,6 +469,35 @@ Object.assign(UI, {
     this._fadeIn(this.els.content);
     this._setupReviewScrollLoader();
     this._setupReviewFilters();
+
+    const enrichBtn = document.getElementById('review-enrich-btn');
+    if (enrichBtn) enrichBtn.addEventListener('click', async () => {
+      enrichBtn.disabled = true;
+      enrichBtn.querySelector('span').textContent = 'Fetching...';
+      try {
+        await Api.reviewEnrich();
+        var self = this;
+        var pollCount = 0;
+        var poll = async function() {
+          pollCount++;
+          try {
+            var p = await Api.getReviewProgress();
+            if (p && p.active) {
+              if (p.total) {
+                enrichBtn.querySelector('span').textContent = (p.done || 0) + '/' + p.total;
+              }
+              if (pollCount < 600) { setTimeout(poll, 1500); return; }
+            }
+          } catch (e) {}
+          self.navigateTo('needs-review');
+        };
+        setTimeout(poll, 1000);
+      } catch (e) {
+        this._showToast('Rescan failed');
+        enrichBtn.disabled = false;
+        enrichBtn.querySelector('span').textContent = 'Rescan Meta & Art';
+      }
+    });
 
     const recheckBtn = document.getElementById('review-recheck-btn');
     if (recheckBtn) recheckBtn.addEventListener('click', async () => {

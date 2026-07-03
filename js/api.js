@@ -121,6 +121,7 @@ const Api = {
   reviewDeleteAll() { return this._req('/api/review/delete-all', { method: 'DELETE', errMsg: 'Failed to delete' }); },
   reviewBulkDelete(flags = []) { return this._req('/api/review/bulk-delete', { method: 'POST', body: { flags }, errMsg: 'Failed to delete' }); },
   reviewBulkApprove(flags = []) { return this._req('/api/review/bulk-approve', { method: 'POST', body: { flags }, errMsg: 'Failed to approve' }); },
+  reviewEnrich() { return this._req('/api/review/enrich', { method: 'POST', errMsg: 'Failed to start enrich' }); },
   reviewRecheckAll() { return this._req('/api/review/recheck-all', { method: 'POST', errMsg: 'Failed to recheck' }); },
   clearCookies() { return this._req('/api/cookies/clear', { method: 'POST', errMsg: 'Failed' }); },
 
