@@ -225,9 +225,9 @@ Object.assign(UI, {
   renderDownloads() {
     this._viewTrackList = [];
 
-    let html = '<div class="page-header">'
-      + '<span class="page-header-title">Downloads</span></div>'
-      + '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+    // ponytail: no page-header — the tab already labels this view; reclaiming
+    // the 56px title bar was the "wasted space above the filter pills".
+    let html = '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
 
     this.els.content.innerHTML = html;
     this._loadDownloads();
@@ -279,6 +279,11 @@ Object.assign(UI, {
       if (needsSel > 0) chips.push({ key: 'needs', label: 'Needs Pick', count: needsSel });
       if (failedCount > 0) chips.push({ key: 'failed', label: 'Failed', count: failedCount });
       if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
+      html += '<div class="queue-stats-actions">'
+        + '<button class="settings-btn" id="btn-dl-settings" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
+        + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
+        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
+        + '</div>';
       let chipsHtml = '<div class="dl-chips">';
       chips.forEach(c => {
         const on = filter === c.key;
@@ -286,12 +291,7 @@ Object.assign(UI, {
       });
       chipsHtml += '</div>';
       html += chipsHtml;
-      html += '<div class="queue-stats-actions">'
-        + '<button class="settings-btn" id="btn-dl-settings" style="font-size:11px;padding:4px 10px;white-space:nowrap">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
-        + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed" style="font-size:11px;padding:4px 10px;white-space:nowrap">&#x21bb; Retry All</button>' : '')
-        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" style="font-size:11px;padding:4px 10px;white-space:nowrap">Clear History</button>' : '')
-        + '</div>'
-        + '</div>';
+      html += '</div>';
 
       if (!jobs || jobs.length === 0) {
         html += '<div class="empty-state" style="padding:40px 22px">'

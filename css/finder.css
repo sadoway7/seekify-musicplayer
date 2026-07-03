@@ -882,11 +882,9 @@
 
 .queue-stats {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px var(--page-margin);
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px var(--page-margin) 8px;
 }
 
 .queue-stats-badges {
@@ -898,7 +896,17 @@
 .queue-stats-actions {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
+  width: 100%;
+}
+/* ponytail: mobile-first — buttons flex to fill edge-to-edge as one row;
+   >=640px they shrink to content width and left-align. */
+.queue-stats-actions .settings-btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+@media (min-width: 640px) {
+  .queue-stats-actions { width: auto; }
+  .queue-stats-actions .settings-btn { flex: 0 0 auto; }
 }
 
 .stat-badge {
@@ -960,10 +968,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
+  padding: 9px 0;
   position: relative;
   overflow: hidden;
+  border-bottom: 1px solid var(--border, rgba(128,128,128,0.12));
 }
+.queue-job-card:last-child { border-bottom: none; }
 
 .queue-active::after {
   content: '';
