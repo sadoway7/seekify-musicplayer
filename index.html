@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!-- DO NOT add viewport-fit=cover here. It extends the viewport into the
+       home-indicator safe area in PWA standalone, which pushes this fixed
+       navbar UP off the bottom on installed iOS web apps. The installed web
+       app navbar must sit flush at the bottom — verified correct WITHOUT cover. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0E0E0E">
   <meta name="mobile-web-app-capable" content="yes">

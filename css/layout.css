@@ -28,6 +28,9 @@
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
   padding-top: var(--sp-3);
+  /* Use --tab-bar-height (NOT --tab-bar-height-safe). The -safe variant adds
+     env(safe-area-inset-bottom), which only behaves correctly under
+     viewport-fit=cover — and cover breaks the PWA navbar. See #tab-bar. */
   padding-bottom: var(--tab-bar-height);
   overscroll-behavior: contain;
   animation: pageFadeIn 0.22s var(--ease-out) both;
@@ -82,6 +85,11 @@ body.mini-player-visible #app-content {
   flex-direction: row;
   align-items: stretch;
   min-height: 50px;
+  /* DO NOT add env(safe-area-inset-bottom) to this padding. It over-corrects
+     in PWA standalone (where the inset is the full home-indicator height) and
+     balloons the navbar, pushing it up. The fixed 20px is correct for the
+     installed web app. Safe-area handling requires viewport-fit=cover, which
+     breaks the PWA navbar — see the viewport meta warning in index.html. */
   padding: 8px 12px 20px;
   background: #0a0b0a;
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);
