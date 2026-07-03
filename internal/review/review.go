@@ -73,6 +73,15 @@ func DbSetReviewStatus(trackID, status, flags, reviewer string) {
 		trackID, status, flags, reviewer)
 }
 
+// DbSeedReviewUnchecked creates an "unchecked" review row only if none exists.
+// Used by the scanner on file import so re-imports don't clobber an existing
+// human approval (reviewed_ok) back to unchecked.
+func DbSeedReviewUnchecked(trackID string) {
+	store.DB.Exec(`INSERT INTO track_reviews (track_id, status, flags, checked_at, reviewer)
+		VALUES (?, 'unchecked', '[]', datetime('now'), '')
+		ON CONFLICT(track_id) DO NOTHING`, trackID)
+}
+
 func DbGetReviewCounts() map[string]int {
 	counts := map[string]int{"unchecked": 0, "needs_review": 0, "reviewed_ok": 0}
 	rows, err := store.DB.Query("SELECT track_id, status FROM track_reviews")
@@ -778,10 +787,14 @@ func CheckAllDuplicates() {
 							}
 							continue
 						}
-						existingStatus, existingFlags := DbGetReviewForTrack(t.ID)
-						if existingStatus == "reviewed_ok" && existingFlags == nil {
-							continue
-						}
+					existingStatus, existingFlags := DbGetReviewForTrack(t.ID)
+					// A human (manual/rescrape) already approved this track —
+					// never re-flag it as a duplicate. (Previous check used
+					// `existingFlags == nil` which is never true: stored "[]"
+					// unmarshals to an empty non-nil slice.)
+					if existingStatus == "reviewed_ok" {
+						continue
+					}
 						var newFlags []string
 						for _, f := range existingFlags {
 							if f != "potential_duplicate" {
@@ -1157,6 +1170,7 @@ func ReviewEditMetaHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	DbUpdateTrackMeta(body.TrackID, body.Fields)
+	DbSetReviewStatus(body.TrackID, "reviewed_ok", "[]", "manual")
 
 	if LibraryVersionAdd != nil {
 		LibraryVersionAdd(1)

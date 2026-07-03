@@ -25,6 +25,7 @@ var (
 	LibraryVersionAdd      func(delta int64)
 	DeleteReview           func(trackID string)
 	SetReviewStatus        func(trackID, status, flags, reviewer string)
+	SeedReviewUnchecked    func(trackID string)
 )
 
 // ResolveFilePath expands a prefixed FilePath into an absolute path on disk.
@@ -803,8 +804,8 @@ func ScanSingleFile(filePath string) {
 	store.Mu.Unlock()
 
 	store.DbUpsertTrack(track)
-	if SetReviewStatus != nil {
-		SetReviewStatus(trackID, "unchecked", "[]", "")
+	if SeedReviewUnchecked != nil {
+		SeedReviewUnchecked(trackID)
 	}
 	// Don't wake the review worker immediately — cover art fetching
 	// (MusicBrainz/Deezer/ExtractEmbeddedCovers) hasn't run yet, so the

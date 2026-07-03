@@ -93,6 +93,7 @@ func main() {
 	review.LibraryVersionAdd = func(delta int64) { handlers.LibraryVersion.Add(delta) }
 	scanner.DeleteReview = review.DbDeleteReview
 	scanner.SetReviewStatus = review.DbSetReviewStatus
+	scanner.SeedReviewUnchecked = review.DbSeedReviewUnchecked
 
 	// Try loading from DB first
 	dbTracks := store.DbLoadTracks()

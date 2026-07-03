@@ -341,7 +341,6 @@ func ApplyApprovedMatches() int {
 	}
 
 	store.Mu.Lock()
-	coverDir := filepath.Join(store.MusicDir, "images")
 	for _, m := range bestPerTrack {
 		track, exists := store.Tracks[m.TrackID]
 		if !exists {
@@ -376,17 +375,13 @@ func ApplyApprovedMatches() int {
 			applied++
 			store.DbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
 
-			if oldAlbumID != track.AlbumID {
-				oldPath := filepath.Join(coverDir, oldAlbumID+".jpg")
-				newPath := filepath.Join(coverDir, track.AlbumID+".jpg")
-				if _, err := os.Stat(newPath); os.IsNotExist(err) {
-					if data, ferr := os.ReadFile(oldPath); ferr == nil {
-						os.WriteFile(newPath, data, 0644)
-						store.CacheCover(track.AlbumID, data)
-						store.MoveCustomCover(oldAlbumID, track.AlbumID)
-					}
-				}
-			}
+		if oldAlbumID != track.AlbumID {
+			// Always move a custom cover when the albumID changes — even if the
+			// new path already has a cover (album merge). Otherwise the custom
+			// flag is orphaned on the old albumID and the track loses its art.
+			// MoveCustomCover no-ops if the old albumID wasn't custom.
+			store.MoveCustomCover(oldAlbumID, track.AlbumID)
+		}
 		}
 
 		if m.MBAlbumID != "" && track.AlbumID != "" {
