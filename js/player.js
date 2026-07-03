@@ -58,6 +58,14 @@ const Player = {
       });
       navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
       navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
+      // iOS shows ±15s skip buttons (not prev/next) whenever seekforward/
+      // seekbackward are left in their default supported state. Explicitly
+      // nulling them forces iOS to render prev/next-track buttons instead.
+      // The seekto scrubber is unaffected.
+      try {
+        navigator.mediaSession.setActionHandler('seekforward', null);
+        navigator.mediaSession.setActionHandler('seekbackward', null);
+      } catch (e) { /* not all browsers support nulling */ }
       // ponytail: seekto so the iOS lock-screen scrubber is functional; without
       // setPositionState + a finite duration iOS shows ±15s buttons, not track skip.
       navigator.mediaSession.setActionHandler('seekto', (details) => {

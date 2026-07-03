@@ -1034,13 +1034,21 @@ func downloadFromSoulseek(job *DownloadJob) {
 	job.ProgressStage = "Searching Soulseek"
 	DbUpdateJob(job)
 
+	// Soulseek search is prone to transient timeouts (peer/network blips).
+	// Retry once before failing — recovers a meaningful chunk of jobs that
+	// would otherwise die on a single dropped search response.
+	// ponytail: single retry, no backoff; SearchTimeout (2m) already bounds cost.
 	cands, serr := searchSlsk(slskQuery(job))
+	if serr != nil {
+		log.Printf("[download] soulseek search failed for %q (%v); retrying once", job.SearchQuery, serr)
+		cands, serr = searchSlsk(slskQuery(job))
+	}
 	if serr != nil {
 		job.Status = "failed"
 		job.Error = "Soulseek search failed: " + serr.Error()
 		job.CompletedAt = time.Now().Format(time.RFC3339)
 		DbUpdateJob(job)
-		log.Printf("[download] soulseek search failed for %q: %v", job.SearchQuery, serr)
+		log.Printf("[download] soulseek search failed for %q after retry: %v", job.SearchQuery, serr)
 		return
 	}
 
