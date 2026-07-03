@@ -130,6 +130,34 @@ func DbGetTracksByReviewStatus(status string, limit int) []string {
 	return ids
 }
 
+// DbGetStaleReviewTracks returns track IDs with the given status whose
+// checked_at is older than age (or NULL). Used to re-evaluate needs_review
+// tracks so stale flags clear once the triggering condition resolves (e.g.
+// duration populated after the original no_duration flag).
+func DbGetStaleReviewTracks(status string, age time.Duration, limit int) []string {
+	cutoff := time.Now().Add(-age).Format(time.RFC3339)
+	rows, err := store.DB.Query(
+		"SELECT track_id FROM track_reviews WHERE status = ? AND (checked_at IS NULL OR checked_at < ?) ORDER BY checked_at ASC LIMIT ?",
+		status, cutoff, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		rows.Scan(&id)
+		store.Mu.RLock()
+		_, exists := store.Tracks[id]
+		store.Mu.RUnlock()
+		if !exists {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func DbGetReviewTotal(flags ...string) int {
 	where, args := reviewFlagWhere(flags)
 	var count int
@@ -998,11 +1026,20 @@ func WakeReviewWorker() {
 
 func RunReviewBatch() bool {
 	batch := DbGetTracksByReviewStatus("unchecked", 50)
+	recheck := false
 	if len(batch) == 0 {
-		return false
+		// No new tracks. Re-evaluate stale needs_review flags so conditions
+		// that resolved since the original flag (e.g. duration now populated
+		// via ffprobe/playback) clear automatically. 1h minimum age avoids
+		// hot-looping on tracks that are legitimately and still flagged.
+		batch = DbGetStaleReviewTracks("needs_review", 1*time.Hour, 50)
+		if len(batch) == 0 {
+			return false
+		}
+		recheck = true
 	}
 
-	log.Printf("[review] Checking batch of %d tracks", len(batch))
+	log.Printf("[review] Checking batch of %d tracks (recheck=%v)", len(batch), recheck)
 
 	ReviewLogData.Lock()
 	ReviewLogData.Entries = nil
