@@ -1399,4 +1399,4 @@
 .review-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; }
 .review-filter-chip { padding: 4px 12px; border-radius: 12px; font-size: 12px; border: 1px solid var(--border, #333); background: transparent; color: var(--text-muted, #888); cursor: pointer; }
 .review-filter-chip:hover { color: var(--text, #fff); border-color: var(--text-muted, #555); }
-.review-filter-chip.active { background: var(--accent, #1a73e8); color: #fff; border-color: var(--accent, #1a73e8); }
+.review-filter-chip.active { background: var(--accent, #1a73e8); color: #000; border-color: var(--accent, #1a73e8); }

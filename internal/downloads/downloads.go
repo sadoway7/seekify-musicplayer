@@ -786,6 +786,23 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 		if albumID != "" {
 			musicbrainz.FetchAndCacheCoverByMBID(albumID, job.AlbumMBID)
 		}
+	} else {
+		// No MBID (common for bulk Soulseek imports). Fall back to a
+		// name-based cover search using the track's tag metadata.
+		store.Mu.RLock()
+		var albumID, artist, album string
+		for _, tr := range store.Tracks {
+			if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+				albumID = tr.AlbumID
+				artist = tr.Artist
+				album = tr.Album
+				break
+			}
+		}
+		store.Mu.RUnlock()
+		if albumID != "" && artist != "" && album != "" {
+			musicbrainz.FetchAndCacheCover(albumID, artist, album)
+		}
 	}
 
 	if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {

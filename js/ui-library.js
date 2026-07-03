@@ -526,14 +526,13 @@ Object.assign(UI, {
       const chip = e.target.closest('.review-filter-chip');
       if (!chip) return;
       const flag = chip.getAttribute('data-flag');
-      let current = (this._reviewFlags || []).slice();
       if (!flag) {
-        current = [];
+        this._reviewFlags = [];
+      } else if ((this._reviewFlags || [])[0] === flag) {
+        this._reviewFlags = []; // toggle off → All
       } else {
-        const idx = current.indexOf(flag);
-        if (idx === -1) current.push(flag); else current.splice(idx, 1);
+        this._reviewFlags = [flag]; // single-select
       }
-      this._reviewFlags = current;
       this.renderNeedsReview();
     });
   },
