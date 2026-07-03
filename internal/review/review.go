@@ -1374,7 +1374,7 @@ func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
 func ReviewProgressHandler(w http.ResponseWriter, r *http.Request) {
 	ReviewProgressData.RLock()
 	resp := map[string]interface{}{
-		"active":       ReviewProgressData.Active,
+		"active":       ReviewProgressData.Active || enrichActive,
 		"currentTrack": ReviewProgressData.CurrentTrack,
 		"currentID":    ReviewProgressData.CurrentID,
 		"checked":      ReviewProgressData.Checked,
