@@ -1395,7 +1395,11 @@ func ReviewLogHandler(w http.ResponseWriter, r *http.Request) {
 // tracks, then re-checks. Per track: MB metadata search (auto-apply if score
 // >= 0.7), then FetchAndCacheCover (which now has the album name from metadata).
 func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]string{"status": "started"})
+	// Diagnostic: check what we'd process BEFORE spawning goroutine
+	ids := DbGetTracksByReviewStatus("needs_review", 0)
+	log.Printf("[review-enrich] handler called, found %d needs_review IDs", len(ids))
+
+	writeJSON(w, map[string]interface{}{"status": "started", "found": len(ids)})
 
 	store.SafeGo("review-enrich", func() {
 		defer func() {
@@ -1407,8 +1411,8 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			ReviewProgressData.Unlock()
 		}()
 
-		ids := DbGetTracksByReviewStatus("needs_review", 0)
 		if len(ids) == 0 {
+			log.Printf("[review-enrich] no needs_review tracks, aborting")
 			return
 		}
 
