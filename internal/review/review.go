@@ -50,8 +50,14 @@ type ReviewLogInfo struct {
 var (
 	ReviewProgressData ReviewProgressInfo
 	ReviewLogData      ReviewLogInfo
-	enrichActive       bool // guard: prevent overlapping enrich runs only
-	enrichLastError    string
+	enrichActive    bool   // guard: prevent overlapping enrich runs only
+	enrichLastError string
+	enrichProgress  struct {
+		sync.RWMutex
+		Checked      int
+		Total        int
+		CurrentTrack string
+	}
 )
 
 func InitReviewTables() {
@@ -1373,9 +1379,25 @@ func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ReviewProgressHandler(w http.ResponseWriter, r *http.Request) {
+	// If enrich is running, report its dedicated progress (not the periodic
+	// worker's ReviewProgressData, which races and clobbers it).
+	if enrichActive {
+		enrichProgress.RLock()
+		resp := map[string]interface{}{
+			"active":       true,
+			"currentTrack": enrichProgress.CurrentTrack,
+			"currentID":    "",
+			"checked":      enrichProgress.Checked,
+			"total":        enrichProgress.Total,
+			"lastError":    enrichLastError,
+		}
+		enrichProgress.RUnlock()
+		writeJSON(w, resp)
+		return
+	}
 	ReviewProgressData.RLock()
 	resp := map[string]interface{}{
-		"active":       ReviewProgressData.Active || enrichActive,
+		"active":       ReviewProgressData.Active,
 		"currentTrack": ReviewProgressData.CurrentTrack,
 		"currentID":    ReviewProgressData.CurrentID,
 		"checked":      ReviewProgressData.Checked,
@@ -1411,9 +1433,6 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 				enrichLastError = fmt.Sprintf("panic: %v", rec)
 			}
 			enrichActive = false
-			ReviewProgressData.Lock()
-			ReviewProgressData.Active = false
-			ReviewProgressData.Unlock()
 		}()
 
 		// Guard: prevent overlapping enrich runs only (not periodic worker).
@@ -1439,22 +1458,21 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		store.Mu.RUnlock()
 
-		ReviewProgressData.Lock()
-		ReviewProgressData.Active = true
-		ReviewProgressData.Checked = 0
-		ReviewProgressData.Total = len(tracks)
-		ReviewProgressData.CurrentTrack = "Starting..."
-		ReviewProgressData.Unlock()
+		enrichProgress.Lock()
+		enrichProgress.Checked = 0
+		enrichProgress.Total = len(tracks)
+		enrichProgress.CurrentTrack = "Starting..."
+		enrichProgress.Unlock()
 
 		log.Printf("[review-enrich] %d tracks to enrich", len(tracks))
 		fetchedCovers := 0
 		appliedMeta := 0
 
 		for i, t := range tracks {
-			ReviewProgressData.Lock()
-			ReviewProgressData.Checked = i
-			ReviewProgressData.CurrentTrack = t.Artist + " — " + t.Title
-			ReviewProgressData.Unlock()
+			enrichProgress.Lock()
+			enrichProgress.Checked = i
+			enrichProgress.CurrentTrack = t.Artist + " — " + t.Title
+			enrichProgress.Unlock()
 
 			// Phase A: metadata — fill missing/derived fields from MB
 			searchTitle := t.Title
