@@ -51,6 +51,7 @@ var (
 	ReviewProgressData ReviewProgressInfo
 	ReviewLogData      ReviewLogInfo
 	enrichActive       bool // guard: prevent overlapping enrich runs only
+	enrichLastError    string
 )
 
 func InitReviewTables() {
@@ -1379,6 +1380,7 @@ func ReviewProgressHandler(w http.ResponseWriter, r *http.Request) {
 		"currentID":    ReviewProgressData.CurrentID,
 		"checked":      ReviewProgressData.Checked,
 		"total":        ReviewProgressData.Total,
+		"lastError":    enrichLastError,
 	}
 	ReviewProgressData.RUnlock()
 	writeJSON(w, resp)
@@ -1406,6 +1408,7 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("[review-enrich] panic: %v\n%s", rec, debug.Stack())
+				enrichLastError = fmt.Sprintf("panic: %v", rec)
 			}
 			enrichActive = false
 			ReviewProgressData.Lock()
@@ -1419,6 +1422,7 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		enrichActive = true
+		enrichLastError = ""
 
 		if len(ids) == 0 {
 			log.Printf("[review-enrich] no needs_review tracks, aborting")
