@@ -25,6 +25,7 @@ const Player = {
     this.audio.addEventListener('ended', () => this._onEnded());
     this.audio.addEventListener('loadedmetadata', () => {
       if (this.onTimeUpdate) this.onTimeUpdate();
+      this._syncPositionState();
       // Report duration to server if track doesn't have one yet
       const track = this.getCurrentTrack();
       if (track && (!track.duration || track.duration === 0) && this.audio.duration && isFinite(this.audio.duration)) {
@@ -37,10 +38,12 @@ const Player = {
       this.playing = true;
       this._consecutiveErrors = 0;
       this._clearLoadTimeout();
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
       if (this.onStateChange) this.onStateChange();
     });
     this.audio.addEventListener('pause', () => {
       this.playing = false;
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
       if (this.onStateChange) this.onStateChange();
     });
     this.audio.addEventListener('error', () => this._onMediaError());
@@ -55,7 +58,31 @@ const Player = {
       });
       navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
       navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
+      // ponytail: seekto so the iOS lock-screen scrubber is functional; without
+      // setPositionState + a finite duration iOS shows ±15s buttons, not track skip.
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime != null && this.audio.duration && isFinite(this.audio.duration)) {
+          this.audio.currentTime = Math.min(Math.max(details.seekTime, 0), this.audio.duration);
+          this._syncPositionState();
+        }
+      });
     }
+  },
+
+  // ponytail: iOS needs finite position state to render prev/next-track buttons
+  // instead of ±15s seek buttons. Called on load/play/seek, not timeupdate (the
+  // OS advances the scrubber itself using playbackRate).
+  _syncPositionState() {
+    if (!('mediaSession' in navigator)) return;
+    const d = this.audio.duration;
+    if (!d || !isFinite(d) || d <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: d,
+        playbackRate: this.audio.playbackRate || 1,
+        position: Math.min(this.audio.currentTime || 0, d)
+      });
+    } catch (e) { /* setPositionState throws on bad values; ignore */ }
   },
 
   _updateMediaSession(track) {
@@ -66,6 +93,8 @@ const Player = {
       album: track.album || '',
       artwork: track.albumID ? [{ src: Api.coverUrl(track.albumID), sizes: '512x512', type: 'image/jpeg' }] : []
     });
+    // Reset position state for the new track (duration from metadata if known).
+    this._syncPositionState();
   },
 
   play(track, trackList, source) {
@@ -207,6 +236,7 @@ const Player = {
   seek(fraction) {
     if (this.audio.duration && isFinite(this.audio.duration)) {
       this.audio.currentTime = fraction * this.audio.duration;
+      this._syncPositionState();
     }
   },
 
