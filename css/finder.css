@@ -915,6 +915,39 @@
 .stat-completed { background: rgba(34,197,94,0.15); color: #22c55e; }
 .stat-failed { background: rgba(248,113,113,0.15); color: #f87171; }
 
+/* Download filter chips — own classes so active state reads (black on lime),
+   unlike review-filter-chip which is white-on-lime/unreadable. Mobile-first. */
+.dl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border, #333);
+  background: transparent;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.dl-chip b { font-weight: 700; opacity: .85; }
+.dl-chip:hover { color: var(--text, #fff); border-color: var(--text-muted, #555); }
+.dl-chip-on {
+  background: var(--accent, #d4f040);
+  color: #000;
+  border-color: var(--accent, #d4f040);
+}
+.dl-chip-on b { opacity: 1; }
+
 .queue-job-list {
   padding: 8px var(--page-margin);
 }

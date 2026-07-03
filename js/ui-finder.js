@@ -265,7 +265,7 @@ Object.assign(UI, {
       this._downloadsSig = sig;
 
       let html = '<div class="queue-stats">';
-      // Filter chips: clickable, double as counts. Reuses review-filter-chip styles.
+      // Filter chips: clickable, double as counts. Mobile-first row that wraps.
       const activeOnly = (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
       const filter = this._downloadFilter || 'all';
       const chips = [{ key: 'all', label: 'All', count: jobs.length }];
@@ -274,10 +274,10 @@ Object.assign(UI, {
       if (needsSel > 0) chips.push({ key: 'needs', label: 'Needs Pick', count: needsSel });
       if (failedCount > 0) chips.push({ key: 'failed', label: 'Failed', count: failedCount });
       if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
-      let chipsHtml = '<div class="review-filter-chips">';
+      let chipsHtml = '<div class="dl-chips">';
       chips.forEach(c => {
         const on = filter === c.key;
-        chipsHtml += '<button class="review-filter-chip' + (on ? ' active' : '') + '" data-filter="' + c.key + '">' + this._esc(c.label) + ' <span style="opacity:.7">' + c.count + '</span></button>';
+        chipsHtml += '<button class="dl-chip' + (on ? ' dl-chip-on' : '') + '" data-filter="' + c.key + '"><span>' + this._esc(c.label) + '</span><b>' + c.count + '</b></button>';
       });
       chipsHtml += '</div>';
       html += chipsHtml;
@@ -388,7 +388,7 @@ Object.assign(UI, {
         });
       });
 
-      container.querySelectorAll('.review-filter-chip[data-filter]').forEach(btn => {
+      container.querySelectorAll('.dl-chip[data-filter]').forEach(btn => {
         btn.addEventListener('click', () => {
           this._downloadFilter = btn.dataset.filter;
           this._downloadsSig = ''; // force re-render despite unchanged counts
@@ -590,8 +590,8 @@ Object.assign(UI, {
       + '</div>'
       + '<div class="candidate-modal-list">' + listHtml + '</div>'
       + '<div class="candidate-modal-actions">'
-      + '<button class="btn-secondary" id="cand-search-again">Search Again</button>'
-      + '<button class="btn-danger" id="cand-remove">Remove</button>'
+      + '<button class="settings-btn" id="cand-search-again">Search Again</button>'
+      + '<button class="settings-btn settings-btn-danger" id="cand-remove">Remove</button>'
       + '</div>'
       + '</div>';
 

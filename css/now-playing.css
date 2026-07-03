@@ -542,3 +542,12 @@
   padding-top: var(--sp-6);
 }
 
+/* Mobile: give the player controls more clearance above the tab bar so they
+   don't sit cramped at the bottom edge. Desktop has no tab bar so the base
+   16px is fine there. */
+@media (max-width: 767px) {
+  .now-playing {
+    padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--sp-8));
+  }
+}
+

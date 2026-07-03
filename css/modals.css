@@ -669,6 +669,13 @@
   overflow-y: auto;
   padding: 8px 0;
 }
+.candidate-modal-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border, #333);
+}
+.candidate-modal-actions .settings-btn { flex: 1; justify-content: center; }
 .candidate-item {
   display: flex;
   align-items: center;
