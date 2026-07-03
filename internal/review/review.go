@@ -1,6 +1,7 @@
 package review
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"musicapp/internal/store"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
@@ -761,6 +763,57 @@ func CheckDuration(t *models.Track, otherFlags []string) []string {
 	return flags
 }
 
+// probeTrackDuration ffprobes the file and returns duration in seconds (0 on
+// failure). Used to backfill tracks whose duration was never persisted (e.g.
+// downloaded before the ffprobe-duration-persist fix shipped).
+func probeTrackDuration(filePath string) int {
+	fullPath := resolveTrackPath(filePath)
+	if fullPath == "" {
+		return 0
+	}
+	if _, err := os.Stat(fullPath); err != nil {
+		return 0
+	}
+	ffprobePath, _ := exec.LookPath("ffprobe")
+	if ffprobePath == "" {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, ffprobePath,
+		"-v", "quiet",
+		"-show_entries", "format=duration",
+		"-of", "default=nw=1:nk=1",
+		fullPath,
+	).Output()
+	if err != nil {
+		return 0
+	}
+	durStr := strings.TrimSpace(string(output))
+	if idx := strings.Index(durStr, "\n"); idx > 0 {
+		durStr = durStr[:idx]
+	}
+	dur, err := strconv.ParseFloat(durStr, 64)
+	if err != nil || dur <= 0 {
+		return 0
+	}
+	return int(dur)
+}
+
+// resolveTrackPath mirrors scanner.ResolveFilePath without importing scanner.
+func resolveTrackPath(filePath string) string {
+	for prefix, dir := range store.MusicDirs {
+		if prefix == "" {
+			continue
+		}
+		prefixKey := prefix + ":"
+		if strings.HasPrefix(filePath, prefixKey) {
+			return filepath.Join(dir, strings.TrimPrefix(filePath, prefixKey))
+		}
+	}
+	return filepath.Join(store.MusicDir, filePath)
+}
+
 func CheckAllDuplicates() {
 	store.Mu.RLock()
 	byArtist := make(map[string][]models.Track)
@@ -1092,6 +1145,19 @@ func RunReviewBatch() bool {
 		}
 
 		if store.GetSettingBool("review_flag_duration", true) {
+			// Backfill: if duration is still 0, probe the file with ffprobe.
+			// Tracks downloaded before the duration-persist fix never got probed.
+			if t.Duration == 0 {
+				if probed := probeTrackDuration(t.FilePath); probed > 0 {
+					t.Duration = probed
+					store.Mu.Lock()
+					if orig, ok := store.Tracks[t.ID]; ok {
+						orig.Duration = probed
+					}
+					store.Mu.Unlock()
+					store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", probed, t.ID)
+				}
+			}
 			durFlags := CheckDuration(t, allFlags)
 			if len(durFlags) > 0 {
 				allFlags = append(allFlags, durFlags...)

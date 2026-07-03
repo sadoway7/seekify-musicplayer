@@ -467,6 +467,7 @@ Object.assign(UI, {
     this.els.content.innerHTML = html;
     this._fadeIn(this.els.content);
     this._setupReviewScrollLoader();
+    this._setupReviewFilters();
 
     const recheckBtn = document.getElementById('review-recheck-btn');
     if (recheckBtn) recheckBtn.addEventListener('click', async () => {
@@ -504,7 +505,7 @@ Object.assign(UI, {
       'missing_title', 'missing_artist', 'missing_album', 'missing_track_number',
       'missing_genre', 'no_cover', 'suspicious_title', 'suspicious_video',
       'suspicious_cover', 'filename_derived', 'artist_equals_title',
-      'very_short_title', 'very_long_title', 'short_duration', 'long_duration',
+      'very_short_title', 'very_long_title', 'no_duration', 'short_duration', 'long_duration',
       'potential_duplicate'
     ];
     let html = '<div class="review-filter-chips">';

@@ -359,6 +359,7 @@ const ReviewUI = {
       very_short_title: 'Very Short Title',
       very_long_title: 'Very Long Title',
       short_duration: 'Short Duration',
+      no_duration: 'No Duration',
       long_duration: 'Long Duration',
       potential_duplicate: 'Possible Duplicate'
     };
