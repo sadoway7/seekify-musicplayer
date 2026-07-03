@@ -50,6 +50,7 @@ type ReviewLogInfo struct {
 var (
 	ReviewProgressData ReviewProgressInfo
 	ReviewLogData      ReviewLogInfo
+	enrichActive       bool // guard: prevent overlapping enrich runs only
 )
 
 func InitReviewTables() {
@@ -1406,21 +1407,18 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			if rec := recover(); rec != nil {
 				log.Printf("[review-enrich] panic: %v\n%s", rec, debug.Stack())
 			}
+			enrichActive = false
 			ReviewProgressData.Lock()
 			ReviewProgressData.Active = false
 			ReviewProgressData.Unlock()
 		}()
 
-		// Guard: don't start if another review pass is already running
-		// (periodic worker, recheck-all, or a prior enrich still going).
-		ReviewProgressData.Lock()
-		if ReviewProgressData.Active {
-			ReviewProgressData.Unlock()
-			log.Printf("[review-enrich] another review pass active, aborting")
+		// Guard: prevent overlapping enrich runs only (not periodic worker).
+		if enrichActive {
+			log.Printf("[review-enrich] already running, aborting")
 			return
 		}
-		ReviewProgressData.Active = true
-		ReviewProgressData.Unlock()
+		enrichActive = true
 
 		if len(ids) == 0 {
 			log.Printf("[review-enrich] no needs_review tracks, aborting")
