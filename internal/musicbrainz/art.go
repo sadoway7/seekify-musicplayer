@@ -172,6 +172,7 @@ func FetchMissingArtistArt() {
 }
 
 func MbSearchRelease(artist, album string) (string, error) {
+	// Try artist + album first (precise)
 	query := fmt.Sprintf(`artist:"%s" AND release:"%s"`, EscapeLucene(artist), EscapeLucene(album))
 	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=1", MbBaseURL, url.QueryEscape(query))
 
@@ -183,6 +184,20 @@ func MbSearchRelease(artist, album string) (string, error) {
 	var searchResp MbSearchResponse
 	if err := json.Unmarshal(body, &searchResp); err != nil {
 		return "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
+	}
+
+	// ponytail: fallback to album-only search for compilations where the
+	// track artist ≠ album artist (e.g. "Wild Summer 2004" by various).
+	if len(searchResp.Releases) == 0 && artist != "" && album != "" {
+		query = fmt.Sprintf(`release:"%s"`, EscapeLucene(album))
+		reqURL = fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=1", MbBaseURL, url.QueryEscape(query))
+		body, err = MbDoRequest(reqURL)
+		if err != nil {
+			return "", err
+		}
+		if err := json.Unmarshal(body, &searchResp); err != nil {
+			return "", fmt.Errorf("invalid response from MusicBrainz: %v", err)
+		}
 	}
 
 	if len(searchResp.Releases) == 0 {

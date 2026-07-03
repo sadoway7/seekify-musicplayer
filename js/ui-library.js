@@ -484,12 +484,15 @@ Object.assign(UI, {
             var p = await Api.getReviewProgress();
             if (p && p.active) {
               if (p.total) {
-                enrichBtn.querySelector('span').textContent = (p.done || 0) + '/' + p.total;
+                enrichBtn.querySelector('span').textContent = (p.checked || 0) + '/' + p.total;
               }
               if (pollCount < 600) { setTimeout(poll, 1500); return; }
             }
           } catch (e) {}
+          self._showToast('Rescan complete — refreshing list');
           self.navigateTo('needs-review');
+          enrichBtn.disabled = false;
+          enrichBtn.querySelector('span').textContent = 'Rescan Meta & Art';
         };
         setTimeout(poll, 1000);
       } catch (e) {
