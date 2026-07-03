@@ -1391,10 +1391,9 @@ func ReviewLogHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(logText))
 }
 
-// ReviewEnrichHandler batch-fetches cover art and metadata candidates for all
-// needs_review tracks, then re-checks. Covers: FetchAndCacheCover for each
-// album missing art. Metadata: MB search per track, auto-apply if best
-// candidate scores >= 0.85, else store candidate for manual pick.
+// ReviewEnrichHandler batch-fetches cover art and metadata for all needs_review
+// tracks, then re-checks. Per track: MB metadata search (auto-apply if score
+// >= 0.7), then FetchAndCacheCover (which now has the album name from metadata).
 func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "started"})
 
@@ -1413,72 +1412,45 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ReviewProgressData.Lock()
-		ReviewProgressData.Active = true
-		ReviewProgressData.Checked = 0
-		ReviewProgressData.Total = len(ids)
-		ReviewProgressData.CurrentTrack = "Starting..."
-		ReviewProgressData.Unlock()
-
-		// Collect tracks + unique albums missing covers
-		type albumKey struct{ id, artist, name string }
-		var tracks []*models.Track
-		missingCovers := map[string]albumKey{}
-		seenAlbum := map[string]bool{}
-
+		// Snapshot tracks (we'll modify under lock per-track)
 		store.Mu.RLock()
+		var tracks []*models.Track
 		for _, id := range ids {
 			if t, ok := store.Tracks[id]; ok {
 				tracks = append(tracks, t)
-				if t.AlbumID != "" && !seenAlbum[t.AlbumID] && t.Artist != "" && t.Album != "" {
-					seenAlbum[t.AlbumID] = true
-					if a, ok := store.Albums[t.AlbumID]; ok && !a.HasCover {
-						missingCovers[t.AlbumID] = albumKey{t.AlbumID, t.Artist, t.Album}
-					}
-				}
 			}
 		}
 		store.Mu.RUnlock()
 
-		log.Printf("[review-enrich] %d tracks, %d albums missing covers", len(tracks), len(missingCovers))
+		ReviewProgressData.Lock()
+		ReviewProgressData.Active = true
+		ReviewProgressData.Checked = 0
+		ReviewProgressData.Total = len(tracks)
+		ReviewProgressData.CurrentTrack = "Starting..."
+		ReviewProgressData.Unlock()
 
-		// Phase 1: covers (most impactful, fixes no_cover flags)
-		i := 0
-		for _, ak := range missingCovers {
-			ReviewProgressData.Lock()
-			ReviewProgressData.CurrentTrack = "Cover: " + ak.artist + " - " + ak.name
-			ReviewProgressData.Unlock()
-			musicbrainz.FetchAndCacheCover(ak.id, ak.artist, ak.name)
-			i++
+		log.Printf("[review-enrich] %d tracks to enrich", len(tracks))
+		fetchedCovers := 0
+		appliedMeta := 0
+
+		for i, t := range tracks {
 			ReviewProgressData.Lock()
 			ReviewProgressData.Checked = i
-			ReviewProgressData.Unlock()
-			time.Sleep(600 * time.Millisecond)
-		}
-
-		// Phase 2: metadata rescan per track
-		for _, t := range tracks {
-			ReviewProgressData.Lock()
-			ReviewProgressData.CurrentTrack = "Meta: " + t.Artist + " - " + t.Title
-			ReviewProgressData.Checked = i
+			ReviewProgressData.CurrentTrack = t.Artist + " — " + t.Title
 			ReviewProgressData.Unlock()
 
+			// Phase A: metadata — fill missing/derived fields from MB
 			searchTitle := t.Title
 			searchArtist := t.Artist
 			if searchTitle == "" {
 				continue
 			}
 
-			cands, err := musicbrainz.MbSearchRecordings(searchArtist, searchTitle, 5)
-			if err != nil {
-				continue
-			}
-
-			// Auto-apply best candidate if high confidence
-			if len(cands) > 0 {
+			cands, _, err := musicbrainz.MbSearchRecordingsPaged(searchArtist, searchTitle, 5, 0)
+			if err == nil && len(cands) > 0 {
 				best := cands[0]
 				score := musicbrainz.ScoreMatch(searchArtist, searchTitle, best.Artist, best.Title, best.Album)
-				if score >= 0.85 {
+				if score >= 0.7 {
 					store.Mu.Lock()
 					changed := false
 					if best.Artist != "" && t.Artist != best.Artist {
@@ -1503,22 +1475,41 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 						}
 						t.HasMetadata = true
 						store.DbUpdateTrackMetadata(t.ID, t.Title, t.Artist, t.Album, t.AlbumArtist)
+						appliedMeta++
 					}
 					store.Mu.Unlock()
 				}
 			}
 
-			i++
-			ReviewProgressData.Lock()
-			ReviewProgressData.Checked = i
-			ReviewProgressData.Unlock()
-			time.Sleep(500 * time.Millisecond)
+			// Phase B: cover — now album may be populated from metadata
+			albumID := t.AlbumID
+			artist := t.Artist
+			album := t.Album
+			if albumID != "" && artist != "" && album != "" {
+				// Check if cover already exists
+				store.Mu.RLock()
+				hasCover := false
+				if a, ok := store.Albums[albumID]; ok {
+					hasCover = a.HasCover
+				}
+				store.Mu.RUnlock()
+				if !hasCover && !store.IsCustomCover(albumID) {
+					if musicbrainz.FetchAndCacheCover(albumID, artist, album) {
+						fetchedCovers++
+					}
+					time.Sleep(600 * time.Millisecond)
+				}
+			}
+
+			time.Sleep(300 * time.Millisecond)
 		}
 
-		// Phase 3: recheck all
-		log.Printf("[review-enrich] done covers+meta, running recheck")
+		log.Printf("[review-enrich] done: %d meta applied, %d covers fetched", appliedMeta, fetchedCovers)
+
+		// Phase C: recheck — reset non-manual and run batch
 		ReviewProgressData.Lock()
 		ReviewProgressData.CurrentTrack = "Re-checking..."
+		ReviewProgressData.Checked = len(tracks)
 		ReviewProgressData.Unlock()
 		DbResetAllReviews()
 		RunReviewBatch()
