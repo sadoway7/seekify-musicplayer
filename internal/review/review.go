@@ -1411,6 +1411,17 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			ReviewProgressData.Unlock()
 		}()
 
+		// Guard: don't start if another review pass is already running
+		// (periodic worker, recheck-all, or a prior enrich still going).
+		ReviewProgressData.Lock()
+		if ReviewProgressData.Active {
+			ReviewProgressData.Unlock()
+			log.Printf("[review-enrich] another review pass active, aborting")
+			return
+		}
+		ReviewProgressData.Active = true
+		ReviewProgressData.Unlock()
+
 		if len(ids) == 0 {
 			log.Printf("[review-enrich] no needs_review tracks, aborting")
 			return
@@ -1510,24 +1521,19 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("[review-enrich] done: %d meta applied, %d covers fetched", appliedMeta, fetchedCovers)
 
-		// Phase C: re-evaluate ONLY the processed tracks (not all).
-		// Mark them unchecked so RunReviewBatch picks them up, then loop
-		// until all are re-evaluated.
-		ReviewProgressData.Lock()
-		ReviewProgressData.CurrentTrack = "Re-checking..."
-		ReviewProgressData.Unlock()
+		// Mark processed tracks unchecked so the periodic review worker
+		// re-evaluates them on its next tick (clears flags for tracks whose
+		// issues are now fixed). We do NOT call RunReviewBatch inline — that
+		// shares ReviewProgressData with the periodic worker and the two race,
+		// causing an infinite loop.
+		// ponytail: let the existing worker do the re-eval; enrich's only job
+		// is fetching meta+covers.
 		for _, t := range tracks {
-			// Preserve manual approvals — don't re-check those
 			status, _ := DbGetReviewForTrack(t.ID)
 			if status != "reviewed_ok" {
 				DbSetReviewStatus(t.ID, "unchecked", "[]", "enrich")
 			}
 		}
-		for {
-			if !RunReviewBatch() {
-				break
-			}
-		}
-		log.Printf("[review-enrich] recheck complete")
+		log.Printf("[review-enrich] marked %d tracks for re-eval", len(tracks))
 	})
 }
