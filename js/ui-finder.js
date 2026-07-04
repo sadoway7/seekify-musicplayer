@@ -239,15 +239,23 @@ Object.assign(UI, {
     if (!container) return;
 
     try {
-      const filter = this._downloadFilter || 'all';
+      let filter = this._downloadFilter || 'all';
       // Map chip → server status so completed/failed aren't hidden behind the
       // 1000-row cap by the queued backlog. 'all' stays unfiltered (actionable
       // items sort first; completed history trimmed at the cap is acceptable).
       const statusFor = (f) => f === 'all' ? '' : f === 'done' ? 'completed' : f === 'needs' ? 'needs_selection' : f;
-      const jobs = await Api.getQueue(1000, statusFor(filter));
+      let jobs = await Api.getQueue(1000, statusFor(filter));
       const counts = await Api.getQueueCounts();
       this._updateDownloadBadge(counts);
       this._downloadPaused = counts.paused === 1;
+
+      // If the active filter just emptied (Retry All, or its last item resolved),
+      // fall back to 'all' so the queue doesn't go blank.
+      if (filter !== 'all') {
+        let fc = counts[statusFor(filter)] || 0;
+        if (filter === 'active') fc = (counts.searching||0)+(counts.downloading||0)+(counts.tagging||0);
+        if (!fc) { this._downloadFilter = 'all'; filter = 'all'; jobs = await Api.getQueue(1000, ''); }
+      }
 
       // Refresh library when new downloads complete so album art shows up
       // without requiring a page reload.

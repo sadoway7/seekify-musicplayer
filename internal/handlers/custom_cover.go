@@ -29,14 +29,8 @@ func UploadCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	albumID := ""
-	if exists {
-		albumID = track.AlbumID
-	}
-	store.Mu.RUnlock()
-	if !exists || albumID == "" {
+	albumID, ok := store.AlbumIDForTrack(trackID)
+	if !ok {
 		http.Error(w, "Track or album not found", http.StatusNotFound)
 		return
 	}
@@ -105,14 +99,8 @@ func ClearCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	albumID := ""
-	if exists {
-		albumID = track.AlbumID
-	}
-	store.Mu.RUnlock()
-	if !exists || albumID == "" {
+	albumID, ok := store.AlbumIDForTrack(trackID)
+	if !ok {
 		http.Error(w, "Track or album not found", http.StatusNotFound)
 		return
 	}

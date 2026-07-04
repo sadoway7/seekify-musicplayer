@@ -832,6 +832,22 @@ func DbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
 		title, artist, album, albumArtist, albumID, trackID)
 }
 
+func AlbumIDForTrack(trackID string) (string, bool) {
+	Mu.RLock()
+	if t, ok := Tracks[trackID]; ok && t.AlbumID != "" {
+		albumID := t.AlbumID
+		Mu.RUnlock()
+		return albumID, true
+	}
+	Mu.RUnlock()
+
+	var albumID string
+	if err := DB.QueryRow(`SELECT album_id FROM tracks WHERE id = ?`, trackID).Scan(&albumID); err != nil || albumID == "" {
+		return "", false
+	}
+	return albumID, true
+}
+
 func DbLoadTracks() map[string]*models.Track {
 	rows, err := DB.Query(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata FROM tracks`)
 	if err != nil {
