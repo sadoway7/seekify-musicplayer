@@ -737,7 +737,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  z-index: 120;
+  z-index: 300; /* above #tab-bar (200) so footer isn't covered by navbar */
   display: flex;
   align-items: flex-start;
   justify-content: center;
