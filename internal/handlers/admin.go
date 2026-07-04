@@ -100,6 +100,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 </html>`))
 }
 
+// AdminAuthStatusHandler reports whether the admin passcode gate is enabled.
+// Public (not behind RequireAdmin) so the SPA can decide whether to show the
+// lock screen at all.
+func AdminAuthStatusHandler(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]bool{"enabled": adminAuthEnabled})
+}
+
 func AdminLoginHandler(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Code string `json:"code"`

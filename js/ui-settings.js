@@ -4,8 +4,17 @@
 // ============================================
 Object.assign(UI, {
 
-  renderSettings() {
+  async renderSettings() {
     this._viewTrackList = [];
+
+    if (!this._settingsUnlocked) {
+      // Skip the lock screen entirely when the backend has auth disabled.
+      try {
+        const res = await fetch('/api/admin-auth-status');
+        const data = await res.json();
+        if (!data.enabled) this._settingsUnlocked = true;
+      } catch (e) { /* assume locked if probe fails */ }
+    }
 
     if (!this._settingsUnlocked) {
       this._renderSettingsLocked();

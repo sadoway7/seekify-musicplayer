@@ -310,6 +310,7 @@ func main() {
 		})
 	})
 	mux.HandleFunc("/api/admin-login", handlers.AdminLoginHandler)
+	mux.HandleFunc("/api/admin-auth-status", handlers.AdminAuthStatusHandler)
 	mux.HandleFunc("/api/files", handlers.RequireAdmin(handlers.FileListHandler))
 	mux.HandleFunc("/api/upload", handlers.RequireAdmin(handlers.UploadHandler))
 	mux.HandleFunc("/api/delete", handlers.RequireAdmin(handlers.DeleteFileHandler))
