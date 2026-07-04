@@ -58,7 +58,7 @@ Object.assign(UI, {
 
     html += '<div class="home-top-row">'
       + '<div class="home-menu-wrap" id="home-menu-wrap">'
-      + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu">' + Icons.settings() + '</button>'
+      + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu">' + Icons.circle() + '</button>'
       + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
       + '<div class="home-menu-label">Options</div>'
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
