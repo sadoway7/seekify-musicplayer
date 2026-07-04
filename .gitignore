@@ -3,7 +3,6 @@ server.exe
 musicapp
 data/
 music/
-.env
 .DS_Store
 *.db
 node_modules/
