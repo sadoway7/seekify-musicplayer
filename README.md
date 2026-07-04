@@ -1,4 +1,6 @@
 <div align="center">
+<img src="icon.png" width="160" alt="Seekify">
+
 <pre>
                      __             ___             
                     /\ \      __  /'___\            
