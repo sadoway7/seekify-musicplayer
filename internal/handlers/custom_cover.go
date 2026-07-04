@@ -72,6 +72,7 @@ func UploadCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	store.RemoveCover(albumID)
 	store.CacheCover(albumID, data)
 
 	store.Mu.Lock()

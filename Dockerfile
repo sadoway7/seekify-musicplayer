@@ -16,7 +16,7 @@ COPY index.html .
 COPY css/ css/
 COPY js/ js/
 COPY scripts/ scripts/
-COPY icon.png .
+COPY apple-touch-icon.png icon.png icon-192.png favicon-32.png favicon-16.png manifest.webmanifest .
 RUN mkdir -p /app/data
 EXPOSE 8081
 CMD ["./server"]
