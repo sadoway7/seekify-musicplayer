@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")/.."
 echo "Stopping Music..."
 PID=$(lsof -ti tcp:8081)
 if [ -n "$PID" ]; then

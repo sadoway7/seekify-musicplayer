@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0\.."
 echo Stopping Music (Windows)...
 taskkill /IM server.exe /F >nul 2>&1
 if %ERRORLEVEL%==0 (

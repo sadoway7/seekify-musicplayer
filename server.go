@@ -24,6 +24,19 @@ import (
 )
 
 func main() {
+	// Load .env first so every env-based knob (admin passcode, MUSIC_DIR, PORT,
+	// ...) sees it. Real env vars still win; missing file is a silent no-op.
+	loadDotEnv(".env")
+
+	// Admin auth gate. Default is OPEN (ADMIN_AUTH_ENABLED unset / "false") so a
+	// fresh checkout runs without a passcode. Enabling requires a non-empty code.
+	adminEnabled := os.Getenv("ADMIN_AUTH_ENABLED") == "true"
+	adminCode := os.Getenv("ADMIN_PASSCODE")
+	if adminEnabled && adminCode == "" {
+		log.Fatal("ADMIN_AUTH_ENABLED=true but ADMIN_PASSCODE is empty — set one in .env or disable the gate")
+	}
+	handlers.SetAdminAuth(adminEnabled, adminCode)
+
 	// Capture logs into a ring buffer for the /api/admin/logs endpoint.
 	logBuf := store.InitLogCapture()
 	log.SetOutput(io.MultiWriter(os.Stderr, logBuf))

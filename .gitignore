@@ -3,9 +3,20 @@ server.exe
 musicapp
 data/
 music/
+.env
 .DS_Store
 *.db
 node_modules/
+
+# Dev-only (not shipped)
+.air.toml
+docs/
+research/
+lists/
+tests/
+waveform-test.html
+__pycache__/
+*.pyc
 
 # Tool artifacts
 .codebase-memory/

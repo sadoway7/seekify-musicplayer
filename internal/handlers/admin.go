@@ -13,7 +13,18 @@ import (
 	"time"
 )
 
-const adminPasscode = "pancake"
+// adminAuthEnabled gates the /admin page and RequireAdmin endpoints. Default
+// false = open (no passcode). Set via .env ADMIN_AUTH_ENABLED=true at startup.
+var (
+	adminPasscode    string
+	adminAuthEnabled bool
+)
+
+// SetAdminAuth configures the admin gate at startup.
+func SetAdminAuth(enabled bool, code string) {
+	adminAuthEnabled = enabled
+	adminPasscode = code
+}
 
 func RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -26,6 +37,9 @@ func RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func adminAuthCheck(r *http.Request) bool {
+	if !adminAuthEnabled {
+		return true // gate disabled → open
+	}
 	cookie, err := r.Cookie("admin_auth")
 	if err != nil {
 		return false
