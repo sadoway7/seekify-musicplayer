@@ -457,6 +457,8 @@ func DbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 	oldAlbumID := track.AlbumID
 	if track.Album != "" {
 		track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
+	} else {
+		track.AlbumID = models.GenerateID("single:" + trackID)
 	}
 	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
 		store.MoveCustomCover(oldAlbumID, track.AlbumID)
