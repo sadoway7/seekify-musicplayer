@@ -1,5 +1,5 @@
 <div align="center">
-<img src="icon.png" width="160" alt="Seekify">
+<img src="icon-rounded.png" width="400" alt="Seekify">
 
 <pre>
                      __             ___             
@@ -14,11 +14,11 @@
 </pre>
 
 a self-hosted music player. rip what's missing.
-</div>
 
 Seekify is a music player you run yourself. Point it at your music and listen
 in any browser. It can also find and download tracks you don't have yet, tag
 them, and keep your library tidy.
+</div>
 
 ---
 
@@ -121,11 +121,13 @@ If you ever lose it or mess it up, here's the whole file to copy back in:
 <pre>
 # Copy to .env and edit. Real environment variables override this file.
 
-# Admin settings passcode (protects /admin and file/worker APIs).
-# Only used when ADMIN_AUTH_ENABLED=true.
+# A passcode that locks the settings screen (download options, Soulseek login,
+# and the like). It does not lock the player or your music — those stay open.
+# No effect unless you switch ADMIN_AUTH_ENABLED on below.
 ADMIN_PASSCODE=
 
-# Set to true to require the passcode above. Default (false/blank) = open.
+# Switch this to true to ask for the passcode before opening settings.
+# Off (the default) means settings are open, just like the rest of Seekify.
 ADMIN_AUTH_ENABLED=false
 
 # Primary music library directory.
@@ -139,9 +141,10 @@ PORT=8081
 </pre>
 
 Everything else — download format, sources, Soulseek login, and the
-needs-attention checker — lives in the app's own settings screen. And if you set
-the same thing as a real environment variable on your system, that takes
-priority.
+needs-attention checker — lives in the app's own settings screen. That screen is
+the only thing a passcode guards; your music and the player stay open either way.
+And if you set the same thing as a real environment variable on your system, that
+takes priority.
 
 ### █ running it
 Once it's running, Seekify lives at **http://localhost:8081** on the machine you
