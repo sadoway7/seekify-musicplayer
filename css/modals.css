@@ -10,7 +10,7 @@
   display: flex;
   flex-direction: column;
   animation: panelSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--sp-4));
   will-change: transform;
 }
 
@@ -340,7 +340,7 @@
   display: flex;
   flex-direction: column;
   animation: sheetSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--sp-4));
   will-change: transform;
 }
 
@@ -729,7 +729,7 @@
   display: flex;
   flex-direction: column;
   animation: sheetSlideDown 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--sp-4));
   will-change: transform;
 }
 
