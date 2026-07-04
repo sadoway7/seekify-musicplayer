@@ -168,6 +168,14 @@
   width: 14px;
 }
 
+.home-menu-btn svg {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  color: rgba(255,255,255,0.9);
+}
+
 .home-menu-btn .hm-bar {
   width: 100%;
   height: 2px;
