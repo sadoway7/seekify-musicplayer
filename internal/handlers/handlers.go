@@ -121,10 +121,10 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 		if playlistID != "" {
 			p := store.DbFindPlaylistByID(playlistID)
 			if p != nil {
-				ogTitle = p.Name + " — Music Playlist"
+				ogTitle = p.Name + " — Seekify Playlist"
 				ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", len(p.TrackIDs))
 			} else {
-				ogTitle = "Music Playlist"
+				ogTitle = "Seekify Playlist"
 				ogDesc = "Private Music Library."
 			}
 		} else if trackID != "" {
@@ -138,7 +138,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			store.Mu.RUnlock()
 			if ogTitle == "" {
-				ogTitle = "Music"
+				ogTitle = "Seekify"
 				ogDesc = "Private Music Library."
 			}
 		} else if albumID != "" {
@@ -150,11 +150,11 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			store.Mu.RUnlock()
 			if ogTitle == "" {
-				ogTitle = "Music"
+				ogTitle = "Seekify"
 				ogDesc = "Private Music Library."
 			}
 		} else if artistName != "" {
-			ogTitle = artistName + " — Music"
+			ogTitle = artistName + " — Seekify"
 			ogDesc = "Private Music Library."
 		}
 

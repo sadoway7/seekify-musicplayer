@@ -226,8 +226,9 @@ Object.assign(UI, {
     // --- Tab: About ---
     html += '<div class="settings-tab-panel" data-panel="about">'
       + '<div class="settings-about">'
-      + '<div>MusicApp</div>'
-      + '<div style="color:var(--text3);font-size:13px">Personal music library with MusicBrainz integration</div>'
+      + '<img class="settings-about-logo" src="/icon.png" alt="">'
+      + '<div class="settings-about-name">Seekify</div>'
+      + '<div class="settings-about-tag" style="color:var(--text3);font-size:13px">Personal music library with MusicBrainz integration</div>'
       + '</div>'
       + '</div>';
 

@@ -221,6 +221,24 @@
   font-size: 14px;
   color: var(--text2);
   padding-top: 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.settings-about-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  display: block;
+}
+.settings-about-name {
+  font-size: 17px;
+  font-weight: 600;
+}
+.settings-about-tag {
+  max-width: 320px;
 }
 
 .review-actions {

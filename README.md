@@ -1,89 +1,176 @@
-# musicapp
+<div align="center">
+<pre>
+                     __             ___             
+                    /\ \      __  /'___\            
+  ____     __     __\ \ \/'\ /\_\/\ \__/  __  __    
+ /',__\  /'__`\ /'__`\ \ , < \/\ \ \ ,__\/\ \/\ \   
+/\__, `\/\  __//\  __/\ \ \\`\\ \ \ \ \_/\ \ \_\ \  
+\/\____/\ \____\ \____\\ \_\ \_\ \_\ \_\  \/`____ \ 
+ \/___/  \/____/\/____/ \/_/\/_/\/_/\/_/   `/___/> \
+                                              /\___/
+                                              \/__/ 
+</pre>
 
-A self-hosted music server. Stream your library, discover and download new
-music, and let it clean up metadata and artwork for you. Runs as a single
-binary; the UI is a mobile-first web app you can install to your home screen.
+a self-hosted music player. rip what's missing.
+</div>
 
----
-
-## What it does
-
-**Build a library two ways:**
-- Point it at a folder of existing music files — it scans tags, extracts
-  embedded artwork, and builds a browsable library.
-- Search for anything and download it — from YouTube (via yt-dlp) or Soulseek
-  (peer-to-peer). Files are auto-tagged, converted to your preferred format,
-  and dropped into the library.
-
-**Browse and play:**
-- Library organized by album and artist. Search, sort, filter.
-- Tap a track to play. A mini-player floats above the tab bar; expand it to a
-  full now-playing screen with scrubbing, queue, and shuffle.
-- Lock-screen / media-key controls on iOS and Android (install to home screen
-  for the full PWA experience).
-- Build playlists; recent plays and favorites are tracked.
-
-**Find & download (Finder tab):**
-- Search MusicBrainz for canonical metadata, YouTube for audio, or Soulseek
-  for lossless files. Download anything with one tap.
-- A download queue shows live progress (searching → downloading → tagging →
-  done). Filter by status. If a source is ambiguous, it asks you to pick.
-- Soulseek sources are ranked by quality and learned peer speed — fast,
-  reliable uploaders are tried first.
-
-**Review (Needs Attention):**
-- After files land, a background worker flags problems: missing metadata,
-  suspicious filenames, duplicates, missing artwork, no duration.
-- The Needs Attention page lists flagged tracks. Fix inline, fetch artwork,
-  rescan metadata from MusicBrainz, or mark "doesn't need review."
-- Manually-approved tracks stay approved — the worker won't re-flag them.
+Seekify is a music player you run yourself. Point it at your music and listen
+in any browser. It can also find and download tracks you don't have yet, tag
+them, and keep your library tidy.
 
 ---
 
-## Design
+### █ the player
+- browse albums, artists, playlists, and favorites, with a history of what you've played
+- now-playing screen with a waveform, queue, shuffle, and repeat
+- floating mini-player; lock-screen and media-key controls when you install it as an app
+- per-track menu to queue, add to a playlist, fix the tags, jump to the album or artist, or favorite
 
-Mobile-first and dark, built to feel like a native music app:
+### █ the ripper
+- search for a single track or a whole album and download it
+- pull from Soulseek or YouTube — you choose which to prefer
+- bulk import: paste a list of songs and download them all at once
+- watch each job live, from searching to downloading to tagging to done
 
-- **Fixed bottom tab bar** (Library, Finder, Downloads, Review) with a
-  floating mini-player above it. On desktop, the tab bar becomes a left rail.
-- **Bottom-sheet modals** slide up from the bottom for track actions, metadata
-  editing, and source selection.
-- **Filter chips** throughout — tap to slice a list by status, type, or flag.
-- **Installable** as a PWA: add to home screen, full-screen, status-bar-aware.
-- No page reloads — it's a single-page app that streams audio and updates live.
+### █ housekeeping
+- downloaded music is tagged and sorted into artist and album folders for you
+- a needs-attention view flags the rough stuff: missing info, messy names, duplicates, missing artwork
+- fix problems inline, fetch new artwork, or re-look-up the details
+- approve a track once and it stays approved
+
+### █ how to use it
+1. put your music files in your music folder
+2. open Seekify in a browser — your library shows up on its own
+3. press play; search for and download anything you're missing
+4. keep the needs-attention list tidy and your library stays clean
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/01-home-library.png" alt="home library"><br><sub>home</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/02-now-playing-menu.png" alt="now playing + menu"><br><sub>now playing</sub></td>
+  </tr>
+  <tr>
+    <td width="33%" align="center"><img src="docs/screenshots/05-downloads-all.png" alt="downloads all"><br><sub>live queue</sub></td>
+    <td width="33%" align="center"><img src="docs/screenshots/06-bulk-import.png" alt="bulk import"><br><sub>bulk import</sub></td>
+    <td width="33%" align="center"><img src="docs/screenshots/04-downloads-done.png" alt="downloads done"><br><sub>done</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/07-artist-albums.png" alt="artist albums"><br><sub>artist — albums</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/08-artist-tracks.png" alt="artist tracks"><br><sub>artist — tracks</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/09-home-artists.png" alt="home artists + favorites"><br><sub>favorites + new</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/03-now-playing-history.png" alt="now playing + history"><br><sub>history</sub></td>
+  </tr>
+</table>
+
+### █ on your phone
+The whole thing works on a phone too — open it in the browser, or install it as
+an app for a full-screen player.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-01.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-02.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-03.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-04.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-05.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-06.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-07.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-08.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-09.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-10.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-11.png" alt="mobile UI"></td>
+    <td width="50%" align="center"></td>
+  </tr>
+</table>
+
+### █ runs anywhere
+Seekify runs as one program and works on its own. Optional helpers add more,
+and it runs fine without them: yt-dlp for YouTube, ffmpeg for converting and
+waveforms, and python for Soulseek. Everything else — download format, sources,
+Soulseek login, and what the needs-attention checker looks for — you set inside
+the app.
+
+### █ scripts
+The scripts folder has simple start and stop scripts: a version for Mac and
+Linux (start.sh / stop.sh), one for Windows (start.bat / stop.bat), and a
+double-click starter for Mac. They install anything Seekify needs, build it,
+and run it — or stop it.
+
+### █ the .env file
+.env is a plain-text settings file that sits next to the app — a short, optional
+list of preferences, one per line, written as NAME=value. Open it in any text
+editor, change a value, and save. You don't need it to run; it's there for the
+few things you might want to set before starting.
+
+If you ever lose it or mess it up, here's the whole file to copy back in:
+
+<pre>
+# Copy to .env and edit. Real environment variables override this file.
+
+# Admin settings passcode (protects /admin and file/worker APIs).
+# Only used when ADMIN_AUTH_ENABLED=true.
+ADMIN_PASSCODE=
+
+# Set to true to require the passcode above. Default (false/blank) = open.
+ADMIN_AUTH_ENABLED=false
+
+# Primary music library directory.
+MUSIC_DIR=./music
+
+# Optional secondary read-only library (mounted with a "media:" prefix).
+# MEDIA_MUSIC_DIR=
+
+# HTTP listen port.
+PORT=8081
+</pre>
+
+Everything else — download format, sources, Soulseek login, and the
+needs-attention checker — lives in the app's own settings screen. And if you set
+the same thing as a real environment variable on your system, that takes
+priority.
+
+### █ running it
+Once it's running, Seekify lives at **http://localhost:8081** on the machine you
+started it on — local access for you and anything else on that machine.
+
+There's an example GitLab pipeline (the .gitlab-ci.yml file) that builds a
+Docker image and drops it on an Unraid-style server. It's just an example — use
+it, adapt it, or ignore it.
+
+A couple of things are on you, and a little beyond what Seekify covers:
+
+- **reaching it from the internet** — opening it up to the outside world means
+  setting up port forwarding on your router. That's between you and your network.
+- **starting it automatically** — Seekify runs while you start it. Making it
+  launch on boot is something you set up with your own operating system.
+
+### █ credits
+Written in Go, with a vanilla JavaScript and CSS front end, plus a little
+Python and shell.
+
+Powered by:
+
+- [aioslsk](https://pypi.org/project/aioslsk/) — Soulseek downloads
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — YouTube downloads
+- [musicbrainzngs](https://github.com/alastair/python-musicbrainzngs) — MusicBrainz lookups
+- [Cover Art Archive](https://coverartarchive.org) — album art
+- [lrclib](https://lrclib.net) — lyrics
+- [ffmpeg](https://ffmpeg.org) — audio conversion and waveforms
+- [dhowden/tag](https://github.com/dhowden/tag) — reading audio tags
+- [mutagen](https://github.com/quodlibet/mutagen) — writing audio tags
 
 ---
 
-## Stack
-
-**Backend** — Go, single binary (one `package main`, no subpackage sprawl
-beyond `internal/`).
-- **SQLite** via `modernc.org/sqlite` — pure-Go, no CGo. WAL mode.
-- **`dhowden/tag`** — reads audio tags (FLAC, MP3, OGG, M4A).
-- **`google/uuid`** — ID generation.
-
-**Frontend** — vanilla JS and CSS. No framework, no bundler, no build step.
-Served as static files by the Go binary.
-
-**Runtime tools** (optional but expected for full functionality):
-- **yt-dlp** — YouTube search and download.
-- **ffmpeg** — transcoding, waveform generation, audio probing (ffprobe).
-- **python3** — Soulseek client (`aioslsk`) and metadata enrichment
-  (`musicbrainzngs`, `mutagen`). Falls back gracefully if unavailable.
-
-**Deploy** — Dockerfile included (Alpine + all runtime tools preinstalled).
-
----
-
-## Quick start
-
-```sh
-cp .env .env          # edit if you want (admin passcode, music dir, port)
-go build -mod=vendor -o server .
-./server
-```
-
-Then open `http://localhost:8081`. The binary auto-opens a browser. Put music
-in `./music` (or set `MUSIC_DIR`). See `.env` for all options.
-
-To run with Docker, see `Dockerfile` and `.gitlab-ci.yml`.
+<div align="center"><pre>rip it. play it. repeat.</pre></div>
