@@ -818,7 +818,7 @@ func DbUpsertAlbumWith(e DbExecer, a *models.Album) {
 }
 
 func DbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
-	albumID := ""
+	albumID := models.GenerateID("single:" + trackID)
 	if album != "" {
 		albumID = models.GenerateAlbumID(albumArtist, album)
 	}
