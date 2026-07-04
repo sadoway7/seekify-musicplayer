@@ -293,7 +293,7 @@ Object.assign(UI, {
   _closeSheetModal(modalEl) {
     if (!modalEl || modalEl.classList.contains('hidden')) return;
     const sheet = modalEl.querySelector('.modal-sheet');
-    if (sheet) sheet.style.animation = 'sheetSlideOutUp 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
+    if (sheet) sheet.style.animation = 'sheetSlideOutDown 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards';
     modalEl.style.animation = 'modalFadeOut 0.25s ease forwards';
     setTimeout(() => {
       modalEl.classList.add('hidden');

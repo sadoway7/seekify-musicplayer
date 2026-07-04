@@ -326,7 +326,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  z-index: 120;
+  z-index: 300; /* above #tab-bar (200) so bottom sheets aren't hidden behind navbar */
   display: flex;
   align-items: flex-end;
   animation: modalFadeIn 0.2s ease forwards;

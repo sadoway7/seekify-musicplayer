@@ -107,6 +107,15 @@
   }
 }
 
+@keyframes sheetSlideOutDown {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
 @keyframes modalFadeOut {
   from {
     opacity: 1;
