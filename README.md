@@ -46,57 +46,6 @@ them, and keep your library tidy.
 3. press play; search for and download anything you're missing
 4. keep the needs-attention list tidy and your library stays clean
 
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/01-home-library.png" alt="home library"><br><sub>home</sub></td>
-    <td width="50%" align="center"><img src="docs/screenshots/02-now-playing-menu.png" alt="now playing + menu"><br><sub>now playing</sub></td>
-  </tr>
-  <tr>
-    <td width="33%" align="center"><img src="docs/screenshots/05-downloads-all.png" alt="downloads all"><br><sub>live queue</sub></td>
-    <td width="33%" align="center"><img src="docs/screenshots/06-bulk-import.png" alt="bulk import"><br><sub>bulk import</sub></td>
-    <td width="33%" align="center"><img src="docs/screenshots/04-downloads-done.png" alt="downloads done"><br><sub>done</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/07-artist-albums.png" alt="artist albums"><br><sub>artist — albums</sub></td>
-    <td width="50%" align="center"><img src="docs/screenshots/08-artist-tracks.png" alt="artist tracks"><br><sub>artist — tracks</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/09-home-artists.png" alt="home artists + favorites"><br><sub>favorites + new</sub></td>
-    <td width="50%" align="center"><img src="docs/screenshots/03-now-playing-history.png" alt="now playing + history"><br><sub>history</sub></td>
-  </tr>
-</table>
-
-### █ on your phone
-The whole thing works on a phone too — open it in the browser, or install it as
-an app for a full-screen player.
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-01.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-02.png" alt="mobile UI"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-03.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-04.png" alt="mobile UI"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-05.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-06.png" alt="mobile UI"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-07.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-08.png" alt="mobile UI"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-09.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-10.png" alt="mobile UI"></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-11.png" alt="mobile UI"></td>
-    <td width="50%" align="center"></td>
-  </tr>
-</table>
-
 ### █ runs anywhere
 Seekify runs as one program and works on its own. Optional helpers add more,
 and it runs fine without them: yt-dlp for YouTube, ffmpeg for converting and
@@ -175,6 +124,50 @@ Powered by:
 - [ffmpeg](https://ffmpeg.org) — audio conversion and waveforms
 - [dhowden/tag](https://github.com/dhowden/tag) — reading audio tags
 - [mutagen](https://github.com/quodlibet/mutagen) — writing audio tags
+
+### █ on your phone
+The whole thing works on a phone too — open it in the browser, or install it as
+an app for a full-screen player.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-01.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-02.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-03.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-04.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-05.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-06.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-07.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-08.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-09.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-10.png" alt="mobile UI"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/mobile-11.png" alt="mobile UI"></td>
+    <td width="50%" align="center"></td>
+  </tr>
+</table>
+
+### █ on your computer
+<table>
+  <tr><td align="center"><img src="docs/screenshots/01-home-library.png" alt="home library"><br><sub>home</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/02-now-playing-menu.png" alt="now playing + menu"><br><sub>now playing</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/05-downloads-all.png" alt="downloads all"><br><sub>live queue</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/06-bulk-import.png" alt="bulk import"><br><sub>bulk import</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/04-downloads-done.png" alt="downloads done"><br><sub>done</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/07-artist-albums.png" alt="artist albums"><br><sub>artist — albums</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/08-artist-tracks.png" alt="artist tracks"><br><sub>artist — tracks</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/09-home-artists.png" alt="home artists + favorites"><br><sub>favorites + new</sub></td></tr>
+  <tr><td align="center"><img src="docs/screenshots/03-now-playing-history.png" alt="now playing + history"><br><sub>history</sub></td></tr>
+</table>
 
 ---
 
