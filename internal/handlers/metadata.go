@@ -460,34 +460,49 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	musicbrainz.RebuildAlbumsFromTracksLocked()
 	store.Mu.Unlock()
 
-	albumIDForCover := body.AlbumID
-	if albumIDForCover == "" {
-		albumIDForCover = track.AlbumID
-	}
-	if albumIDForCover != "" && !store.IsCustomCover(track.AlbumID) {
+	// Manual rescan override: the user explicitly picked a candidate from the
+	// rescan modal, so we fetch fresh art and REPLACE the current cover (custom
+	// or not). Background cover workers never reach here — they guard
+	// IsCustomCover — so this is the only path that overrides user artwork.
+	// ponytail: only replace when we actually obtain new art; a failed fetch
+	// keeps the existing cover instead of leaving the album bare.
+	if track.AlbumID != "" {
 		coverDir := filepath.Join(store.MusicDir, "images")
 		os.MkdirAll(coverDir, 0755)
 
+		var coverData []byte
 		if body.AlbumID != "" {
 			log.Printf("[metadata] Fetching cover from Cover Art Archive for MBID %s", body.AlbumID)
-			data, _, err := musicbrainz.MbFetchCoverArt(body.AlbumID)
-			if err == nil && len(data) > 0 {
-				coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
-				os.WriteFile(coverPath, data, 0644)
-				store.CacheCover(track.AlbumID, data)
-				store.Mu.Lock()
-				track.HasCover = true
-				if a, ok := store.Albums[track.AlbumID]; ok {
-					a.HasCover = true
-				}
-				store.Mu.Unlock()
-				log.Printf("[metadata] Cover fetched and cached for %s", track.AlbumID)
+			if d, _, err := musicbrainz.MbFetchCoverArt(body.AlbumID); err == nil && len(d) > 0 {
+				coverData = d
 			} else {
 				log.Printf("[metadata] Cover Art Archive failed for MBID %s: %v, trying search fallback", body.AlbumID, err)
-				musicbrainz.FetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
 			}
+		}
+		if len(coverData) == 0 && track.Artist != "" && track.Album != "" {
+			// search fallback: resolve a release MBID, then fetch its art
+			if mbid, err := musicbrainz.MbSearchRelease(track.Artist, track.Album); err == nil {
+				if d, _, err := musicbrainz.MbFetchCoverArt(mbid); err == nil && len(d) > 0 {
+					coverData = d
+				}
+			}
+		}
+
+		if len(coverData) > 0 {
+			store.ClearCustomCover(track.AlbumID)
+			store.RemoveCover(track.AlbumID)
+			coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
+			os.WriteFile(coverPath, coverData, 0644)
+			store.CacheCover(track.AlbumID, coverData)
+			store.Mu.Lock()
+			track.HasCover = true
+			if a, ok := store.Albums[track.AlbumID]; ok {
+				a.HasCover = true
+			}
+			store.Mu.Unlock()
+			log.Printf("[metadata] Cover fetched and cached for %s", track.AlbumID)
 		} else {
-			musicbrainz.FetchAndCacheCover(track.AlbumID, track.Artist, track.Album)
+			log.Printf("[metadata] No cover obtained for %s; keeping existing", track.AlbumID)
 		}
 	}
 
