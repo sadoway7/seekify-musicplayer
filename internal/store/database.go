@@ -542,7 +542,7 @@ func DbGetPlaylistTracks(playlistID string) []string {
 
 func DbCreatePlaylist(name string) models.Playlist {
 	id := models.GenerateUUID()
-	now := models.TimeNow()
+	now := time.Now().UTC().Format(time.RFC3339)
 	DB.Exec("INSERT INTO playlists (id, name, created_at) VALUES (?, ?, ?)", id, name, now)
 	return models.Playlist{ID: id, Name: name, CreatedAt: now, TrackIDs: []string{}}
 }

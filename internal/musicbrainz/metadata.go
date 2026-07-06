@@ -395,7 +395,7 @@ func ApplyApprovedMatches() int {
 	}
 
 	if applied > 0 {
-		rebuildAlbumsFromTracksLocked()
+		RebuildAlbumsFromTracksLocked()
 	}
 	store.Mu.Unlock()
 
@@ -468,12 +468,6 @@ func ApplyApprovedMatches() int {
 // MUST be called under store.Mu.Lock() — it reads store.Tracks and rewrites
 // store.Albums without taking the lock itself.
 func RebuildAlbumsFromTracksLocked() {
-	rebuildAlbumsFromTracksLocked()
-}
-
-// rebuildAlbumsFromTracksLocked is the unexported implementation; see
-// RebuildAlbumsFromTracksLocked for the contract.
-func rebuildAlbumsFromTracksLocked() {
 	newAlbums := make(map[string]*models.Album)
 	coverDir := filepath.Join(store.MusicDir, "images")
 	for _, t := range store.Tracks {
