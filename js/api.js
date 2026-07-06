@@ -14,6 +14,9 @@ const Api = {
       }
       const res = await fetch(url, fetchOpts);
       if (!res.ok) {
+        if (res.status === 401 && !url.startsWith('/api/me') && !url.startsWith('/api/login') && !url.startsWith('/api/setup') && !url.startsWith('/api/library')) {
+          window.dispatchEvent(new CustomEvent('auth-required'));
+        }
         if (fallback !== undefined) return fallback;
         let msg = errMsg || 'Request failed';
         try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
@@ -62,6 +65,8 @@ const Api = {
   getQueue(limit, status) {
     let url = '/api/queue?limit=' + (limit || 100);
     if (status) url += '&status=' + encodeURIComponent(status);
+    // Admin sees every user's jobs by default; regular users see only their own (server-scoped).
+    if (typeof Store !== 'undefined' && Store.user && Store.user.role === 'admin') url += '&all=1';
     return this._req(url, { errMsg: 'Failed to load queue' });
   },
   getWatched() { return this._req('/api/watch', { errMsg: 'Failed' }); },
@@ -277,5 +282,34 @@ const Api = {
       xhr.open('POST', '/api/library-upload');
       xhr.send(form);
     });
-  }
+  },
+
+  // ── auth ──
+  getMe() { return this._req('/api/me'); },
+  getSetupStatus() { return this._req('/api/setup-status'); },
+  async login(username, password) {
+    const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    const data = await res.json().catch(() => ({ error: 'Login failed' }));
+    return { ok: res.ok, data };
+  },
+  async logout() { await fetch('/api/logout', { method: 'POST' }); },
+  async setup(username, password, email) {
+    const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, email }) });
+    const data = await res.json().catch(() => ({ error: 'Setup failed' }));
+    return { ok: res.ok, data };
+  },
+  changePassword(oldPw, newPw) {
+    return this._req('/api/users/me/password', { method: 'POST', body: { old: oldPw, new: newPw } });
+  },
+
+  // ── admin: user management ──
+  adminListUsers() { return this._req('/api/admin/users'); },
+  adminCreateUser(data) { return this._req('/api/admin/users/create', { method: 'POST', body: data }); },
+  adminUpdateUser(id, data) { return this._req('/api/admin/users/' + encodeURIComponent(id), { method: 'PUT', body: data }); },
+  adminResetPassword(id, newPw) { return this._req('/api/admin/users/' + encodeURIComponent(id) + '/password', { method: 'POST', body: { new: newPw } }); },
+  adminDeleteUser(id) { return this._req('/api/admin/users/' + encodeURIComponent(id), { method: 'DELETE' }); },
+
+  // ── admin: download limits ──
+  adminGetDownloadLimits() { return this._req('/api/admin/download-limits'); },
+  adminPutDownloadLimits(global, perUser) { return this._req('/api/admin/download-limits', { method: 'PUT', body: { global, perUser } }); }
 };

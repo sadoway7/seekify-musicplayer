@@ -53,6 +53,20 @@ a:hover{text-decoration:underline}
   .upload-zone{padding:24px 16px}
   .file-row .size{display:none}
 }
+.adm-input{padding:8px 10px;background:#0E0E0E;border:1px solid #444;color:#F0EFE9;border-radius:8px;font-size:13px;font-family:inherit}
+.adm-btn{padding:8px 18px;border:1px solid #444;background:#1E1E1E;color:#F0EFE9;border-radius:8px;font-size:13px;cursor:pointer;transition:background .2s,border-color .2s}
+.adm-btn:hover{background:#2a2a2a;border-color:#666}
+.section-title{margin:32px 0 12px;font-size:16px;font-weight:600}
+.card{background:#1E1E1E;border-radius:12px;padding:16px 20px;margin-bottom:16px}
+.card .label{font-size:14px;margin-bottom:8px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.user-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #2a2a2a;flex-wrap:wrap}
+.user-row:last-child{border-bottom:none}
+.user-row .uname{font-weight:600;min-width:120px;font-size:14px}
+.user-row .uemail{font-size:12px;color:#888}
+.user-row .ubadge{font-size:11px;padding:2px 8px;border-radius:10px;background:#333;color:#aaa}
+.user-row .ubadge.disabled{background:rgba(248,113,113,.2);color:#f87171}
+.user-row .actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -81,6 +95,29 @@ a:hover{text-decoration:underline}
 
   <div class="file-list" id="fileList">
     <div class="empty-state">Loading...</div>
+  </div>
+
+  <h2 class="section-title">Users &amp; Access</h2>
+
+  <div class="card">
+    <div class="label">Download limits (0 = unlimited; counts non-completed/failed jobs)</div>
+    <div class="row">
+      <label style="font-size:13px;color:#aaa">Global max active<br><input id="limitGlobal" type="number" min="0" value="0" class="adm-input" style="width:120px"></label>
+      <label style="font-size:13px;color:#aaa">Per-user max active<br><input id="limitPerUser" type="number" min="0" value="0" class="adm-input" style="width:120px"></label>
+      <button id="saveLimitsBtn" class="adm-btn">Save Limits</button>
+    </div>
+  </div>
+
+  <form id="createForm" class="card row">
+    <input id="createUsername" placeholder="username" class="adm-input" style="width:160px">
+    <input id="createPassword" type="password" placeholder="password" class="adm-input" style="width:160px">
+    <input id="createEmail" placeholder="email (optional)" class="adm-input" style="width:200px">
+    <select id="createRole" class="adm-input"><option value="user">user</option><option value="admin">admin</option></select>
+    <button type="submit" class="adm-btn">Create User</button>
+  </form>
+
+  <div class="file-list" id="usersList" style="display:block">
+    <div class="empty-state">Loading users...</div>
   </div>
 </div>
 
@@ -321,6 +358,122 @@ a:hover{text-decoration:underline}
       showStatus("Failed to create folder", "error");
     });
   });
+
+  // --- Users & download-limits management ---
+  var usersList = document.getElementById("usersList");
+  var limitGlobal = document.getElementById("limitGlobal");
+  var limitPerUser = document.getElementById("limitPerUser");
+  var createForm = document.getElementById("createForm");
+  var createUsername = document.getElementById("createUsername");
+  var createPassword = document.getElementById("createPassword");
+  var createEmail = document.getElementById("createEmail");
+  var createRole = document.getElementById("createRole");
+
+  function apiJSON(url, opts) {
+    return fetch(url, opts).then(function(r){
+      return r.json().then(function(d){ return {ok:r.ok, status:r.status, data:d}; }).catch(function(){ return {ok:r.ok, status:r.status, data:{}}; });
+    });
+  }
+
+  function loadUsers() {
+    apiJSON("/api/admin/users").then(function(res){
+      if (res.ok) renderUsers(res.data.users || []);
+      else usersList.innerHTML = '<div class="empty-state">Failed to load users</div>';
+    }).catch(function(){ usersList.innerHTML = '<div class="empty-state">Failed to load users</div>'; });
+  }
+
+  function renderUsers(users) {
+    if (!users.length) { usersList.innerHTML = '<div class="empty-state">No users</div>'; return; }
+    usersList.innerHTML = users.map(function(u){
+      return '<div class="user-row">'
+        + '<span class="uname">' + escapeHtml(u.username) + '</span>'
+        + '<select class="adm-input role-sel" data-id="' + u.id + '">'
+          + '<option value="user"' + (u.role==='user'?' selected':'') + '>user</option>'
+          + '<option value="admin"' + (u.role==='admin'?' selected':'') + '>admin</option>'
+        + '</select>'
+        + (u.email ? '<span class="uemail">' + escapeHtml(u.email) + '</span>' : '')
+        + '<span class="ubadge' + (u.disabled?' disabled':'') + '">' + (u.disabled?'disabled':'active') + '</span>'
+        + '<div class="actions">'
+          + '<button class="adm-btn toggle-btn" data-id="' + u.id + '" data-disabled="' + (u.disabled?1:0) + '">' + (u.disabled?'Enable':'Disable') + '</button>'
+          + '<button class="adm-btn reset-btn" data-id="' + u.id + '">Reset PW</button>'
+          + '<button class="adm-btn del-btn" data-id="' + u.id + '">Delete</button>'
+        + '</div>'
+        + '</div>';
+    }).join("");
+
+    usersList.querySelectorAll(".role-sel").forEach(function(sel){
+      sel.addEventListener("change", function(){
+        updateUser(this.getAttribute("data-id"), {role: this.value});
+      });
+    });
+    usersList.querySelectorAll(".toggle-btn").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var isDisabled = this.getAttribute("data-disabled")==="1";
+        updateUser(this.getAttribute("data-id"), {disabled: !isDisabled});
+      });
+    });
+    usersList.querySelectorAll(".reset-btn").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var pw = prompt("New password (min 8 chars):");
+        if (!pw) return;
+        apiJSON("/api/admin/users/" + this.getAttribute("data-id") + "/password", {
+          method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({new: pw})
+        }).then(function(res){
+          showStatus(res.ok ? "Password reset" : ((res.data&&res.data.error)||"Reset failed"), res.ok?"success":"error");
+        });
+      });
+    });
+    usersList.querySelectorAll(".del-btn").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        if (!confirm("Delete this user? This cannot be undone.")) return;
+        apiJSON("/api/admin/users/" + this.getAttribute("data-id"), {method:"DELETE"})
+          .then(function(res){
+            if (res.ok) { showStatus("User deleted","success"); loadUsers(); }
+            else showStatus((res.data&&res.data.error)||"Delete failed","error");
+          });
+      });
+    });
+  }
+
+  function updateUser(id, patch) {
+    apiJSON("/api/admin/users/" + id, {
+      method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch)
+    }).then(function(res){
+      if (res.ok) { showStatus("User updated","success"); loadUsers(); }
+      else showStatus((res.data&&res.data.error)||"Update failed","error");
+    });
+  }
+
+  createForm.addEventListener("submit", function(e){
+    e.preventDefault();
+    var username = createUsername.value.trim();
+    var password = createPassword.value;
+    if (!username || !password) { showStatus("Username and password required","error"); return; }
+    apiJSON("/api/admin/users/create", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({username:username, password:password, role:createRole.value, email:createEmail.value.trim()})
+    }).then(function(res){
+      if (res.ok) { showStatus("User created","success"); createForm.reset(); loadUsers(); }
+      else showStatus((res.data&&res.data.error)||"Create failed","error");
+    });
+  });
+
+  function loadLimits() {
+    apiJSON("/api/admin/download-limits").then(function(res){
+      if (res.ok) { limitGlobal.value = res.data.global||0; limitPerUser.value = res.data.perUser||0; }
+    });
+  }
+  document.getElementById("saveLimitsBtn").addEventListener("click", function(){
+    apiJSON("/api/admin/download-limits", {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({global: parseInt(limitGlobal.value||"0",10), perUser: parseInt(limitPerUser.value||"0",10)})
+    }).then(function(res){
+      showStatus(res.ok ? "Limits saved" : ((res.data&&res.data.error)||"Save failed"), res.ok?"success":"error");
+    });
+  });
+
+  loadUsers();
+  loadLimits();
 
   loadFiles();
 })();

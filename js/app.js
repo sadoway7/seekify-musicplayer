@@ -18,10 +18,12 @@ const App = {
       UI._renderQueue();
       UI.updateTrackHighlights();
       if (track) {
-        try {
-          await Api.addRecent(track.id);
-          await Store.refreshRecent();
-        } catch (err) {}
+        if (!Store.isGuest) {
+          try {
+            await Api.addRecent(track.id);
+            await Store.refreshRecent();
+          } catch (err) {}
+        }
       }
     };
 
@@ -32,6 +34,12 @@ const App = {
     UI.init();
 
     ReviewUI.init();
+
+    // First-run setup: no users exist yet → bootstrap admin.
+    try {
+      const st = await Api.getSetupStatus();
+      if (st && st.needsSetup) { UI.showSetupScreen(); return; }
+    } catch (e) {}
 
     UI.homeSkeleton();
 
@@ -52,6 +60,8 @@ const App = {
       UI.els.content.innerHTML = '<div style="padding:40px;text-align:center;color:#ff6b6b"><div style="font-size:16px;font-weight:600">Error loading page</div><div style="font-size:12px;margin-top:8px;color:#aaa">' + (e.message || e) + '</div></div>';
     }
     UI.updateMiniPlayer();
+
+    UI.renderUserState();
 
     // Deep link: ?play=TRACK_ID
     const params = new URLSearchParams(window.location.search);
@@ -138,4 +148,7 @@ const App = {
   }
 };
 
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener('auth-required', () => UI.showLoginScreen());
+  App.init();
+});

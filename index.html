@@ -22,9 +22,36 @@
   <link rel="stylesheet" href="css/styles.css?v=20260702g">
   <link rel="stylesheet" href="css/review.css?v=20260702g">
   <link rel="stylesheet" href="css/ripperv2.css?v=20260702g">
+  <style>
+    .auth-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px}
+    .auth-overlay.hidden{display:none}
+    .auth-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:28px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    .auth-card h2{margin:0 0 4px;font-size:20px;color:#fff;font-weight:700}
+    .auth-card p.auth-sub{margin:0 0 20px;font-size:13px;color:#888}
+    .auth-card input{width:100%;box-sizing:border-box;background:#0e0e0e;border:1px solid #2a2a2a;border-radius:8px;padding:11px 13px;color:#eee;font-size:14px;margin-bottom:10px;outline:none}
+    .auth-card input:focus{border-color:#4a9eff}
+    .auth-card button.auth-submit{width:100%;padding:12px;border:none;border-radius:8px;background:#4a9eff;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+    .auth-card button.auth-submit:disabled{opacity:.6;cursor:default}
+    .auth-card .auth-error{color:#ff6b6b;font-size:12px;margin:8px 0 0;min-height:14px}
+    .auth-chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#ccc;cursor:pointer;padding:4px 10px;border-radius:6px;background:rgba(255,255,255,.06)}
+    .auth-chip:hover{background:rgba(255,255,255,.12)}
+  </style>
 </head>
 <body>
   <div id="app">
+    <div id="auth-overlay" class="auth-overlay hidden">
+      <div class="auth-card">
+        <h2 id="auth-title">Log in</h2>
+        <p class="auth-sub" id="auth-sub">Welcome back.</p>
+        <input id="auth-username" placeholder="username" autocomplete="username" autocapitalize="off">
+        <input id="auth-password" type="password" placeholder="password" autocomplete="current-password">
+        <div id="auth-email-wrap" class="hidden">
+          <input id="auth-email" placeholder="email (optional)" autocomplete="email">
+        </div>
+        <button id="auth-submit" class="auth-submit">Log in</button>
+        <p class="auth-error" id="auth-error"></p>
+      </div>
+    </div>
     <header id="app-header"></header>
     <main id="app-content"></main>
 
@@ -373,11 +400,11 @@
   </div>
 
   <script src="js/icons.js?v=20260702"></script>
-  <script src="js/api.js?v=20260702"></script>
+  <script src="js/api.js?v=20260706"></script>
   <script src="js/player.js?v=20260702e"></script>
-  <script src="js/store.js?v=20260702"></script>
+  <script src="js/store.js?v=20260706"></script>
   <script src="js/review.js?v=20260702"></script>
-  <script src="js/ui.js?v=20260702"></script>
+  <script src="js/ui.js?v=20260706"></script>
   <script src="js/ui-waveform.js?v=20260702"></script>
   <script src="js/ui-context-menus.js?v=20260702"></script>
   <script src="js/ui-settings.js?v=20260702"></script>
@@ -386,6 +413,6 @@
   <script src="js/ui-home.js?v=20260702"></script>
   <script src="js/ui-player-chrome.js?v=20260702"></script>
   <script src="js/ripperv2.js?v=20260702"></script>
-  <script src="js/app.js?v=20260702"></script>
+  <script src="js/app.js?v=20260706"></script>
 </body>
 </html>

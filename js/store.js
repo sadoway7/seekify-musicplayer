@@ -12,6 +12,9 @@ const Store = {
   downloadsEnabled: true,
   waveformStyle: 'rounded',
   reviewCounts: { unchecked: 0, needs_review: 0, reviewed_ok: 0 },
+  user: null,
+
+  get isGuest() { return !this.user || this.user.guest; },
 
   defaultHomeLayout: [
     { id: 'needs-review', title: 'Needs Review', enabled: false },
@@ -50,25 +53,34 @@ const Store = {
   async init() {
     this.loading = true;
     try {
-      const [library, playlists, favorites, recent] = await Promise.all([
-        Api.getLibrary(),
-        Api.getPlaylists(),
-        Api.getFavorites(),
-        Api.getRecent()
-      ]);
+      // Resolve current user first (guest returns {guest:true}).
+      try { this.user = await Api.getMe(); } catch(e) { this.user = { guest: true }; }
+      const library = await Api.getLibrary();
       this.library = library;
-      this.playlists = playlists;
-      this.favorites = favorites;
-      this.recent = recent;
+      // Personal collections only when logged in; guests 401 on these.
+      if (this.user && !this.user.guest) {
+        const [playlists, favorites, recent] = await Promise.all([
+          Api.getPlaylists().catch(() => []),
+          Api.getFavorites().catch(() => ({ favorites: [] })),
+          Api.getRecent().catch(() => ({ recent: [] }))
+        ]);
+        this.playlists = playlists || [];
+        this.favorites = (favorites && favorites.favorites) || [];
+        this.recent = (recent && recent.recent) || [];
+      } else {
+        this.playlists = [];
+        this.favorites = [];
+        this.recent = [];
+      }
       this._rebuildMaps();
       try {
         const settings = await Api.getSettings();
         this.downloadsEnabled = settings.downloads_enabled !== 'false';
         this.waveformStyle = settings.waveform_style || 'rounded';
       } catch(e) {}
-      try {
-        this.reviewCounts = await Api.getReviewCounts();
-      } catch(e) {}
+      if (!this.isGuest) {
+        try { this.reviewCounts = await Api.getReviewCounts(); } catch(e) {}
+      }
     } catch (err) {
       UI.showToast('Failed to load library');
       UI.els.content.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;color:#aaa">'

@@ -38,6 +38,110 @@ const UI = {
     this._pollDownloadBadge();
   },
 
+  // --- Auth / user state ---
+
+  showLoginScreen() {
+    this._showAuthOverlay('login');
+  },
+
+  showSetupScreen() {
+    this._showAuthOverlay('setup');
+  },
+
+  hideAuthOverlay() {
+    const ov = document.getElementById('auth-overlay');
+    if (ov) ov.classList.add('hidden');
+  },
+
+  _showAuthOverlay(mode) {
+    const ov = document.getElementById('auth-overlay');
+    if (!ov) return;
+    const title = document.getElementById('auth-title');
+    const sub = document.getElementById('auth-sub');
+    const emailWrap = document.getElementById('auth-email-wrap');
+    const submit = document.getElementById('auth-submit');
+    const err = document.getElementById('auth-error');
+    const userInp = document.getElementById('auth-username');
+    const pwInp = document.getElementById('auth-password');
+    if (title) title.textContent = mode === 'setup' ? 'Create admin account' : 'Log in';
+    if (sub) sub.textContent = mode === 'setup' ? 'Set up your music server' : '';
+    if (emailWrap) emailWrap.classList.toggle('hidden', mode !== 'setup');
+    if (submit) submit.textContent = mode === 'setup' ? 'Create admin' : 'Log in';
+    if (err) { err.textContent = ''; err.classList.add('hidden'); }
+    if (userInp) userInp.value = '';
+    if (pwInp) pwInp.value = '';
+    const submitHandler = () => this._submitAuth(mode);
+    if (submit) submit.onclick = submitHandler;
+    const onKey = (e) => { if (e.key === 'Enter') submitHandler(); };
+    if (userInp) userInp.onkeydown = onKey;
+    if (pwInp) pwInp.onkeydown = onKey;
+    ov.classList.remove('hidden');
+    if (userInp) setTimeout(() => userInp.focus(), 50);
+  },
+
+  async _submitAuth(mode) {
+    const username = (document.getElementById('auth-username').value || '').trim();
+    const password = document.getElementById('auth-password').value || '';
+    const email = (document.getElementById('auth-email').value || '').trim();
+    const err = document.getElementById('auth-error');
+    const submit = document.getElementById('auth-submit');
+    if (!username || !password) {
+      if (err) { err.textContent = 'Enter a username and password'; err.classList.remove('hidden'); }
+      return;
+    }
+    if (submit) submit.disabled = true;
+    const res = mode === 'setup'
+      ? await Api.setup(username, password, email)
+      : await Api.login(username, password);
+    if (submit) submit.disabled = false;
+    if (res && res.ok) {
+      this.hideAuthOverlay();
+      window.location.reload();
+    } else {
+      const data = res && res.data;
+      const msg = (data && (data.error || data.message)) || (mode === 'setup' ? 'Setup failed' : 'Invalid credentials');
+      if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+    }
+  },
+
+  async _logout() {
+    if (!confirm('Log out?')) return;
+    try { await Api.logout(); } catch (e) {}
+    window.location.reload();
+  },
+
+  // Gate personal surfaces + render the account chip. Called after each render.
+  renderUserState() {
+    const favTab = document.querySelector('.tab-item[data-tab="favorites"]');
+    const settingsTab = document.getElementById('tab-settings');
+    const guest = Store.isGuest;
+    const admin = !!(Store.user && Store.user.role === 'admin');
+    if (favTab) favTab.style.display = guest ? 'none' : '';
+    if (settingsTab) settingsTab.style.display = admin ? '' : 'none';
+    this._renderUserChip();
+  },
+
+  _renderUserChip() {
+    const bar = document.getElementById('tab-bar');
+    if (!bar) return;
+    let chip = document.getElementById('user-chip');
+    if (!chip) {
+      chip = document.createElement('button');
+      chip.id = 'user-chip';
+      chip.className = 'tab-item';
+      chip.style.cssText = 'flex:0 0 auto;padding:0 14px;font-size:13px;white-space:nowrap;border:none;background:none;color:var(--text,#eee);cursor:pointer;opacity:.85';
+      bar.appendChild(chip);
+    }
+    if (Store.isGuest) {
+      chip.textContent = 'Log in';
+      chip.onclick = () => this.showLoginScreen();
+    } else {
+      const u = Store.user || {};
+      chip.textContent = (u.username || 'user') + (u.role === 'admin' ? ' ★' : '');
+      chip.onclick = () => this._logout();
+    }
+  },
+
   _cacheDom() {
     this.els = {
       header: document.getElementById('app-header'),
