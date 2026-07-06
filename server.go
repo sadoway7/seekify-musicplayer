@@ -396,6 +396,27 @@ func main() {
 		}
 	}))
 
+	// Admin user management + download limits.
+	mux.HandleFunc("/api/admin/users", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handlers.AdminListUsers(w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+	mux.HandleFunc("/api/admin/users/create", auth.RequireAdmin(handlers.AdminCreateUser))
+	mux.HandleFunc("/api/admin/users/", auth.RequireAdmin(handlers.AdminUserSubrouter))
+	mux.HandleFunc("/api/admin/download-limits", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handlers.AdminGetDownloadLimits(w, r)
+		case http.MethodPut:
+			handlers.AdminPutDownloadLimits(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
 	mux.HandleFunc("/api/cookies/upload", handlers.CorsAny(handlers.UploadCookiesHandler))
 	mux.HandleFunc("/api/cookies/clear", handlers.ClearCookiesHandler)
 	mux.HandleFunc("/api/cookies/extract", handlers.ExtractCookiesHandler)
