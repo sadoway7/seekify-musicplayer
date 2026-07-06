@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -55,7 +56,10 @@ type DownloadJob struct {
 	Genre          string `json:"genre,omitempty"`
 	Year           string `json:"year,omitempty"`
 	CandidatesJSON string `json:"candidates,omitempty"`
+	UserID         string `json:"userId,omitempty"`
 }
+
+var ErrDownloadLimit = errors.New("download limit reached")
 
 var (
 	DownloadMu     sync.Mutex
@@ -350,12 +354,12 @@ func DbCreateJob(job *DownloadJob) error {
 	_, err := store.DB.Exec(`INSERT INTO download_jobs
 		(id, query, artist, title, album, album_mbid, track_number, track_total,
 		 status, error, source, audio_quality, file_path, file_deleted, progress_stage,
-		 override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at, user_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		job.ID, job.Query, job.Artist, job.Title, job.Album, job.AlbumMBID,
 		job.TrackNumber, job.TrackTotal, job.Status, job.Error, job.Source,
 		job.AudioQuality, job.FilePath, store.BoolToInt(job.FileDeleted), job.ProgressStage,
-		job.OverrideDir, job.SearchQuery, store.BoolToInt(job.ConvertToFlac), job.PlaylistID, job.VideoID, job.CreatedAt, job.CompletedAt)
+		job.OverrideDir, job.SearchQuery, store.BoolToInt(job.ConvertToFlac), job.PlaylistID, job.VideoID, job.CreatedAt, job.CompletedAt, job.UserID)
 	return err
 }
 
@@ -379,16 +383,28 @@ func DbGetJob(id string) (*DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
-		pipeline, recording_id, release_id, artist_id, genre, year, candidates
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id
 		FROM download_jobs WHERE id = ?`, id)
 	return ScanJob(row)
 }
 
-// DbGetJobs returns download jobs. status filters: "" = all (ordered
-// actionable-first), "active" = searching/downloading/tagging, otherwise a
-// literal status value. Per-status filtering avoids the 1000-row cap hiding
-// completed/failed items behind a large queued backlog.
+// DbGetJobs returns all download jobs (admin view). Back-compat wrapper.
 func DbGetJobs(limit int, status string) ([]DownloadJob, error) {
+	return DbGetJobsAll(limit, status)
+}
+
+// DbGetJobsAll returns every job (admin). DbGetJobsForUser returns only a
+// user's own jobs. status filters: "" = all (ordered actionable-first),
+// "active" = searching/downloading/tagging, otherwise a literal status value.
+func DbGetJobsAll(limit int, status string) ([]DownloadJob, error) {
+	return dbGetJobs("", limit, status)
+}
+
+func DbGetJobsForUser(userID string, limit int, status string) ([]DownloadJob, error) {
+	return dbGetJobs(userID, limit, status)
+}
+
+func dbGetJobs(userID string, limit int, status string) ([]DownloadJob, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -396,16 +412,29 @@ func DbGetJobs(limit int, status string) ([]DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
-		pipeline, recording_id, release_id, artist_id, genre, year, candidates
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id
 		FROM download_jobs `
 	var args []interface{}
+	whereUser := ""
+	if userID != "" {
+		whereUser = " WHERE user_id = ? "
+		args = append(args, userID)
+	}
 	switch status {
 	case "", "all":
-		// no filter
+		// no status filter
 	case "active":
-		query += ` WHERE status IN ('searching','downloading','tagging') `
+		if userID != "" {
+			query += whereUser + ` AND status IN ('searching','downloading','tagging') `
+		} else {
+			query += ` WHERE status IN ('searching','downloading','tagging') `
+		}
 	default:
-		query += ` WHERE status = ? `
+		if userID != "" {
+			query += whereUser + ` AND status = ? `
+		} else {
+			query += ` WHERE status = ? `
+		}
 		args = append(args, status)
 	}
 	query += ` ORDER BY
@@ -436,7 +465,7 @@ func DbGetQueuedJobs() ([]DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
-		pipeline, recording_id, release_id, artist_id, genre, year, candidates
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id
 		FROM download_jobs WHERE status = 'queued' ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -462,6 +491,70 @@ func DbGetJobCounts() map[string]int {
 	return counts
 }
 
+// DbGetJobCountsForUser returns job-status counts scoped to one user.
+func DbGetJobCountsForUser(userID string) map[string]int {
+	counts := map[string]int{"queued": 0, "searching": 0, "downloading": 0, "tagging": 0, "completed": 0, "failed": 0, "needs_selection": 0}
+	rows, err := store.DB.Query("SELECT status, COUNT(*) FROM download_jobs WHERE user_id = ? GROUP BY status", userID)
+	if err != nil {
+		return counts
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var count int
+		if rows.Scan(&status, &count) == nil {
+			counts[status] = count
+		}
+	}
+	return counts
+}
+
+// ActiveJobCountForUser counts a user's non-terminal jobs (queue budget used).
+func ActiveJobCountForUser(userID string) (int, error) {
+	var n int
+	err := store.DB.QueryRow(
+		`SELECT COUNT(*) FROM download_jobs WHERE user_id = ? AND status NOT IN ('completed','failed')`,
+		userID).Scan(&n)
+	return n, err
+}
+
+// ActiveJobCountAll counts every non-terminal job (global queue budget used).
+func ActiveJobCountAll() (int, error) {
+	var n int
+	err := store.DB.QueryRow(
+		`SELECT COUNT(*) FROM download_jobs WHERE status NOT IN ('completed','failed')`).Scan(&n)
+	return n, err
+}
+
+// EnforceDownloadLimits returns ErrDownloadLimit if adding a job for userID
+// would breach the admin-set per-user or global cap. 0 = unlimited.
+// A blank userID (system/background job) skips the per-user check.
+func EnforceDownloadLimits(userID string) error {
+	if userID != "" {
+		perUser := store.GetSettingInt("download_limit_per_user", 0)
+		if perUser > 0 {
+			n, err := ActiveJobCountForUser(userID)
+			if err != nil {
+				return err
+			}
+			if n >= perUser {
+				return fmt.Errorf("%w: per-user limit %d reached", ErrDownloadLimit, perUser)
+			}
+		}
+	}
+	global := store.GetSettingInt("download_limit_global", 0)
+	if global > 0 {
+		n, err := ActiveJobCountAll()
+		if err != nil {
+			return err
+		}
+		if n >= global {
+			return fmt.Errorf("%w: global limit %d reached", ErrDownloadLimit, global)
+		}
+	}
+	return nil
+}
+
 func ScanJob(row *sql.Row) (*DownloadJob, error) {
 	var j DownloadJob
 	var fileDeleted, convertFlac int
@@ -471,7 +564,7 @@ func ScanJob(row *sql.Row) (*DownloadJob, error) {
 		&j.FilePath, &fileDeleted, &j.ProgressStage,
 		&j.OverrideDir, &j.SearchQuery, &convertFlac,
 		&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt,
-		&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON)
+		&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON, &j.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +584,7 @@ func ScanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 			&j.FilePath, &fileDeleted, &j.ProgressStage,
 			&j.OverrideDir, &j.SearchQuery, &convertFlac,
 			&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt,
-			&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON)
+			&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON, &j.UserID)
 		if err != nil {
 			continue
 		}
@@ -502,7 +595,10 @@ func ScanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 	return jobs, nil
 }
 
-func CreateDownloadJob(query, artist, title, album, albumMBID string, trackNum, trackTotal int, overrideDir, videoID string) (*DownloadJob, error) {
+func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, trackNum, trackTotal int, overrideDir, videoID string) (*DownloadJob, error) {
+	if err := EnforceDownloadLimits(userID); err != nil {
+		return nil, err
+	}
 	id := uuid.New().String()[:8]
 	searchQuery := query
 	if searchQuery == "" && (artist != "" || title != "") {
@@ -548,10 +644,11 @@ func CreateDownloadJob(query, artist, title, album, albumMBID string, trackNum, 
 		TrackTotal:    trackTotal,
 		Status:        "queued",
 		OverrideDir:   overrideDir,
-		SearchQuery:   searchQuery,
-		ConvertToFlac: true,
-		VideoID:       videoID,
-		CreatedAt:     time.Now().Format(time.RFC3339),
+		SearchQuery:    searchQuery,
+		ConvertToFlac:  true,
+		VideoID:        videoID,
+		CreatedAt:      time.Now().Format(time.RFC3339),
+		UserID:         userID,
 	}
 
 	if err := DbCreateJob(job); err != nil {

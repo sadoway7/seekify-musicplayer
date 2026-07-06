@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"musicapp/internal/auth"
 	"musicapp/internal/downloads"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
@@ -16,6 +19,17 @@ import (
 	"strings"
 	"time"
 )
+
+// jobOwnedOrAdmin reports whether the current user may act on job. If not,
+// it writes a 404 (to hide existence from non-owners) and returns false.
+func jobOwnedOrAdmin(w http.ResponseWriter, r *http.Request, job *downloads.DownloadJob) bool {
+	u := auth.CurrentUser(r)
+	if u != nil && (u.Role == auth.RoleAdmin || job.UserID == u.ID) {
+		return true
+	}
+	http.NotFound(w, r)
+	return false
+}
 
 func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/download/")
@@ -150,7 +164,16 @@ func DownloadQueueHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	status := r.URL.Query().Get("status")
 
-	jobs, err := downloads.DbGetJobs(limit, status)
+	u := auth.CurrentUser(r)
+	var jobs []downloads.DownloadJob
+	var err error
+	if u != nil && u.Role == auth.RoleAdmin && r.URL.Query().Get("all") == "1" {
+		jobs, err = downloads.DbGetJobsAll(limit, status)
+	} else if u != nil {
+		jobs, err = downloads.DbGetJobsForUser(u.ID, limit, status)
+	} else {
+		jobs, err = downloads.DbGetJobsForUser("", limit, status)
+	}
 	if err != nil {
 		http.Error(w, `{"error":"failed to load jobs"}`, http.StatusInternalServerError)
 		return
@@ -188,13 +211,20 @@ func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	u := auth.CurrentUser(r)
+	userID := ""
+	if u != nil {
+		userID = u.ID
+	}
 	job, err := downloads.CreateDownloadJob(
-		req.Query, req.Artist, req.Title, req.Album,
+		userID, req.Query, req.Artist, req.Title, req.Album,
 		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir, "",
 	)
 	if err != nil {
 		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "already in library") {
+		if errors.Is(err, downloads.ErrDownloadLimit) {
+			status = http.StatusTooManyRequests
+		} else if strings.Contains(err.Error(), "already in library") || strings.Contains(err.Error(), "already in download queue") {
 			status = http.StatusConflict
 		}
 		writeJSONError(w, status, err.Error())
@@ -236,6 +266,11 @@ func DownloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	u := auth.CurrentUser(r)
+	userID := ""
+	if u != nil {
+		userID = u.ID
+	}
 	var jobs []*downloads.DownloadJob
 	for _, t := range req.Tracks {
 		query := ""
@@ -246,7 +281,7 @@ func DownloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		job, err := downloads.CreateDownloadJob(
-			query, t.Artist, t.Title, t.Album,
+			userID, query, t.Artist, t.Title, t.Album,
 			t.AlbumMBID, t.TrackNum, t.TrackTotal, req.OverrideDir, "",
 		)
 		if err != nil {
@@ -272,6 +307,9 @@ func DownloadJobStatusHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"job not found"}`, http.StatusNotFound)
 		return
 	}
+	if !jobOwnedOrAdmin(w, r, job) {
+		return
+	}
 
 	writeJSON(w, job)
 }
@@ -292,6 +330,9 @@ func DownloadJobRetryHandler(w http.ResponseWriter, r *http.Request) {
 	job, err := downloads.DbGetJob(id)
 	if err != nil {
 		http.Error(w, `{"error":"job not found"}`, http.StatusNotFound)
+		return
+	}
+	if !jobOwnedOrAdmin(w, r, job) {
 		return
 	}
 
@@ -319,6 +360,15 @@ func DownloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	job, err := downloads.DbGetJob(id)
+	if err != nil {
+		http.Error(w, `{"error":"job not found"}`, http.StatusNotFound)
+		return
+	}
+	if !jobOwnedOrAdmin(w, r, job) {
+		return
+	}
+
 	store.DB.Exec("DELETE FROM download_jobs WHERE id = ?", id)
 
 	writeJSON(w, map[string]string{"status": "deleted"})
@@ -340,6 +390,9 @@ func DownloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
 	job, err := downloads.DbGetJob(id)
 	if err != nil || job.Status != "needs_selection" {
 		http.Error(w, `{"error":"job not found or not awaiting selection"}`, http.StatusBadRequest)
+		return
+	}
+	if !jobOwnedOrAdmin(w, r, job) {
 		return
 	}
 
@@ -384,6 +437,9 @@ func DownloadJobFileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
 	}
+	if !jobOwnedOrAdmin(w, r, job) {
+		return
+	}
 
 	f, err := os.Open(job.FilePath)
 	if err != nil {
@@ -405,9 +461,15 @@ func QueueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading')")
+	u := auth.CurrentUser(r)
+	var result sql.Result
+	if u != nil && u.Role == auth.RoleAdmin {
+		result, _ = store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading')")
+	} else if u != nil {
+		result, _ = store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading') AND user_id = ?", u.ID)
+	}
 	cleared := 0
-	if err == nil {
+	if result != nil {
 		affected, _ := result.RowsAffected()
 		cleared = int(affected)
 	}
@@ -426,7 +488,15 @@ func DownloadTogglePauseHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func QueueCountsHandler(w http.ResponseWriter, r *http.Request) {
-	result := downloads.DbGetJobCounts()
+	u := auth.CurrentUser(r)
+	var result map[string]int
+	if u != nil && u.Role == auth.RoleAdmin {
+		result = downloads.DbGetJobCounts()
+	} else if u != nil {
+		result = downloads.DbGetJobCountsForUser(u.ID)
+	} else {
+		result = downloads.DbGetJobCountsForUser("")
+	}
 	result["paused"] = 0
 	if store.GetSettingBool("download_paused", false) {
 		result["paused"] = 1

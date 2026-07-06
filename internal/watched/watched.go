@@ -342,7 +342,7 @@ func RefreshWatchedPlaylist(p *WatchedPlaylist) error {
 			continue
 		}
 
-		job, _ := downloads.CreateDownloadJob("", artist, title, "", "", 0, 0, "", videoID)
+		job, _ := downloads.CreateDownloadJob("", "", artist, title, "", "", 0, 0, "", videoID)
 		if job != nil {
 			job.PlaylistID = libraryPlaylistID
 			store.DB.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
