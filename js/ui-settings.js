@@ -7,16 +7,7 @@ Object.assign(UI, {
   async renderSettings() {
     this._viewTrackList = [];
 
-    if (!this._settingsUnlocked) {
-      // Skip the lock screen entirely when the backend has auth disabled.
-      try {
-        const res = await fetch('/api/admin-auth-status');
-        const data = await res.json();
-        if (!data.enabled) this._settingsUnlocked = true;
-      } catch (e) { /* assume locked if probe fails */ }
-    }
-
-    if (!this._settingsUnlocked) {
+    if (!Store.user || Store.user.role !== 'admin') {
       this._renderSettingsLocked();
       return;
     }
@@ -926,52 +917,16 @@ Object.assign(UI, {
   },
 
   _renderSettingsLocked() {
-    const html = '<div class="settings-lock">'
+    this.els.content.innerHTML = '<div class="settings-lock">'
       + '<div class="settings-lock-icon">' + Icons.settings() + '</div>'
       + '<div class="settings-lock-title">Settings</div>'
-      + '<div class="settings-lock-desc">Enter password to continue</div>'
-      + '<div class="settings-lock-form">'
-      + '<input type="password" id="settings-password" class="settings-lock-input" placeholder="Password" autocomplete="off">'
-      + '<button id="settings-unlock-btn" class="settings-btn settings-btn-primary">Unlock</button>'
-      + '</div>'
-      + '<div id="settings-lock-error" class="settings-lock-error hidden">Incorrect password</div>'
-      + '</div>';
-    this.els.content.innerHTML = html;
-
-    const input = document.getElementById('settings-password');
-    const btn = document.getElementById('settings-unlock-btn');
-    const error = document.getElementById('settings-lock-error');
-
-    const tryUnlock = async () => {
-      // Set the admin cookie so admin-protected API endpoints (like
-      // /api/workers) work from the SPA.
-      try {
-        const res = await fetch('/api/admin-login', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({code: input.value})
-        });
-        const data = await res.json();
-        if (data.ok) {
-          this._settingsUnlocked = true;
-          this.renderSettings();
-        } else {
-          error.classList.remove('hidden');
-          input.value = '';
-          input.focus();
-        }
-      } catch (e) {
-        error.classList.remove('hidden');
-        input.value = '';
-        input.focus();
-      }
-    };
-
-    btn.addEventListener('click', tryUnlock);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') tryUnlock();
-      error.classList.add('hidden');
-    });
+      + '<div class="settings-lock-desc">Admin access required. '
+      + (Store.isGuest
+          ? '<a href="#" id="settings-login-link">Log in</a> with an admin account.'
+          : 'Your account does not have permission to view this page.')
+      + '</div></div>';
+    const link = document.getElementById('settings-login-link');
+    if (link) link.addEventListener('click', (e) => { e.preventDefault(); this.showLoginScreen(); });
   },
 
   async _loadMetadataStatus() {
