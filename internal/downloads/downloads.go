@@ -422,7 +422,7 @@ func dbGetJobs(userID string, limit int, status string) ([]DownloadJob, error) {
 	}
 	switch status {
 	case "", "all":
-		// no status filter
+		query += whereUser
 	case "active":
 		if userID != "" {
 			query += whereUser + ` AND status IN ('searching','downloading','tagging') `
