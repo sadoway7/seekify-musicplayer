@@ -2,15 +2,17 @@ package handlers
 
 import (
 	"encoding/json"
+	"musicapp/internal/auth"
 	"musicapp/internal/store"
 	"net/http"
 	"strings"
 )
 
 func PlaylistsHandler(w http.ResponseWriter, r *http.Request) {
+	u := auth.CurrentUser(r)
 	switch r.Method {
 	case http.MethodGet:
-		playlists := store.DbGetPlaylists()
+		playlists := store.DbGetPlaylists(u.ID)
 		writeJSON(w, playlists)
 
 	case http.MethodPost:
@@ -27,7 +29,7 @@ func PlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		playlist := store.DbCreatePlaylist(body.Name)
+		playlist := store.DbCreatePlaylist(u.ID, body.Name)
 
 		writeJSON(w, playlist)
 
@@ -37,6 +39,7 @@ func PlaylistsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
+	u := auth.CurrentUser(r)
 	id := strings.TrimPrefix(r.URL.Path, "/api/playlists/")
 
 	switch r.Method {
@@ -50,9 +53,9 @@ func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		store.DbUpdatePlaylist(id, body.Name, body.TrackIDs)
+		store.DbUpdatePlaylist(u.ID, id, body.Name, body.TrackIDs)
 
-		playlists := store.DbGetPlaylists()
+		playlists := store.DbGetPlaylists(u.ID)
 		for _, p := range playlists {
 			if p.ID == id {
 				writeJSON(w, p)
@@ -62,7 +65,7 @@ func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Playlist not found", http.StatusNotFound)
 
 	case http.MethodDelete:
-		if !store.DbDeletePlaylist(id) {
+		if !store.DbDeletePlaylist(u.ID, id) {
 			http.Error(w, "Playlist not found", http.StatusNotFound)
 			return
 		}
@@ -75,7 +78,8 @@ func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func FavoritesHandler(w http.ResponseWriter, r *http.Request) {
-	favorites := store.DbGetFavorites()
+	u := auth.CurrentUser(r)
+	favorites := store.DbGetUserFavorites(u.ID)
 	writeJSON(w, favorites)
 }
 
@@ -84,23 +88,30 @@ func FavoriteToggleHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	u := auth.CurrentUser(r)
 	trackID := strings.TrimPrefix(r.URL.Path, "/api/favorites/")
 	if trackID == "" {
 		http.Error(w, "missing track id", http.StatusBadRequest)
 		return
 	}
-	added := store.DbToggleFavorite(trackID)
+	added := store.DbToggleUserFavorite(u.ID, trackID)
 	writeJSON(w, map[string]bool{"added": added})
 }
 
 func RecentHandler(w http.ResponseWriter, r *http.Request) {
-	recent := store.DbGetRecent()
+	u := auth.CurrentUser(r)
+	recent := store.DbGetUserRecent(u.ID)
 	writeJSON(w, recent)
 }
 
 func RecentAddHandler(w http.ResponseWriter, r *http.Request) {
+	u := auth.CurrentUser(r)
 	trackID := strings.TrimPrefix(r.URL.Path, "/api/recent/")
-	store.DbAddRecent(trackID)
+	if trackID == "" {
+		http.Error(w, "missing track id", http.StatusBadRequest)
+		return
+	}
+	store.DbAddUserRecent(u.ID, trackID)
 	writeJSON(w, map[string]bool{"added": true})
 }
 

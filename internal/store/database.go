@@ -534,8 +534,81 @@ func DbAddRecent(trackID string) {
 	DB.Exec("DELETE FROM recent WHERE rowid NOT IN (SELECT rowid FROM recent ORDER BY position ASC LIMIT 50)")
 }
 
-func DbGetPlaylists() []models.Playlist {
-	rows, err := DB.Query("SELECT id, name, created_at FROM playlists ORDER BY rowid")
+// --- per-user favorites / recent (multi-user) ---
+
+func DbGetUserFavorites(userID string) []string {
+	rows, err := DB.Query("SELECT track_id FROM user_favorites WHERE user_id = ? ORDER BY added_at DESC", userID)
+	if err != nil {
+		return []string{}
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return []string{}
+		}
+		out = append(out, id)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out
+}
+
+// DbToggleUserFavorite returns true if the track is now a favorite.
+func DbToggleUserFavorite(userID, trackID string) bool {
+	var exists int
+	err := DB.QueryRow("SELECT 1 FROM user_favorites WHERE user_id = ? AND track_id = ?", userID, trackID).Scan(&exists)
+	if err != nil && err != sql.ErrNoRows {
+		return false
+	}
+	if exists == 1 {
+		DB.Exec("DELETE FROM user_favorites WHERE user_id = ? AND track_id = ?", userID, trackID)
+		return false
+	}
+	DB.Exec("INSERT OR IGNORE INTO user_favorites (user_id, track_id, added_at) VALUES (?, ?, ?)", userID, trackID, time.Now().Unix())
+	return true
+}
+
+func DbGetUserRecent(userID string) []string {
+	rows, err := DB.Query("SELECT track_id FROM user_recent WHERE user_id = ? ORDER BY position DESC", userID)
+	if err != nil {
+		return []string{}
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return []string{}
+		}
+		out = append(out, id)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out
+}
+
+// DbAddUserRecent pushes trackID to position 1, reordering the rest. Caps at 50.
+func DbAddUserRecent(userID, trackID string) {
+	tx, err := DB.Begin()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+	tx.Exec("DELETE FROM user_recent WHERE user_id = ? AND track_id = ?", userID, trackID)
+	tx.Exec("UPDATE user_recent SET position = position + 1 WHERE user_id = ?", userID)
+	tx.Exec("INSERT INTO user_recent (user_id, track_id, position) VALUES (?, ?, 1)", userID, trackID)
+	tx.Exec("DELETE FROM user_recent WHERE user_id = ? AND track_id NOT IN (SELECT track_id FROM user_recent WHERE user_id = ? ORDER BY position DESC LIMIT 50)", userID, userID)
+	tx.Commit()
+}
+
+// DbGetPlaylists returns a user's own playlists plus shared/system playlists
+// (user_id = ''). Personal playlists are isolated per user.
+func DbGetPlaylists(userID string) []models.Playlist {
+	rows, err := DB.Query("SELECT id, name, created_at FROM playlists WHERE user_id = ? OR user_id = '' ORDER BY rowid", userID)
 	if err != nil {
 		return []models.Playlist{}
 	}
@@ -572,14 +645,19 @@ func DbGetPlaylistTracks(playlistID string) []string {
 	return ids
 }
 
-func DbCreatePlaylist(name string) models.Playlist {
+func DbCreatePlaylist(userID, name string) models.Playlist {
 	id := models.GenerateUUID()
 	now := time.Now().UTC().Format(time.RFC3339)
-	DB.Exec("INSERT INTO playlists (id, name, created_at) VALUES (?, ?, ?)", id, name, now)
+	DB.Exec("INSERT INTO playlists (id, name, created_at, user_id) VALUES (?, ?, ?, ?)", id, name, now, userID)
 	return models.Playlist{ID: id, Name: name, CreatedAt: now, TrackIDs: []string{}}
 }
 
-func DbUpdatePlaylist(id string, name string, trackIDs []string) {
+func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) {
+	var owned int
+	DB.QueryRow("SELECT 1 FROM playlists WHERE id = ? AND user_id = ?", id, userID).Scan(&owned)
+	if owned != 1 {
+		return
+	}
 	if name != "" {
 		DB.Exec("UPDATE playlists SET name = ? WHERE id = ?", name, id)
 	}
@@ -621,14 +699,16 @@ func DbGetOrCreatePlaylistByName(name string) string {
 	if existing != nil {
 		return existing.ID
 	}
-	p := DbCreatePlaylist(name)
+	p := DbCreatePlaylist("", name) // system/shared playlist (no owner)
 	return p.ID
 }
 
-func DbDeletePlaylist(id string) bool {
-	res, _ := DB.Exec("DELETE FROM playlists WHERE id = ?", id)
+func DbDeletePlaylist(userID, id string) bool {
+	res, _ := DB.Exec("DELETE FROM playlists WHERE id = ? AND user_id = ?", id, userID)
 	affected, _ := res.RowsAffected()
-	DB.Exec("DELETE FROM playlist_tracks WHERE playlist_id = ?", id)
+	if affected > 0 {
+		DB.Exec("DELETE FROM playlist_tracks WHERE playlist_id = ?", id)
+	}
 	return affected > 0
 }
 
