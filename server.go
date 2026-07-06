@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"musicapp/internal/auth"
 	"musicapp/internal/downloads"
 	"musicapp/internal/handlers"
 	"musicapp/internal/models"
@@ -24,18 +25,9 @@ import (
 )
 
 func main() {
-	// Load .env first so every env-based knob (admin passcode, MUSIC_DIR, PORT,
-	// ...) sees it. Real env vars still win; missing file is a silent no-op.
+	// Load .env first so every env-based knob (MUSIC_DIR, PORT, ...) sees it.
+	// Real env vars still win; missing file is a silent no-op.
 	loadDotEnv(".env")
-
-	// Admin auth gate. Default is OPEN (ADMIN_AUTH_ENABLED unset / "false") so a
-	// fresh checkout runs without a passcode. Enabling requires a non-empty code.
-	adminEnabled := os.Getenv("ADMIN_AUTH_ENABLED") == "true"
-	adminCode := os.Getenv("ADMIN_PASSCODE")
-	if adminEnabled && adminCode == "" {
-		log.Fatal("ADMIN_AUTH_ENABLED=true but ADMIN_PASSCODE is empty — set one in .env or disable the gate")
-	}
-	handlers.SetAdminAuth(adminEnabled, adminCode)
 
 	// Capture logs into a ring buffer for the /api/admin/logs endpoint.
 	logBuf := store.InitLogCapture()
@@ -290,12 +282,12 @@ func main() {
 	mux.HandleFunc("/api/scan", handlers.ScanHandler)
 	mux.HandleFunc("/api/library-upload", handlers.LibraryUploadHandler)
 	mux.HandleFunc("/api/metadata-preview", handlers.MetadataPreviewHandler)
-	mux.HandleFunc("/api/playlists", handlers.PlaylistsHandler)
-	mux.HandleFunc("/api/playlists/", handlers.PlaylistHandler)
-	mux.HandleFunc("/api/favorites", handlers.FavoritesHandler)
-	mux.HandleFunc("/api/favorites/", handlers.FavoriteToggleHandler)
-	mux.HandleFunc("/api/recent", handlers.RecentHandler)
-	mux.HandleFunc("/api/recent/", handlers.RecentAddHandler)
+	mux.HandleFunc("/api/playlists", auth.RequireUser(handlers.PlaylistsHandler))
+	mux.HandleFunc("/api/playlists/", auth.RequireUser(handlers.PlaylistHandler))
+	mux.HandleFunc("/api/favorites", auth.RequireUser(handlers.FavoritesHandler))
+	mux.HandleFunc("/api/favorites/", auth.RequireUser(handlers.FavoriteToggleHandler))
+	mux.HandleFunc("/api/recent", auth.RequireUser(handlers.RecentHandler))
+	mux.HandleFunc("/api/recent/", auth.RequireUser(handlers.RecentAddHandler))
 	mux.HandleFunc("/admin", handlers.AdminHandler)
 	mux.HandleFunc("/api/v2/resolve-url", handlers.ResolveURLHandler)
 	mux.HandleFunc("/api/v2/search", handlers.V2SearchHandler)
@@ -309,8 +301,12 @@ func main() {
 			"ffmpeg": ffmpeg,
 		})
 	})
-	mux.HandleFunc("/api/admin-login", handlers.AdminLoginHandler)
-	mux.HandleFunc("/api/admin-auth-status", handlers.AdminAuthStatusHandler)
+	mux.HandleFunc("/api/setup-status", handlers.SetupStatusHandler)
+	mux.HandleFunc("/api/setup", handlers.SetupHandler)
+	mux.HandleFunc("/api/login", handlers.LoginHandler)
+	mux.HandleFunc("/api/logout", handlers.LogoutHandler)
+	mux.HandleFunc("/api/me", handlers.MeHandler)
+	mux.HandleFunc("/api/users/me/password", auth.RequireUser(handlers.ChangeOwnPasswordHandler))
 	mux.HandleFunc("/api/files", handlers.RequireAdmin(handlers.FileListHandler))
 	mux.HandleFunc("/api/upload", handlers.RequireAdmin(handlers.UploadHandler))
 	mux.HandleFunc("/api/delete", handlers.RequireAdmin(handlers.DeleteFileHandler))
@@ -363,14 +359,14 @@ func main() {
 	mux.HandleFunc("/api/preview/", handlers.PreviewAudioHandler)
 	mux.HandleFunc("/api/download-job/", handlers.DownloadJobFileHandler)
 
-	mux.HandleFunc("/api/queue", handlers.DownloadQueueHandler)
-	mux.HandleFunc("/api/queue/add", handlers.DownloadQueueAddHandler)
-	mux.HandleFunc("/api/queue/add-batch", handlers.DownloadQueueAddBatchHandler)
-	mux.HandleFunc("/api/queue/counts", handlers.QueueCountsHandler)
-	mux.HandleFunc("/api/queue/clear-completed", handlers.QueueClearCompletedHandler)
-	mux.HandleFunc("/api/queue/toggle-pause", handlers.DownloadTogglePauseHandler)
-	mux.HandleFunc("/api/soulseek/connect", handlers.SoulseekConnectHandler)
-	mux.HandleFunc("/api/queue/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/queue", auth.RequireUser(handlers.DownloadQueueHandler))
+	mux.HandleFunc("/api/queue/add", auth.RequireUser(handlers.DownloadQueueAddHandler))
+	mux.HandleFunc("/api/queue/add-batch", auth.RequireUser(handlers.DownloadQueueAddBatchHandler))
+	mux.HandleFunc("/api/queue/counts", auth.RequireUser(handlers.QueueCountsHandler))
+	mux.HandleFunc("/api/queue/clear-completed", auth.RequireUser(handlers.QueueClearCompletedHandler))
+	mux.HandleFunc("/api/queue/toggle-pause", auth.RequireUser(handlers.DownloadTogglePauseHandler))
+	mux.HandleFunc("/api/soulseek/connect", auth.RequireAdmin(handlers.SoulseekConnectHandler))
+	mux.HandleFunc("/api/queue/", auth.RequireUser(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/retry") {
 			handlers.DownloadJobRetryHandler(w, r)
@@ -381,7 +377,7 @@ func main() {
 		} else {
 			handlers.DownloadJobStatusHandler(w, r)
 		}
-	})
+	}))
 
 	mux.HandleFunc("/api/bulk-import", handlers.BulkImportHandler)
 
@@ -392,13 +388,13 @@ func main() {
 	mux.HandleFunc("/api/watch/", handlers.WatchedPlaylistsHandler)
 	mux.HandleFunc("/api/watch", handlers.WatchedPlaylistsHandler)
 
-	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
+	mux.HandleFunc("/api/settings", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
 			handlers.SettingsSetHandler(w, r)
 		} else {
 			handlers.SettingsGetHandler(w, r)
 		}
-	})
+	}))
 
 	mux.HandleFunc("/api/cookies/upload", handlers.CorsAny(handlers.UploadCookiesHandler))
 	mux.HandleFunc("/api/cookies/clear", handlers.ClearCookiesHandler)
@@ -422,6 +418,7 @@ func main() {
 	mux.HandleFunc("/api/review/log", review.ReviewLogHandler)
 
 	var handler http.Handler = mux
+	handler = auth.SessionLoad(handler)
 	handler = loggingMiddleware(recoveryMiddleware(handler))
 	handler = gzipMiddleware(handler)
 

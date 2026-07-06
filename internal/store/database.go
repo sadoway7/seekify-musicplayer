@@ -961,6 +961,32 @@ func DbCleanupRecent() {
 	DB.Exec(`DELETE FROM recent WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }
 
+// MigrateLegacyDataTo re-owns pre-user global data to the first admin, run once
+// during first-run setup. Idempotent: INSERT OR IGNORE + backfill only empty
+// user_id values, so re-running is a no-op.
+func MigrateLegacyDataTo(userID string) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`INSERT OR IGNORE INTO user_favorites(user_id, track_id, added_at)
+		SELECT ?, track_id, added_at FROM favorites`, userID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT OR IGNORE INTO user_recent(user_id, track_id, position)
+		SELECT ?, track_id, position FROM recent`, userID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE playlists SET user_id=? WHERE user_id=''`, userID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE download_jobs SET user_id=? WHERE user_id=''`, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func DbCleanupPlaylistTracks() {
 	DB.Exec(`DELETE FROM playlist_tracks WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }

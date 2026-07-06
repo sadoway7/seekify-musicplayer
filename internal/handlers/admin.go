@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"io"
+	"musicapp/internal/auth"
 	"musicapp/internal/store"
 	"musicapp/internal/waveform"
 	"net/http"
@@ -13,122 +14,18 @@ import (
 	"time"
 )
 
-// adminAuthEnabled gates the /admin page and RequireAdmin endpoints. Default
-// false = open (no passcode). Set via .env ADMIN_AUTH_ENABLED=true at startup.
-var (
-	adminPasscode    string
-	adminAuthEnabled bool
-)
-
-// SetAdminAuth configures the admin gate at startup.
-func SetAdminAuth(enabled bool, code string) {
-	adminAuthEnabled = enabled
-	adminPasscode = code
-}
-
+// RequireAdmin gates an endpoint to admin-role users. Delegates to the auth
+// package so the many handlers.RequireAdmin(...) call sites in server.go keep
+// working after the passcode gate was retired.
 func RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !adminAuthCheck(r) {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next(w, r)
-	}
-}
-
-func adminAuthCheck(r *http.Request) bool {
-	if !adminAuthEnabled {
-		return true // gate disabled → open
-	}
-	cookie, err := r.Cookie("admin_auth")
-	if err != nil {
-		return false
-	}
-	return cookie.Value == "1"
+	return auth.RequireAdmin(next)
 }
 
 func AdminHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
-
-	if adminAuthCheck(r) {
-		http.ServeFile(w, r, "admin.html")
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Settings Locked</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#0E0E0E;color:#F0EFE9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-</style>
-</head>
-<body>
-<div style="text-align:center;max-width:320px;width:100%">
-  <div style="width:56px;height:56px;margin:0 auto 20px;border-radius:16px;background:#1E1E1E;display:flex;align-items:center;justify-content:center">
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D4F040" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-  </div>
-  <h2 style="font-size:20px;font-weight:700;margin-bottom:6px">Settings Locked</h2>
-  <p style="font-size:13px;color:#888;margin-bottom:24px">Enter the access code to continue</p>
-  <input id="code" type="password" autocomplete="off" autofocus placeholder="Access code" style="width:100%;padding:14px 16px;background:#1E1E1E;border:2px solid #2a2a2a;border-radius:12px;color:#F0EFE9;font-size:18px;text-align:center;letter-spacing:0.15em;outline:none;transition:border-color 0.2s">
-  <div id="err" style="font-size:13px;color:#f87171;min-height:20px;margin-top:12px"></div>
-</div>
-<script>
-(function(){
-  var inp=document.getElementById("code");
-  var err=document.getElementById("err");
-  inp.focus();
-  inp.addEventListener("input",function(){err.textContent="";inp.style.borderColor="#2a2a2a"});
-  inp.addEventListener("keydown",function(e){
-    if(e.key==="Enter"){
-      e.preventDefault();
-      var v=inp.value;
-      fetch("/api/admin-login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:v})}).then(function(r){return r.json()}).then(function(d){
-        if(d.ok){window.location.reload()}else{err.textContent="Incorrect code";inp.style.borderColor="#f87171";inp.value="";inp.focus()}
-      }).catch(function(){err.textContent="Error";inp.value=""});
-    }
-  });
-})();
-</script>
-</body>
-</html>`))
-}
-
-// AdminAuthStatusHandler reports whether the admin passcode gate is enabled.
-// Public (not behind RequireAdmin) so the SPA can decide whether to show the
-// lock screen at all.
-func AdminAuthStatusHandler(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]bool{"enabled": adminAuthEnabled})
-}
-
-func AdminLoginHandler(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Code string `json:"code"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-	if body.Code != adminPasscode {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":false}`))
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     "admin_auth",
-		Value:    "1",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"ok":true}`))
+	http.ServeFile(w, r, "admin.html")
 }
 
 func FileListHandler(w http.ResponseWriter, r *http.Request) {
