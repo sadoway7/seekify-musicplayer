@@ -64,6 +64,10 @@ Object.assign(UI, {
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
       + '<div class="home-menu-divider"></div>'
       + '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>'
+      + '<div class="home-menu-divider"></div>'
+      + (Store.isGuest
+          ? '<div class="home-menu-item" data-action="login">' + Icons.circle() + '<span>Log in</span></div>'
+          : '<div class="home-menu-item" data-action="logout">' + Icons.circle() + '<span>Log out (' + (Store.user.username || '') + ')</span></div>')
       + '</div>'
       + '</div>'
       + '<div class="home-search-bar" id="home-search-bar">'
@@ -316,6 +320,10 @@ Object.assign(UI, {
           this.renderSettings();
         } else if (action === 'homepage-layout') {
           this._openHomepageLayoutModal();
+        } else if (action === 'login') {
+          this.showLoginScreen();
+        } else if (action === 'logout') {
+          this._logout();
         }
       });
     }

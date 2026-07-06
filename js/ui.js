@@ -121,25 +121,10 @@ const UI = {
     this._renderUserChip();
   },
 
+  // Login/logout live in the home Options menu now; remove any stale floating chip.
   _renderUserChip() {
-    const bar = document.getElementById('tab-bar');
-    if (!bar) return;
-    let chip = document.getElementById('user-chip');
-    if (!chip) {
-      chip = document.createElement('button');
-      chip.id = 'user-chip';
-      chip.className = 'tab-item';
-      chip.style.cssText = 'flex:0 0 auto;padding:0 14px;font-size:13px;white-space:nowrap;border:none;background:none;color:var(--text,#eee);cursor:pointer;opacity:.85';
-      bar.appendChild(chip);
-    }
-    if (Store.isGuest) {
-      chip.textContent = 'Log in';
-      chip.onclick = () => this.showLoginScreen();
-    } else {
-      const u = Store.user || {};
-      chip.textContent = (u.username || 'user') + (u.role === 'admin' ? ' ★' : '');
-      chip.onclick = () => this._logout();
-    }
+    const chip = document.getElementById('user-chip');
+    if (chip) chip.remove();
   },
 
   _cacheDom() {
