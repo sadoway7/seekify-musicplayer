@@ -339,6 +339,7 @@ func InitDownloadTables() {
 		`ALTER TABLE download_jobs ADD COLUMN genre TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE download_jobs ADD COLUMN year TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE download_jobs ADD COLUMN candidates TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		store.DB.Exec(m)

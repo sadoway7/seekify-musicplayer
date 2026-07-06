@@ -131,6 +131,38 @@ func InitDB(path string) {
 	// Add added_at to favorites for ordering (newest first)
 	DB.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
 
+	// Multi-user accounts (additive; safe on existing DBs)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS users (
+		id            TEXT PRIMARY KEY,
+		username      TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		role          TEXT NOT NULL,
+		email         TEXT,
+		disabled      INTEGER NOT NULL DEFAULT 0,
+		created_at    INTEGER NOT NULL
+	)`)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS sessions (
+		token      TEXT PRIMARY KEY,
+		user_id    TEXT NOT NULL,
+		created_at INTEGER NOT NULL,
+		expires_at INTEGER NOT NULL,
+		ip_address TEXT,
+		user_agent TEXT
+	)`)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS user_favorites (
+		user_id  TEXT NOT NULL,
+		track_id TEXT NOT NULL,
+		added_at INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (user_id, track_id)
+	)`)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS user_recent (
+		user_id  TEXT NOT NULL,
+		track_id TEXT NOT NULL,
+		position INTEGER NOT NULL,
+		PRIMARY KEY (user_id, track_id)
+	)`)
+	DB.Exec(`ALTER TABLE playlists ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`)
+
 	dedupTracksByFilePath()
 	DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path)`)
 
