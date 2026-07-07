@@ -129,27 +129,33 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if trackID != "" {
 			store.Mu.RLock()
-			if t, ok := store.Tracks[trackID]; ok {
+			t := store.Tracks[trackID]
+			store.Mu.RUnlock()
+			if t == nil {
+				t = store.DbGetTrackByID(trackID)
+			}
+			if t != nil {
 				ogTitle = t.Artist + " — " + t.Title
 				ogDesc = "Private Music Library."
 				if t.AlbumID != "" {
 					ogImage = host + "/api/cover/" + t.AlbumID + "?size=300"
 				}
-			}
-			store.Mu.RUnlock()
-			if ogTitle == "" {
+			} else {
 				ogTitle = "Seekify"
 				ogDesc = "Private Music Library."
 			}
 		} else if albumID != "" {
 			store.Mu.RLock()
-			if a, ok := store.Albums[albumID]; ok {
+			a := store.Albums[albumID]
+			store.Mu.RUnlock()
+			if a == nil {
+				a = store.DbGetAlbumByID(albumID)
+			}
+			if a != nil {
 				ogTitle = a.Artist + " — " + a.Name
 				ogDesc = fmt.Sprintf("%d tracks. Private Music Library.", a.TrackCount)
 				ogImage = host + "/api/cover/" + albumID + "?size=300"
-			}
-			store.Mu.RUnlock()
-			if ogTitle == "" {
+			} else {
 				ogTitle = "Seekify"
 				ogDesc = "Private Music Library."
 			}

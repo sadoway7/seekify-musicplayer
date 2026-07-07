@@ -1031,6 +1031,37 @@ func DbLoadAlbums() map[string]*models.Album {
 	return result
 }
 
+// DbGetTrackByID returns a single track by id, or nil if not found. Used by the
+// OG/share-preview handler as a fallback when the in-memory map is empty during
+// startup, so link previews never go blank mid-restart.
+func DbGetTrackByID(id string) *models.Track {
+	t := &models.Track{}
+	var hasCover, hasMetadata int
+	err := DB.QueryRow(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata FROM tracks WHERE id=?`, id).
+		Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist, &t.AlbumID,
+			&t.TrackNumber, &t.Year, &t.Genre, &t.Duration, &t.FilePath,
+			&hasCover, &t.ModTime, &hasMetadata)
+	if err != nil {
+		return nil
+	}
+	t.HasCover = hasCover == 1
+	t.HasMetadata = hasMetadata == 1
+	return t
+}
+
+// DbGetAlbumByID returns a single album by id, or nil if not found.
+func DbGetAlbumByID(id string) *models.Album {
+	a := &models.Album{}
+	var hasCover int
+	err := DB.QueryRow(`SELECT id, name, artist, track_count, year, has_cover FROM albums WHERE id=?`, id).
+		Scan(&a.ID, &a.Name, &a.Artist, &a.TrackCount, &a.Year, &hasCover)
+	if err != nil {
+		return nil
+	}
+	a.HasCover = hasCover == 1
+	return a
+}
+
 func DbDeleteTrack(trackID string) {
 	tx, err := DB.Begin()
 	if err != nil {
