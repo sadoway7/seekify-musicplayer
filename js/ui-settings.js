@@ -4,14 +4,14 @@
 // ============================================
 Object.assign(UI, {
 
-  async renderSettings() {
+  async renderSettings(forceAccount) {
     this._viewTrackList = [];
 
     if (!Store.user) {
       this._renderSettingsLocked();
       return;
     }
-    if (Store.user.role !== 'admin') {
+    if (forceAccount || Store.user.role !== 'admin') {
       this._renderUserSettings();
       return;
     }

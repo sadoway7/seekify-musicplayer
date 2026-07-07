@@ -74,6 +74,7 @@ const Api = {
   previewUrl(videoId) { return this._req('/api/preview/' + videoId, { errMsg: 'Preview failed' }); },
   getQueueCounts() { return this._req('/api/queue/counts', { errMsg: 'Failed' }); },
   getSettings() { return this._req('/api/settings', { errMsg: 'Failed' }); },
+  getPublicSettings() { return this._req('/api/settings/public', { errMsg: 'Failed' }); },
 
   // ── GET (fallback on error) ──
   getStats() { return this._req('/api/stats', { fallback: null }); },

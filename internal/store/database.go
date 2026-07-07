@@ -171,6 +171,22 @@ func InitDB(path string) {
 	InitSettingsTable()
 
 	MigrateFromJSON()
+
+	// Re-own legacy pre-account global recent/favorites/playlists/download_jobs
+	// to the first admin. Originally this only ran at first-run setup
+	// (SetupHandler), which skipped existing deployments that already had an
+	// admin before the multi-user change — leaving their history trapped in the
+	// global tables and Recently Played blank. Idempotent, safe each boot.
+	if adminID := firstAdminID(); adminID != "" {
+		MigrateLegacyDataTo(adminID)
+	}
+}
+
+// firstAdminID returns the id of the earliest-created admin, or "" if none.
+func firstAdminID() string {
+	var id string
+	_ = DB.QueryRow(`SELECT id FROM users WHERE role='admin' ORDER BY created_at LIMIT 1`).Scan(&id)
+	return id
 }
 
 // DedupTracks runs all dedup passes and reloads store.Tracks from the clean DB.

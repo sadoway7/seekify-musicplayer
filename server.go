@@ -390,6 +390,10 @@ func main() {
 	mux.HandleFunc("/api/watch/", handlers.WatchedPlaylistsHandler)
 	mux.HandleFunc("/api/watch", handlers.WatchedPlaylistsHandler)
 
+	// Public display settings (waveform style, downloads flag) — admin-set globals
+	// every client needs to render the site. No auth; sensitive config + writes
+	// stay admin-only via /api/settings below.
+	mux.HandleFunc("/api/settings/public", handlers.PublicSettingsHandler)
 	mux.HandleFunc("/api/settings", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			handlers.SettingsSetHandler(w, r)

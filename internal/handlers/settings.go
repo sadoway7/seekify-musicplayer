@@ -18,6 +18,18 @@ func SettingsGetHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, store.GetAllSettings())
 }
 
+// PublicSettingsHandler returns only the non-sensitive global display settings
+// that every client needs to render the site (waveform style, downloads flag).
+// No auth: the admin sets these to configure the site's look/behavior for all
+// visitors; sensitive admin config (download source, credentials) stays behind
+// the admin-only /api/settings, and writes stay admin-only.
+func PublicSettingsHandler(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{
+		"waveform_style":    store.GetSetting("waveform_style", "rounded"),
+		"downloads_enabled": store.GetSetting("downloads_enabled", "true"),
+	})
+}
+
 func SettingsSetHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)

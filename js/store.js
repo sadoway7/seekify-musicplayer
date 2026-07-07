@@ -77,13 +77,13 @@ const Store = {
         this.recent = [];
       }
       this._rebuildMaps();
-      if (Store.isAdmin) {
-        try {
-          const settings = await Api.getSettings();
-          this.downloadsEnabled = settings.downloads_enabled !== 'false';
-          this.waveformStyle = settings.waveform_style || 'rounded';
-        } catch(e) {}
-      }
+      // Global display settings (admin-configured) must reach every client, so
+      // fetch the public subset for all users — no auth, no 401/403 noise.
+      try {
+        const ps = await Api.getPublicSettings();
+        this.downloadsEnabled = ps.downloads_enabled !== 'false';
+        this.waveformStyle = ps.waveform_style || 'rounded';
+      } catch(e) {}
       if (!this.isGuest) {
         try { this.reviewCounts = await Api.getReviewCounts(); } catch(e) {}
       }

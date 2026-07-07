@@ -67,7 +67,8 @@ Object.assign(UI, {
       + '<div class="home-menu-label">Options</div>'
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
       + (Store.isGuest ? '' : '<div class="home-menu-divider"></div>'
-        + '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>')
+        + '<div class="home-menu-item" data-action="my-account">' + Icons.person() + '<span>My Account</span></div>'
+        + (Store.isAdmin ? '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>' : ''))
       + '<div class="home-menu-divider"></div>'
       + (Store.isGuest
           ? '<div class="home-menu-item" data-action="login">' + Icons.circle() + '<span>Log in</span></div>'
@@ -114,15 +115,25 @@ Object.assign(UI, {
 
   _homeRecent() {
     if (Store.isGuest) {
-      let cta = '<div style="margin-top:24px;padding:28px 24px;border-radius:16px;background:linear-gradient(135deg,var(--l2),var(--l1));border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;text-align:center">';
-      cta += '<div style="font-size:20px;font-weight:700;color:var(--text-primary);letter-spacing:-0.02em">Welcome to Seekify</div>';
-      cta += '<div style="margin-top:8px;font-size:14px;color:var(--text-secondary);max-width:420px">Log in to track your listening, save favorites, and build playlists.</div>';
-      cta += '<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">';
-      cta += '<button id="home-cta-login" style="padding:11px 22px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:var(--bg);font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Log in</button>';
-      if (Store.registrationMode && Store.registrationMode !== 'off') {
-        cta += '<button id="home-cta-register" style="padding:11px 22px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-primary);font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer">Create account</button>';
+      const reg = Store.registrationMode && Store.registrationMode !== 'off';
+      let cta = '<div style="position:relative;margin-top:24px;overflow:hidden;background:var(--l1);min-height:144px;display:flex;align-items:center">';
+      // Accent glow tints the banner backdrop.
+      cta += '<div style="position:absolute;inset:0;background:radial-gradient(120% 160% at 6% 35%, rgba(212,240,64,.13), transparent 55%);pointer-events:none"></div>';
+      // Logo as a large faded tilted backdrop on the right; screen blend drops the icon's black bg.
+      cta += '<img src="/icon.png" alt="" aria-hidden="true" style="position:absolute;right:-26px;top:50%;transform:translateY(-50%) rotate(-15deg);width:232px;height:232px;opacity:.30;mix-blend-mode:screen;pointer-events:none">';
+      // Content stacks left (block, not a flex row) so the capsule never gets
+      // pushed over the logo on the right.
+      cta += '<div style="position:relative;z-index:1;padding:24px 28px;width:100%">';
+      // Wordmark — italic, slanted, hard layered drop shadow = sticker/bomb vibe.
+      cta += '<div style="display:inline-block;font-style:italic;font-weight:800;font-size:42px;line-height:.95;letter-spacing:-0.025em;text-shadow:2px 2px 0 rgba(0,0,0,.55),4px 4px 0 rgba(0,0,0,.3);transform:rotate(-2deg);transform-origin:left center;margin-bottom:12px"><span style="color:var(--accent)">Seek</span><span style="color:var(--text-primary)">ify</span></div>';
+      cta += '<div style="font-size:15px;line-height:1.45;color:var(--text-secondary);max-width:360px;margin-bottom:18px">Log in to track your listening, save favorites, and build playlists.</div>';
+      // Integrated capsule action bar — buttons share one shell, no individual borders.
+      cta += '<div style="display:inline-flex;align-items:stretch;background:var(--bg);border-radius:999px;padding:4px;box-shadow:var(--shadow-deep)">';
+      cta += '<button id="home-cta-login" style="padding:11px 26px;border:none;border-radius:999px;background:var(--accent);color:var(--bg);font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Log in</button>';
+      if (reg) {
+        cta += '<button id="home-cta-register" style="padding:11px 26px;border:none;border-radius:999px;background:transparent;color:var(--text-primary);font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer">Create account</button>';
       }
-      cta += '</div></div>';
+      cta += '</div></div></div>';
       return cta;
     }
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
@@ -329,6 +340,10 @@ Object.assign(UI, {
         const action = item.dataset.action;
         if (action === 'rescan') {
           this._rescanLibrary();
+        } else if (action === 'my-account') {
+          Store.currentView = 'settings';
+          Store.viewData = {};
+          this.renderSettings(true);
         } else if (action === 'settings') {
           Store.currentView = 'settings';
           Store.viewData = {};
