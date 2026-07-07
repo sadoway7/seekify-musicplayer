@@ -222,14 +222,16 @@ Object.assign(UI, {
         this.hideContextMenu();
         this.showPlaylistModal(trackId);
       }},
-      { label: 'Rescan Metadata', icon: Icons.search(), action: async () => {
-        this.hideContextMenu();
-        this._showRescanModal(trackId);
-      }},
-      { label: 'Edit Metadata', icon: Icons.edit(), action: () => {
-        this.hideContextMenu();
-        ReviewUI.showEditMetaModal(trackId);
-      }},
+      ...(Store.isAdmin ? [
+        { label: 'Rescan Metadata', icon: Icons.search(), action: async () => {
+          this.hideContextMenu();
+          this._showRescanModal(trackId);
+        }},
+        { label: 'Edit Metadata', icon: Icons.edit(), action: () => {
+          this.hideContextMenu();
+          ReviewUI.showEditMetaModal(trackId);
+        }}
+      ] : []),
       { type: 'divider' },
       { label: 'Go to Album', icon: Icons.library(), action: () => {
         this.hideContextMenu();

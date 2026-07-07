@@ -143,6 +143,35 @@ const UI = {
     window.location.reload();
   },
 
+  // Guest tried a login-only action (download). Show a prominent prompt
+  // instead of a silent 401. Built lazily; reused across finder + ripper.
+  _showAccountRequired() {
+    let modal = document.getElementById('account-required-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'account-required-modal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:10001;display:flex;align-items:center;justify-content:center;padding:24px';
+      modal.innerHTML =
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:32px 28px;max-width:360px;width:100%;text-align:center;box-shadow:var(--shadow-deep)">'
+        + '<div style="width:56px;height:56px;border-radius:50%;background:rgba(212,240,64,.12);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:var(--accent)">' + Icons.person() + '</div>'
+        + '<div style="font-size:20px;font-weight:700;color:var(--text1);margin-bottom:8px;letter-spacing:-0.01em">Account required</div>'
+        + '<div style="font-size:14px;color:var(--text3);margin-bottom:24px;line-height:1.5">Log in to download music to your library.</div>'
+        + '<button id="ar-login" style="width:100%;padding:13px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:var(--bg);font-family:var(--ff);font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px">Log in</button>'
+        + '<button id="ar-dismiss" style="width:100%;padding:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text2);font-family:var(--ff);font-size:15px;cursor:pointer">Maybe later</button>'
+        + '</div>';
+      document.body.appendChild(modal);
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.id === 'ar-dismiss') {
+          modal.style.display = 'none';
+        } else if (e.target.closest('#ar-login')) {
+          modal.style.display = 'none';
+          this.showLoginScreen();
+        }
+      });
+    }
+    modal.style.display = 'flex';
+  },
+
   // Navbar is static (home/finder/library). Personal surfaces (favorites,
   // settings) are reached via the Library view and the home Options menu.
   renderUserState() {

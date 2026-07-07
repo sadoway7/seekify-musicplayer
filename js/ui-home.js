@@ -113,6 +113,18 @@ Object.assign(UI, {
   },
 
   _homeRecent() {
+    if (Store.isGuest) {
+      let cta = '<div style="margin-top:24px;padding:28px 24px;border-radius:16px;background:linear-gradient(135deg,var(--l2),var(--l1));border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;text-align:center">';
+      cta += '<div style="font-size:20px;font-weight:700;color:var(--text-primary);letter-spacing:-0.02em">Welcome to Seekify</div>';
+      cta += '<div style="margin-top:8px;font-size:14px;color:var(--text-secondary);max-width:420px">Log in to track your listening, save favorites, and build playlists.</div>';
+      cta += '<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">';
+      cta += '<button id="home-cta-login" style="padding:11px 22px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:var(--bg);font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Log in</button>';
+      if (Store.registrationMode && Store.registrationMode !== 'off') {
+        cta += '<button id="home-cta-register" style="padding:11px 22px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-primary);font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer">Create account</button>';
+      }
+      cta += '</div></div>';
+      return cta;
+    }
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);
     const currentTrack = Player.getCurrentTrack();
 
@@ -335,6 +347,11 @@ Object.assign(UI, {
         }
       });
     }
+
+    const ctaLogin = document.getElementById('home-cta-login');
+    if (ctaLogin) ctaLogin.addEventListener('click', () => this.showLoginScreen());
+    const ctaReg = document.getElementById('home-cta-register');
+    if (ctaReg) ctaReg.addEventListener('click', () => this._showAuthOverlay('register'));
   },
 
 });

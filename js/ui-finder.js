@@ -13,12 +13,12 @@ Object.assign(UI, {
     if (!this._finderTab) this._finderTab = 'search';
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
-    if (Store.isGuest && this._finderTab === 'bulk') this._finderTab = 'search';
+    if (Store.isGuest && (this._finderTab === 'bulk' || this._finderTab === 'downloads')) this._finderTab = 'search';
     let html = '<div class="lib-sticky-header">'
       + '<div class="lib-tabs">'
       + '<button class="lib-tab' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Rip Search</button>'
       + (Store.isGuest ? '' : '<button class="lib-tab' + (this._finderTab === 'bulk' ? ' active' : '') + '" data-finder-tab="bulk">Bulk Import</button>')
-      + '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
+      + (Store.isGuest ? '' : '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>')
       + '</div>'
       + (this._finderTab === 'downloads' ? '' : '');
 
@@ -239,6 +239,13 @@ Object.assign(UI, {
     const container = document.getElementById('downloads-content');
     if (!container) return;
 
+    // Admin sees every user's jobs (&all=1); resolve userId → username once so
+    // job rows can show an owner badge. Cached on first load.
+    if (Store.isAdmin && !this._adminUserMap) {
+      try { const u = await Api.adminListUsers(); this._adminUserMap = {}; (u.users || []).forEach(x => { this._adminUserMap[x.id] = x.username; }); }
+      catch (e) { this._adminUserMap = {}; }
+    }
+
     try {
       let filter = this._downloadFilter || 'all';
       // Map chip → server status so completed/failed aren't hidden behind the
@@ -289,7 +296,7 @@ Object.assign(UI, {
       if (failedCount > 0) chips.push({ key: 'failed', label: 'Failed', count: failedCount });
       if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
       html += '<div class="queue-stats-actions">'
-        + '<button class="settings-btn" id="btn-dl-settings">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>'
+        + (Store.isAdmin ? '<button class="settings-btn" id="btn-dl-settings">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>' : '')
         + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed">&#x21bb; Retry All</button>' : '')
         + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history">Clear History</button>' : '')
         + '</div>';
@@ -382,6 +389,7 @@ Object.assign(UI, {
       + (j.progressStage && !isQueued && !completed ? '<span class="queue-stage">' + this._esc(j.progressStage) + '</span>' : '')
       + (!completed && j.audioQuality ? '<span class="queue-job-quality">' + this._esc(j.audioQuality) + '</span>' : '')
       + (failed && j.error ? '<span class="queue-job-error">' + this._esc(j.error) + '</span>' : '')
+      + (Store.isAdmin && j.userId ? '<span style="font-size:11px;color:var(--accent);background:rgba(212,240,64,.12);padding:2px 7px;border-radius:6px">@' + this._esc((this._adminUserMap && this._adminUserMap[j.userId]) || String(j.userId).slice(0, 8)) + '</span>' : '')
       + '</div>'
           + '</div>'
       + '<div class="queue-job-actions">'
@@ -834,6 +842,7 @@ Object.assign(UI, {
 
       const dlBtn = e.target.closest('[data-action="download-song"]');
       if (dlBtn) {
+        if (Store.isGuest) { this._showAccountRequired(); return; }
         e.stopPropagation();
         const badge = document.createElement('span');
         badge.className = 'finder-status-badge finder-in-queue';
@@ -1094,6 +1103,7 @@ Object.assign(UI, {
     const dlAllBtn = container.querySelector('#btn-download-all-artist');
     if (dlAllBtn) {
       dlAllBtn.addEventListener('click', () => {
+        if (Store.isGuest) { this._showAccountRequired(); return; }
         const toDownload = allTracks.filter(t => !t.inLibrary);
         if (toDownload.length === 0) {
           this._showToast('All tracks are already in your library');
@@ -1192,6 +1202,7 @@ Object.assign(UI, {
         actionsEl.style.display = '';
         actionsEl.innerHTML = '<button class="settings-btn settings-btn-primary" id="btn-download-album" style="margin-bottom:8px">' + Icons.download() + '<span>Download All Tracks</span></button>';
         document.getElementById('btn-download-album').addEventListener('click', () => {
+          if (Store.isGuest) { this._showAccountRequired(); return; }
           const trackList = tracks.map((t, i) => ({
             artist: t.artist || artist,
             title: t.title,

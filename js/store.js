@@ -65,12 +65,12 @@ const Store = {
       if (this.user && !this.user.guest) {
         const [playlists, favorites, recent] = await Promise.all([
           Api.getPlaylists().catch(() => []),
-          Api.getFavorites().catch(() => ({ favorites: [] })),
-          Api.getRecent().catch(() => ({ recent: [] }))
+          Api.getFavorites().catch(() => []),
+          Api.getRecent().catch(() => [])
         ]);
         this.playlists = playlists || [];
-        this.favorites = (favorites && favorites.favorites) || [];
-        this.recent = (recent && recent.recent) || [];
+        this.favorites = favorites || [];
+        this.recent = recent || [];
       } else {
         this.playlists = [];
         this.favorites = [];

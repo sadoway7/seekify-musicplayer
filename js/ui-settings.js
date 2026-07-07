@@ -239,6 +239,17 @@ Object.assign(UI, {
       + '<span id="reg-msg" class="settings-status"></span>'
       + '</div>'
 
+      + '<div class="settings-subsection-label" style="margin-top:28px">Download limits</div>'
+      + '<div class="settings-section-desc">Cap how many downloads can run at once. 0 = unlimited.</div>'
+      + '<div class="settings-field" style="max-width:160px"><label>Global limit</label>'
+      + '<input id="dl-limit-global" class="settings-input" type="number" min="0" placeholder="0"></div>'
+      + '<div class="settings-field" style="max-width:160px"><label>Per-user limit</label>'
+      + '<input id="dl-limit-peruser" class="settings-input" type="number" min="0" placeholder="0"></div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-dl-limits">' + Icons.check() + '<span>Save</span></button>'
+      + '<span id="dl-limits-msg" class="settings-status"></span>'
+      + '</div>'
+
       + '<div class="settings-subsection-label" style="margin-top:28px">Create user</div>'
       + '<form id="adm-create-form">'
       + '<div class="settings-field"><label>Username</label>'
@@ -370,6 +381,14 @@ Object.assign(UI, {
     if (saveReg) saveReg.addEventListener('click', () => this._saveRegistration());
     const createForm = document.getElementById('adm-create-form');
     if (createForm) createForm.addEventListener('submit', (e) => { e.preventDefault(); this._adminCreateUser(); });
+    Api.adminGetDownloadLimits().then(l => {
+      const g = document.getElementById('dl-limit-global');
+      if (g) g.value = (l && l.global) || 0;
+      const p = document.getElementById('dl-limit-peruser');
+      if (p) p.value = (l && l.perUser) || 0;
+    }).catch(() => {});
+    const saveLimits = document.getElementById('btn-save-dl-limits');
+    if (saveLimits) saveLimits.addEventListener('click', () => this._saveDownloadLimits());
     this._loadAdminUsers();
   },
 
@@ -379,6 +398,14 @@ Object.assign(UI, {
     Api.adminPutRegistration(mode, role)
       .then(() => this._setRegMsg('reg-msg', 'Saved', false))
       .catch(err => this._setRegMsg('reg-msg', (err && err.message) || 'Failed to save', true));
+  },
+
+  _saveDownloadLimits() {
+    const g = parseInt((document.getElementById('dl-limit-global') || {}).value || '0', 10) || 0;
+    const p = parseInt((document.getElementById('dl-limit-peruser') || {}).value || '0', 10) || 0;
+    Api.adminPutDownloadLimits(g, p)
+      .then(() => this._setRegMsg('dl-limits-msg', 'Saved', false))
+      .catch(err => this._setRegMsg('dl-limits-msg', (err && err.message) || 'Failed to save', true));
   },
 
   _loadAdminUsers() {

@@ -6,7 +6,7 @@ const RipperV2 = {
 
   render(container) {
     this.els = { content: container };
-    if (!this._downloadJobs.length) {
+    if (!Store.isGuest && !this._downloadJobs.length) {
       Api.getQueue().then(j => { this._downloadJobs = j || []; }).catch(() => {});
     }
     this._renderMain();
@@ -14,6 +14,7 @@ const RipperV2 = {
   },
 
   _startPoll() {
+    if (Store.isGuest) return;
     if (this._pollTimer) clearInterval(this._pollTimer);
     this._pollTimer = setInterval(() => this._pollQueue(), 5000);
   },
@@ -236,6 +237,7 @@ const RipperV2 = {
       container.innerHTML = '<div style="padding:8px;font-size:var(--fs-caption);color:var(--text-muted)">No MusicBrainz matches. Will download with basic metadata.</div>'
         + '<button class="v2-btn-primary" id="v2-dl-basic" style="margin-top:8px;width:100%">' + Icons.download() + ' Download Anyway</button>';
       container.querySelector('#v2-dl-basic').addEventListener('click', () => {
+        if (Store.isGuest) { UI._showAccountRequired(); return; }
         this._queueV2Download(resolveData._sourceUrl || resolveData.url, resolveData, {});
       });
       return;
@@ -282,11 +284,13 @@ const RipperV2 = {
     });
 
     container.querySelector('#v2-dl-enriched').addEventListener('click', () => {
+      if (Store.isGuest) { UI._showAccountRequired(); return; }
       const match = candidates[this._selectedCandidate];
       this._queueV2Download(resolveData._sourceUrl || resolveData.url, resolveData, match);
     });
 
     container.querySelector('#v2-dl-basic-alt').addEventListener('click', () => {
+      if (Store.isGuest) { UI._showAccountRequired(); return; }
       this._queueV2Download(resolveData._sourceUrl || resolveData.url, resolveData, {});
     });
   },
@@ -396,6 +400,7 @@ const RipperV2 = {
 
     container.querySelectorAll('.v2-py-dl').forEach(btn => {
       btn.addEventListener('click', async (e) => {
+        if (Store.isGuest) { UI._showAccountRequired(); return; }
         e.stopPropagation();
         const badge = document.createElement('span');
         badge.className = 'finder-status-badge finder-in-queue';
@@ -435,6 +440,7 @@ const RipperV2 = {
   },
 
   async _loadQueue() {
+    if (Store.isGuest) return;
     try {
       const [jobs, counts] = await Promise.all([Api.getQueue(100), Api.getQueueCounts()]);
       this._downloadJobs = jobs || [];
