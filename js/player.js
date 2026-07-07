@@ -48,33 +48,24 @@ const Player = {
     });
     this.audio.addEventListener('error', () => this._onMediaError());
 
-    // Media Session API — lock screen controls, keyboard media keys
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.setActionHandler('play', () => {
-        this.audio.play().catch(() => {});
-      });
-      navigator.mediaSession.setActionHandler('pause', () => {
-        this.audio.pause();
-      });
+    // iOS only renders prev/next-track buttons (not ±10s skip) when Media Session
+    // handlers are (re)registered at playback start; init-time registration does
+    // not reliably reach the lock-screen UI. seekforward/seekbackward are never
+    // registered: iOS forces a choice between seek-skip and track-skip, and we
+    // want track-skip. seekto is kept so the lock-screen scrubber still works.
+    this.audio.addEventListener('playing', () => {
+      if (!('mediaSession' in navigator)) return;
+      navigator.mediaSession.setActionHandler('play', () => { this.audio.play().catch(() => {}); });
+      navigator.mediaSession.setActionHandler('pause', () => { this.audio.pause(); });
       navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
       navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
-      // iOS shows ±15s skip buttons (not prev/next) whenever seekforward/
-      // seekbackward are left in their default supported state. Explicitly
-      // nulling them forces iOS to render prev/next-track buttons instead.
-      // The seekto scrubber is unaffected.
-      try {
-        navigator.mediaSession.setActionHandler('seekforward', null);
-        navigator.mediaSession.setActionHandler('seekbackward', null);
-      } catch (e) { /* not all browsers support nulling */ }
-      // ponytail: seekto so the iOS lock-screen scrubber is functional; without
-      // setPositionState + a finite duration iOS shows ±15s buttons, not track skip.
       navigator.mediaSession.setActionHandler('seekto', (details) => {
         if (details.seekTime != null && this.audio.duration && isFinite(this.audio.duration)) {
           this.audio.currentTime = Math.min(Math.max(details.seekTime, 0), this.audio.duration);
           this._syncPositionState();
         }
       });
-    }
+    });
   },
 
   // ponytail: iOS needs finite position state to render prev/next-track buttons
