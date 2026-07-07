@@ -517,6 +517,7 @@ Object.assign(UI, {
   },
 
   async _pollFinderStatus() {
+    if (Store.isGuest) return;
     try {
       const counts = await Api.getQueueCounts();
       this._updateDownloadBadge(counts);

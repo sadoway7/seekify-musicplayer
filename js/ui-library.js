@@ -43,7 +43,7 @@ Object.assign(UI, {
         }
       }
     });
-    Store.refreshPlaylists().then(() => {
+    if (!Store.isGuest) Store.refreshPlaylists().then(() => {
       if (Store.currentView === 'library' && this.libFilter === 'playlists') {
         const results = this.els.content.querySelector('.lib-results');
         if (results) results.innerHTML = this._renderLibPlaylists();
