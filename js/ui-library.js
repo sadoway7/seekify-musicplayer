@@ -17,7 +17,7 @@ Object.assign(UI, {
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input lib-search-input" type="search" enterkeyhint="search" placeholder="">'
       + '</div>'
-      + '<button class="lib-upload-btn" id="lib-upload-btn" aria-label="Upload music">' + Icons.upload() + '</button>'
+      + (Store.isAdmin ? '<button class="lib-upload-btn" id="lib-upload-btn" aria-label="Upload music">' + Icons.upload() + '</button>' : '')
       + '</div>'
       + '<div class="lib-results">';
 

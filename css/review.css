@@ -202,8 +202,10 @@
 
 #edit-meta-modal .modal-sheet {
   max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 0;
-  overflow-y: auto;
   animation: sheetSlideDown 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
@@ -223,6 +225,9 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .edit-meta-cover {
