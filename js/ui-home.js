@@ -68,7 +68,7 @@ Object.assign(UI, {
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
       + (Store.isGuest ? '' : '<div class="home-menu-divider"></div>'
         + '<div class="home-menu-item" data-action="my-account">' + Icons.person() + '<span>My Account</span></div>'
-        + (Store.isAdmin ? '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>' : ''))
+        + (Store.isAdmin ? '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Admin Settings</span></div>' : ''))
       + '<div class="home-menu-divider"></div>'
       + (Store.isGuest
           ? '<div class="home-menu-item" data-action="login">' + Icons.circle() + '<span>Log in</span></div>'

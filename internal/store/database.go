@@ -172,11 +172,12 @@ func InitDB(path string) {
 
 	MigrateFromJSON()
 
-	// Re-own legacy pre-account global recent/favorites/playlists/download_jobs
-	// to the first admin. Originally this only ran at first-run setup
-	// (SetupHandler), which skipped existing deployments that already had an
-	// admin before the multi-user change — leaving their history trapped in the
-	// global tables and Recently Played blank. Idempotent, safe each boot.
+	// Re-own legacy pre-account global favorites/playlists/download_jobs to the
+	// first admin (SetupHandler used to do this only at first-run, skipping
+	// deployments that already had an admin). Legacy global `recent` is
+	// intentionally NOT migrated — it is unattributable pre-account data;
+	// MigrateLegacyDataTo also clears any such rows an earlier deploy already
+	// copied onto the admin. Idempotent, safe each boot.
 	if adminID := firstAdminID(); adminID != "" {
 		MigrateLegacyDataTo(adminID)
 	}
@@ -590,7 +591,7 @@ func DbToggleUserFavorite(userID, trackID string) bool {
 }
 
 func DbGetUserRecent(userID string) []string {
-	rows, err := DB.Query("SELECT track_id FROM user_recent WHERE user_id = ? ORDER BY position DESC", userID)
+	rows, err := DB.Query("SELECT track_id FROM user_recent WHERE user_id = ? ORDER BY position ASC", userID)
 	if err != nil {
 		return []string{}
 	}
@@ -1072,8 +1073,12 @@ func MigrateLegacyDataTo(userID string) error {
 		SELECT ?, track_id, added_at FROM favorites`, userID); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT OR IGNORE INTO user_recent(user_id, track_id, position)
-		SELECT ?, track_id, position FROM recent`, userID); err != nil {
+	// Legacy global `recent` is unattributable pre-account data; do not surface
+	// it as this user's Recently Played. An earlier deploy copied it into
+	// user_recent — remove those rows. Genuine logged-in plays are never written
+	// to legacy `recent` (its writer has no callers), so only migrated rows are
+	// affected.
+	if _, err = tx.Exec(`DELETE FROM user_recent WHERE user_id = ? AND track_id IN (SELECT track_id FROM recent)`, userID); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(`UPDATE playlists SET user_id=? WHERE user_id=''`, userID); err != nil {
