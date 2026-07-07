@@ -149,6 +149,5 @@ const App = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  window.addEventListener('auth-required', () => UI.showLoginScreen());
   App.init();
 });

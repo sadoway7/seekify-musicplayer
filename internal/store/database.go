@@ -132,7 +132,7 @@ func InitDB(path string) {
 	DB.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
 
 	// Multi-user accounts (additive; safe on existing DBs)
-	DB.Exec(`CREATE TABLE IF NOT EXISTS users (
+		DB.Exec(`CREATE TABLE IF NOT EXISTS users (
 		id            TEXT PRIMARY KEY,
 		username      TEXT UNIQUE NOT NULL,
 		password_hash TEXT NOT NULL,
@@ -141,6 +141,8 @@ func InitDB(path string) {
 		disabled      INTEGER NOT NULL DEFAULT 0,
 		created_at    INTEGER NOT NULL
 	)`)
+	// Registration: pending-approval workflow (additive; existing users → 'active').
+	DB.Exec(`ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`)
 	DB.Exec(`CREATE TABLE IF NOT EXISTS sessions (
 		token      TEXT PRIMARY KEY,
 		user_id    TEXT NOT NULL,

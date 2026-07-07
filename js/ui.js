@@ -63,18 +63,42 @@ const UI = {
     const err = document.getElementById('auth-error');
     const userInp = document.getElementById('auth-username');
     const pwInp = document.getElementById('auth-password');
-    if (title) title.textContent = mode === 'setup' ? 'Create admin account' : 'Log in';
-    if (sub) sub.textContent = mode === 'setup' ? 'Set up your music server' : '';
-    if (emailWrap) emailWrap.classList.toggle('hidden', mode !== 'setup');
-    if (submit) submit.textContent = mode === 'setup' ? 'Create admin' : 'Log in';
-    if (err) { err.textContent = ''; err.classList.add('hidden'); }
+    const isSetup = mode === 'setup';
+    const isRegister = mode === 'register';
+    if (title) title.textContent = isSetup ? 'Create admin account' : (isRegister ? 'Create account' : 'Log in');
+    if (sub) sub.textContent = isSetup ? 'Set up your music server'
+      : (isRegister ? (Store.registrationMode === 'approval' ? 'An admin must approve your account' : 'Pick a username and password') : '');
+    if (emailWrap) emailWrap.classList.toggle('hidden', !isSetup);
+    if (submit) submit.textContent = isSetup ? 'Create admin' : (isRegister ? 'Register' : 'Log in');
+    if (err) { err.textContent = ''; err.classList.add('hidden'); err.classList.remove('success'); }
     if (userInp) userInp.value = '';
     if (pwInp) pwInp.value = '';
+
+    const cancelBtn = document.getElementById('auth-cancel');
+    if (cancelBtn) {
+      cancelBtn.classList.toggle('hidden', isSetup);
+      cancelBtn.onclick = () => this.hideAuthOverlay();
+    }
+
+    const switchLink = document.getElementById('auth-mode-switch');
+    if (switchLink) {
+      if (mode === 'login' && Store.registrationMode !== 'off') {
+        switchLink.classList.remove('hidden');
+        switchLink.textContent = "Don't have an account? Register";
+        switchLink.onclick = (e) => { e.preventDefault(); this._showAuthOverlay('register'); };
+      } else if (isRegister) {
+        switchLink.classList.remove('hidden');
+        switchLink.textContent = 'Already have an account? Log in';
+        switchLink.onclick = (e) => { e.preventDefault(); this._showAuthOverlay('login'); };
+      } else {
+        switchLink.classList.add('hidden');
+        switchLink.onclick = null;
+      }
+    }
+
     const submitHandler = () => this._submitAuth(mode);
-    if (submit) submit.onclick = submitHandler;
-    const onKey = (e) => { if (e.key === 'Enter') submitHandler(); };
-    if (userInp) userInp.onkeydown = onKey;
-    if (pwInp) pwInp.onkeydown = onKey;
+    const form = document.getElementById('auth-form');
+    if (form) form.onsubmit = (e) => { e.preventDefault(); submitHandler(); };
     ov.classList.remove('hidden');
     if (userInp) setTimeout(() => userInp.focus(), 50);
   },
@@ -86,21 +110,30 @@ const UI = {
     const err = document.getElementById('auth-error');
     const submit = document.getElementById('auth-submit');
     if (!username || !password) {
-      if (err) { err.textContent = 'Enter a username and password'; err.classList.remove('hidden'); }
+      if (err) { err.textContent = 'Enter a username and password'; err.classList.remove('hidden'); err.classList.remove('success'); }
       return;
     }
     if (submit) submit.disabled = true;
-    const res = mode === 'setup'
-      ? await Api.setup(username, password, email)
-      : await Api.login(username, password);
+    let res;
+    if (mode === 'setup') {
+      res = await Api.setup(username, password, email);
+    } else if (mode === 'register') {
+      res = await Api.register(username, password);
+    } else {
+      res = await Api.login(username, password);
+    }
     if (submit) submit.disabled = false;
-    if (res && res.ok) {
+    if (mode === 'register' && res && res.status === 202) {
+      // Approval mode: account created but awaiting admin approval.
+      if (err) { err.textContent = 'Account created! An admin must approve it before you can log in.'; err.classList.remove('hidden'); err.classList.add('success'); }
+    } else if (res && res.ok) {
       this.hideAuthOverlay();
       window.location.reload();
     } else {
       const data = res && res.data;
-      const msg = (data && (data.error || data.message)) || (mode === 'setup' ? 'Setup failed' : 'Invalid credentials');
-      if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+      const fallback = mode === 'setup' ? 'Setup failed' : (mode === 'register' ? 'Registration failed' : 'Invalid credentials');
+      const msg = (data && (data.error || data.message)) || fallback;
+      if (err) { err.textContent = msg; err.classList.remove('hidden'); err.classList.remove('success'); }
     }
   },
 
@@ -110,14 +143,9 @@ const UI = {
     window.location.reload();
   },
 
-  // Gate personal surfaces + render the account chip. Called after each render.
+  // Navbar is static (home/finder/library). Personal surfaces (favorites,
+  // settings) are reached via the Library view and the home Options menu.
   renderUserState() {
-    const favTab = document.querySelector('.tab-item[data-tab="favorites"]');
-    const settingsTab = document.getElementById('tab-settings');
-    const guest = Store.isGuest;
-    const admin = !!(Store.user && Store.user.role === 'admin');
-    if (favTab) favTab.style.display = guest ? 'none' : '';
-    if (settingsTab) settingsTab.style.display = admin ? '' : 'none';
     this._renderUserChip();
   },
 

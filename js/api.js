@@ -301,6 +301,12 @@ const Api = {
   changePassword(oldPw, newPw) {
     return this._req('/api/users/me/password', { method: 'POST', body: { old: oldPw, new: newPw } });
   },
+  getRegistrationMode() { return this._req('/api/registration'); },
+  async register(username, password) {
+    const res = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    const data = await res.json().catch(() => ({ error: 'Registration failed' }));
+    return { ok: res.ok, data, status: res.status };
+  },
 
   // ── admin: user management ──
   adminListUsers() { return this._req('/api/admin/users'); },
@@ -308,8 +314,14 @@ const Api = {
   adminUpdateUser(id, data) { return this._req('/api/admin/users/' + encodeURIComponent(id), { method: 'PUT', body: data }); },
   adminResetPassword(id, newPw) { return this._req('/api/admin/users/' + encodeURIComponent(id) + '/password', { method: 'POST', body: { new: newPw } }); },
   adminDeleteUser(id) { return this._req('/api/admin/users/' + encodeURIComponent(id), { method: 'DELETE' }); },
+  adminApproveUser(id) { return this._req('/api/admin/users/' + encodeURIComponent(id) + '/approve', { method: 'POST' }); },
+  adminRejectUser(id) { return this._req('/api/admin/users/' + encodeURIComponent(id) + '/reject', { method: 'POST' }); },
 
   // ── admin: download limits ──
   adminGetDownloadLimits() { return this._req('/api/admin/download-limits'); },
-  adminPutDownloadLimits(global, perUser) { return this._req('/api/admin/download-limits', { method: 'PUT', body: { global, perUser } }); }
+  adminPutDownloadLimits(global, perUser) { return this._req('/api/admin/download-limits', { method: 'PUT', body: { global, perUser } }); },
+
+  // ── admin: registration ──
+  adminGetRegistration() { return this._req('/api/admin/registration'); },
+  adminPutRegistration(mode, defaultRole) { return this._req('/api/admin/registration', { method: 'PUT', body: { mode, default_role: defaultRole } }); }
 };

@@ -34,6 +34,12 @@ const ReviewUI = {
 
   updateForTrack(track) {
     if (!this.overlay) return;
+    // Needs-review UI is admin-only: never show for guests or regular users.
+    if (!Store.isAdmin) {
+      this.currentTrackId = null;
+      this.overlay.classList.remove('visible');
+      return;
+    }
     const fresh = track ? Store.getTrack(track.id) : null;
     if (fresh && fresh.reviewStatus === 'needs_review') {
       this.currentTrackId = fresh.id;

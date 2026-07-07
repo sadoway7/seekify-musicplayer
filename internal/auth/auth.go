@@ -15,6 +15,10 @@ const (
 	RoleAdmin = "admin"
 	RoleUser  = "user"
 
+	// Registration account status. 'pending' = awaiting admin approval.
+	StatusActive  = "active"
+	StatusPending = "pending"
+
 	sessionCookieName = "music_session"
 	sessionTTL        = 30 * 24 * time.Hour
 )
@@ -27,6 +31,7 @@ type User struct {
 	Role         string `json:"role"`
 	Email        string `json:"email,omitempty"`
 	Disabled     bool   `json:"disabled"`
+	Status       string `json:"status"`
 	CreatedAt    int64  `json:"createdAt"`
 	PasswordHash string `json:"-"`
 }
@@ -42,6 +47,7 @@ func PublicUser(u *User) map[string]interface{} {
 		"role":     u.Role,
 		"email":    u.Email,
 		"disabled": u.Disabled,
+		"status":   u.Status,
 	}
 }
 

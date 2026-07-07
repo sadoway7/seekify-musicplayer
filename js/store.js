@@ -13,8 +13,10 @@ const Store = {
   waveformStyle: 'rounded',
   reviewCounts: { unchecked: 0, needs_review: 0, reviewed_ok: 0 },
   user: null,
+  registrationMode: 'off',
 
   get isGuest() { return !this.user || this.user.guest; },
+  get isAdmin() { return !!this.user && this.user.role === 'admin'; },
 
   defaultHomeLayout: [
     { id: 'needs-review', title: 'Needs Review', enabled: false },
@@ -55,6 +57,8 @@ const Store = {
     try {
       // Resolve current user first (guest returns {guest:true}).
       try { this.user = await Api.getMe(); } catch(e) { this.user = { guest: true }; }
+      // Public: whether self-registration is enabled (drives the Register button).
+      try { this.registrationMode = ((await Api.getRegistrationMode()) || {}).mode || 'off'; } catch(e) {}
       const library = await Api.getLibrary();
       this.library = library;
       // Personal collections only when logged in; guests 401 on these.
@@ -73,11 +77,13 @@ const Store = {
         this.recent = [];
       }
       this._rebuildMaps();
-      try {
-        const settings = await Api.getSettings();
-        this.downloadsEnabled = settings.downloads_enabled !== 'false';
-        this.waveformStyle = settings.waveform_style || 'rounded';
-      } catch(e) {}
+      if (Store.isAdmin) {
+        try {
+          const settings = await Api.getSettings();
+          this.downloadsEnabled = settings.downloads_enabled !== 'false';
+          this.waveformStyle = settings.waveform_style || 'rounded';
+        } catch(e) {}
+      }
       if (!this.isGuest) {
         try { this.reviewCounts = await Api.getReviewCounts(); } catch(e) {}
       }

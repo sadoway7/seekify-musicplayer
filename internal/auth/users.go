@@ -29,23 +29,36 @@ type rowScanner interface {
 	Scan(dest ...interface{}) error
 }
 
-const userCols = "id, username, password_hash, role, email, disabled, created_at"
+const userCols = "id, username, password_hash, role, email, disabled, status, created_at"
 
 func scanUser(s rowScanner) (*User, error) {
 	u := &User{}
 	var disabled int
 	var email sql.NullString
-	if err := s.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &email, &disabled, &u.CreatedAt); err != nil {
+	var status sql.NullString
+	if err := s.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &email, &disabled, &status, &u.CreatedAt); err != nil {
 		return nil, err
 	}
 	u.Disabled = disabled != 0
 	if email.Valid {
 		u.Email = email.String
 	}
+	if status.Valid && status.String != "" {
+		u.Status = status.String
+	} else {
+		u.Status = StatusActive
+	}
 	return u, nil
 }
 
 func CreateUser(username, password, role, email string) (*User, error) {
+	return CreateUserWithStatus(username, password, role, email, StatusActive)
+}
+
+// CreateUserWithStatus lets callers create a pending (awaiting approval) or
+// active user. Used by setup/admin-create (active) and self-registration
+// (active or pending depending on the admin's registration_mode setting).
+func CreateUserWithStatus(username, password, role, email, status string) (*User, error) {
 	if err := ValidateCredentials(username, password); err != nil {
 		return nil, err
 	}
@@ -53,13 +66,16 @@ func CreateUser(username, password, role, email string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
+	if status != StatusPending {
+		status = StatusActive
+	}
 	u := &User{
-		ID: newUserID(), Username: username, Role: role, Email: email,
+		ID: newUserID(), Username: username, Role: role, Email: email, Status: status,
 		CreatedAt: time.Now().Unix(), PasswordHash: hash,
 	}
 	_, err = store.DB.Exec(
-		`INSERT INTO users(id, username, password_hash, role, email, disabled, created_at) VALUES(?,?,?,?,?,?,?)`,
-		u.ID, u.Username, u.PasswordHash, u.Role, nullIfEmpty(u.Email), 0, u.CreatedAt,
+		`INSERT INTO users(id, username, password_hash, role, email, disabled, status, created_at) VALUES(?,?,?,?,?,?,?,?)`,
+		u.ID, u.Username, u.PasswordHash, u.Role, nullIfEmpty(u.Email), 0, u.Status, u.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -95,6 +111,15 @@ func CountAdmins() (int, error) {
 	var n int
 	err := store.DB.QueryRow(`SELECT COUNT(*) FROM users WHERE role=? AND disabled=0`, RoleAdmin).Scan(&n)
 	return n, err
+}
+
+// SetUserStatus flips a user between pending and active (registration approval).
+func SetUserStatus(id, status string) error {
+	if status != StatusPending {
+		status = StatusActive
+	}
+	_, err := store.DB.Exec(`UPDATE users SET status=? WHERE id=?`, status, id)
+	return err
 }
 
 // UserUpdate describes mutable fields. Only non-nil fields are applied.

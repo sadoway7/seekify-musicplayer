@@ -307,6 +307,8 @@ func main() {
 	mux.HandleFunc("/api/logout", handlers.LogoutHandler)
 	mux.HandleFunc("/api/me", handlers.MeHandler)
 	mux.HandleFunc("/api/users/me/password", auth.RequireUser(handlers.ChangeOwnPasswordHandler))
+	mux.HandleFunc("/api/registration", handlers.RegistrationModeHandler)
+	mux.HandleFunc("/api/register", handlers.RegisterHandler)
 	mux.HandleFunc("/api/files", handlers.RequireAdmin(handlers.FileListHandler))
 	mux.HandleFunc("/api/upload", handlers.RequireAdmin(handlers.UploadHandler))
 	mux.HandleFunc("/api/delete", handlers.RequireAdmin(handlers.DeleteFileHandler))
@@ -406,6 +408,7 @@ func main() {
 	}))
 	mux.HandleFunc("/api/admin/users/create", auth.RequireAdmin(handlers.AdminCreateUser))
 	mux.HandleFunc("/api/admin/users/", auth.RequireAdmin(handlers.AdminUserSubrouter))
+	mux.HandleFunc("/api/admin/registration", auth.RequireAdmin(handlers.AdminRegistrationSettingsHandler))
 	mux.HandleFunc("/api/admin/download-limits", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:

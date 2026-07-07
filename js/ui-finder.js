@@ -13,10 +13,11 @@ Object.assign(UI, {
     if (!this._finderTab) this._finderTab = 'search';
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
+    if (Store.isGuest && this._finderTab === 'bulk') this._finderTab = 'search';
     let html = '<div class="lib-sticky-header">'
       + '<div class="lib-tabs">'
       + '<button class="lib-tab' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Rip Search</button>'
-      + '<button class="lib-tab' + (this._finderTab === 'bulk' ? ' active' : '') + '" data-finder-tab="bulk">Bulk Import</button>'
+      + (Store.isGuest ? '' : '<button class="lib-tab' + (this._finderTab === 'bulk' ? ' active' : '') + '" data-finder-tab="bulk">Bulk Import</button>')
       + '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>'
       + '</div>'
       + (this._finderTab === 'downloads' ? '' : '');
@@ -663,6 +664,7 @@ Object.assign(UI, {
   },
 
   _pollDownloadBadge() {
+    if (Store.isGuest) return;
     Api.getQueueCounts().then(counts => {
       this._updateDownloadBadge(counts);
       const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);

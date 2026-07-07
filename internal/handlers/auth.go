@@ -72,6 +72,10 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
+	if u.Status != auth.StatusActive {
+		writeJSONError(w, http.StatusForbidden, "account pending approval")
+		return
+	}
 	tok, err := auth.CreateSession(u.ID, r.RemoteAddr, r.UserAgent())
 	if err != nil {
 		http.Error(w, "session error", http.StatusInternalServerError)

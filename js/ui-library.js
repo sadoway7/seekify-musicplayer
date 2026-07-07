@@ -5,9 +5,10 @@ Object.assign(UI, {
 
   renderLibrary() {
     this._viewTrackList = [];
+    if (Store.isGuest && this.libFilter === 'playlists') this.libFilter = 'albums';
     let html = '<div class="lib-sticky-header">'
       + '<div class="lib-tabs">'
-      + '<button class="lib-tab' + (this.libFilter === 'playlists' ? ' active' : '') + '" data-filter="playlists">Playlists</button>'
+      + (Store.isGuest ? '' : '<button class="lib-tab' + (this.libFilter === 'playlists' ? ' active' : '') + '" data-filter="playlists">Playlists</button>')
       + '<button class="lib-tab' + (this.libFilter === 'albums' ? ' active' : '') + '" data-filter="albums">Albums</button>'
       + '<button class="lib-tab' + (this.libFilter === 'artists' ? ' active' : '') + '" data-filter="artists">Artists</button>'
       + '</div>'
@@ -98,20 +99,24 @@ Object.assign(UI, {
       + '<div class="list-item-info"><div class="list-item-title">All Music</div>'
       + '<div class="list-item-subtitle">' + Store.library.tracks.length + ' songs</div></div></div>';
 
-    const reviewCount = Store.reviewCounts.needs_review || 0;
-    html += '<div class="list-item" data-action="needs-review" style="cursor:pointer">'
-      + '<div class="list-item-art" style="background:rgba(255,107,107,.1);display:flex;align-items:center;justify-content:center;color:#ff6b6b">'
-      + Icons.warning() + '</div>'
-      + '<div class="list-item-info"><div class="list-item-title" style="color:#ff6b6b">Needs Review</div>'
-      + '<div class="list-item-subtitle">' + reviewCount + ' tracks flagged</div></div></div>';
+    if (Store.isAdmin) {
+      const reviewCount = Store.reviewCounts.needs_review || 0;
+      html += '<div class="list-item" data-action="needs-review" style="cursor:pointer">'
+        + '<div class="list-item-art" style="background:rgba(255,107,107,.1);display:flex;align-items:center;justify-content:center;color:#ff6b6b">'
+        + Icons.warning() + '</div>'
+        + '<div class="list-item-info"><div class="list-item-title" style="color:#ff6b6b">Needs Review</div>'
+        + '<div class="list-item-subtitle">' + reviewCount + ' tracks flagged</div></div></div>';
+    }
 
-    html += '<div class="list-item" data-action="create-playlist" style="cursor:pointer">'
-      + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
-      + Icons.plus() + '</div>'
-      + '<div class="list-item-info"><div class="list-item-title" style="color:var(--accent)">Create Playlist</div></div></div>';
+    if (!Store.isGuest) {
+      html += '<div class="list-item" data-action="create-playlist" style="cursor:pointer">'
+        + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
+        + Icons.plus() + '</div>'
+        + '<div class="list-item-info"><div class="list-item-title" style="color:var(--accent)">Create Playlist</div></div></div>';
+    }
 
     if (Store.playlists.length === 0) {
-      html += this._emptyState('No playlists yet', 'Create a playlist to organize your music', Icons.library());
+      html += this._emptyState('No playlists yet', Store.isGuest ? 'Log in to create and save playlists' : 'Create a playlist to organize your music', Icons.library());
     } else {
       Store.playlists.forEach(p => {
         const firstTrack = p.trackIds.map(tid => Store.getTrack(tid)).find(Boolean);
@@ -422,6 +427,7 @@ Object.assign(UI, {
   },
 
   async renderNeedsReview() {
+    if (!Store.isAdmin) { this.navigateTo('albums'); return; }
     this._viewTrackList = [];
     this._reviewOffset = 0;
     this._reviewTotal = 0;

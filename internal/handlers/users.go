@@ -67,6 +67,10 @@ func AdminUserSubrouter(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.HasSuffix(r.URL.Path, "/password") && r.Method == http.MethodPost:
 		adminResetPassword(w, r, id)
+	case strings.HasSuffix(r.URL.Path, "/approve") && r.Method == http.MethodPost:
+		adminApproveUser(w, r, id)
+	case strings.HasSuffix(r.URL.Path, "/reject") && r.Method == http.MethodPost:
+		adminRejectUser(w, r, id)
 	case r.Method == http.MethodPut:
 		adminUpdateUser(w, r, id)
 	case r.Method == http.MethodDelete:
@@ -141,6 +145,25 @@ func adminDeleteUser(w http.ResponseWriter, r *http.Request, id string) {
 			return
 		}
 	}
+	auth.DeleteSessionsForUser(id)
+	if err := auth.DeleteUser(id); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// adminApproveUser activates a pending registration so the user can log in.
+func adminApproveUser(w http.ResponseWriter, r *http.Request, id string) {
+	if err := auth.SetUserStatus(id, auth.StatusActive); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// adminRejectUser deletes a pending registration (and any stray sessions).
+func adminRejectUser(w http.ResponseWriter, r *http.Request, id string) {
 	auth.DeleteSessionsForUser(id)
 	if err := auth.DeleteUser(id); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())

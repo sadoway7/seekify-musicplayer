@@ -46,11 +46,15 @@ Object.assign(UI, {
     };
 
     Store.refreshLibrary().then(scheduleHomeRender);
-    Store.refreshRecent().then(scheduleHomeRender);
-    Api.getReviewCounts().then(counts => {
-      Store.reviewCounts = counts;
-      scheduleHomeRender();
-    }).catch(() => {});
+    if (!Store.isGuest) {
+      Store.refreshRecent().then(scheduleHomeRender);
+    }
+    if (Store.isAdmin) {
+      Api.getReviewCounts().then(counts => {
+        Store.reviewCounts = counts;
+        scheduleHomeRender();
+      }).catch(() => {});
+    }
   },
 
   _renderHomeContent() {
@@ -62,11 +66,12 @@ Object.assign(UI, {
       + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
       + '<div class="home-menu-label">Options</div>'
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
-      + '<div class="home-menu-divider"></div>'
-      + '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>'
+      + (Store.isGuest ? '' : '<div class="home-menu-divider"></div>'
+        + '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Settings</span></div>')
       + '<div class="home-menu-divider"></div>'
       + (Store.isGuest
           ? '<div class="home-menu-item" data-action="login">' + Icons.circle() + '<span>Log in</span></div>'
+            + (Store.registrationMode !== 'off' ? '<div class="home-menu-item" data-action="register">' + Icons.plus() + '<span>Register</span></div>' : '')
           : '<div class="home-menu-item" data-action="logout">' + Icons.circle() + '<span>Log out (' + (Store.user.username || '') + ')</span></div>')
       + '</div>'
       + '</div>'
@@ -238,6 +243,7 @@ Object.assign(UI, {
   },
 
   _homeNeedsReview() {
+    if (!Store.isAdmin) return '';
     const reviewCount = Store.reviewCounts.needs_review || 0;
     if (reviewCount === 0) return '';
     let html = '<div class="home-review-card" data-action="needs-review">'
@@ -322,6 +328,8 @@ Object.assign(UI, {
           this._openHomepageLayoutModal();
         } else if (action === 'login') {
           this.showLoginScreen();
+        } else if (action === 'register') {
+          this._showAuthOverlay('register');
         } else if (action === 'logout') {
           this._logout();
         }

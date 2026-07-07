@@ -7,8 +7,12 @@ Object.assign(UI, {
   async renderSettings() {
     this._viewTrackList = [];
 
-    if (!Store.user || Store.user.role !== 'admin') {
+    if (!Store.user) {
       this._renderSettingsLocked();
+      return;
+    }
+    if (Store.user.role !== 'admin') {
+      this._renderUserSettings();
       return;
     }
 
@@ -30,6 +34,7 @@ Object.assign(UI, {
       + '<button class="lib-tab" data-settings-tab="downloads">Downloads</button>'
       + '<button class="lib-tab" data-settings-tab="library">Library</button>'
       + '<button class="lib-tab" data-settings-tab="tasks">Tasks</button>'
+      + '<button class="lib-tab" data-settings-tab="users">Users</button>'
       + '<button class="lib-tab" data-settings-tab="about">About</button>'
       + '</div>';
 
@@ -214,6 +219,48 @@ Object.assign(UI, {
       + '</div>'
       + '</div>';
 
+    // --- Tab: Users (admin) ---
+    html += '<div class="settings-tab-panel" data-panel="users">'
+      + '<div class="settings-subsection-label">Registration</div>'
+      + '<div class="settings-section-desc">Control whether new people can create their own accounts.</div>'
+      + '<div class="settings-field"><label>Sign-up mode</label>'
+      + '<select id="reg-mode" class="settings-select">'
+        + '<option value="off">Off — no public sign-ups</option>'
+        + '<option value="self_service">Self-service — accounts activate instantly</option>'
+        + '<option value="approval">Approval required — admin approves each sign-up</option>'
+      + '</select></div>'
+      + '<div class="settings-field"><label>Default role for new accounts</label>'
+      + '<select id="reg-role" class="settings-select">'
+        + '<option value="user">user</option>'
+        + '<option value="admin">admin</option>'
+      + '</select></div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-registration">' + Icons.check() + '<span>Save</span></button>'
+      + '<span id="reg-msg" class="settings-status"></span>'
+      + '</div>'
+
+      + '<div class="settings-subsection-label" style="margin-top:28px">Create user</div>'
+      + '<form id="adm-create-form">'
+      + '<div class="settings-field"><label>Username</label>'
+      + '<input id="adm-username" class="settings-input" placeholder="username" autocomplete="off"></div>'
+      + '<div class="settings-field"><label>Password</label>'
+      + '<input id="adm-password" class="settings-input" type="password" placeholder="password" autocomplete="new-password"></div>'
+      + '<div class="settings-field"><label>Email (optional)</label>'
+      + '<input id="adm-email" class="settings-input" placeholder="email"></div>'
+      + '<div class="settings-field"><label>Role</label>'
+      + '<select id="adm-role" class="settings-select">'
+        + '<option value="user">user</option>'
+        + '<option value="admin">admin</option>'
+      + '</select></div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button type="submit" class="settings-btn settings-btn-primary" id="btn-admin-create-user">' + Icons.plus() + '<span>Create user</span></button>'
+      + '</div>'
+      + '</form>'
+
+      + '<div class="settings-subsection-label" style="margin-top:28px">All users</div>'
+      + '<div id="admin-users-list" class="settings-status">Loading users...</div>'
+      + '</div>';
+
     // --- Tab: About ---
     html += '<div class="settings-tab-panel" data-panel="about">'
       + '<div class="settings-about">'
@@ -301,8 +348,163 @@ Object.assign(UI, {
       wfSaveBtn.addEventListener('click', () => this._saveWaveformStyle());
     }
 
+    // Users tab (admin only): load registration settings + user list, bind actions.
+    if (Store.isAdmin) {
+      this._initUsersTab();
+    }
+
     this._paintWaveformPreview();
 
+  },
+
+  // ── Users tab (admin) ──
+
+  _initUsersTab() {
+    Api.adminGetRegistration().then(s => {
+      const m = document.getElementById('reg-mode');
+      if (m) m.value = (s && s.mode) || 'off';
+      const r = document.getElementById('reg-role');
+      if (r) r.value = (s && s.default_role) || 'user';
+    }).catch(() => {});
+    const saveReg = document.getElementById('btn-save-registration');
+    if (saveReg) saveReg.addEventListener('click', () => this._saveRegistration());
+    const createForm = document.getElementById('adm-create-form');
+    if (createForm) createForm.addEventListener('submit', (e) => { e.preventDefault(); this._adminCreateUser(); });
+    this._loadAdminUsers();
+  },
+
+  _saveRegistration() {
+    const mode = (document.getElementById('reg-mode') || {}).value || 'off';
+    const role = (document.getElementById('reg-role') || {}).value || 'user';
+    Api.adminPutRegistration(mode, role)
+      .then(() => this._setRegMsg('reg-msg', 'Saved', false))
+      .catch(err => this._setRegMsg('reg-msg', (err && err.message) || 'Failed to save', true));
+  },
+
+  _loadAdminUsers() {
+    const list = document.getElementById('admin-users-list');
+    if (!list) return;
+    list.textContent = 'Loading users...';
+    Api.adminListUsers()
+      .then(data => this._renderAdminUsers((data && data.users) || []))
+      .catch(() => { list.textContent = 'Failed to load users'; });
+  },
+
+  _renderAdminUsers(users) {
+    const list = document.getElementById('admin-users-list');
+    if (!list) return;
+    if (!users.length) { list.innerHTML = '<div>No users</div>'; return; }
+    list.innerHTML = users.map(u => {
+      const pending = u.status === 'pending';
+      const badge = pending ? 'pending' : (u.disabled ? 'disabled' : 'active');
+      const badgeStyle = 'font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap;'
+        + (pending ? 'background:rgba(212,240,64,.15);color:var(--accent)'
+          : u.disabled ? 'background:rgba(201,64,64,.15);color:var(--danger)'
+          : 'background:rgba(255,255,255,.06);color:var(--text3)');
+      let actions = '';
+      if (pending) {
+        actions += '<button class="settings-btn" data-adm-action="approve" data-id="' + u.id + '">Approve</button>'
+          + '<button class="settings-btn" data-adm-action="reject" data-id="' + u.id + '">Reject</button>';
+      } else {
+        actions += '<button class="settings-btn" data-adm-action="toggle" data-id="' + u.id + '" data-disabled="' + (u.disabled ? 1 : 0) + '">' + (u.disabled ? 'Enable' : 'Disable') + '</button>';
+      }
+      actions += '<button class="settings-btn" data-adm-action="reset" data-id="' + u.id + '">Reset PW</button>'
+        + '<button class="settings-btn" data-adm-action="delete" data-id="' + u.id + '">Delete</button>';
+      const roleSel = pending
+        ? '<span class="settings-select" style="display:inline-block;min-width:60px">' + this._esc(u.role || 'user') + '</span>'
+        : '<select class="settings-select" data-adm-action="role" data-id="' + u.id + '" style="max-width:90px">'
+          + '<option value="user"' + (u.role === 'user' ? ' selected' : '') + '>user</option>'
+          + '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>admin</option>'
+          + '</select>';
+      return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border)">'
+        + roleSel
+        + '<span style="font-weight:600">' + this._esc(u.username) + '</span>'
+        + (u.email ? '<span style="color:var(--text3);font-size:13px">' + this._esc(u.email) + '</span>' : '')
+        + '<span style="' + badgeStyle + '">' + badge + '</span>'
+        + '<div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap">' + actions + '</div>'
+        + '</div>';
+    }).join('');
+
+    list.querySelectorAll('[data-adm-action]').forEach(el => {
+      const action = el.dataset.admAction;
+      const id = el.dataset.id;
+      if (action === 'role') {
+        el.addEventListener('change', () => this._adminUpdateUser(id, { role: el.value }));
+      } else {
+        el.addEventListener('click', () => this._handleUserAction(action, id, el));
+      }
+    });
+  },
+
+  _handleUserAction(action, id, el) {
+    if (action === 'approve') return this._adminApprove(id);
+    if (action === 'reject') return this._adminReject(id);
+    if (action === 'delete') return this._adminDelete(id);
+    if (action === 'reset') return this._adminReset(id);
+    if (action === 'toggle') {
+      const disabled = el.dataset.disabled === '1';
+      return this._adminUpdateUser(id, { disabled: !disabled });
+    }
+  },
+
+  _adminCreateUser() {
+    const username = ((document.getElementById('adm-username') || {}).value || '').trim();
+    const password = (document.getElementById('adm-password') || {}).value || '';
+    const email = ((document.getElementById('adm-email') || {}).value || '').trim();
+    const role = (document.getElementById('adm-role') || {}).value || 'user';
+    if (!username || !password) { this._setRegMsg('reg-msg', 'Username and password are required', true); return; }
+    Api.adminCreateUser({ username, password, role, email })
+      .then(() => {
+        const u = document.getElementById('adm-username'); if (u) u.value = '';
+        const p = document.getElementById('adm-password'); if (p) p.value = '';
+        const e = document.getElementById('adm-email'); if (e) e.value = '';
+        this._setRegMsg('reg-msg', 'User created', false);
+        this._loadAdminUsers();
+      })
+      .catch(err => this._setRegMsg('reg-msg', (err && err.message) || 'Create failed', true));
+  },
+
+  _adminUpdateUser(id, patch) {
+    Api.adminUpdateUser(id, patch)
+      .then(() => this._loadAdminUsers())
+      .catch(err => UI.showToast((err && err.message) || 'Update failed'));
+  },
+
+  _adminDelete(id) {
+    if (!confirm('Delete this user? This cannot be undone.')) return;
+    Api.adminDeleteUser(id)
+      .then(() => this._loadAdminUsers())
+      .catch(err => UI.showToast((err && err.message) || 'Delete failed'));
+  },
+
+  _adminReset(id) {
+    const pw = prompt('New password (min 8 chars):');
+    if (!pw) return;
+    Api.adminResetPassword(id, pw)
+      .then(() => UI.showToast('Password reset'))
+      .catch(err => UI.showToast((err && err.message) || 'Reset failed'));
+  },
+
+  _adminApprove(id) {
+    Api.adminApproveUser(id)
+      .then(() => this._loadAdminUsers())
+      .catch(err => UI.showToast((err && err.message) || 'Approve failed'));
+  },
+
+  _adminReject(id) {
+    if (!confirm('Reject and delete this pending registration?')) return;
+    Api.adminRejectUser(id)
+      .then(() => this._loadAdminUsers())
+      .catch(err => UI.showToast((err && err.message) || 'Reject failed'));
+  },
+
+  _setRegMsg(id, text, isError) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = text; el.style.color = isError ? 'var(--danger)' : 'var(--accent)'; }
+  },
+
+  _esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   },
 
   _stoggleOn(id, on) {
@@ -929,6 +1131,70 @@ Object.assign(UI, {
     if (link) link.addEventListener('click', (e) => { e.preventDefault(); this.showLoginScreen(); });
   },
 
+  _renderUserSettings() {
+    let html = '<div class="page-header">'
+      + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
+    html += '<div class="lib-tabs" id="settings-tabs">'
+      + '<button class="lib-tab active" data-settings-tab="account">Account</button>'
+      + '<button class="lib-tab" data-settings-tab="about">About</button>'
+      + '</div>';
+    html += '<div class="settings-tab-content" id="settings-tab-content">';
+    html += '<div class="settings-tab-panel active" data-panel="account">'
+      + '<div class="settings-section-desc">Signed in as <strong>' + this._esc(Store.user.username || '') + '</strong></div>'
+      + '<div class="settings-subsection-label" style="margin-top:16px">Change Password</div>'
+      + '<div class="settings-field"><label>Current Password</label>'
+      + '<input type="password" id="user-pw-current" class="settings-input" autocomplete="current-password" placeholder="current password"></div>'
+      + '<div class="settings-field"><label>New Password</label>'
+      + '<input type="password" id="user-pw-new" class="settings-input" autocomplete="new-password" placeholder="new password"></div>'
+      + '<div class="settings-actions" style="margin-top:8px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-user-change-pw">' + Icons.check() + '<span>Update Password</span></button>'
+      + '</div>'
+      + '<div id="user-pw-msg" class="settings-section-desc" style="margin-top:8px;font-size:12px;min-height:16px"></div>'
+      + '</div>';
+    html += '<div class="settings-tab-panel" data-panel="about">'
+      + '<div class="settings-about">'
+      + '<img class="settings-about-logo" src="/icon.png" alt="">'
+      + '<div class="settings-about-name">Seekify</div>'
+      + '<div class="settings-about-tag" style="color:var(--text3);font-size:13px">Personal music library</div>'
+      + '</div></div>';
+    html += '</div>';
+    this.els.content.innerHTML = html;
+
+    this.els.content.querySelectorAll('[data-settings-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.settingsTab;
+        this.els.content.querySelectorAll('[data-settings-tab]').forEach(t => t.classList.remove('active'));
+        this.els.content.querySelectorAll('.settings-tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        const panel = this.els.content.querySelector('[data-panel="' + target + '"]');
+        if (panel) panel.classList.add('active');
+      });
+    });
+
+    const pwBtn = document.getElementById('btn-user-change-pw');
+    if (pwBtn) pwBtn.addEventListener('click', () => this._changeOwnPassword());
+  },
+
+  async _changeOwnPassword() {
+    const cur = (document.getElementById('user-pw-current') || {}).value || '';
+    const nw = (document.getElementById('user-pw-new') || {}).value || '';
+    const msg = document.getElementById('user-pw-msg');
+    if (!cur || !nw) { if (msg) { msg.textContent = 'Fill in both fields'; msg.style.color = '#ff6b6b'; } return; }
+    try {
+      const res = await Api.changePassword(cur, nw);
+      if (res && res.ok) {
+        if (msg) { msg.textContent = 'Password updated'; msg.style.color = '#22c55e'; }
+        document.getElementById('user-pw-current').value = '';
+        document.getElementById('user-pw-new').value = '';
+      } else {
+        const d = res && res.data;
+        if (msg) { msg.textContent = (d && (d.error || d.message)) || 'Failed to update'; msg.style.color = '#ff6b6b'; }
+      }
+    } catch (e) {
+      if (msg) { msg.textContent = 'Failed to update'; msg.style.color = '#ff6b6b'; }
+    }
+  },
+
   async _loadMetadataStatus() {
     const statusEl = document.getElementById('metadata-status');
     if (!statusEl) return;
@@ -1047,7 +1313,7 @@ Object.assign(UI, {
 
     let html = '<div class="hl-hint">Drag to reorder</div>';
     html += '<div class="hl-sections" id="hl-sections">';
-    layout.forEach((s, i) => {
+    layout.filter(s => Store.isAdmin || s.id !== 'needs-review').forEach((s, i) => {
       html += '<div class="hl-section' + (s.enabled ? ' hl-enabled' : '') + '" data-section-id="' + s.id + '" data-index="' + i + '">'
         + '<div class="hl-row">'
         + '<div class="hl-drag" aria-label="Drag to reorder">' + Icons.grip() + '</div>'

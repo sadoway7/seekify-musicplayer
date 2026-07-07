@@ -23,16 +23,23 @@
   <link rel="stylesheet" href="css/review.css?v=20260702g">
   <link rel="stylesheet" href="css/ripperv2.css?v=20260702g">
   <style>
-    .auth-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px}
+    .auth-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:10000;padding:24px}
     .auth-overlay.hidden{display:none}
-    .auth-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:28px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-    .auth-card h2{margin:0 0 4px;font-size:20px;color:#fff;font-weight:700}
-    .auth-card p.auth-sub{margin:0 0 20px;font-size:13px;color:#888}
-    .auth-card input{width:100%;box-sizing:border-box;background:#0e0e0e;border:1px solid #2a2a2a;border-radius:8px;padding:11px 13px;color:#eee;font-size:14px;margin-bottom:10px;outline:none}
-    .auth-card input:focus{border-color:#4a9eff}
-    .auth-card button.auth-submit{width:100%;padding:12px;border:none;border-radius:8px;background:#4a9eff;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
-    .auth-card button.auth-submit:disabled{opacity:.6;cursor:default}
-    .auth-card .auth-error{color:#ff6b6b;font-size:12px;margin:8px 0 0;min-height:14px}
+    .auth-card{width:100%;max-width:360px;text-align:center}
+    .auth-logo{width:72px;height:72px;border-radius:16px;margin:0 auto 24px;display:block;box-shadow:var(--shadow-deep)}
+    .auth-card h2{margin:0 0 6px;font-size:24px;color:var(--text-primary);font-weight:700;letter-spacing:-0.02em}
+    .auth-card p.auth-sub{margin:0 0 24px;font-size:14px;color:var(--text-secondary)}
+    .auth-card input{width:100%;box-sizing:border-box;background:var(--l1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 15px;color:var(--text-primary);font-family:var(--ff);font-size:15px;margin-bottom:10px;outline:none;transition:border-color .15s}
+    .auth-card input:focus{border-color:var(--accent)}
+    .auth-card input::placeholder{color:var(--text-muted)}
+    .auth-card button.auth-submit{width:100%;padding:14px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:var(--bg);font-family:var(--ff);font-size:15px;font-weight:700;cursor:pointer;transition:background .15s}
+    .auth-card button.auth-submit:hover{background:var(--accent-hover)}
+    .auth-card button.auth-submit:disabled{opacity:.5;cursor:default}
+    .auth-card .auth-error{color:var(--danger);font-size:13px;margin:10px 0 0;min-height:16px}
+    .auth-card .auth-error.success{color:var(--accent)}
+    .auth-card button.auth-cancel{width:100%;padding:12px;margin-top:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-secondary);font-family:var(--ff);font-size:14px;cursor:pointer}
+    .auth-card button.auth-cancel:hover{background:var(--l1)}
+    .auth-card .auth-mode-switch{display:inline-block;margin-top:14px;font-size:13px;color:var(--accent);text-decoration:none;cursor:pointer}
     .auth-chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#ccc;cursor:pointer;padding:4px 10px;border-radius:6px;background:rgba(255,255,255,.06)}
     .auth-chip:hover{background:rgba(255,255,255,.12)}
   </style>
@@ -41,15 +48,20 @@
   <div id="app">
     <div id="auth-overlay" class="auth-overlay hidden">
       <div class="auth-card">
+        <img class="auth-logo" src="/icon.png" alt="Seekify">
         <h2 id="auth-title">Log in</h2>
-        <p class="auth-sub" id="auth-sub">Welcome back.</p>
-        <input id="auth-username" placeholder="username" autocomplete="username" autocapitalize="off">
-        <input id="auth-password" type="password" placeholder="password" autocomplete="current-password">
-        <div id="auth-email-wrap" class="hidden">
-          <input id="auth-email" placeholder="email (optional)" autocomplete="email">
-        </div>
-        <button id="auth-submit" class="auth-submit">Log in</button>
-        <p class="auth-error" id="auth-error"></p>
+        <p class="auth-sub" id="auth-sub"></p>
+        <form id="auth-form">
+          <input id="auth-username" placeholder="username" autocomplete="username" autocapitalize="off">
+          <input id="auth-password" type="password" placeholder="password" autocomplete="current-password">
+          <div id="auth-email-wrap" class="hidden">
+            <input id="auth-email" placeholder="email (optional)" autocomplete="email">
+          </div>
+          <button id="auth-submit" class="auth-submit">Log in</button>
+          <button type="button" id="auth-cancel" class="auth-cancel hidden">Cancel</button>
+          <a id="auth-mode-switch" href="#" class="auth-mode-switch hidden"></a>
+          <p class="auth-error" id="auth-error"></p>
+        </form>
       </div>
     </div>
     <header id="app-header"></header>
@@ -400,19 +412,19 @@
   </div>
 
   <script src="js/icons.js?v=20260702"></script>
-  <script src="js/api.js?v=20260706"></script>
+  <script src="js/api.js?v=20260708"></script>
   <script src="js/player.js?v=20260702e"></script>
-  <script src="js/store.js?v=20260706"></script>
-  <script src="js/review.js?v=20260702"></script>
-  <script src="js/ui.js?v=20260706"></script>
+  <script src="js/store.js?v=20260709"></script>
+  <script src="js/review.js?v=20260708"></script>
+  <script src="js/ui.js?v=20260709"></script>
   <script src="js/ui-waveform.js?v=20260702"></script>
   <script src="js/ui-context-menus.js?v=20260702"></script>
-  <script src="js/ui-settings.js?v=20260706"></script>
-  <script src="js/ui-finder.js?v=20260702"></script>
-  <script src="js/ui-library.js?v=20260702"></script>
-  <script src="js/ui-home.js?v=20260706"></script>
+  <script src="js/ui-settings.js?v=20260708"></script>
+  <script src="js/ui-finder.js?v=20260708"></script>
+  <script src="js/ui-library.js?v=20260708"></script>
+  <script src="js/ui-home.js?v=20260709"></script>
   <script src="js/ui-player-chrome.js?v=20260702"></script>
   <script src="js/ripperv2.js?v=20260702"></script>
-  <script src="js/app.js?v=20260706"></script>
+  <script src="js/app.js?v=20260707"></script>
 </body>
 </html>
