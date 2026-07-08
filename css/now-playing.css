@@ -239,6 +239,8 @@
 ::view-transition-new(viz-disc) {
   animation: viz-disc-in 0.35s ease-out forwards;
 }
+::view-transition-old(root) { animation: none; }
+::view-transition-new(root) { animation: none; }
 
 /* Small album-art thumbnail shown over the top-left of the viz disc so the
    cover isn't fully lost while the visualizer runs. */
