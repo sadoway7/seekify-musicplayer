@@ -122,7 +122,6 @@
   border-radius: 50%;
   box-shadow: 0 24px 48px -12px rgba(0,0,0,0.7);
   will-change: transform;
-  z-index: 2;
   /* ponytail: parent .np-artwork is pointer-events:none (letterbox passes
      through). Re-enable on the disc so the swipe-down touchstart bubbles up
      to the .np-artwork listener. Pseudos below stay none. */
@@ -241,14 +240,16 @@
    (click → album art). Viz-off → live mini sphere (click → viz). Crossfades. */
 .np-corner-toggle {
   position: absolute;
-  top: 6%;
-  left: 6%;
+  top: 50%;
+  right: 4%;
+  left: auto;
+  transform: translateY(-50%);
   width: 38%;
   min-width: 52px;
   max-width: 80px;
   aspect-ratio: 1;
   border-radius: 50%;
-  z-index: 1;
+  z-index: 5;
   pointer-events: auto;
   padding: 0;
   border: none;
@@ -259,7 +260,6 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.12);
-  transition: top 0.15s ease, left 0.15s ease, width 0.15s ease, opacity 0s, z-index 0s;
 }
 
 .np-viz-thumb {
@@ -286,19 +286,6 @@
 
 .now-playing.viz-on .np-viz-thumb { opacity: 1; }
 .now-playing.viz-on .np-corner-viz-canvas { opacity: 0; }
-
-.now-playing.viz-on .np-corner-toggle {
-  z-index: 5;
-  top: 10px;
-  left: 0%;
-  opacity: 1;
-  width: 42%; min-width: 58px; max-width: 88px;
-  transition: top 0.15s ease, left 0.15s ease, width 0.15s ease, opacity 0.15s ease, z-index 0s 0.07s;
-}
-.now-playing:not(.viz-on) .np-corner-toggle {
-  opacity: 0.8;
-  width: 34%; min-width: 48px; max-width: 70px;
-}
 
 .np-info {
   position: relative;
