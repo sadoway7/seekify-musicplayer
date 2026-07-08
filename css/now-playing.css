@@ -242,8 +242,16 @@
   }
 }
 
-/* Corner toggle: floats over the disc top-left. Viz-on → shows album art
-   thumbnail (click → album art). Viz-off → shows mini viz icon (click → viz). */
+/* Disc frame: shrink-wraps the spinning disc so the corner toggle positions
+   relative to the disc itself, not the larger .np-artwork flex container. */
+.np-disc-frame {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+/* Corner toggle: floats over the disc top-left. Viz-on → album art thumb
+   (click → album art). Viz-off → animated mini bars (click → viz). Crossfades. */
 .np-corner-toggle {
   position: absolute;
   top: 4%;
@@ -267,22 +275,40 @@
 }
 
 .np-viz-thumb {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
 .np-corner-viz-icon {
+  position: absolute;
   width: 48%;
   height: 48%;
   color: rgba(255,255,255,0.7);
+  transition: opacity 0.3s ease;
 }
 
-.now-playing.viz-on .np-viz-thumb { display: block; }
-.now-playing.viz-on .np-corner-viz-icon { display: none; }
-.now-playing:not(.viz-on) .np-viz-thumb { display: none; }
-.now-playing:not(.viz-on) .np-corner-viz-icon { display: block; }
+.np-corner-viz-icon rect {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+.now-playing:not(.viz-on) .np-corner-viz-icon rect:nth-child(1) { animation: miniVizBar 0.7s ease-in-out infinite alternate; }
+.now-playing:not(.viz-on) .np-corner-viz-icon rect:nth-child(2) { animation: miniVizBar 0.5s ease-in-out infinite alternate 0.1s; }
+.now-playing:not(.viz-on) .np-corner-viz-icon rect:nth-child(3) { animation: miniVizBar 0.6s ease-in-out infinite alternate 0.05s; }
+.now-playing:not(.viz-on) .np-corner-viz-icon rect:nth-child(4) { animation: miniVizBar 0.45s ease-in-out infinite alternate 0.15s; }
+
+@keyframes miniVizBar {
+  from { transform: scaleY(0.3); }
+  to { transform: scaleY(1.2); }
+}
+
+.now-playing.viz-on .np-viz-thumb { opacity: 1; }
+.now-playing.viz-on .np-corner-viz-icon { opacity: 0; }
 
 .np-info {
   position: relative;

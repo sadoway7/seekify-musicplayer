@@ -13,7 +13,7 @@ const Visualizer = {
 precision highp float;
 uniform float iTime;
 uniform vec2 iResolution;
-uniform float uBass, uMid, uTreble, uLevel;
+uniform float uBass, uMidLow, uMidHigh, uTreble, uLevel;
 uniform vec3 uAlbumColor;
 out vec4 fragColor;
 
@@ -33,9 +33,10 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 float map(vec3 p){
   float r = 1.0 + 1.3*uBass + 0.08*uLevel;
   float d = length(p) - r;
-  float disp = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.15)) - 0.5) * (0.05 + uMid*0.8);
-  float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.8, 5.3)) - 0.5) * 0.18 * uTreble;
-  return d + disp + detail;
+  float dispLow = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.10)) - 0.5) * (0.05 + uMidLow*0.8);
+  float dispHigh = (fbm(p*2.8 + vec3(4.2, 9.6, iTime*0.20)) - 0.5) * (0.04 + uMidHigh*0.5);
+  float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.4, 5.3)) - 0.5) * 0.18 * uTreble;
+  return d + dispLow + dispHigh + detail;
 }
 vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
   return normalize(vec3(map(p+e.xyy)-map(p-e.xyy), map(p+e.yxy)-map(p-e.yxy), map(p+e.yyx)-map(p-e.yyx)));
@@ -71,7 +72,7 @@ void main(){
   col = (col - 0.5) * 1.2 + 0.5;
   col = clamp(col, 0.0, 1.0);
   col = 1.0 - exp(-col * 1.1);
-  float sh = pow(smoothstep(0.35, 0.95, fbm(vec3(uv * 1.5 + iTime * 0.08, iTime * 0.15))), 2.0) * (0.04 + uLevel * 0.14 + uBass * 0.08);
+  float sh = pow(smoothstep(0.35, 0.95, fbm(vec3(uv * 1.5 + iTime * 0.05, iTime * 0.10))), 2.0) * (0.04 + uLevel * 0.14 + uBass * 0.08);
   col += col * sh + C * sh * 0.3;
   col = clamp(col, 0.0, 1.0);
   float scan = 0.95 + 0.05 * sin(gl_FragCoord.y * 1.5 + iTime * 4.0);
@@ -90,7 +91,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   state: -1,        // -1 = off, >=0 = shader index
   gl: null,
   _audioReady: false,
-  _bands: { bass: 0, mid: 0, treble: 0, level: 0 },
+  _bands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
   _color: null,
 
   init() {
@@ -110,6 +111,18 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const corner = document.getElementById('np-corner-toggle');
     if (corner) corner.addEventListener('click', () => this.cycle());
     this._applyVisualState();
+    // Safety net: if viz is on + now-playing visible but the loop died or
+    // never rendered, restart it. Catches deep links, delayed layout, and
+    // any path that doesn't explicitly call onShowNowPlaying.
+    setInterval(() => {
+      if (this.state < 0) return;
+      const np = document.getElementById('now-playing');
+      if (!np || np.classList.contains('hidden')) return;
+      if (this._raf == null || (this._lastRender && performance.now() - this._lastRender > 2000)) {
+        this._stop();
+        this._start();
+      }
+    }, 1000);
   },
 
   cycle() {
@@ -176,7 +189,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
           iTime: gl.getUniformLocation(prog, 'iTime'),
           iResolution: gl.getUniformLocation(prog, 'iResolution'),
           uBass: gl.getUniformLocation(prog, 'uBass'),
-          uMid: gl.getUniformLocation(prog, 'uMid'),
+          uMidLow: gl.getUniformLocation(prog, 'uMidLow'),
+          uMidHigh: gl.getUniformLocation(prog, 'uMidHigh'),
           uTreble: gl.getUniformLocation(prog, 'uTreble'),
           uLevel: gl.getUniformLocation(prog, 'uLevel'),
           uAlbumColor: gl.getUniformLocation(prog, 'uAlbumColor')
@@ -256,14 +270,15 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (!wrap || wrap.clientWidth < 2) return;
     this._resize();
 
-    let b = 0, m = 0, tr = 0;
+    let b = 0, ml = 0, mh = 0, tr = 0;
     if (this._analyser && !(Player.audio && Player.audio.seeking)) {
       this._analyser.getByteFrequencyData(this._freq);
       for (let i = 0; i < 12; i++) b += this._freq[i];
-      for (let i = 12; i < 64; i++) m += this._freq[i];
-      for (let i = 64; i < 200; i++) tr += this._freq[i];
-      b /= 12 * 255; m /= 52 * 255; tr /= 136 * 255;
-      b = Math.max(0, Math.min(1, b * 2.5 - 0.01)); m = Math.max(0, Math.min(1, m * 1.3 - 0.01)); tr = Math.max(0, Math.min(1, tr * 2.2 - 0.01));
+      for (let i = 12; i < 40; i++) ml += this._freq[i];
+      for (let i = 40; i < 72; i++) mh += this._freq[i];
+      for (let i = 72; i < 200; i++) tr += this._freq[i];
+      b /= 12 * 255; ml /= 28 * 255; mh /= 32 * 255; tr /= 128 * 255;
+      b = Math.max(0, Math.min(1, b * 2.5 - 0.01)); ml = Math.max(0, Math.min(1, ml * 1.4 - 0.01)); mh = Math.max(0, Math.min(1, mh * 1.2 - 0.01)); tr = Math.max(0, Math.min(1, tr * 2.2 - 0.01));
     }
     // asymmetric: fast attack (punch on the beat), slower release (shape holds)
     const follow = (cur, prev, atk, rel) => {
@@ -272,9 +287,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       return prev + (cur - prev) * dynRel;
     };
     this._bands.bass = follow(b, this._bands.bass, 0.9, 0.18);
-    this._bands.mid = follow(m, this._bands.mid, 0.5, 0.22);
-    this._bands.treble = follow(tr, this._bands.treble, 0.85, 0.3);
-    const lvl = (this._bands.bass + this._bands.mid + this._bands.treble) / 3;
+    this._bands.midLow = follow(ml, this._bands.midLow, 0.5, 0.27);
+    this._bands.midHigh = follow(mh, this._bands.midHigh, 0.55, 0.27);
+    this._bands.treble = follow(tr, this._bands.treble, 0.78, 0.3);
+    const lvl = (this._bands.bass + this._bands.midLow + this._bands.midHigh + this._bands.treble) / 4;
     this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
 
     // Live color: sample the cover dominant color (same-origin #np-art),
@@ -299,11 +315,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     gl.uniform1f(p.loc.iTime, (performance.now() / 1000) - this._t0);
     gl.uniform2f(p.loc.iResolution, this.canvas.width, this.canvas.height);
     gl.uniform1f(p.loc.uBass, this._bands.bass);
-    gl.uniform1f(p.loc.uMid, this._bands.mid);
+    gl.uniform1f(p.loc.uMidLow, this._bands.midLow);
+    gl.uniform1f(p.loc.uMidHigh, this._bands.midHigh);
     gl.uniform1f(p.loc.uTreble, this._bands.treble);
     gl.uniform1f(p.loc.uLevel, this._bands.level);
     gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this._lastRender = performance.now();
   },
 
   // Called by UI._applyNowPlayingBg when a cover's dominant color is computed
