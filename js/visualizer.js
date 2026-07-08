@@ -31,11 +31,11 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 // ripples the displacement. Color is uAlbumColor, now fed by the working
 // self-sampling pipeline (_sampleCoverColor), so it tracks the cover.
 float map(vec3 p){
-  float r = 1.0 + 1.3*uBass + 0.08*uLevel;
+  float r = 1.0 + 1.5*uBass + 0.08*uLevel;
   float d = length(p) - r;
-  float dispLow = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.08)) - 0.5) * (0.05 + uMidLow*0.65);
-  float dispHigh = (fbm(p*2.8 + vec3(4.2, 9.6, iTime*0.12)) - 0.5) * (0.04 + uMidHigh*0.5);
-  float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.4, 5.3)) - 0.5) * 0.18 * uTreble;
+  float dispLow = (fbm(p*2.0 + vec3(11.3, 7.7, iTime*0.08)) - 0.5) * (0.03 + uMidLow*0.3);
+  float dispHigh = (fbm(p*3.2 + vec3(4.2, 9.6, iTime*0.12)) - 0.5) * (0.02 + uMidHigh*0.2);
+  float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.4, 5.3)) - 0.5) * 0.22 * uTreble;
   return d + dispLow + dispHigh + detail;
 }
 vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
@@ -84,6 +84,30 @@ void main(){
     }
   ],
 
+  MINI_FRAGMENT: `#version 300 es
+precision highp float;
+uniform float iTime;
+uniform vec2 iResolution;
+uniform float uBass, uMidLow, uMidHigh, uTreble, uLevel;
+uniform vec3 uAlbumColor;
+out vec4 fragColor;
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
+  vec3 C = uAlbumColor;
+  float radius = 0.25 + uBass * 0.10 + uLevel * 0.03;
+  float angle = atan(uv.y, uv.x);
+  float ripple = sin(angle * 6.0 + iTime * 1.5) * uMidLow * 0.025
+               + sin(angle * 10.0 - iTime * 2.0) * uMidHigh * 0.018;
+  float d = length(uv) + ripple;
+  float disk = smoothstep(radius + 0.015, radius - 0.015, d);
+  float shade = 1.0 - smoothstep(0.0, radius, d) * 0.5;
+  float rim = pow(max(1.0 - d / radius, 0.0), 0.5) * 0.3;
+  float halo = exp(-pow(max(d - radius, 0.0) * 8.0, 2.0)) * (0.25 + uLevel * 0.35);
+  vec3 col = C * disk * shade + C * rim * disk + C * halo * 0.6 + C * uTreble * 0.2 * disk;
+  fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`,
+
   VERT: `#version 300 es
 in vec2 aPos;
 void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
@@ -100,7 +124,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._miniCanvas = document.getElementById('np-corner-viz-canvas');
     if (this._miniCanvas) {
       this._miniCanvas.width = this._miniCanvas.height = 128;
-      this._miniCtx = this._miniCanvas.getContext('2d');
     }
     this.btn = document.querySelector('.np-viz-btn');
     try {
@@ -224,6 +247,36 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     } catch (e) { console.warn('[viz] audio init failed:', e); }
   },
 
+  _ensureMiniGL() {
+    if (this._miniGL) return true;
+    if (!this._miniCanvas) return false;
+    const gl = this._miniCanvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false });
+    if (!gl) return false;
+    this._miniGL = gl;
+    const mk = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+    const vs = mk(gl.VERTEX_SHADER, this.VERT);
+    const fs = mk(gl.FRAGMENT_SHADER, this.MINI_FRAGMENT);
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    this._miniProg = prog;
+    this._miniLoc = {
+      aPos: gl.getAttribLocation(prog, 'aPos'),
+      iTime: gl.getUniformLocation(prog, 'iTime'),
+      iResolution: gl.getUniformLocation(prog, 'iResolution'),
+      uBass: gl.getUniformLocation(prog, 'uBass'),
+      uMidLow: gl.getUniformLocation(prog, 'uMidLow'),
+      uMidHigh: gl.getUniformLocation(prog, 'uMidHigh'),
+      uTreble: gl.getUniformLocation(prog, 'uTreble'),
+      uLevel: gl.getUniformLocation(prog, 'uLevel'),
+      uAlbumColor: gl.getUniformLocation(prog, 'uAlbumColor')
+    };
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    this._miniVbuf = buf;
+    return true;
+  },
+
   // Kick the render loop only. The loop self-heals GL/audio/canvas-size each
   // frame (the old eager init here bailed permanently on a transient first-open
   // hiccup, leaving a blank canvas until the user toggled off→on).
@@ -276,8 +329,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       return prev + (cur - prev) * dynRel;
     };
     this._bands.bass = follow(b, this._bands.bass, 0.9, 0.18);
-    this._bands.midLow = follow(ml, this._bands.midLow, 0.5, 0.35);
-    this._bands.midHigh = follow(mh, this._bands.midHigh, 0.55, 0.27);
+    this._bands.midLow = follow(ml, this._bands.midLow, 0.5, 0.30);
+    this._bands.midHigh = follow(mh, this._bands.midHigh, 0.55, 0.22);
     this._bands.treble = follow(tr, this._bands.treble, 0.78, 0.3);
     const lvl = (this._bands.bass + this._bands.midLow + this._bands.midHigh + this._bands.treble) / 4;
     this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
@@ -314,26 +367,35 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       gl.uniform1f(p.loc.uLevel, this._bands.level);
       gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-    } else if (this._miniCtx) {
-      const ctx = this._miniCtx, w = this._miniCanvas.width, h = this._miniCanvas.height;
-      const cx = w / 2, cy = h / 2;
-      ctx.clearRect(0, 0, w, h);
-      const r = Math.round(cr * 255), g = Math.round(cg * 255), b2 = Math.round(cb * 255);
-      const haloR = w * (0.42 + this._bands.level * 0.12);
-      const halo = ctx.createRadialGradient(cx, cy, w * 0.15, cx, cy, haloR);
-      halo.addColorStop(0, `rgba(${r},${g},${b2},0.35)`);
-      halo.addColorStop(1, `rgba(${r},${g},${b2},0)`);
-      ctx.fillStyle = halo;
-      ctx.fillRect(0, 0, w, h);
-      const orbR = w * (0.22 + this._bands.bass * 0.14);
-      const orb = ctx.createRadialGradient(cx - orbR * 0.3, cy - orbR * 0.3, 0, cx, cy, orbR);
-      orb.addColorStop(0, `rgba(${Math.min(255,r+50)},${Math.min(255,g+50)},${Math.min(255,b2+50)},1)`);
-      orb.addColorStop(0.6, `rgba(${r},${g},${b2},0.95)`);
-      orb.addColorStop(1, `rgba(${r},${g},${b2},0.25)`);
-      ctx.fillStyle = orb;
-      ctx.beginPath();
-      ctx.arc(cx, cy, orbR, 0, Math.PI * 2);
-      ctx.fill();
+    } else if (this._miniCanvas && this._ensureMiniGL()) {
+      let mb = 0, mml = 0, mmh = 0, mtr = 0;
+      if (this._freq) {
+        for (let i = 2; i < 6; i++) mb += this._freq[i];
+        for (let i = 6; i < 35; i++) mml += this._freq[i];
+        for (let i = 35; i < 93; i++) mmh += this._freq[i];
+        for (let i = 93; i < Math.min(232, this._freq.length); i++) mtr += this._freq[i];
+        mb = Math.max(0, Math.min(1, mb / (4 * 255) * 1.5));
+        mml = Math.max(0, Math.min(1, mml / (29 * 255) * 1.3));
+        mmh = Math.max(0, Math.min(1, mmh / (58 * 255) * 1.2));
+        mtr = Math.max(0, Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 1.8));
+      }
+      const mlvl = (mb + mml + mmh + mtr) / 4;
+      const gl = this._miniGL;
+      const w = this._miniCanvas.width, h = this._miniCanvas.height;
+      gl.viewport(0, 0, w, h);
+      gl.useProgram(this._miniProg);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this._miniVbuf);
+      gl.enableVertexAttribArray(this._miniLoc.aPos);
+      gl.vertexAttribPointer(this._miniLoc.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform1f(this._miniLoc.iTime, (performance.now() / 1000) - this._t0);
+      gl.uniform2f(this._miniLoc.iResolution, w, h);
+      gl.uniform1f(this._miniLoc.uBass, mb);
+      gl.uniform1f(this._miniLoc.uMidLow, mml);
+      gl.uniform1f(this._miniLoc.uMidHigh, mmh);
+      gl.uniform1f(this._miniLoc.uTreble, mtr);
+      gl.uniform1f(this._miniLoc.uLevel, mlvl);
+      gl.uniform3f(this._miniLoc.uAlbumColor, cr, cg, cb);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     this._lastRender = performance.now();
   },
