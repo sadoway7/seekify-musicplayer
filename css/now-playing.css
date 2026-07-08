@@ -285,7 +285,7 @@
   border-radius: 50%;
   transition: opacity 0.3s ease;
   opacity: 1;
-  filter: contrast(1.35) saturate(1.4);
+  filter: blur(2px) contrast(1.25) saturate(1.4);
 }
 
 .now-playing.viz-on .np-viz-thumb { opacity: 1; }

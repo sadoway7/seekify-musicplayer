@@ -360,8 +360,8 @@
   }
 
   .np-corner-toggle {
-    top: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.04) !important;
-    left: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.04) !important;
+    top: calc(50% - var(--disc-size) / 2 - var(--disc-size) * 0.02) !important;
+    left: calc(50% - var(--disc-size) / 2 - var(--disc-size) * 0.02) !important;
   }
 
   .np-art-wrapper {
@@ -369,8 +369,8 @@
     width: var(--disc-size) !important;
     height: auto !important;
     aspect-ratio: 1 / 1;
-    max-height: 50vh;
-    max-width: 80%;
+    max-height: 53vh;
+    max-width: 84%;
     opacity: 1 !important;
     border-radius: 50% !important;
     flex-shrink: 0;
@@ -642,8 +642,8 @@
   }
 
   .np-art-wrapper {
-    max-width: 480px;
-    max-height: 50vh;
+    max-width: 504px;
+    max-height: 53vh;
   }
 
   .np-play-main {
@@ -670,8 +670,8 @@
   }
 
   .np-art-wrapper {
-    max-width: 480px;
-    max-height: 50vh;
+    max-width: 504px;
+    max-height: 53vh;
   }
 
   .np-header {
