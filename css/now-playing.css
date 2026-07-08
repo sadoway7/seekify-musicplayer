@@ -195,27 +195,29 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── Visualizer (#3) ── canvas swaps into the disc frame when viz is on */
+/* ── Visualizer (#3) ── canvas crossfades into the disc frame when viz is on */
 #np-viz-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  display: none;
+  opacity: 0;
   z-index: 3;
   pointer-events: none;
   box-shadow: inset 0 0 50px 15px rgba(0,0,0,0.75);
   filter: saturate(1.25) brightness(1.1);
+  transition: opacity 0.5s ease;
 }
 
 .now-playing.viz-on #np-viz-canvas {
-  display: block;
+  opacity: 1;
 }
 
 .now-playing.viz-on #np-art,
 .now-playing.viz-on #np-art-bg {
   opacity: 0 !important;
+  transition: opacity 0.5s ease !important;
 }
 
 .now-playing.viz-on.playing .np-art-wrapper {
