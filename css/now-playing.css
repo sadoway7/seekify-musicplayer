@@ -257,7 +257,7 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.12);
-  transition: top 0.15s ease, left 0.15s ease, width 0.15s ease, z-index 0s 0.07s;
+  transition: top 0.15s ease, left 0.15s ease, width 0.15s ease, opacity 0.15s ease, z-index 0s 0.07s;
 }
 
 .np-viz-thumb {
@@ -280,7 +280,6 @@
   transition: opacity 0.15s ease;
   opacity: 1;
   filter: saturate(1.15);
-  opacity: 0.85;
 }
 
 .now-playing.viz-on .np-viz-thumb { opacity: 1; }
@@ -290,9 +289,11 @@
   z-index: 5;
   top: -3%;
   left: -3%;
+  opacity: 1;
   width: 42%; min-width: 58px; max-width: 88px;
 }
 .now-playing:not(.viz-on) .np-corner-toggle {
+  opacity: 0.55;
   width: 34%; min-width: 48px; max-width: 70px;
 }
 
