@@ -59,6 +59,8 @@ Object.assign(UI, {
       this._lastArtTrackId = track.id;
       this._lastArtAlbumId = track.albumID;
       this._lastArtSrc = newSrc;
+      const thumb = document.getElementById('np-viz-thumb');
+      if (thumb) thumb.src = newSrc;
       const art = this.els.npArt;
       const bg = this.els.npArtBg;
       if (!this.els.nowPlaying.classList.contains('hidden') && art.src && !art.src.endsWith('/') && art.src !== newSrc) {
@@ -469,6 +471,8 @@ Object.assign(UI, {
       const r = Math.round(rSum / count);
       const g = Math.round(gSum / count);
       const b = Math.round(bSum / count);
+
+      if (window.Visualizer) Visualizer.setColor(r / 255, g / 255, b / 255);
 
       glow.style.backgroundColor = 'rgba(' + r + ',' + g + ',' + b + ',0.45)';
       glow.classList.add('active');

@@ -27,7 +27,7 @@ float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
 float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*noise(p); p = p*2.02; a *= 0.5; } return v; }
 
 float map(vec3 p){
-  float r = 1.0 + 0.45*uBass + 0.08*uLevel;
+  float r = 1.0 + 0.9*uBass + 0.1*uLevel;
   float d = length(p) - r;
   float disp = (fbm(p*1.5 + vec3(0.0, 0.0, iTime*0.3)) - 0.5) * (0.18 + uMid*0.8 + uBass*0.35);
   return d + disp;
@@ -40,28 +40,27 @@ void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
   vec3 ro = vec3(0.0, 0.0, -3.2);
   vec3 rd = normalize(vec3(uv, 1.6));
-  vec3 C = uAlbumColor; // locked to cover color
-  vec3 col = C*0.05 + vec3(0.01);
+  vec3 C = uAlbumColor;
+  vec3 col = C*0.04;
   float t = 0.0, glow = 0.0;
   bool hit = false;
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 96; i++) {
     vec3 p = ro + rd*t;
     float d = map(p);
     if (d < 0.001) { hit = true; break; }
     if (t > 6.0) break;
-    glow += exp(-max(d, 0.0)*4.5) * 0.02;
+    glow += exp(-max(d, 0.0)*5.0) * 0.013;
     t += d;
   }
   if (hit) {
     vec3 p = ro + rd*t;
     vec3 n = calcNormal(p);
-    float fres = pow(1.0 - max(dot(n, -rd), 0.0), 2.5);
-    float diff = 0.4 + 0.6*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
-    vec3 surf = C * diff * (0.85 + 0.6*uTreble);
-    col = surf + fres * (C + vec3(0.18)) * (1.0 + uLevel*1.6);
+    float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
+    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.22;
+    col = C*diff + rim*(C + vec3(0.08));
   }
-  col += C * glow * (0.7 + uLevel*2.2);
-  col = pow(clamp(col, 0.0, 1.0), vec3(0.85));
+  col += C * glow * (0.3 + uLevel*0.6);
+  col = clamp(col, 0.0, 1.0);
   fragColor = vec4(col, 1.0);
 }`
     }
@@ -75,6 +74,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   gl: null,
   _audioReady: false,
   _bands: { bass: 0, mid: 0, treble: 0, level: 0 },
+  _color: null,
 
   init() {
     this.canvas = document.getElementById('np-viz-canvas');
@@ -109,7 +109,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     else this._stop();
   },
 
-  onShowNowPlaying() { if (this.state >= 0) this._start(); },
+  onShowNowPlaying() {
+    if (this.state < 0) return;
+    // Defer one frame: now-playing was just un-hidden, so the canvas hasn't
+    // been laid out yet. Initializing GL / reading clientWidth synchronously
+    // gave a 0-size canvas and a blank render (only fixed by toggling off→on).
+    requestAnimationFrame(() => this._start());
+  },
   onHideNowPlaying() { this._stop(); },
 
   // --- GL lifecycle ---
@@ -166,7 +172,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const src = actx.createMediaElementSource(Player.audio);
       const an = actx.createAnalyser();
       an.fftSize = 1024;
-      an.smoothingTimeConstant = 0.55;
+      an.smoothingTimeConstant = 0.3;
       src.connect(an);
       an.connect(actx.destination);
       this._actx = actx;
@@ -205,6 +211,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
 
   _loop() {
     const gl = this.gl;
+    const wrap = this.canvas.parentElement;
+    if (!wrap || wrap.clientWidth < 2) { this._raf = requestAnimationFrame(() => this._loop()); return; }
     this._resize();
 
     let b = 0, m = 0, tr = 0;
@@ -214,24 +222,18 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       for (let i = 8; i < 64; i++) m += this._freq[i];
       for (let i = 64; i < 200; i++) tr += this._freq[i];
       b /= 8 * 255; m /= 56 * 255; tr /= 136 * 255;
-      b = Math.min(1, b * 1.5); m = Math.min(1, m * 1.4); tr = Math.min(1, tr * 1.5);
+      b = Math.min(1, b * 2.5); m = Math.min(1, m * 1.4); tr = Math.min(1, tr * 1.5);
     }
     // asymmetric: fast attack (punch on the beat), slower release (shape holds)
     const follow = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
-    this._bands.bass = follow(b, this._bands.bass, 0.55, 0.18);
+    this._bands.bass = follow(b, this._bands.bass, 0.85, 0.15);
     this._bands.mid = follow(m, this._bands.mid, 0.45, 0.25);
     this._bands.treble = follow(tr, this._bands.treble, 0.6, 0.3);
     const lvl = (this._bands.bass + this._bands.mid + this._bands.treble) / 3;
     this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
 
     let cr = 0.83, cg = 0.94, cb = 0.25;
-    if (window.UI && UI._albumColor && UI._albumColor.h != null) {
-      const ac = UI._albumColor;
-      const vibS = Math.min(100, ac.s + 35);
-      const vibL = Math.min(65, Math.max(45, ac.l + 10));
-      const rgb = this._hslToRgb(ac.h, vibS, vibL);
-      cr = rgb[0]; cg = rgb[1]; cb = rgb[2];
-    }
+    if (this._color) { cr = this._color[0]; cg = this._color[1]; cb = this._color[2]; }
 
     const p = this._programs[this.state];
     gl.useProgram(p.prog);
@@ -250,12 +252,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._raf = requestAnimationFrame(() => this._loop());
   },
 
-  // h: 0..360, s/l: 0..100 → [r,g,b] 0..1
-  _hslToRgb(h, s, l) {
-    s /= 100; l /= 100;
-    const k = function (n) { return (n + h / 30) % 12; };
-    const a = s * Math.min(l, 1 - l);
-    const f = function (n) { return l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); };
-    return [f(0), f(8), f(4)];
+  // Called by UI._applyNowPlayingBg when a cover's dominant color is computed
+  // (push, not poll) — fires on every album change so the viz retints immediately.
+  // r,g,b in 0..1. Lift so the brightest channel >= 0.55: keeps dark covers
+  // visible without shifting hue (uniform scale).
+  setColor(r, g, b) {
+    const mx = Math.max(r, g, b);
+    const k = mx > 0 ? Math.max(0.55 / mx, 1) : 1;
+    this._color = [Math.min(1, r*k), Math.min(1, g*k), Math.min(1, b*k)];
   }
 };
