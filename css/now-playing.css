@@ -236,9 +236,42 @@
   }
 }
 
-.np-viz-btn.active {
-  color: var(--accent);
+.np-viz-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  padding: 0;
+  flex-shrink: 0;
 }
+.np-viz-btn.active {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.np-viz-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.np-corner-viz-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  transition: opacity 0.2s ease;
+  opacity: 1;
+}
+
+.now-playing.viz-on .np-viz-thumb { opacity: 1; }
+.now-playing.viz-on .np-corner-viz-canvas { opacity: 0; }
 
 .np-info {
   position: relative;
