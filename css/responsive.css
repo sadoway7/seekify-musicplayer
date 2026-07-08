@@ -112,7 +112,7 @@
     transform: var(--mini-tx);
     margin: 0;
     height: 80px;
-    background: rgba(10, 11, 10, 0.75);
+    background: rgba(10, 11, 10, 0.7) !important;
     backdrop-filter: blur(24px) saturate(1.4);
     -webkit-backdrop-filter: blur(24px) saturate(1.4);
     box-shadow:
@@ -131,8 +131,8 @@
   }
 
   .mini-progress::after {
-    height: 3px;
-    opacity: 0.35;
+    height: 5px;
+    opacity: 0.6;
   }
 
   .mini-player-inner {

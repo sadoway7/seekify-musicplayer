@@ -37,8 +37,12 @@ Object.assign(UI, {
 
     const playingChanged = this._miniWasPlaying !== undefined && this._miniWasPlaying !== Player.playing;
     this._miniWasPlaying = Player.playing;
-    this.els.miniPlayBtn.innerHTML = Player.playing ? Icons.pause() : Icons.play();
-    if (playingChanged) this._popIcon(this.els.miniPlayBtn);
+    // updateMiniPlayer runs on timeupdate (~4x/s); rewrite only on state flip
+    // so innerHTML churn doesn't drop clicks landing mid-reflow.
+    if (playingChanged || !this.els.miniPlayBtn.innerHTML) {
+      this.els.miniPlayBtn.innerHTML = Player.playing ? Icons.pause() : Icons.play();
+      if (playingChanged) this._popIcon(this.els.miniPlayBtn);
+    }
 
     const progress = Player.getProgress();
     this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
