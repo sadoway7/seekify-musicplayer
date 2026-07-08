@@ -356,7 +356,7 @@
   }
 
   .np-artwork {
-    --disc-size: min(480px, 50vh, 80%);
+    --disc-size: min(504px, 53vh, 84%);
   }
 
   .np-corner-toggle {
@@ -365,7 +365,7 @@
   }
 
   .np-art-wrapper {
-    --disc-size: min(480px, 50vh, 80%);
+    --disc-size: min(504px, 53vh, 84%);
     width: var(--disc-size) !important;
     height: auto !important;
     aspect-ratio: 1 / 1;
