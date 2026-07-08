@@ -238,15 +238,15 @@
 
 .np-viz-btn {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   overflow: hidden;
   padding: 0;
   flex-shrink: 0;
 }
 .np-viz-btn.active {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: none;
 }
 
 .np-viz-thumb {
