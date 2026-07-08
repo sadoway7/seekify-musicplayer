@@ -130,11 +130,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (this.btn) this.btn.addEventListener('click', () => this.cycle());
     const disc = document.querySelector('.np-artwork');
     if (disc) disc.addEventListener('click', (e) => {
-      if (e.target.closest('.np-float-tray') || e.target.closest('.np-review-overlay') || e.target.closest('#np-corner-toggle')) return;
+      if (e.target.closest('.np-float-tray') || e.target.closest('.np-review-overlay')) return;
       this.cycle();
     });
-    const corner = document.getElementById('np-corner-toggle');
-    if (corner) corner.addEventListener('click', () => this.cycle());
     this._applyVisualState();
     // Safety net: if viz is on + now-playing visible but the loop died or
     // never rendered, restart it. Catches deep links, delayed layout, and

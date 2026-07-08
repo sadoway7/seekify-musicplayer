@@ -134,6 +134,9 @@
           </button>
           <div class="np-header-text"></div>
           <div class="np-header-right">
+            <button class="np-btn np-viz-btn" aria-label="Toggle visualizer">
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="3" y="10" width="3" height="4" rx="1.5"/><rect x="8" y="7" width="3" height="10" rx="1.5"/><rect x="13" y="9" width="3" height="6" rx="1.5"/><rect x="18" y="6" width="3" height="12" rx="1.5"/></svg>
+            </button>
             <button class="np-btn np-more" aria-label="More">
               <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
             </button>
@@ -145,10 +148,8 @@
             <img id="np-art" src="" alt="">
             <canvas id="np-viz-canvas"></canvas>
           </div>
-          <button id="np-corner-toggle" class="np-corner-toggle" aria-label="Toggle visualizer">
-            <img id="np-viz-thumb" class="np-viz-thumb" alt="">
-            <canvas id="np-corner-viz-canvas" class="np-corner-viz-canvas"></canvas>
-          </button>
+          <img id="np-viz-thumb" alt="" style="display:none">
+          <canvas id="np-corner-viz-canvas" style="display:none"></canvas>
           <div class="np-float-tray">
             <div class="np-float-pill">
               <button id="np-like-btn" class="np-btn np-like-btn" aria-label="Like">

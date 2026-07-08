@@ -359,13 +359,6 @@
     --disc-size: min(504px, 53vh, 84%);
   }
 
-  .np-corner-toggle {
-    top: calc(50% - var(--disc-size) / 2) !important;
-    right: calc(50% - var(--disc-size) / 2) !important;
-    left: auto !important;
-    transform: none !important;
-  }
-
   .np-art-wrapper {
     --disc-size: min(504px, 53vh, 84%);
     width: var(--disc-size) !important;
