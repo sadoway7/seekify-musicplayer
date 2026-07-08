@@ -228,11 +228,11 @@
    cover isn't fully lost while the visualizer runs. */
 .np-viz-thumb {
   position: absolute;
-  top: 6%;
-  left: 6%;
-  width: 30%;
-  min-width: 42px;
-  max-width: 64px;
+  top: 4%;
+  left: 4%;
+  width: 33%;
+  min-width: 46px;
+  max-width: 70px;
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
