@@ -112,6 +112,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   _audioReady: false,
   _bands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
   _miniBands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
+  _miniFloor: { bass: 0, midLow: 0, midHigh: 0, treble: 0 },
   _color: null,
 
   init() {
@@ -378,15 +379,15 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         mmh = Math.pow(Math.min(1, mmh / (58 * 255) * 1.0), 0.65);
         mtr = Math.pow(Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 1.5), 0.65);
       }
-      const mf = (cur, prev, atk, rel) => {
-        if (prev > 0.8) prev -= (prev - 0.8) * 0.18;
-        if (cur > prev) return prev + (cur - prev) * atk;
-        return prev + (cur - prev) * rel;
+      const af = (raw, key) => {
+        this._miniFloor[key] = this._miniFloor[key] * 0.96 + raw * 0.04;
+        return Math.min(1, Math.max(0, raw - this._miniFloor[key] * 0.75) * 2.5);
       };
-      this._miniBands.bass = mf(mb, this._miniBands.bass, 0.7, 0.10);
-      this._miniBands.midLow = mf(mml, this._miniBands.midLow, 0.5, 0.14);
-      this._miniBands.midHigh = mf(mmh, this._miniBands.midHigh, 0.55, 0.16);
-      this._miniBands.treble = mf(mtr, this._miniBands.treble, 0.7, 0.18);
+      const mf = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
+      this._miniBands.bass = mf(af(mb, 'bass'), this._miniBands.bass, 0.7, 0.12);
+      this._miniBands.midLow = mf(af(mml, 'midLow'), this._miniBands.midLow, 0.5, 0.15);
+      this._miniBands.midHigh = mf(af(mmh, 'midHigh'), this._miniBands.midHigh, 0.55, 0.17);
+      this._miniBands.treble = mf(af(mtr, 'treble'), this._miniBands.treble, 0.7, 0.19);
       const mlvl = (this._miniBands.bass + this._miniBands.midLow + this._miniBands.midHigh + this._miniBands.treble) / 4;
       this._miniBands.level = mf(mlvl, this._miniBands.level, 0.5, 0.12);
       const gl = this._miniGL;
