@@ -33,26 +33,34 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 // domain; the edgeless falloff keeps the silhouette soft.
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
-  vec3 ro = vec3(0.0, 0.0, -3.0);
-  vec3 rd = normalize(vec3(uv, 1.5));
+  vec3 ro = vec3(0.0, 0.0, -3.2);
+  vec3 rd = normalize(vec3(uv, 1.6));
   vec3 C = uAlbumColor;
-  float t = 0.2, trans = 1.0;
-  vec3 col = C*0.02;
-  for (int i = 0; i < 60; i++) {
+  // Front-to-back volumetric accumulation. Emission is scaled by the step
+  // size (dt) and transmittance decays via Beer-Lambert, so the accumulated
+  // color is stable across STEPS/dt. The final exponential tone map keeps
+  // dense regions glowing without ever clipping to flat white — the previous
+  // version scaled emission without dt and used a hard clamp, so ~60 steps
+  // accumulated to C*2+ and saturated to white even at idle.
+  const int STEPS = 64;
+  const float dt = 0.06;
+  float trans = 1.0;
+  vec3 col = vec3(0.0);
+  float t = 0.1;
+  for (int i = 0; i < STEPS; i++) {
     vec3 p = ro + rd*t;
-    float fall = exp(-dot(p,p)*0.55);
-    float field = fbm(p*1.5 + vec3(iTime*0.12, uMid*1.4, iTime*0.2));
-    float dens = fall * field * (0.7 + uBass*1.6 + uLevel*0.3);
-    if (dens > 0.002) {
-      col += C * dens * (0.45 + uLevel*0.7) * trans;
-      trans *= exp(-dens*0.22);
+    float fall = exp(-dot(p,p)*0.5);
+    float field = fbm(p*1.3 + vec3(iTime*0.10, uMid*1.3, iTime*0.18));
+    float dens = fall * field * (0.55 + uBass*1.5);
+    if (dens > 0.003) {
+      vec3 emit = C * (0.5 + 0.5*field) * (0.8 + uLevel*1.2);
+      col += trans * dens * dt * emit * 3.0;
+      trans *= exp(-dens * dt * 2.2);   // Beer-Lambert absorption
     }
-    t += 0.075;
+    t += dt;
     if (trans < 0.02) break;
   }
-  col += C * uBass * 0.18;     // beat bloom
-  col += C * uTreble * 0.08;   // high sparkle
-  col = clamp(col, 0.0, 1.0);
+  col = 1.0 - exp(-col * 1.1);   // tone map: bounded, never flat white
   fragColor = vec4(col, 1.0);
 }`
     }
@@ -197,20 +205,26 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _loop() {
-    // Self-healing init: ensure GL + a compiled program for the current shader
-    // every frame. A transient failure on first open (canvas not laid out, GL
-    // context not ready) used to leave the viz blank permanently.
-    if (!this._ensureGL() || !this._programs || !this._programs[this.state]) {
-      this._raf = requestAnimationFrame(() => this._loop());
-      return;
-    }
+    // Scheduler: always re-arms the next frame even if _frame throws, so a
+    // transient first-open error can't permanently kill the render loop
+    // (which left a blank canvas until the user toggled off→on).
+    try { this._frame(); }
+    catch (e) { console.warn('[viz] frame error:', e); }
+    this._raf = requestAnimationFrame(() => this._loop());
+  },
+
+  _frame() {
+    // Self-healing init every frame: GL + a compiled program for the current
+    // shader. A transient failure on first open (canvas not laid out, GL not
+    // ready) just skips this frame and retries next frame.
+    if (!this._ensureGL() || !this._programs || !this._programs[this.state]) return;
     this._ensureAudio();
     if (this._actx && this._actx.state === 'suspended') this._actx.resume();
     if (this._t0 == null) this._t0 = performance.now() / 1000;
 
     const gl = this.gl;
     const wrap = this.canvas.parentElement;
-    if (!wrap || wrap.clientWidth < 2) { this._raf = requestAnimationFrame(() => this._loop()); return; }
+    if (!wrap || wrap.clientWidth < 2) return;
     this._resize();
 
     let b = 0, m = 0, tr = 0;
@@ -256,8 +270,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     gl.uniform1f(p.loc.uLevel, this._bands.level);
     gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    this._raf = requestAnimationFrame(() => this._loop());
   },
 
   // Called by UI._applyNowPlayingBg when a cover's dominant color is computed
