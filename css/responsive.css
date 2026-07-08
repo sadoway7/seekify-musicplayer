@@ -360,8 +360,8 @@
   }
 
   .np-corner-toggle {
-    top: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.06) !important;
-    left: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.06) !important;
+    top: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.10) !important;
+    left: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.10) !important;
   }
 
   .now-playing.viz-on .np-corner-toggle {
