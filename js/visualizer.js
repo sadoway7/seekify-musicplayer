@@ -252,12 +252,14 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // Ceiling: O(n) per frame, n=512. State: two Float32Array(512) on this.
   _preprocessFreq() {
     // ---- tunables ----
-    const SILENCE = 4;      // raw byte below this → bin forced dark, pipeline skipped
-    const TAU     = 2.0;    // moving-average time constant (s)
-    const GAMMA   = 1.8;    // expansion exponent (>1 widens small deviations)
-    const GAIN    = 1.6;    // linear gain after expansion
-    const ATTACK  = 0.6;    // per-frame coefficient when rising  (fast attack)
-    const RELEASE = 0.08;   // per-frame coefficient when falling (slow release)
+    const SILENCE  = 4;      // raw byte below this → bin output forced dark
+    const TAU      = 2.0;    // moving-average time constant (s)
+    const DEADZONE = 0.008;  // normalized dev below this → target 0 (kills noise flicker)
+    const GAMMA    = 1.8;    // expansion exponent (>1 widens small deviations)
+    const GAIN     = 1.6;    // linear gain after expansion
+    const FLOOR    = 0.12;   // blend weight of raw level (keeps loud sustains faintly lit)
+    const ATTACK   = 0.6;    // per-frame coefficient when rising  (fast attack)
+    const RELEASE  = 0.08;   // per-frame coefficient when falling (slow release)
     // ------------------
     const f = this._freq;
     const n = f.length;
@@ -277,17 +279,27 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const invGamma = 1 / GAMMA;
     for (let i = 0; i < n; i++) {
       const raw = f[i];
-      if (raw < SILENCE) { f[i] = 0; continue; }            // silence gate
+      if (raw < SILENCE) {
+        this._fpAvg[i] += (raw - this._fpAvg[i]) * a;        // keep baseline tracking through silence
+        f[i] = 0;                                            // only output forced dark
+        continue;
+      }
       this._fpAvg[i] += (raw - this._fpAvg[i]) * a;          // slow per-bin average
       let dev = (raw - this._fpAvg[i]) / 255;                // signed deviation, ~[-1,1]
       if (dev < 0) dev = 0;                                  // negative excursions stay dark
-      const expanded = Math.pow(dev, invGamma) * GAIN;       // gamma-expand + gain
-      const clamped = expanded > 1 ? 1 : expanded;           // clamp 0..1
+      let target;
+      if (dev < DEADZONE) {
+        target = 0;                                          // dead-zone: noise → target 0
+      } else {
+        target = Math.pow(dev - DEADZONE, invGamma) * GAIN;  // gamma-expand + gain
+        if (target > 1) target = 1;
+      }
       const prev = this._fpOut[i];
-      const k = clamped > prev ? ATTACK : RELEASE;           // fast-attack / slow-release
-      const sm = prev + (clamped - prev) * k;
+      const k = target > prev ? ATTACK : RELEASE;            // fast-attack / slow-release
+      const sm = prev + (target - prev) * k;
       this._fpOut[i] = sm;
-      f[i] = (sm * 255) | 0;                                 // write back as 0..255 int
+      const blend = FLOOR * (raw / 255) + (1 - FLOOR) * sm;  // floor keeps loud sustains faintly lit
+      f[i] = blend >= 1 ? 255 : (blend * 255) | 0;           // write back as 0..255 int
     }
   },
 
