@@ -22,7 +22,12 @@ const App = {
           try {
             await Api.addRecent(track.id);
             await Store.refreshRecent();
-          } catch (err) {}
+            console.log('[recent-debug] saved', track.id, '| count', Store.recent.length, '| top3', Store.recent.slice(0,3));
+          } catch (err) {
+            console.log('[recent-debug] FAILED', track.id, err.message);
+          }
+        } else {
+          console.log('[recent-debug] skipped (guest) for', track.id);
         }
       }
     };
