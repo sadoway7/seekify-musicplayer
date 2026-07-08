@@ -96,15 +96,12 @@ void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
   vec3 C = uAlbumColor;
   float radius = 0.25 + uBass * 0.10 + uLevel * 0.03;
-  float angle = atan(uv.y, uv.x);
-  float ripple = sin(angle * 6.0 + iTime * 1.5) * uMidLow * 0.025
-               + sin(angle * 10.0 - iTime * 2.0) * uMidHigh * 0.018;
-  float d = length(uv) + ripple;
+  float d = length(uv);
   float disk = smoothstep(radius + 0.015, radius - 0.015, d);
   float shade = 1.0 - smoothstep(0.0, radius, d) * 0.5;
   float rim = pow(max(1.0 - d / radius, 0.0), 0.5) * 0.3;
   float halo = exp(-pow(max(d - radius, 0.0) * 8.0, 2.0)) * (0.25 + uLevel * 0.35);
-  vec3 col = C * disk * shade + C * rim * disk + C * halo * 0.6 + C * uTreble * 0.2 * disk;
+  vec3 col = C * disk * shade + C * rim * disk + C * halo * 0.6 + C * (uTreble * 0.2 + uMidLow * 0.1) * disk;
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`,
 
