@@ -8,7 +8,7 @@ const Visualizer = {
   // Each fragment shader MUST begin with `#version 300 es`.
   SHADERS: [
     {
-      name: 'plasma',
+      name: 'spheres',
       fragment: `#version 300 es
 precision highp float;
 uniform float iTime;
@@ -26,41 +26,45 @@ float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
 }
 float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*noise(p); p = p*2.02; a *= 0.5; } return v; }
 
-// Volumetric plasma: front-to-back density accumulation through an animated
-// fbm field with a soft gaussian falloff. No surface normal / no specular, so
-// it physically cannot produce a "mirror" highlight (the solid SDF sphere
-// always read as a chrome ball). Bass pumps core density; mid ripples the
-// domain; the edgeless falloff keeps the silhouette soft.
+// Solid raymarched SDF sphere with fbm surface displacement — the "round 2"
+// look. Depth comes from the shaded gradient; bass pumps the radius; mid
+// ripples the displacement. Color is uAlbumColor, now fed by the working
+// self-sampling pipeline (_sampleCoverColor), so it tracks the cover.
+float map(vec3 p){
+  float r = 1.0 + 0.9*uBass + 0.1*uLevel;
+  float d = length(p) - r;
+  float disp = (fbm(p*1.5 + vec3(0.0, 0.0, iTime*0.3)) - 0.5) * (0.18 + uMid*0.8 + uBass*0.35);
+  return d + disp;
+}
+vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
+  return normalize(vec3(map(p+e.xyy)-map(p-e.xyy), map(p+e.yxy)-map(p-e.yxy), map(p+e.yyx)-map(p-e.yyx)));
+}
+
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
   vec3 ro = vec3(0.0, 0.0, -3.2);
   vec3 rd = normalize(vec3(uv, 1.6));
   vec3 C = uAlbumColor;
-  // Front-to-back volumetric accumulation. Emission is scaled by the step
-  // size (dt) and transmittance decays via Beer-Lambert, so the accumulated
-  // color is stable across STEPS/dt. The final exponential tone map keeps
-  // dense regions glowing without ever clipping to flat white — the previous
-  // version scaled emission without dt and used a hard clamp, so ~60 steps
-  // accumulated to C*2+ and saturated to white even at idle.
-  const int STEPS = 64;
-  const float dt = 0.06;
-  float trans = 1.0;
-  vec3 col = vec3(0.0);
-  float t = 0.1;
-  for (int i = 0; i < STEPS; i++) {
+  vec3 col = C*0.04;
+  float t = 0.0, glow = 0.0;
+  bool hit = false;
+  for (int i = 0; i < 96; i++) {
     vec3 p = ro + rd*t;
-    float fall = exp(-dot(p,p)*0.5);
-    float field = fbm(p*1.3 + vec3(iTime*0.10, uMid*1.3, iTime*0.18));
-    float dens = fall * field * (0.55 + uBass*1.5);
-    if (dens > 0.003) {
-      vec3 emit = C * (0.5 + 0.5*field) * (0.8 + uLevel*1.2);
-      col += trans * dens * dt * emit * 3.0;
-      trans *= exp(-dens * dt * 2.2);   // Beer-Lambert absorption
-    }
-    t += dt;
-    if (trans < 0.02) break;
+    float d = map(p);
+    if (d < 0.001) { hit = true; break; }
+    if (t > 6.0) break;
+    glow += exp(-max(d, 0.0)*5.0) * 0.013;
+    t += d;
   }
-  col = 1.0 - exp(-col * 1.1);   // tone map: bounded, never flat white
+  if (hit) {
+    vec3 p = ro + rd*t;
+    vec3 n = calcNormal(p);
+    float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
+    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.22;
+    col = C*diff + rim*(C + vec3(0.08));
+  }
+  col += C * glow * (0.3 + uLevel*0.6);
+  col = clamp(col, 0.0, 1.0);
   fragColor = vec4(col, 1.0);
 }`
     }
