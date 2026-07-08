@@ -111,6 +111,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   gl: null,
   _audioReady: false,
   _bands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
+  _miniBands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
   _color: null,
 
   init() {
@@ -377,7 +378,17 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         mmh = Math.pow(Math.min(1, mmh / (58 * 255) * 1.0), 0.65);
         mtr = Math.pow(Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 1.5), 0.65);
       }
-      const mlvl = (mb + mml + mmh + mtr) / 4;
+      const mf = (cur, prev, atk, rel) => {
+        if (prev > 0.8) prev -= (prev - 0.8) * 0.18;
+        if (cur > prev) return prev + (cur - prev) * atk;
+        return prev + (cur - prev) * rel;
+      };
+      this._miniBands.bass = mf(mb, this._miniBands.bass, 0.7, 0.10);
+      this._miniBands.midLow = mf(mml, this._miniBands.midLow, 0.5, 0.14);
+      this._miniBands.midHigh = mf(mmh, this._miniBands.midHigh, 0.55, 0.16);
+      this._miniBands.treble = mf(mtr, this._miniBands.treble, 0.7, 0.18);
+      const mlvl = (this._miniBands.bass + this._miniBands.midLow + this._miniBands.midHigh + this._miniBands.treble) / 4;
+      this._miniBands.level = mf(mlvl, this._miniBands.level, 0.5, 0.12);
       const gl = this._miniGL;
       const w = this._miniCanvas.width, h = this._miniCanvas.height;
       gl.viewport(0, 0, w, h);
@@ -387,11 +398,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       gl.vertexAttribPointer(this._miniLoc.aPos, 2, gl.FLOAT, false, 0, 0);
       gl.uniform1f(this._miniLoc.iTime, (performance.now() / 1000) - this._t0);
       gl.uniform2f(this._miniLoc.iResolution, w, h);
-      gl.uniform1f(this._miniLoc.uBass, mb);
-      gl.uniform1f(this._miniLoc.uMidLow, mml);
-      gl.uniform1f(this._miniLoc.uMidHigh, mmh);
-      gl.uniform1f(this._miniLoc.uTreble, mtr);
-      gl.uniform1f(this._miniLoc.uLevel, mlvl);
+      gl.uniform1f(this._miniLoc.uBass, this._miniBands.bass);
+      gl.uniform1f(this._miniLoc.uMidLow, this._miniBands.midLow);
+      gl.uniform1f(this._miniLoc.uMidHigh, this._miniBands.midHigh);
+      gl.uniform1f(this._miniLoc.uTreble, this._miniBands.treble);
+      gl.uniform1f(this._miniLoc.uLevel, this._miniBands.level);
       gl.uniform3f(this._miniLoc.uAlbumColor, cr, cg, cb);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
