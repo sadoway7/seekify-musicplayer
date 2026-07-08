@@ -148,11 +148,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   cycle() {
-    const wrap = this.canvas && this.canvas.parentElement;
-    if (wrap) {
-      wrap.classList.add('viz-toggle');
-      setTimeout(() => wrap.classList.remove('viz-toggle'), 450);
-    }
     this.state = (this.state < 0) ? 0 : -1;
     this._persist();
     this._applyVisualState();

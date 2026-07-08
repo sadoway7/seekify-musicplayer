@@ -229,15 +229,6 @@
   color: var(--accent);
 }
 
-@keyframes vizToggleSpin {
-  0% { transform: rotate(0) scale(1); opacity: 1; }
-  50% { transform: rotate(90deg) scale(0.2); opacity: 0.4; }
-  100% { transform: rotate(0) scale(1); opacity: 1; }
-}
-.np-art-wrapper.viz-toggle {
-  animation: vizToggleSpin 0.4s ease-in-out !important;
-}
-
 @media (min-width: 768px) {
   .now-playing.playing .np-art-wrapper {
     animation: none;
