@@ -127,3 +127,4 @@ data/ directory and *.db files are gitignored — runtime-only.
 The music/ directory contains test audio data (mostly gitignored).
 The old app/ and reference apps/ directories are legacy/reference only — do not modify.
 The SPA catch-all route serves index.html for any non-/api/ path.
+~18 tracked files are flagged git assume-unchanged (index.html, server.go, internal/store/database.go, internal/handlers/handlers.go + settings.go, most js/, css/finder.css, css/review.css, ripperv2.html, etc.). Edits to a flagged file are invisible to `git diff` and silently won't stage. Before staging such an edit run `git update-index --no-assume-unchanged <file>`, then re-flag after commit to preserve the baseline. Check one: `git ls-files -v <file>` (lowercase `h` = flagged, `H` = clean). List all: `git ls-files -v | grep '^[a-z]'`. This has silently dropped core fixes before — always verify `git diff --cached --stat` shows every intended file.
