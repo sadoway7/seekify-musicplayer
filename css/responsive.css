@@ -355,6 +355,11 @@
     bottom: 28px !important;
   }
 
+  .np-disc-frame {
+    width: min(480px, 50vh, 80%) !important;
+    height: min(480px, 50vh, 80%) !important;
+  }
+
   .np-art-wrapper {
     --disc-size: min(480px, 50vh, 80%);
     width: var(--disc-size) !important;

@@ -33,8 +33,8 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 float map(vec3 p){
   float r = 1.0 + 1.3*uBass + 0.08*uLevel;
   float d = length(p) - r;
-  float dispLow = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.10)) - 0.5) * (0.05 + uMidLow*0.8);
-  float dispHigh = (fbm(p*2.8 + vec3(4.2, 9.6, iTime*0.20)) - 0.5) * (0.04 + uMidHigh*0.5);
+  float dispLow = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.08)) - 0.5) * (0.05 + uMidLow*0.65);
+  float dispHigh = (fbm(p*2.8 + vec3(4.2, 9.6, iTime*0.12)) - 0.5) * (0.04 + uMidHigh*0.5);
   float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.4, 5.3)) - 0.5) * 0.18 * uTreble;
   return d + dispLow + dispHigh + detail;
 }
@@ -97,6 +97,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   init() {
     this.canvas = document.getElementById('np-viz-canvas');
     if (!this.canvas) return;
+    this._miniCanvas = document.getElementById('np-corner-viz-canvas');
+    if (this._miniCanvas) {
+      this._miniCanvas.width = this._miniCanvas.height = 128;
+      this._miniCtx = this._miniCanvas.getContext('2d');
+    }
     this.btn = document.querySelector('.np-viz-btn');
     try {
       const p = JSON.parse(localStorage.getItem('musicapp:viz') || '{}');
@@ -115,7 +120,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     // never rendered, restart it. Catches deep links, delayed layout, and
     // any path that doesn't explicitly call onShowNowPlaying.
     setInterval(() => {
-      if (this.state < 0) return;
       const np = document.getElementById('now-playing');
       if (!np || np.classList.contains('hidden')) return;
       if (this._raf == null || (this._lastRender && performance.now() - this._lastRender > 2000)) {
@@ -146,12 +150,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const np = document.getElementById('now-playing');
     if (np) np.classList.toggle('viz-on', on);
     if (this.btn) this.btn.classList.toggle('active', on);
-    if (on && np && !np.classList.contains('hidden')) this._start();
-    else this._stop();
   },
 
   onShowNowPlaying() {
-    if (this.state < 0) return;
     this._start();
   },
 
@@ -227,7 +228,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // frame (the old eager init here bailed permanently on a transient first-open
   // hiccup, leaving a blank canvas until the user toggled off→on).
   _start() {
-    console.log('[viz] _start: raf=', this._raf, 'state=', this.state);
     if (this._raf == null) this._loop();
   },
 
@@ -257,10 +257,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _frame() {
-    // Self-healing init every frame: GL + a compiled program for the current
-    // shader. A transient failure on first open (canvas not laid out, GL not
-    // ready) just skips this frame and retries next frame.
-    if (!this._ensureGL() || !this._programs || !this._programs[this.state]) return;
+    const sIdx = Math.max(0, this.state);
+    if (!this._ensureGL() || !this._programs || !this._programs[sIdx]) return;
     this._ensureAudio();
     if (this._actx && this._actx.state === 'suspended') this._actx.resume();
     if (this._t0 == null) this._t0 = performance.now() / 1000;
@@ -287,7 +285,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       return prev + (cur - prev) * dynRel;
     };
     this._bands.bass = follow(b, this._bands.bass, 0.9, 0.18);
-    this._bands.midLow = follow(ml, this._bands.midLow, 0.5, 0.27);
+    this._bands.midLow = follow(ml, this._bands.midLow, 0.5, 0.35);
     this._bands.midHigh = follow(mh, this._bands.midHigh, 0.55, 0.27);
     this._bands.treble = follow(tr, this._bands.treble, 0.78, 0.3);
     const lvl = (this._bands.bass + this._bands.midLow + this._bands.midHigh + this._bands.treble) / 4;
@@ -307,7 +305,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       cr = this._colorCur[0]; cg = this._colorCur[1]; cb = this._colorCur[2];
     }
 
-    const p = this._programs[this.state];
+    const p = this._programs[sIdx];
     gl.useProgram(p.prog);
     gl.bindBuffer(gl.ARRAY_BUFFER, this._vbuf);
     gl.enableVertexAttribArray(p.loc.aPos);
@@ -321,6 +319,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     gl.uniform1f(p.loc.uLevel, this._bands.level);
     gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (this.state < 0 && this._miniCtx) {
+      this._miniCtx.drawImage(this.canvas, 0, 0, this._miniCanvas.width, this._miniCanvas.height);
+    }
     this._lastRender = performance.now();
   },
 
