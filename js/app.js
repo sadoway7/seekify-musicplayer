@@ -33,6 +33,8 @@ const App = {
 
     UI.init();
 
+    Keyboard.init();
+
     ReviewUI.init();
 
     // First-run setup: no users exist yet → bootstrap admin.
