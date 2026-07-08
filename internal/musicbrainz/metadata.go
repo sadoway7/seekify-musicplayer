@@ -672,6 +672,9 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 			Releases     []struct {
 				ID    string `json:"id"`
 				Title string `json:"title"`
+				ReleaseGroup struct {
+					Type string `json:"primary-type"`
+				} `json:"release-group"`
 			} `json:"releases"`
 		} `json:"recordings"`
 	}
@@ -685,11 +688,23 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 		if len(rec.ArtistCredit) > 0 {
 			artistName = rec.ArtistCredit[0].Name
 		}
+		// Pick the release whose release-group primary-type ranks highest
+		// (Album > EP > Single > Compilation), matching the non-paged path.
+		// Previously Releases[0] was taken blindly, which front-loads
+		// compilations in many MB responses. No extra HTTP call.
 		albumName := ""
 		albumID := ""
-		if len(rec.Releases) > 0 {
-			albumName = rec.Releases[0].Title
-			albumID = rec.Releases[0].ID
+		bestPriority := -1
+		for _, rel := range rec.Releases {
+			p := ReleaseTypePriority(rel.ReleaseGroup.Type)
+			if IsCompilationTitle(rel.Title) {
+				p -= 5
+			}
+			if p > bestPriority {
+				bestPriority = p
+				albumName = rel.Title
+				albumID = rel.ID
+			}
 		}
 		results = append(results, MbRecordingResult{
 			RecordingID: rec.ID,
