@@ -332,8 +332,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // now-playing instead of showing the raw (often dark/muted) cover color.
   setColor(r, g, b) {
     const [h, s, l] = this._rgbToHsl(r, g, b);
-    const vibS = Math.min(100, s + 35);
-    const vibL = Math.min(65, Math.max(45, l + 10));
+    const vibS = Math.min(100, s + 42);
+    const vibL = Math.min(68, Math.max(48, l + 12));
     this._color = this._hslToRgb(h, vibS, vibL);
   },
   // Self-sufficient color source: sample the live album cover (#np-art, same-origin)
