@@ -93,13 +93,13 @@ out vec4 fragColor;
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
   vec3 C = uAlbumColor;
-  float radius = 0.25 + uBass * 0.10 + uLevel * 0.03;
+  float radius = 0.22 + uBass * 0.18 + uLevel * 0.06;
   float d = length(uv);
   float disk = smoothstep(radius + 0.015, radius - 0.015, d);
   float shade = 1.0 - smoothstep(0.0, radius, d) * 0.5;
   float rim = pow(max(1.0 - d / radius, 0.0), 0.5) * 0.3;
-  float halo = exp(-pow(max(d - radius, 0.0) * 8.0, 2.0)) * (0.25 + uLevel * 0.35);
-  vec3 col = C * disk * shade + C * rim * disk + C * halo * 0.6 + C * (uTreble * 0.2 + uMidLow * 0.1) * disk;
+  float halo = exp(-pow(max(d - radius, 0.0) * 8.0, 2.0)) * (0.2 + uLevel * 0.5);
+  vec3 col = C * disk * shade + C * rim * disk + C * halo * 0.6 + C * (uTreble * 0.3 + uMidLow * 0.15) * disk;
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`,
 
@@ -148,9 +148,17 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   cycle() {
+    const art = document.getElementById('np-art');
+    const bg = document.getElementById('np-art-bg');
+    if (art) art.style.setProperty('transition', 'opacity 0.35s ease', 'important');
+    if (bg) bg.style.setProperty('transition', 'opacity 0.35s ease', 'important');
     this.state = (this.state < 0) ? 0 : -1;
     this._persist();
     this._applyVisualState();
+    setTimeout(() => {
+      if (art) art.style.removeProperty('transition');
+      if (bg) bg.style.removeProperty('transition');
+    }, 400);
   },
 
   _persist() {
@@ -364,10 +372,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         for (let i = 6; i < 35; i++) mml += this._freq[i];
         for (let i = 35; i < 93; i++) mmh += this._freq[i];
         for (let i = 93; i < Math.min(232, this._freq.length); i++) mtr += this._freq[i];
-        mb = Math.max(0, Math.min(1, mb / (4 * 255) * 1.5));
-        mml = Math.max(0, Math.min(1, mml / (29 * 255) * 1.3));
-        mmh = Math.max(0, Math.min(1, mmh / (58 * 255) * 1.2));
-        mtr = Math.max(0, Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 1.8));
+        mb = Math.max(0, Math.min(1, mb / (4 * 255) * 2.0));
+        mml = Math.max(0, Math.min(1, mml / (29 * 255) * 1.6));
+        mmh = Math.max(0, Math.min(1, mmh / (58 * 255) * 1.5));
+        mtr = Math.max(0, Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 2.5));
       }
       const mlvl = (mb + mml + mmh + mtr) / 4;
       const gl = this._miniGL;
