@@ -250,12 +250,16 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (window.UI && UI._albumColor) {
       const ac = UI._albumColor;
       if (!this._acSrc || this._acSrc[0] !== ac.r || this._acSrc[1] !== ac.g || this._acSrc[2] !== ac.b) {
-        this.setColor(ac.r / 255, ac.g / 255, ac.b / 255);
+        try { this.setColor(ac.r / 255, ac.g / 255, ac.b / 255); } catch (e) { console.error('[viz-color] setColor threw', e); }
         this._acSrc = [ac.r, ac.g, ac.b];
+        console.log('[viz-color] poll fired; ac=', ac.r, ac.g, ac.b, '→ _color=', this._color);
       }
+    } else if ((this._dbg = (this._dbg || 0) + 1) % 30 === 0) {
+      console.log('[viz-color] no UI._albumColor; _color=', this._color);
     }
     let cr = 0.83, cg = 0.94, cb = 0.25;
     if (this._color) { cr = this._color[0]; cg = this._color[1]; cb = this._color[2]; }
+    if ((this._dbg2 = (this._dbg2 || 0) + 1) % 60 === 0) console.log('[viz-color] uniform=', cr.toFixed(2), cg.toFixed(2), cb.toFixed(2));
 
     const p = this._programs[this.state];
     gl.useProgram(p.prog);
