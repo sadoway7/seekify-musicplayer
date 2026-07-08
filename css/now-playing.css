@@ -287,8 +287,8 @@
 
 .now-playing.viz-on .np-corner-toggle {
   z-index: 5;
-  top: -3%;
-  left: -3%;
+  top: 0%;
+  left: 0%;
   opacity: 1;
   width: 42%; min-width: 58px; max-width: 88px;
 }
