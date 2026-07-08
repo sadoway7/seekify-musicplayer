@@ -307,7 +307,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _frame() {
-    this._ensureAudio();
+    // Only route the <audio> element through Web Audio when the full viz is
+    // explicitly ON. createMediaElementSource ties playback to the
+    // AudioContext's state; on iOS/Android the context suspends on
+    // background/lock, which pauses the media element and stops music. The
+    // mini-viz (state < 0) is decorative — it renders flat rather than
+    // breaking background playback.
+    if (this.state >= 0) this._ensureAudio();
     if (this._actx && this._actx.state === 'suspended') this._actx.resume();
     if (this._t0 == null) this._t0 = performance.now() / 1000;
 
