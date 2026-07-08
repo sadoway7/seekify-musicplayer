@@ -33,7 +33,7 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 float map(vec3 p){
   float r = 1.0 + 1.3*uBass + 0.08*uLevel;
   float d = length(p) - r;
-  float disp = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.15)) - 0.5) * (0.05 + uMid*0.7 + uBass*0.6);
+  float disp = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.15)) - 0.5) * (0.05 + uMid*0.8);
   float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.8, 5.3)) - 0.5) * 0.18 * uTreble;
   return d + disp + detail;
 }
@@ -71,6 +71,9 @@ void main(){
   col = (col - 0.5) * 1.2 + 0.5;
   col = clamp(col, 0.0, 1.0);
   col = 1.0 - exp(-col * 1.1);
+  float sh = pow(smoothstep(0.35, 0.95, fbm(vec3(uv * 1.5 + iTime * 0.08, iTime * 0.15))), 2.0) * (0.04 + uLevel * 0.14 + uBass * 0.08);
+  col += col * sh + C * sh * 0.3;
+  col = clamp(col, 0.0, 1.0);
   float scan = 0.95 + 0.05 * sin(gl_FragCoord.y * 1.5 + iTime * 4.0);
   float vig = 1.0 - 0.15 * dot(uv, uv * vec2(1.2, 1.0));
   float grain = (hash(vec3(gl_FragCoord.xy, iTime)) - 0.5) * 0.03;
@@ -92,18 +95,20 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
 
   init() {
     this.canvas = document.getElementById('np-viz-canvas');
+    if (!this.canvas) return;
     this.btn = document.querySelector('.np-viz-btn');
-    if (!this.canvas || !this.btn) return;
     try {
       const p = JSON.parse(localStorage.getItem('musicapp:viz') || '{}');
       if (typeof p.which === 'number' && p.which >= 0 && p.which < this.SHADERS.length) this.state = p.which;
     } catch (e) {}
-    this.btn.addEventListener('click', () => this.cycle());
+    if (this.btn) this.btn.addEventListener('click', () => this.cycle());
     const disc = document.querySelector('.np-artwork');
     if (disc) disc.addEventListener('click', (e) => {
-      if (e.target.closest('.np-float-tray') || e.target.closest('.np-review-overlay')) return;
+      if (e.target.closest('.np-float-tray') || e.target.closest('.np-review-overlay') || e.target.closest('#np-corner-toggle')) return;
       this.cycle();
     });
+    const corner = document.getElementById('np-corner-toggle');
+    if (corner) corner.addEventListener('click', () => this.cycle());
     this._applyVisualState();
   },
 
@@ -193,7 +198,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const src = actx.createMediaElementSource(Player.audio);
       const an = actx.createAnalyser();
       an.fftSize = 1024;
-      an.smoothingTimeConstant = 0.75;
+      an.smoothingTimeConstant = 0.5;
       src.connect(an);
       an.connect(actx.destination);
       this._actx = actx;
@@ -258,13 +263,17 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       for (let i = 12; i < 64; i++) m += this._freq[i];
       for (let i = 64; i < 200; i++) tr += this._freq[i];
       b /= 12 * 255; m /= 52 * 255; tr /= 136 * 255;
-      b = Math.max(0, Math.min(1, b * 2.5 - 0.01)); m = Math.max(0, Math.min(1, m * 1.3 - 0.01)); tr = Math.max(0, Math.min(1, tr * 1.5 - 0.01));
+      b = Math.max(0, Math.min(1, b * 2.5 - 0.01)); m = Math.max(0, Math.min(1, m * 1.3 - 0.01)); tr = Math.max(0, Math.min(1, tr * 2.2 - 0.01));
     }
     // asymmetric: fast attack (punch on the beat), slower release (shape holds)
-    const follow = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
-    this._bands.bass = follow(b, this._bands.bass, 0.9, 0.12);
+    const follow = (cur, prev, atk, rel) => {
+      if (cur > prev) return prev + (cur - prev) * atk;
+      const dynRel = Math.min(0.85, rel * (1 + prev * 3));
+      return prev + (cur - prev) * dynRel;
+    };
+    this._bands.bass = follow(b, this._bands.bass, 0.9, 0.18);
     this._bands.mid = follow(m, this._bands.mid, 0.5, 0.22);
-    this._bands.treble = follow(tr, this._bands.treble, 0.65, 0.28);
+    this._bands.treble = follow(tr, this._bands.treble, 0.85, 0.3);
     const lvl = (this._bands.bass + this._bands.mid + this._bands.treble) / 3;
     this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
 

@@ -382,7 +382,7 @@
     object-fit: cover;
   }
 
-  .now-playing.playing .np-art-wrapper {
+  .now-playing.playing:not(.viz-on) .np-art-wrapper {
     animation: coverSpin 20s linear infinite !important;
   }
 

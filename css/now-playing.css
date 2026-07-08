@@ -120,7 +120,7 @@
   width: min(340px, 70vw, 55vh);
   height: min(340px, 70vw, 55vh);
   border-radius: 50%;
-  box-shadow: 0 24px 48px -12px rgba(0,0,0,0.7), inset 0 0 25px rgba(0,0,0,0.25);
+  box-shadow: 0 24px 48px -12px rgba(0,0,0,0.7);
   will-change: transform;
   /* ponytail: parent .np-artwork is pointer-events:none (letterbox passes
      through). Re-enable on the disc so the swipe-down touchstart bubbles up
@@ -204,6 +204,7 @@
   display: none;
   z-index: 3;
   pointer-events: none;
+  box-shadow: inset 0 0 50px 15px rgba(0,0,0,0.75);
 }
 
 .now-playing.viz-on #np-viz-canvas {
@@ -241,9 +242,9 @@
   }
 }
 
-/* Small album-art thumbnail shown over the top-left of the viz disc so the
-   cover isn't fully lost while the visualizer runs. */
-.np-viz-thumb {
+/* Corner toggle: floats over the disc top-left. Viz-on → shows album art
+   thumbnail (click → album art). Viz-off → shows mini viz icon (click → viz). */
+.np-corner-toggle {
   position: absolute;
   top: 4%;
   left: 4%;
@@ -252,16 +253,36 @@
   max-width: 80px;
   aspect-ratio: 1;
   border-radius: 50%;
-  object-fit: cover;
-  display: none;
-  z-index: 4;
-  pointer-events: none;
+  z-index: 5;
+  pointer-events: auto;
+  padding: 0;
+  border: none;
+  background: rgba(0,0,0,0.4);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.12);
 }
 
-.now-playing.viz-on .np-viz-thumb {
-  display: block;
+.np-viz-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
+
+.np-corner-viz-icon {
+  width: 48%;
+  height: 48%;
+  color: rgba(255,255,255,0.7);
+}
+
+.now-playing.viz-on .np-viz-thumb { display: block; }
+.now-playing.viz-on .np-corner-viz-icon { display: none; }
+.now-playing:not(.viz-on) .np-viz-thumb { display: none; }
+.now-playing:not(.viz-on) .np-corner-viz-icon { display: block; }
 
 .np-info {
   position: relative;
