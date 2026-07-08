@@ -112,7 +112,7 @@
     transform: var(--mini-tx);
     margin: 0;
     height: 80px;
-    background: rgba(10, 11, 10, 0.85);
+    background: rgba(10, 11, 10, 0.75);
     backdrop-filter: blur(24px) saturate(1.4);
     -webkit-backdrop-filter: blur(24px) saturate(1.4);
     box-shadow:

@@ -149,10 +149,11 @@
   transform: scale(0.93);
 }
 
-.mini-play-btn svg {
+.mini-player .mini-play-btn svg {
   width: 18px;
   height: 18px;
   fill: var(--bg);
+  color: var(--bg);
 }
 
 .mini-prev-btn svg,
