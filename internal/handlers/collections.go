@@ -111,7 +111,10 @@ func RecentAddHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing track id", http.StatusBadRequest)
 		return
 	}
-	store.DbAddUserRecent(u.ID, trackID)
+	if err := store.DbAddUserRecent(u.ID, trackID); err != nil {
+		http.Error(w, "add recent: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, map[string]bool{"added": true})
 }
 

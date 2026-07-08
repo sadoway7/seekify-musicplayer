@@ -21,7 +21,12 @@ func InitDB(path string) {
 	os.MkdirAll(dir, 0755)
 
 	var err error
-	DB, err = sql.Open("sqlite", path)
+	// _pragma=busy_timeout(5000) applies the busy timeout to EVERY pooled
+	// connection. The PRAGMA Exec below only hit one connection, so writes on
+	// other pool members returned SQLITE_BUSY immediately and were silently
+	// dropped (ignored tx.Exec errors) — recently-played saves failed under
+	// any background-writer contention.
+	DB, err = sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
@@ -611,17 +616,25 @@ func DbGetUserRecent(userID string) []string {
 }
 
 // DbAddUserRecent pushes trackID to position 1, reordering the rest. Caps at 50.
-func DbAddUserRecent(userID, trackID string) {
+func DbAddUserRecent(userID, trackID string) error {
 	tx, err := DB.Begin()
 	if err != nil {
-		return
+		return err
 	}
 	defer tx.Rollback()
-	tx.Exec("DELETE FROM user_recent WHERE user_id = ? AND track_id = ?", userID, trackID)
-	tx.Exec("UPDATE user_recent SET position = position + 1 WHERE user_id = ?", userID)
-	tx.Exec("INSERT INTO user_recent (user_id, track_id, position) VALUES (?, ?, 1)", userID, trackID)
-	tx.Exec("DELETE FROM user_recent WHERE user_id = ? AND track_id NOT IN (SELECT track_id FROM user_recent WHERE user_id = ? ORDER BY position DESC LIMIT 50)", userID, userID)
-	tx.Commit()
+	if _, err := tx.Exec("DELETE FROM user_recent WHERE user_id = ? AND track_id = ?", userID, trackID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("UPDATE user_recent SET position = position + 1 WHERE user_id = ?", userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("INSERT INTO user_recent (user_id, track_id, position) VALUES (?, ?, 1)", userID, trackID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM user_recent WHERE user_id = ? AND track_id NOT IN (SELECT track_id FROM user_recent WHERE user_id = ? ORDER BY position ASC LIMIT 50)", userID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // DbGetPlaylists returns a user's own playlists plus shared/system playlists
