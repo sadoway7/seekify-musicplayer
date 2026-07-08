@@ -236,14 +236,21 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const wrap = this.canvas.parentElement;
-    const size = Math.max(64, Math.min(wrap.clientWidth, 640));
-    const px = Math.round(size * dpr);
-    if (this.canvas.width !== px || this.canvas.height !== px) {
-      this.canvas.width = px;
-      this.canvas.height = px;
-      this.gl.viewport(0, 0, px, px);
+    if (this.state < 0) {
+      const px = 48;
+      if (this.canvas.width !== px || this.canvas.height !== px) {
+        this.canvas.width = px; this.canvas.height = px;
+        this.gl.viewport(0, 0, px, px);
+      }
+    } else {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const size = Math.max(64, Math.min(wrap.clientWidth, 640));
+      const px = Math.round(size * dpr);
+      if (this.canvas.width !== px || this.canvas.height !== px) {
+        this.canvas.width = px; this.canvas.height = px;
+        this.gl.viewport(0, 0, px, px);
+      }
     }
   },
 
@@ -319,25 +326,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     gl.uniform1f(p.loc.uLevel, this._bands.level);
     gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-    if (this.state < 0 && this._miniCtx && this._freq) {
-      const ctx = this._miniCtx, w = this._miniCanvas.width, h = this._miniCanvas.height;
-      const cx = w / 2, cy = h / 2;
-      ctx.clearRect(0, 0, w, h);
-      const numBars = 28, innerR = w * 0.22, maxBar = w * 0.26;
-      ctx.lineCap = 'round';
-      const r = Math.round(cr * 255), g = Math.round(cg * 255), b = Math.round(cb * 255);
-      for (let i = 0; i < numBars; i++) {
-        const angle = (i / numBars) * Math.PI * 2 - Math.PI / 2;
-        const fi = Math.floor(i / numBars * 64);
-        const v = (this._freq[fi] || 0) / 255;
-        const len = innerR + v * maxBar;
-        ctx.strokeStyle = `rgba(${r},${g},${b},${0.45 + v * 0.55})`;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR);
-        ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
-        ctx.stroke();
-      }
+    if (this.state < 0 && this._miniCtx) {
+      this._miniCtx.imageSmoothingEnabled = true;
+      this._miniCtx.imageSmoothingQuality = 'high';
+      this._miniCtx.drawImage(this.canvas, 0, 0, this._miniCanvas.width, this._miniCanvas.height);
     }
     this._lastRender = performance.now();
   },
