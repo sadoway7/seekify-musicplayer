@@ -360,8 +360,13 @@
   }
 
   .np-corner-toggle {
-    top: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.02) !important;
-    left: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.02) !important;
+    top: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.06) !important;
+    left: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.06) !important;
+  }
+
+  .now-playing.viz-on .np-corner-toggle {
+    top: calc(50% - var(--disc-size) / 2 - var(--disc-size) * 0.05) !important;
+    left: calc(50% - var(--disc-size) / 2 - var(--disc-size) * 0.05) !important;
   }
 
   .np-art-wrapper {
