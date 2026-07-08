@@ -61,11 +61,9 @@ void main(){
   if (hit) {
     vec3 p = ro + rd*t;
     vec3 n = calcNormal(p);
-    float hueShift = (n.y*0.5 + n.x*0.3) * 0.15;
-    vec3 Ctint = mix(C, C.zxy, hueShift);
     float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
     float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.45;
-    col = Ctint*diff + rim*(Ctint + vec3(0.3)) + Ctint*0.12*uBass;
+    col = C*diff + rim*(C + vec3(0.3)) + C*0.12*uBass;
   }
   col += C * glow * (0.6 + uLevel*1.3);
   col = clamp(col, 0.0, 1.0);
