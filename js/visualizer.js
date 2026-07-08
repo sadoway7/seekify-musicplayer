@@ -8,7 +8,7 @@ const Visualizer = {
   // Each fragment shader MUST begin with `#version 300 es`.
   SHADERS: [
     {
-      name: 'spheres',
+      name: 'plasma',
       fragment: `#version 300 es
 precision highp float;
 uniform float iTime;
@@ -26,43 +26,32 @@ float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
 }
 float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*noise(p); p = p*2.02; a *= 0.5; } return v; }
 
-float map(vec3 p){
-  float r = 1.0 + 0.9*uBass + 0.1*uLevel;
-  float d = length(p) - r;
-  float disp = (fbm(p*1.5 + vec3(0.0, 0.0, iTime*0.3)) - 0.5) * (0.18 + uMid*0.8 + uBass*0.35);
-  return d + disp;
-}
-vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
-  return normalize(vec3(map(p+e.xyy)-map(p-e.xyy), map(p+e.yxy)-map(p-e.yxy), map(p+e.yyx)-map(p-e.yyx)));
-}
-
+// Volumetric plasma: front-to-back density accumulation through an animated
+// fbm field with a soft gaussian falloff. No surface normal / no specular, so
+// it physically cannot produce a "mirror" highlight (the solid SDF sphere
+// always read as a chrome ball). Bass pumps core density; mid ripples the
+// domain; the edgeless falloff keeps the silhouette soft.
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
-  vec3 ro = vec3(0.0, 0.0, -3.2);
-  vec3 rd = normalize(vec3(uv, 1.6));
+  vec3 ro = vec3(0.0, 0.0, -3.0);
+  vec3 rd = normalize(vec3(uv, 1.5));
   vec3 C = uAlbumColor;
-  vec3 col = C*0.04;
-  float t = 0.0, glow = 0.0;
-  bool hit = false;
-  for (int i = 0; i < 96; i++) {
+  float t = 0.2, trans = 1.0;
+  vec3 col = C*0.02;
+  for (int i = 0; i < 60; i++) {
     vec3 p = ro + rd*t;
-    float d = map(p);
-    if (d < 0.001) { hit = true; break; }
-    if (t > 6.0) break;
-    glow += exp(-max(d, 0.0)*4.0) * 0.018;
-    t += d;
+    float fall = exp(-dot(p,p)*0.55);
+    float field = fbm(p*1.5 + vec3(iTime*0.12, uMid*1.4, iTime*0.2));
+    float dens = fall * field * (0.7 + uBass*1.6 + uLevel*0.3);
+    if (dens > 0.002) {
+      col += C * dens * (0.45 + uLevel*0.7) * trans;
+      trans *= exp(-dens*0.22);
+    }
+    t += 0.075;
+    if (trans < 0.02) break;
   }
-  if (hit) {
-    vec3 p = ro + rd*t;
-    vec3 n = calcNormal(p);
-    // Soft wrap lighting (key + fill, high ambient) — smooth and self-luminous.
-    // No silhouette rim: the old fresnel term read as a "mirror" edge.
-    float key = max(dot(n, normalize(vec3(0.55, 0.7, -0.8))), 0.0);
-    float fill = max(dot(n, normalize(vec3(-0.5, -0.25, 0.45))), 0.0);
-    float diff = 0.45 + 0.4*key + 0.15*fill;
-    col = C*diff;
-  }
-  col += C * glow * (0.55 + uLevel*0.9);
+  col += C * uBass * 0.18;     // beat bloom
+  col += C * uTreble * 0.08;   // high sparkle
   col = clamp(col, 0.0, 1.0);
   fragColor = vec4(col, 1.0);
 }`
@@ -108,29 +97,15 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const np = document.getElementById('now-playing');
     if (np) np.classList.toggle('viz-on', on);
     if (this.btn) this.btn.classList.toggle('active', on);
-    if (on && np && !np.classList.contains('hidden')) this._startWhenReady();
+    if (on && np && !np.classList.contains('hidden')) this._start();
     else this._stop();
   },
 
   onShowNowPlaying() {
     if (this.state < 0) return;
-    this._startWhenReady();
-  },
-
-  // Wait for the canvas to have a real layout size before starting GL. On the
-  // first open after an app reload, now-playing was just un-hidden and the
-  // canvas can read clientWidth=0 for several frames; starting GL then gave a
-  // blank render that only recovered after an off→on toggle.
-  _startWhenReady(tries) {
-    if (tries == null) tries = 0;
-    if (this.state < 0) return;
-    const wrap = this.canvas && this.canvas.parentElement;
-    if (!wrap || wrap.clientWidth < 2) {
-      if (tries < 30) requestAnimationFrame(() => this._startWhenReady(tries + 1));
-      return;
-    }
     this._start();
   },
+
   onHideNowPlaying() { this._stop(); },
 
   // --- GL lifecycle ---
@@ -198,13 +173,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     } catch (e) { console.warn('[viz] audio init failed:', e); }
   },
 
+  // Kick the render loop only. The loop self-heals GL/audio/canvas-size each
+  // frame (the old eager init here bailed permanently on a transient first-open
+  // hiccup, leaving a blank canvas until the user toggled off→on).
   _start() {
-    if (!this._ensureGL()) return;
-    if (!this._programs || !this._programs[this.state]) return;
-    this._ensureAudio();
-    if (this._actx && this._actx.state === 'suspended') this._actx.resume();
-    this._t0 = performance.now() / 1000;
-    this._resize();
     if (this._raf == null) this._loop();
   },
 
@@ -225,6 +197,17 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _loop() {
+    // Self-healing init: ensure GL + a compiled program for the current shader
+    // every frame. A transient failure on first open (canvas not laid out, GL
+    // context not ready) used to leave the viz blank permanently.
+    if (!this._ensureGL() || !this._programs || !this._programs[this.state]) {
+      this._raf = requestAnimationFrame(() => this._loop());
+      return;
+    }
+    this._ensureAudio();
+    if (this._actx && this._actx.state === 'suspended') this._actx.resume();
+    if (this._t0 == null) this._t0 = performance.now() / 1000;
+
     const gl = this.gl;
     const wrap = this.canvas.parentElement;
     if (!wrap || wrap.clientWidth < 2) { this._raf = requestAnimationFrame(() => this._loop()); return; }
@@ -237,16 +220,26 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       for (let i = 8; i < 64; i++) m += this._freq[i];
       for (let i = 64; i < 200; i++) tr += this._freq[i];
       b /= 8 * 255; m /= 56 * 255; tr /= 136 * 255;
-      b = Math.min(1, b * 2.5); m = Math.min(1, m * 1.4); tr = Math.min(1, tr * 1.5);
+      b = Math.min(1, b * 3.0); m = Math.min(1, m * 1.6); tr = Math.min(1, tr * 1.8);
     }
     // asymmetric: fast attack (punch on the beat), slower release (shape holds)
     const follow = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
-    this._bands.bass = follow(b, this._bands.bass, 0.85, 0.15);
-    this._bands.mid = follow(m, this._bands.mid, 0.45, 0.25);
-    this._bands.treble = follow(tr, this._bands.treble, 0.6, 0.3);
+    this._bands.bass = follow(b, this._bands.bass, 0.9, 0.12);
+    this._bands.mid = follow(m, this._bands.mid, 0.5, 0.22);
+    this._bands.treble = follow(tr, this._bands.treble, 0.65, 0.28);
     const lvl = (this._bands.bass + this._bands.mid + this._bands.treble) / 3;
     this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
 
+    // Live color: pull UI._albumColor (the cover dominant color the rest of
+    // now-playing already uses), re-deriving only when it changes. Robust to the
+    // push path failing and retints on every song change.
+    if (window.UI && UI._albumColor) {
+      const ac = UI._albumColor;
+      if (!this._acSrc || this._acSrc[0] !== ac.r || this._acSrc[1] !== ac.g || this._acSrc[2] !== ac.b) {
+        this.setColor(ac.r / 255, ac.g / 255, ac.b / 255);
+        this._acSrc = [ac.r, ac.g, ac.b];
+      }
+    }
     let cr = 0.83, cg = 0.94, cb = 0.25;
     if (this._color) { cr = this._color[0]; cg = this._color[1]; cb = this._color[2]; }
 

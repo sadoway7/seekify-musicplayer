@@ -230,9 +230,9 @@
   position: absolute;
   top: 4%;
   left: 4%;
-  width: 33%;
-  min-width: 46px;
-  max-width: 70px;
+  width: 38%;
+  min-width: 52px;
+  max-width: 80px;
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
