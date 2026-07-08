@@ -99,6 +99,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       if (typeof p.which === 'number' && p.which >= 0 && p.which < this.SHADERS.length) this.state = p.which;
     } catch (e) {}
     this.btn.addEventListener('click', () => this.cycle());
+    const disc = document.querySelector('.np-artwork');
+    if (disc) disc.addEventListener('click', (e) => {
+      if (e.target.closest('.np-float-tray') || e.target.closest('.np-review-overlay')) return;
+      this.cycle();
+    });
     this._applyVisualState();
   },
 
@@ -188,7 +193,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const src = actx.createMediaElementSource(Player.audio);
       const an = actx.createAnalyser();
       an.fftSize = 1024;
-      an.smoothingTimeConstant = 0.6;
+      an.smoothingTimeConstant = 0.75;
       src.connect(an);
       an.connect(actx.destination);
       this._actx = actx;
@@ -203,6 +208,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // frame (the old eager init here bailed permanently on a transient first-open
   // hiccup, leaving a blank canvas until the user toggled off→on).
   _start() {
+    console.log('[viz] _start: raf=', this._raf, 'state=', this.state);
     if (this._raf == null) this._loop();
   },
 
@@ -246,7 +252,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._resize();
 
     let b = 0, m = 0, tr = 0;
-    if (this._analyser) {
+    if (this._analyser && !(Player.audio && Player.audio.seeking)) {
       this._analyser.getByteFrequencyData(this._freq);
       for (let i = 0; i < 12; i++) b += this._freq[i];
       for (let i = 12; i < 64; i++) m += this._freq[i];
