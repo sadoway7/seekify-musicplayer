@@ -236,21 +236,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const wrap = this.canvas.parentElement;
-    if (this.state < 0) {
-      const px = 48;
-      if (this.canvas.width !== px || this.canvas.height !== px) {
-        this.canvas.width = px; this.canvas.height = px;
-        this.gl.viewport(0, 0, px, px);
-      }
-    } else {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const size = Math.max(64, Math.min(wrap.clientWidth, 640));
-      const px = Math.round(size * dpr);
-      if (this.canvas.width !== px || this.canvas.height !== px) {
-        this.canvas.width = px; this.canvas.height = px;
-        this.gl.viewport(0, 0, px, px);
-      }
+    const size = Math.max(64, Math.min(wrap.clientWidth, 640));
+    const px = Math.round(size * dpr);
+    if (this.canvas.width !== px || this.canvas.height !== px) {
+      this.canvas.width = px; this.canvas.height = px;
+      this.gl.viewport(0, 0, px, px);
     }
   },
 
@@ -264,16 +256,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _frame() {
-    const sIdx = Math.max(0, this.state);
-    if (!this._ensureGL() || !this._programs || !this._programs[sIdx]) return;
     this._ensureAudio();
     if (this._actx && this._actx.state === 'suspended') this._actx.resume();
     if (this._t0 == null) this._t0 = performance.now() / 1000;
-
-    const gl = this.gl;
-    const wrap = this.canvas.parentElement;
-    if (!wrap || wrap.clientWidth < 2) return;
-    this._resize();
 
     let b = 0, ml = 0, mh = 0, tr = 0;
     if (this._analyser && !(Player.audio && Player.audio.seeking)) {
@@ -285,7 +270,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       b /= 12 * 255; ml /= 28 * 255; mh /= 32 * 255; tr /= 128 * 255;
       b = Math.max(0, Math.min(1, b * 2.5 - 0.01)); ml = Math.max(0, Math.min(1, ml * 1.4 - 0.01)); mh = Math.max(0, Math.min(1, mh * 1.2 - 0.01)); tr = Math.max(0, Math.min(1, tr * 2.2 - 0.01));
     }
-    // asymmetric: fast attack (punch on the beat), slower release (shape holds)
     const follow = (cur, prev, atk, rel) => {
       if (cur > prev) return prev + (cur - prev) * atk;
       const dynRel = Math.min(0.85, rel * (1 + prev * 3));
@@ -298,9 +282,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const lvl = (this._bands.bass + this._bands.midLow + this._bands.midHigh + this._bands.treble) / 4;
     this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
 
-    // Live color: sample the cover dominant color (same-origin #np-art),
-    // re-deriving only when it changes. Eased toward the target each frame so
-    // song-to-song changes crossfade smoothly instead of snapping.
     this._sampleCoverColor();
     let cr = 0.83, cg = 0.94, cb = 0.25;
     if (this._color) {
@@ -312,24 +293,47 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       cr = this._colorCur[0]; cg = this._colorCur[1]; cb = this._colorCur[2];
     }
 
-    const p = this._programs[sIdx];
-    gl.useProgram(p.prog);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this._vbuf);
-    gl.enableVertexAttribArray(p.loc.aPos);
-    gl.vertexAttribPointer(p.loc.aPos, 2, gl.FLOAT, false, 0, 0);
-    gl.uniform1f(p.loc.iTime, (performance.now() / 1000) - this._t0);
-    gl.uniform2f(p.loc.iResolution, this.canvas.width, this.canvas.height);
-    gl.uniform1f(p.loc.uBass, this._bands.bass);
-    gl.uniform1f(p.loc.uMidLow, this._bands.midLow);
-    gl.uniform1f(p.loc.uMidHigh, this._bands.midHigh);
-    gl.uniform1f(p.loc.uTreble, this._bands.treble);
-    gl.uniform1f(p.loc.uLevel, this._bands.level);
-    gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    if (this.state < 0 && this._miniCtx) {
-      this._miniCtx.imageSmoothingEnabled = true;
-      this._miniCtx.imageSmoothingQuality = 'high';
-      this._miniCtx.drawImage(this.canvas, 0, 0, this._miniCanvas.width, this._miniCanvas.height);
+    if (this.state >= 0) {
+      const sIdx = this.state;
+      if (!this._ensureGL() || !this._programs || !this._programs[sIdx]) { this._lastRender = performance.now(); return; }
+      const gl = this.gl;
+      const wrap = this.canvas.parentElement;
+      if (!wrap || wrap.clientWidth < 2) { this._lastRender = performance.now(); return; }
+      this._resize();
+      const p = this._programs[sIdx];
+      gl.useProgram(p.prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this._vbuf);
+      gl.enableVertexAttribArray(p.loc.aPos);
+      gl.vertexAttribPointer(p.loc.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform1f(p.loc.iTime, (performance.now() / 1000) - this._t0);
+      gl.uniform2f(p.loc.iResolution, this.canvas.width, this.canvas.height);
+      gl.uniform1f(p.loc.uBass, this._bands.bass);
+      gl.uniform1f(p.loc.uMidLow, this._bands.midLow);
+      gl.uniform1f(p.loc.uMidHigh, this._bands.midHigh);
+      gl.uniform1f(p.loc.uTreble, this._bands.treble);
+      gl.uniform1f(p.loc.uLevel, this._bands.level);
+      gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    } else if (this._miniCtx) {
+      const ctx = this._miniCtx, w = this._miniCanvas.width, h = this._miniCanvas.height;
+      const cx = w / 2, cy = h / 2;
+      ctx.clearRect(0, 0, w, h);
+      const r = Math.round(cr * 255), g = Math.round(cg * 255), b2 = Math.round(cb * 255);
+      const haloR = w * (0.42 + this._bands.level * 0.12);
+      const halo = ctx.createRadialGradient(cx, cy, w * 0.15, cx, cy, haloR);
+      halo.addColorStop(0, `rgba(${r},${g},${b2},0.35)`);
+      halo.addColorStop(1, `rgba(${r},${g},${b2},0)`);
+      ctx.fillStyle = halo;
+      ctx.fillRect(0, 0, w, h);
+      const orbR = w * (0.22 + this._bands.bass * 0.14);
+      const orb = ctx.createRadialGradient(cx - orbR * 0.3, cy - orbR * 0.3, 0, cx, cy, orbR);
+      orb.addColorStop(0, `rgba(${Math.min(255,r+50)},${Math.min(255,g+50)},${Math.min(255,b2+50)},1)`);
+      orb.addColorStop(0.6, `rgba(${r},${g},${b2},0.95)`);
+      orb.addColorStop(1, `rgba(${r},${g},${b2},0.25)`);
+      ctx.fillStyle = orb;
+      ctx.beginPath();
+      ctx.arc(cx, cy, orbR, 0, Math.PI * 2);
+      ctx.fill();
     }
     this._lastRender = performance.now();
   },
