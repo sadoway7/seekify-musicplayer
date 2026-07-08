@@ -31,9 +31,9 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 // ripples the displacement. Color is uAlbumColor, now fed by the working
 // self-sampling pipeline (_sampleCoverColor), so it tracks the cover.
 float map(vec3 p){
-  float r = 1.0 + 1.0*uBass + 0.08*uLevel;
+  float r = 1.0 + 1.3*uBass + 0.08*uLevel;
   float d = length(p) - r;
-  float disp = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.15)) - 0.5) * (0.05 + uMid*0.9 + uBass*0.4);
+  float disp = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.15)) - 0.5) * (0.05 + uMid*0.7 + uBass*0.6);
   float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.8, 5.3)) - 0.5) * 0.18 * uTreble;
   return d + disp + detail;
 }
@@ -60,9 +60,11 @@ void main(){
   if (hit) {
     vec3 p = ro + rd*t;
     vec3 n = calcNormal(p);
+    float hueShift = (n.y*0.5 + n.x*0.3) * 0.15;
+    vec3 Ctint = mix(C, C.zxy, hueShift);
     float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
     float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.45;
-    col = C*diff + rim*(C + vec3(0.3)) + C*0.12*uBass;
+    col = Ctint*diff + rim*(Ctint + vec3(0.3)) + Ctint*0.12*uBass;
   }
   col += C * glow * (0.6 + uLevel*1.3);
   col = clamp(col, 0.0, 1.0);
@@ -101,13 +103,14 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   cycle() {
-    const toggle = () => {
-      this.state = (this.state < 0) ? 0 : -1;
-      this._persist();
-      this._applyVisualState();
-    };
-    if (document.startViewTransition) document.startViewTransition(toggle);
-    else toggle();
+    const wrap = this.canvas && this.canvas.parentElement;
+    if (wrap) {
+      wrap.classList.add('viz-toggle');
+      setTimeout(() => wrap.classList.remove('viz-toggle'), 450);
+    }
+    this.state = (this.state < 0) ? 0 : -1;
+    this._persist();
+    this._applyVisualState();
   },
 
   _persist() {

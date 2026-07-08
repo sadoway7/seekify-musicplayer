@@ -215,32 +215,25 @@
   opacity: 0 !important;
 }
 
+.now-playing.viz-on.playing .np-art-wrapper {
+  animation: none;
+}
 .now-playing.viz-on .np-art-wrapper {
-  animation: none !important;
-  transform: none !important;
+  transform: none;
 }
 
 .np-viz-btn.active {
   color: var(--accent);
 }
 
-.np-art-wrapper {
-  view-transition-name: viz-disc;
+@keyframes vizToggleSpin {
+  0% { transform: rotate(0) scale(1); opacity: 1; }
+  50% { transform: rotate(90deg) scale(0.2); opacity: 0.4; }
+  100% { transform: rotate(0) scale(1); opacity: 1; }
 }
-@keyframes viz-disc-out {
-  to { transform: rotate(120deg) scale(0.2); opacity: 0; }
+.np-art-wrapper.viz-toggle {
+  animation: vizToggleSpin 0.4s ease-in-out !important;
 }
-@keyframes viz-disc-in {
-  from { transform: rotate(-120deg) scale(0.2); opacity: 0; }
-}
-::view-transition-old(viz-disc) {
-  animation: viz-disc-out 0.35s ease-in forwards;
-}
-::view-transition-new(viz-disc) {
-  animation: viz-disc-in 0.35s ease-out forwards;
-}
-::view-transition-old(root) { animation: none; }
-::view-transition-new(root) { animation: none; }
 
 /* Small album-art thumbnail shown over the top-left of the viz disc so the
    cover isn't fully lost while the visualizer runs. */
