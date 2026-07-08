@@ -194,6 +194,36 @@
   to { transform: rotate(360deg); }
 }
 
+/* ── Visualizer (#3) ── canvas swaps into the disc frame when viz is on */
+#np-viz-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: none;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.now-playing.viz-on #np-viz-canvas {
+  display: block;
+}
+
+.now-playing.viz-on #np-art,
+.now-playing.viz-on #np-art-bg {
+  opacity: 0 !important;
+}
+
+.now-playing.viz-on .np-art-wrapper {
+  animation: none !important;
+  transform: none !important;
+}
+
+.np-viz-btn.active {
+  color: var(--accent);
+}
+
 .np-info {
   position: relative;
   z-index: 1;

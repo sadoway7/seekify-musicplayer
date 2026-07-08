@@ -38,6 +38,8 @@ const App = {
 
     UI.init();
 
+    Visualizer.init();
+
     Keyboard.init();
 
     ReviewUI.init();

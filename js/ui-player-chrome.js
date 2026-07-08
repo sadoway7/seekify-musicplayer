@@ -184,6 +184,7 @@ Object.assign(UI, {
     if (window.innerWidth >= 768) {
       this.els.queuePanel.classList.remove('hidden');
     }
+    if (window.Visualizer) Visualizer.onShowNowPlaying();
   },
 
   hideNowPlaying() {
@@ -224,6 +225,7 @@ Object.assign(UI, {
     document.querySelectorAll('.tab-item').forEach(t => {
       t.classList.toggle('active', t.dataset.tab === Store.currentTab);
     });
+    if (window.Visualizer) Visualizer.onHideNowPlaying();
   },
 
   showQueue() {
