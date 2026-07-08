@@ -360,8 +360,8 @@
   }
 
   .np-corner-toggle {
-    top: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.04) !important;
-    right: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.04) !important;
+    top: calc(50% - var(--disc-size) / 2) !important;
+    right: calc(50% - var(--disc-size) / 2) !important;
     left: auto !important;
     transform: none !important;
   }

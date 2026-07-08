@@ -240,8 +240,8 @@
    (click → album art). Viz-off → live mini sphere (click → viz). Crossfades. */
 .np-corner-toggle {
   position: absolute;
-  top: 4%;
-  right: 4%;
+  top: 0%;
+  right: 0%;
   left: auto;
   transform: none;
   width: 30%;
