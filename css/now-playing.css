@@ -296,9 +296,6 @@
 
 .now-playing.viz-on .np-corner-toggle {
   z-index: 5;
-  top: 50%;
-  left: -8%;
-  transform: translateY(-50%);
   width: 42%; min-width: 58px; max-width: 88px;
 }
 .now-playing:not(.viz-on) .np-corner-toggle {
