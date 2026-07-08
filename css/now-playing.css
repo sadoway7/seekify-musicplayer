@@ -294,6 +294,20 @@
 .now-playing.viz-on .np-viz-thumb { opacity: 1; }
 .now-playing.viz-on .np-corner-viz-canvas { opacity: 0; }
 
+.np-corner-expand {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30%; height: 30%;
+  color: rgba(255,255,255,0.85);
+  z-index: 3;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  opacity: 0;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+}
+.now-playing:not(.viz-on) .np-corner-expand { opacity: 0.85; }
+
 .now-playing.viz-on .np-corner-toggle {
   z-index: 5;
   top: 0%;
