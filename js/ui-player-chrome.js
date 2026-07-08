@@ -188,22 +188,39 @@ Object.assign(UI, {
 
   hideNowPlaying() {
     const np = this.els.nowPlaying;
+    // clear any stray inline drag styles so the keyframe runs from rest
+    np.style.transform = '';
+    np.style.opacity = '';
+    np.style.transition = '';
     np.style.animation = 'nowPlayingSlideDown 0.35s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards';
-    np.addEventListener('animationend', () => {
-      np.classList.add('hidden');
-      np.style.animation = '';
-      np.style.background = '';
+    np.addEventListener('animationend', () => this._applyNowPlayingHiddenState(), { once: true });
+    this._afterHideNowPlaying();
+  },
+
+  // Final visibility reset (hidden class + clear all inline presentational
+  // styles + album-color vars). Called after the slide-down animation (button
+  // path) and after the swipe-off transition (gesture path).
+  _applyNowPlayingHiddenState() {
+    const np = this.els.nowPlaying;
+    np.classList.add('hidden');
+    np.style.animation = '';
+    np.style.transform = '';
+    np.style.opacity = '';
+    np.style.transition = '';
+    np.style.background = '';
     this._lastColorAlbumId = null;
     this._albumColor = null;
-      document.documentElement.style.setProperty('--waveform-played', '#D4F040');
-      document.documentElement.style.setProperty('--waveform-hover', 'rgba(212, 240, 64, 0.8)');
-    }, { once: true });
+    document.documentElement.style.setProperty('--waveform-played', '#D4F040');
+    document.documentElement.style.setProperty('--waveform-hover', 'rgba(212, 240, 64, 0.8)');
+  },
+
+  // Synchronous restore when leaving now-playing: show mini-player, hide queue,
+  // restore active tab. Shared by animated hide + swipe dismiss.
+  _afterHideNowPlaying() {
     if (Player.getCurrentTrack()) {
       this.els.miniPlayer.classList.remove('hidden');
     }
-    // Hide queue
     this.els.queuePanel.classList.add('hidden');
-    // Restore active tab highlight
     document.querySelectorAll('.tab-item').forEach(t => {
       t.classList.toggle('active', t.dataset.tab === Store.currentTab);
     });

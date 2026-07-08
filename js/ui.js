@@ -22,6 +22,7 @@ const UI = {
     this._bindTabBar();
     this._bindMiniPlayer();
     this._bindNowPlaying();
+    this._bindNowPlayingSwipe();
     this._bindSeekBar();
     this._bindVolumeBar();
     this._bindQueuePanel();
@@ -736,6 +737,55 @@ const UI = {
       startY = 0;
       currentY = 0;
     });
+  },
+
+  // Swipe-down on the now-playing header or artwork dismisses it (touch only).
+  // Binds to .np-header + .np-artwork (excludes waveform seek + control taps).
+  _bindNowPlayingSwipe() {
+    const np = this.els.nowPlaying;
+    if (!np) return;
+    let startY = 0, lastY = 0, swiping = false;
+    const onStart = (e) => {
+      if (np.classList.contains('hidden') || e.touches.length !== 1) return;
+      startY = e.touches[0].clientY;
+      lastY = startY;
+      swiping = true;
+      np.style.transition = 'none';
+    };
+    np.querySelectorAll('.np-header, .np-artwork').forEach(z =>
+      z.addEventListener('touchstart', onStart, { passive: true }));
+
+    np.addEventListener('touchmove', (e) => {
+      if (!swiping) return;
+      lastY = e.touches[0].clientY;
+      const diff = lastY - startY;
+      if (diff > 0) np.style.transform = 'translateY(' + diff + 'px)';
+    }, { passive: true });
+
+    const onEnd = () => {
+      if (!swiping) return;
+      swiping = false;
+      const diff = lastY - startY;
+      if (diff > 120) {
+        // continue off-screen then finalize (no jump-back into the slide animation)
+        np.style.transition = 'transform 0.22s ease-in, opacity 0.22s ease-in';
+        np.style.transform = 'translateY(' + Math.round(window.innerHeight * 1.05) + 'px)';
+        np.style.opacity = '0';
+        const done = (ev) => {
+          if (ev.target !== np) return;
+          np.removeEventListener('transitionend', done);
+          this._applyNowPlayingHiddenState();
+        };
+        np.addEventListener('transitionend', done);
+        this._afterHideNowPlaying();
+      } else {
+        np.style.transition = 'transform 0.22s ease-out';
+        np.style.transform = '';
+        setTimeout(() => { np.style.transition = ''; }, 240);
+      }
+    };
+    np.addEventListener('touchend', onEnd);
+    np.addEventListener('touchcancel', onEnd);
   },
 
   _bindQueueDrag() {
