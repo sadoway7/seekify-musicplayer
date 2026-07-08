@@ -403,7 +403,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       gl.uniform1f(this._miniLoc.uMidHigh, this._miniBands.midHigh);
       gl.uniform1f(this._miniLoc.uTreble, this._miniBands.treble);
       gl.uniform1f(this._miniLoc.uLevel, this._miniBands.level);
-      gl.uniform3f(this._miniLoc.uAlbumColor, cr, cg, cb);
+      gl.uniform3f(this._miniLoc.uAlbumColor, 0.8, 0.8, 0.8);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     this._lastRender = performance.now();
