@@ -247,7 +247,7 @@
 .np-corner-toggle {
   position: absolute;
   top: 4%;
-  left: 4%;
+  left: 1%;
   width: 38%;
   min-width: 52px;
   max-width: 80px;
