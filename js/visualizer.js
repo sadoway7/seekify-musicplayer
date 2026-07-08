@@ -247,19 +247,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     // Live color: pull UI._albumColor (the cover dominant color the rest of
     // now-playing already uses), re-deriving only when it changes. Robust to the
     // push path failing and retints on every song change.
-    if (window.UI && UI._albumColor) {
-      const ac = UI._albumColor;
-      if (!this._acSrc || this._acSrc[0] !== ac.r || this._acSrc[1] !== ac.g || this._acSrc[2] !== ac.b) {
-        try { this.setColor(ac.r / 255, ac.g / 255, ac.b / 255); } catch (e) { console.error('[viz-color] setColor threw', e); }
-        this._acSrc = [ac.r, ac.g, ac.b];
-        console.log('[viz-color] poll fired; ac=', ac.r, ac.g, ac.b, '→ _color=', this._color);
-      }
-    } else if ((this._dbg = (this._dbg || 0) + 1) % 30 === 0) {
-      console.log('[viz-color] no UI._albumColor; _color=', this._color);
-    }
+    this._sampleCoverColor();
     let cr = 0.83, cg = 0.94, cb = 0.25;
     if (this._color) { cr = this._color[0]; cg = this._color[1]; cb = this._color[2]; }
-    if ((this._dbg2 = (this._dbg2 || 0) + 1) % 60 === 0) console.log('[viz-color] uniform=', cr.toFixed(2), cg.toFixed(2), cb.toFixed(2));
 
     const p = this._programs[this.state];
     gl.useProgram(p.prog);
@@ -286,6 +276,28 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const vibS = Math.min(100, s + 35);
     const vibL = Math.min(65, Math.max(45, l + 10));
     this._color = this._hslToRgb(h, vibS, vibL);
+  },
+  // Self-sufficient color source: sample the live album cover (#np-art, same-origin)
+  // directly and derive the dominant RGB ourselves. UI._albumColor turned out to be
+  // null at render time (nulled on hide, async-populated), so push/poll never landed
+  // and the viz stayed on the lime fallback. Sampling the img is robust to all that
+  // and retints the moment a new cover loads.
+  _sampleCoverColor() {
+    const img = document.getElementById('np-art');
+    if (!img || !img.complete || !img.naturalWidth) return;
+    if (this._artSrc === img.src) return;
+    this._artSrc = img.src;
+    try {
+      if (!this._samp) this._samp = document.createElement('canvas');
+      this._samp.width = this._samp.height = 8;
+      const ctx = this._samp.getContext('2d');
+      ctx.drawImage(img, 0, 0, 8, 8);
+      const d = ctx.getImageData(0, 0, 8, 8).data;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+      this.setColor(r / (n * 255), g / (n * 255), b / (n * 255));
+      console.log('[viz-color] sample →', this._color);
+    } catch (e) { /* CORS/not-ready: keep prior color */ }
   },
   _rgbToHsl(r, g, b) {
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
