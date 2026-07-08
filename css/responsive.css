@@ -360,10 +360,10 @@
   }
 
   .np-corner-toggle {
-    top: 50% !important;
+    top: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.04) !important;
     right: calc(50% - var(--disc-size) / 2 + var(--disc-size) * 0.04) !important;
     left: auto !important;
-    transform: translateY(-50%) !important;
+    transform: none !important;
   }
 
   .np-art-wrapper {
