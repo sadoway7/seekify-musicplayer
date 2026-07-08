@@ -287,6 +287,10 @@
 .now-playing.viz-on .np-viz-thumb { opacity: 1; }
 .now-playing.viz-on .np-corner-viz-canvas { opacity: 0; }
 
+.now-playing:not(.viz-on) .np-corner-toggle {
+  width: 24%; min-width: 36px; max-width: 54px;
+}
+
 .np-info {
   position: relative;
   z-index: 1;
