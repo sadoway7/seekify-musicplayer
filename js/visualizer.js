@@ -31,10 +31,14 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 // ripples the displacement. Color is uAlbumColor, now fed by the working
 // self-sampling pipeline (_sampleCoverColor), so it tracks the cover.
 float map(vec3 p){
-  float r = 1.0 + 0.9*uBass + 0.1*uLevel;
+  float r = 1.0 + 1.3*uBass + 0.12*uLevel;
   float d = length(p) - r;
-  float disp = (fbm(p*1.5 + vec3(0.0, 0.0, iTime*0.3)) - 0.5) * (0.18 + uMid*0.8 + uBass*0.35);
-  return d + disp;
+  // Calm when quiet: low idle displacement (~0.05) so the sphere settles smooth
+  // when audio is low; mid ripples + bass bulge it when active. Slow time anim.
+  float disp = (fbm(p*1.5 + vec3(0.0,0.0,iTime*0.15)) - 0.5) * (0.05 + uMid*0.9 + uBass*0.4);
+  // Treble shimmer — subtle + slow so it doesn't jitter when quiet.
+  float detail = (fbm(p*4.0 + vec3(0.0,iTime*0.8,0.0)) - 0.5) * 0.18 * uTreble;
+  return d + disp + detail;
 }
 vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
   return normalize(vec3(map(p+e.xyy)-map(p-e.xyy), map(p+e.yxy)-map(p-e.yxy), map(p+e.yyx)-map(p-e.yyx)));
@@ -59,12 +63,16 @@ void main(){
   if (hit) {
     vec3 p = ro + rd*t;
     vec3 n = calcNormal(p);
-    float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
-    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.22;
-    col = C*diff + rim*(C + vec3(0.08));
+    // Matte: asymmetric directional key (lights the +x/+y side) + soft fill.
+    // NO fresnel rim — that symmetric bright ring read as a mirror. Lit side
+    // differs from shadow side, so left/right are no longer equal.
+    float key = max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
+    float fill = 0.3*max(dot(n, normalize(vec3(-0.5, -0.3, 0.6))), 0.0);
+    float diff = 0.4 + 0.55*key + fill;
+    col = C*diff + C*0.18*uBass;  // kick bloom on the surface
   }
-  col += C * glow * (0.3 + uLevel*0.6);
-  col = clamp(col, 0.0, 1.0);
+  col += C * glow * (0.7 + uLevel*2.0);   // version-1-level strong outer glow
+  col = 1.0 - exp(-col*1.1);              // tone-map: glows but never blows to white
   fragColor = vec4(col, 1.0);
 }`
     }
@@ -248,12 +256,19 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const lvl = (this._bands.bass + this._bands.mid + this._bands.treble) / 3;
     this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
 
-    // Live color: pull UI._albumColor (the cover dominant color the rest of
-    // now-playing already uses), re-deriving only when it changes. Robust to the
-    // push path failing and retints on every song change.
+    // Live color: sample the cover dominant color (same-origin #np-art),
+    // re-deriving only when it changes. Eased toward the target each frame so
+    // song-to-song changes crossfade smoothly instead of snapping.
     this._sampleCoverColor();
     let cr = 0.83, cg = 0.94, cb = 0.25;
-    if (this._color) { cr = this._color[0]; cg = this._color[1]; cb = this._color[2]; }
+    if (this._color) {
+      if (!this._colorCur) this._colorCur = this._color.slice();
+      const k = 0.06;
+      this._colorCur[0] += (this._color[0] - this._colorCur[0]) * k;
+      this._colorCur[1] += (this._color[1] - this._colorCur[1]) * k;
+      this._colorCur[2] += (this._color[2] - this._colorCur[2]) * k;
+      cr = this._colorCur[0]; cg = this._colorCur[1]; cb = this._colorCur[2];
+    }
 
     const p = this._programs[this.state];
     gl.useProgram(p.prog);
