@@ -372,10 +372,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         for (let i = 6; i < 35; i++) mml += this._freq[i];
         for (let i = 35; i < 93; i++) mmh += this._freq[i];
         for (let i = 93; i < Math.min(232, this._freq.length); i++) mtr += this._freq[i];
-        mb = Math.max(0, Math.min(1, mb / (4 * 255) * 2.0));
-        mml = Math.max(0, Math.min(1, mml / (29 * 255) * 1.6));
-        mmh = Math.max(0, Math.min(1, mmh / (58 * 255) * 1.5));
-        mtr = Math.max(0, Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 2.5));
+        mb = Math.pow(Math.min(1, mb / (4 * 255) * 1.2), 0.65);
+        mml = Math.pow(Math.min(1, mml / (29 * 255) * 1.0), 0.65);
+        mmh = Math.pow(Math.min(1, mmh / (58 * 255) * 1.0), 0.65);
+        mtr = Math.pow(Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 1.5), 0.65);
       }
       const mlvl = (mb + mml + mmh + mtr) / 4;
       const gl = this._miniGL;

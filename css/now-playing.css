@@ -244,9 +244,9 @@
   right: 4%;
   left: auto;
   transform: none;
-  width: 38%;
-  min-width: 52px;
-  max-width: 80px;
+  width: 30%;
+  min-width: 42px;
+  max-width: 64px;
   aspect-ratio: 1;
   border-radius: 50%;
   z-index: 5;
