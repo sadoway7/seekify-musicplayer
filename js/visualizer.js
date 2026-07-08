@@ -27,48 +27,40 @@ float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
 float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*noise(p); p = p*2.02; a *= 0.5; } return v; }
 
 float map(vec3 p){
-  float r = 1.0 + 0.22*uBass;
+  float r = 1.0 + 0.45*uBass + 0.08*uLevel;
   float d = length(p) - r;
-  float disp = (fbm(p*2.0 + vec3(0.0, 0.0, iTime*0.35)) - 0.5) * 0.5 * (0.25 + uMid*1.6);
+  float disp = (fbm(p*1.5 + vec3(0.0, 0.0, iTime*0.3)) - 0.5) * (0.18 + uMid*0.8 + uBass*0.35);
   return d + disp;
 }
 vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
   return normalize(vec3(map(p+e.xyy)-map(p-e.xyy), map(p+e.yxy)-map(p-e.yxy), map(p+e.yyx)-map(p-e.yyx)));
 }
 
-// cosine palette anchored on the cover color → neon but cohesive.
-vec3 palette(float t){
-  vec3 a = uAlbumColor;
-  vec3 b = vec3(0.45);
-  vec3 c = vec3(1.0, 0.9, 1.1);
-  vec3 d = vec3(0.0, 0.10, 0.20);
-  return a + b*cos(6.28318*(c*t + d));
-}
-
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
   vec3 ro = vec3(0.0, 0.0, -3.2);
   vec3 rd = normalize(vec3(uv, 1.6));
-  vec3 col = vec3(0.015, 0.015, 0.02);
+  vec3 C = uAlbumColor; // locked to cover color
+  vec3 col = C*0.05 + vec3(0.01);
   float t = 0.0, glow = 0.0;
   bool hit = false;
-  for (int i = 0; i < 56; i++) {
+  for (int i = 0; i < 100; i++) {
     vec3 p = ro + rd*t;
     float d = map(p);
     if (d < 0.001) { hit = true; break; }
     if (t > 6.0) break;
-    glow += exp(-max(d, 0.0)*4.5) * 0.016;
+    glow += exp(-max(d, 0.0)*4.5) * 0.02;
     t += d;
   }
   if (hit) {
     vec3 p = ro + rd*t;
     vec3 n = calcNormal(p);
-    float fres = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
-    float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
-    vec3 base = palette(0.5 + 0.5*n.y + 0.15*sin(iTime*0.8) + uTreble*0.35) * diff;
-    col = base + fres*palette(0.85 + 0.1*sin(iTime)) * 1.35;
+    float fres = pow(1.0 - max(dot(n, -rd), 0.0), 2.5);
+    float diff = 0.4 + 0.6*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
+    vec3 surf = C * diff * (0.85 + 0.6*uTreble);
+    col = surf + fres * (C + vec3(0.18)) * (1.0 + uLevel*1.6);
   }
-  col += palette(0.2) * glow * (0.6 + uLevel*1.7);
+  col += C * glow * (0.7 + uLevel*2.2);
   col = pow(clamp(col, 0.0, 1.0), vec3(0.85));
   fragColor = vec4(col, 1.0);
 }`
@@ -174,7 +166,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const src = actx.createMediaElementSource(Player.audio);
       const an = actx.createAnalyser();
       an.fftSize = 1024;
-      an.smoothingTimeConstant = 0.8;
+      an.smoothingTimeConstant = 0.55;
       src.connect(an);
       an.connect(actx.destination);
       this._actx = actx;
@@ -200,9 +192,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const wrap = this.canvas.parentElement;
-    const size = Math.max(64, Math.min(wrap.clientWidth, 512));
+    const size = Math.max(64, Math.min(wrap.clientWidth, 640));
     const px = Math.round(size * dpr);
     if (this.canvas.width !== px || this.canvas.height !== px) {
       this.canvas.width = px;
@@ -222,18 +214,22 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       for (let i = 8; i < 64; i++) m += this._freq[i];
       for (let i = 64; i < 200; i++) tr += this._freq[i];
       b /= 8 * 255; m /= 56 * 255; tr /= 136 * 255;
+      b = Math.min(1, b * 1.5); m = Math.min(1, m * 1.4); tr = Math.min(1, tr * 1.5);
     }
-    const sm = 0.2;
-    this._bands.bass += (b - this._bands.bass) * sm;
-    this._bands.mid += (m - this._bands.mid) * sm;
-    this._bands.treble += (tr - this._bands.treble) * sm;
+    // asymmetric: fast attack (punch on the beat), slower release (shape holds)
+    const follow = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
+    this._bands.bass = follow(b, this._bands.bass, 0.55, 0.18);
+    this._bands.mid = follow(m, this._bands.mid, 0.45, 0.25);
+    this._bands.treble = follow(tr, this._bands.treble, 0.6, 0.3);
     const lvl = (this._bands.bass + this._bands.mid + this._bands.treble) / 3;
-    this._bands.level += (lvl - this._bands.level) * sm;
+    this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
 
-    // Vivid neon from the cover's hue (fall back to lime accent).
     let cr = 0.83, cg = 0.94, cb = 0.25;
     if (window.UI && UI._albumColor && UI._albumColor.h != null) {
-      const rgb = this._hslToRgb(UI._albumColor.h, 80, 60);
+      const ac = UI._albumColor;
+      const vibS = Math.min(100, ac.s + 35);
+      const vibL = Math.min(65, Math.max(45, ac.l + 10));
+      const rgb = this._hslToRgb(ac.h, vibS, vibL);
       cr = rgb[0]; cg = rgb[1]; cb = rgb[2];
     }
 
