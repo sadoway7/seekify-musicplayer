@@ -31,7 +31,7 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 // ripples the displacement. Color is uAlbumColor, now fed by the working
 // self-sampling pipeline (_sampleCoverColor), so it tracks the cover.
 float map(vec3 p){
-  float r = 1.0 + 1.3*uBass + 0.12*uLevel;
+  float r = 1.0 + 0.8*uBass + 0.08*uLevel;
   float d = length(p) - r;
   float disp = (fbm(p*1.5 + vec3(11.3, 7.7, iTime*0.15)) - 0.5) * (0.05 + uMid*0.9 + uBass*0.4);
   float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.8, 5.3)) - 0.5) * 0.18 * uTreble;
@@ -62,16 +62,16 @@ void main(){
     vec3 n = calcNormal(p);
     float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
     float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.22;
-    col = C*diff + rim*(C + vec3(0.08)) + C*0.18*uBass;
+    col = C*diff + rim*(C + vec3(0.08)) + C*0.10*uBass;
   }
-  col += C * glow * (0.7 + uLevel*2.0);
+  col += C * glow * (0.5 + uLevel*1.0);
   col = clamp(col, 0.0, 1.0);
-  col = (col - 0.5) * 1.6 + 0.5;
+  col = (col - 0.5) * 1.2 + 0.5;
   col = clamp(col, 0.0, 1.0);
   col = 1.0 - exp(-col * 1.1);
-  float scan = 0.90 + 0.10 * sin(gl_FragCoord.y * 1.5 + iTime * 4.0);
-  float vig = 1.0 - 0.40 * dot(uv, uv * vec2(1.2, 1.0));
-  float grain = (hash(vec3(gl_FragCoord.xy, iTime)) - 0.5) * 0.07;
+  float scan = 0.95 + 0.05 * sin(gl_FragCoord.y * 1.5 + iTime * 4.0);
+  float vig = 1.0 - 0.15 * dot(uv, uv * vec2(1.2, 1.0));
+  float grain = (hash(vec3(gl_FragCoord.xy, iTime)) - 0.5) * 0.03;
   col = col * scan * vig + grain;
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`
@@ -243,13 +243,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._resize();
 
     let b = 0, m = 0, tr = 0;
-    if (this._analyser && this._actx && this._actx.state === 'running') {
+    if (this._analyser) {
       this._analyser.getByteFrequencyData(this._freq);
       for (let i = 0; i < 12; i++) b += this._freq[i];
       for (let i = 12; i < 64; i++) m += this._freq[i];
       for (let i = 64; i < 200; i++) tr += this._freq[i];
       b /= 12 * 255; m /= 52 * 255; tr /= 136 * 255;
-      b = Math.max(0, b * 3.0 - 0.04); m = Math.max(0, m * 1.6 - 0.03); tr = Math.max(0, tr * 1.8 - 0.03);
+      b = Math.max(0, Math.min(1, b * 2.0 - 0.04)); m = Math.max(0, Math.min(1, m * 1.2 - 0.03)); tr = Math.max(0, Math.min(1, tr * 1.4 - 0.03));
     }
     // asymmetric: fast attack (punch on the beat), slower release (shape holds)
     const follow = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
