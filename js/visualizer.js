@@ -245,6 +245,52 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     } catch (e) { console.warn('[viz] audio init failed:', e); }
   },
 
+  // ponytail: per-bin spectral-flux-style pre-processing. Loud/clipped masters
+  // peg raw bins near 255 with no movement; this re-centers each bin on its own
+  // ~2s moving average so dynamics survive. Writes back into this._freq as
+  // 0–255 ints — downstream band aggregators (lines 323–328, 377–384) untouched.
+  // Ceiling: O(n) per frame, n=512. State: two Float32Array(512) on this.
+  _preprocessFreq() {
+    // ---- tunables ----
+    const SILENCE = 4;      // raw byte below this → bin forced dark, pipeline skipped
+    const TAU     = 2.0;    // moving-average time constant (s)
+    const GAMMA   = 1.8;    // expansion exponent (>1 widens small deviations)
+    const GAIN    = 1.6;    // linear gain after expansion
+    const ATTACK  = 0.6;    // per-frame coefficient when rising  (fast attack)
+    const RELEASE = 0.08;   // per-frame coefficient when falling (slow release)
+    // ------------------
+    const f = this._freq;
+    const n = f.length;
+    const now = performance.now();
+    const dt = this._fpLastT ? Math.min(0.1, (now - this._fpLastT) / 1000) : 1 / 60;
+    this._fpLastT = now;
+    if (!this._fpAvg || this._fpAvg.length !== n) {
+      this._fpAvg = new Float32Array(n);
+      this._fpOut = new Float32Array(n);
+      this._fpInit = false;
+    }
+    const a = 1 - Math.exp(-dt / TAU);   // EMA coefficient, frame-rate independent
+    if (!this._fpInit) {                 // seed from first frame → no startup flash
+      for (let i = 0; i < n; i++) this._fpAvg[i] = f[i];
+      this._fpInit = true;
+    }
+    const invGamma = 1 / GAMMA;
+    for (let i = 0; i < n; i++) {
+      const raw = f[i];
+      if (raw < SILENCE) { f[i] = 0; continue; }            // silence gate
+      this._fpAvg[i] += (raw - this._fpAvg[i]) * a;          // slow per-bin average
+      let dev = (raw - this._fpAvg[i]) / 255;                // signed deviation, ~[-1,1]
+      if (dev < 0) dev = 0;                                  // negative excursions stay dark
+      const expanded = Math.pow(dev, invGamma) * GAIN;       // gamma-expand + gain
+      const clamped = expanded > 1 ? 1 : expanded;           // clamp 0..1
+      const prev = this._fpOut[i];
+      const k = clamped > prev ? ATTACK : RELEASE;           // fast-attack / slow-release
+      const sm = prev + (clamped - prev) * k;
+      this._fpOut[i] = sm;
+      f[i] = (sm * 255) | 0;                                 // write back as 0..255 int
+    }
+  },
+
   _ensureMiniGL() {
     if (this._miniGL) return true;
     if (!this._miniCanvas) return false;
@@ -320,6 +366,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     let b = 0, ml = 0, mh = 0, tr = 0;
     if (this._analyser && !(Player.audio && Player.audio.seeking)) {
       this._analyser.getByteFrequencyData(this._freq);
+      this._preprocessFreq();
       for (let i = 0; i < 12; i++) b += this._freq[i];
       for (let i = 12; i < 40; i++) ml += this._freq[i];
       for (let i = 40; i < 72; i++) mh += this._freq[i];
