@@ -43,6 +43,7 @@ type MbRecordingResult struct {
 	Artist      string
 	Album       string
 	AlbumID     string
+	ReleaseType string
 }
 
 type MbRecording struct {

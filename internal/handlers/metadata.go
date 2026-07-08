@@ -17,12 +17,13 @@ import (
 )
 
 type rescanCandidate struct {
-	Title    string  `json:"title"`
-	Artist   string  `json:"artist"`
-	Album    string  `json:"album"`
-	AlbumID  string  `json:"albumId"`
-	Score    float64 `json:"score"`
-	HasCover bool    `json:"hasCover"`
+	Title       string  `json:"title"`
+	Artist      string  `json:"artist"`
+	Album       string  `json:"album"`
+	AlbumID     string  `json:"albumId"`
+	Score       float64 `json:"score"`
+	HasCover    bool    `json:"hasCover"`
+	ReleaseType string  `json:"releaseType"`
 }
 
 func MetadataScanHandler(w http.ResponseWriter, r *http.Request) {
@@ -265,14 +266,26 @@ func MetadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 		store.Mu.RUnlock()
 
 		out = append(out, rescanCandidate{
-			Title:    cand.Title,
-			Artist:   cand.Artist,
-			Album:    cand.Album,
-			AlbumID:  cand.AlbumID,
-			Score:    score,
-			HasCover: hasCover,
+			Title:       cand.Title,
+			Artist:      cand.Artist,
+			Album:       cand.Album,
+			AlbumID:     cand.AlbumID,
+			Score:       score,
+			HasCover:    hasCover,
+			ReleaseType: cand.ReleaseType,
 		})
 	}
+
+	// Real albums (Album/EP) above compilations/soundtracks, then by match
+	// score. MB's raw relevance order front-loads compilations for popular
+	// tracks, which buried the user's actual album.
+	sort.SliceStable(out, func(i, j int) bool {
+		pi, pj := musicbrainz.ReleaseTypePriority(out[i].ReleaseType), musicbrainz.ReleaseTypePriority(out[j].ReleaseType)
+		if pi != pj {
+			return pi > pj
+		}
+		return out[i].Score > out[j].Score
+	})
 
 	returned := offset + len(out)
 	writeJSON(w, map[string]interface{}{
@@ -305,14 +318,15 @@ func searchMBRecordings(searchArtist, searchTitle string, limit int) []rescanCan
 			}
 			store.Mu.RUnlock()
 
-			results = append(results, rescanCandidate{
-				Title:    cand.Title,
-				Artist:   cand.Artist,
-				Album:    cand.Album,
-				AlbumID:  cand.AlbumID,
-				Score:    score,
-				HasCover: hasCover,
-			})
+		results = append(results, rescanCandidate{
+			Title:       cand.Title,
+			Artist:      cand.Artist,
+			Album:       cand.Album,
+			AlbumID:     cand.AlbumID,
+			Score:       score,
+			HasCover:    hasCover,
+			ReleaseType: cand.ReleaseType,
+		})
 		}
 	}
 
@@ -359,7 +373,11 @@ func searchMBRecordings(searchArtist, searchTitle string, limit int) []rescanCan
 		}
 	}
 
-	sort.Slice(results, func(i, j int) bool {
+	sort.SliceStable(results, func(i, j int) bool {
+		pi, pj := musicbrainz.ReleaseTypePriority(results[i].ReleaseType), musicbrainz.ReleaseTypePriority(results[j].ReleaseType)
+		if pi != pj {
+			return pi > pj
+		}
 		return results[i].Score > results[j].Score
 	})
 

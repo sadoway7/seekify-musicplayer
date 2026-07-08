@@ -23,7 +23,7 @@ func setupTestDB(t *testing.T) {
 	store.DB = db
 	t.Cleanup(func() { store.DB = prev })
 	for _, q := range []string{
-		`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL, email TEXT, disabled INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL, email TEXT, disabled INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, ip_address TEXT, user_agent TEXT)`,
 	} {
 		if _, err := db.Exec(q); err != nil {

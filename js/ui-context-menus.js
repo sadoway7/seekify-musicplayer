@@ -393,12 +393,13 @@ Object.assign(UI, {
         const cls = pct >= 80 ? 'score-high' : pct >= 50 ? 'score-mid' : 'score-low';
         const art = c.albumId ? '<img src="/api/finder/cover/' + c.albumId + '" alt="" onerror="this.style.display=\'none\'">' : '';
         const coverBadge = c.hasCover ? ' <span style="color:var(--accent);font-size:10px">&#10003; cover</span>' : '';
+        const typeBadge = c.releaseType ? ' <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">' + this._esc(c.releaseType) + '</span>' : '';
         html += '<div class="rescan-candidate" data-title="' + this._esc(c.title) + '" data-artist="' + this._esc(c.artist) + '" data-album="' + this._esc(c.album) + '" data-album-id="' + (c.albumId || '') + '">'
           + (art ? '<div class="rescan-candidate-art">' + art + '</div>' : '')
           + '<div class="rescan-candidate-info">'
           + '<div class="rescan-candidate-title">' + this._esc(c.title) + '</div>'
           + '<div class="rescan-candidate-artist">' + this._esc(c.artist) + '</div>'
-          + '<div class="rescan-candidate-album">' + this._esc(c.album || '—') + coverBadge + '</div>'
+          + '<div class="rescan-candidate-album">' + this._esc(c.album || '—') + coverBadge + typeBadge + '</div>'
           + '</div>'
           + '<span class="review-score ' + cls + '">' + pct + '%</span>'
           + '</div>';
