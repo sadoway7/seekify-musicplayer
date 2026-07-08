@@ -254,9 +254,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     // ---- tunables ----
     const SILENCE  = 4;      // raw byte below this → bin output forced dark
     const TAU      = 2.0;    // moving-average time constant (s)
-    const DEADZONE = 0.008;  // normalized dev below this → target 0 (kills noise flicker)
+    const DEADZONE = 0.02;   // normalized dev below this → target 0 (kills noise flicker)
     const GAMMA    = 1.8;    // expansion exponent (>1 widens small deviations)
-    const GAIN     = 1.0;    // linear gain after expansion
+    const GAIN     = 1.4;    // linear gain after expansion
     const FLOOR    = 0.35;   // blend weight of raw level (keeps loud sustains faintly lit)
     const ATTACK   = 0.4;    // per-frame coefficient when rising  (fast attack)
     const RELEASE  = 0.08;   // per-frame coefficient when falling (slow release)
