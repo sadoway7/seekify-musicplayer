@@ -544,7 +544,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       gl.uniform1f(p.loc.uTreble, this._bands.treble);
       gl.uniform1f(p.loc.uLevel, this._bands.level);
       gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
-      gl.uniform1f(p.loc.uCamFov, ((window.innerWidth || 9999) <= 768) ? 2.1 : 1.75);
+      // Portrait: canvas is now truly fullscreen (tall). The shader sizes the
+      // sphere to canvas height, so zoom out (lower uCamFov) proportional to
+      // aspect so the sphere fits the narrow width instead of clipping.
+      const _asp = (window.innerWidth || 1) / (window.innerHeight || 1);
+      gl.uniform1f(p.loc.uCamFov, _asp >= 1 ? 1.75 : 1.75 * _asp);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     } else if (this._miniCanvas && this._ensureMiniGL()) {
       let mb = 0, mml = 0, mmh = 0, mtr = 0;
