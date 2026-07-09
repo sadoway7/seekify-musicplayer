@@ -11,75 +11,132 @@ const Visualizer = {
       name: 'spheres',
       fragment: `#version 300 es
 precision highp float;
+
 uniform float iTime;
 uniform vec2 iResolution;
 uniform float uBass, uMidLow, uMidHigh, uTreble, uLevel;
+uniform float uRadAmt, uRadBase, uRadSrc;
+uniform float uWobLo, uWobHi, uDet, uGlowAmt, uFlash;
+uniform float uWobLoSrc, uWobHiSrc, uDetSrc, uGlowSrc, uFlashSrc, uRimSrc, uShimSrc;
+uniform float uRimPow, uRimStr, uShimBase, uShimLvl, uShimBass, uShimColor;
+uniform float uScanAmt, uVigAmt, uGrainAmt, uAmbient, uDiffBase, uDiffAmt, uGlowAcc, uRadLvl;
+uniform float uWobBaseLo, uWobBaseHi;
+uniform float uContrast, uExposure;
+uniform float uContrastSrc, uExposureSrc, uGrainSrc, uScanSrc, uVigSrc, uAmbientSrc, uDiffSrc, uRadLvlSrc;
+uniform float uCamDist, uCamFov, uMaxDist, uHitEps, uGlowBase, uShimPow, uShimLo, uShimHi;
+uniform float uWobFreqLo, uWobFreqHi, uDetFreq, uWobTimeLo, uWobTimeHi, uDetTime;
+uniform float uScanFreq, uScanTime, uVigX, uVigY, uLightX, uLightY, uLightZ;
+uniform int uMaxSteps;
 uniform vec3 uAlbumColor;
-uniform float uZoom;          // mobile zoom-out (smaller sphere on small screens)
+
 out vec4 fragColor;
 
-float hash(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
-float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
-  return mix(mix(mix(hash(i+vec3(0.0,0.0,0.0)), hash(i+vec3(1.0,0.0,0.0)), f.x),
-                 mix(hash(i+vec3(0.0,1.0,0.0)), hash(i+vec3(1.0,1.0,0.0)), f.x), f.y),
-             mix(mix(hash(i+vec3(0.0,0.0,1.0)), hash(i+vec3(1.0,0.0,1.0)), f.x),
-                 mix(hash(i+vec3(0.0,1.0,1.0)), hash(i+vec3(1.0,1.0,1.0)), f.x), f.y), f.z);
+float hash(vec3 p) {
+  p = fract(p * 0.3183099 + 0.1);
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
-float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*noise(p); p = p*2.02; a *= 0.5; } return v; }
 
-// Solid raymarched SDF sphere with fbm surface displacement — the "round 2"
-// look. Depth comes from the shaded gradient; bass pumps the radius; mid
-// ripples the displacement. Color is uAlbumColor, now fed by the working
-// self-sampling pipeline (_sampleCoverColor), so it tracks the cover.
-float map(vec3 p){
-  float r = 0.5 + 0.3*uBass + 0.08*uLevel;
+float noise(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+                 mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                 mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+
+float fbm(vec3 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noise(p);
+    p = p * 2.02;
+    a *= 0.5;
+  }
+  return v;
+}
+
+// Source selector: 0=Normal(0.0), 1=Bass, 2=MidLow, 3=MidHigh, 4=Treble, 5=Level
+float bandSel(float src) {
+  if (src < 0.5) return 0.0;
+  if (src < 1.5) return uBass;
+  if (src < 2.5) return uMidLow;
+  if (src < 3.5) return uMidHigh;
+  if (src < 4.5) return uTreble;
+  return uLevel;
+}
+
+float map(vec3 p) {
+  float drv = bandSel(uRadSrc);
+  float radMod = bandSel(uRadLvlSrc);
+  float r = uRadBase + uRadAmt * drv + uRadLvl * (uLevel + radMod);
   float d = length(p) - r;
-  float dispLow = (fbm(p*2.0 + vec3(11.3, 7.7, iTime*0.08)) - 0.5) * (0.03 + uMidLow*0.36);
-  float dispHigh = (fbm(p*3.2 + vec3(4.2, 9.6, iTime*0.12)) - 0.5) * (0.02 + uMidHigh*0.44);
-  float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.4, 5.3)) - 0.5) * 0.28 * uTreble;
+  float dispLow  = (fbm(p * uWobFreqLo + vec3(11.3, 7.7, iTime * uWobTimeLo)) - 0.5)
+                   * (uWobBaseLo + bandSel(uWobLoSrc) * uWobLo);
+  float dispHigh = (fbm(p * uWobFreqHi + vec3(4.2, 9.6, iTime * uWobTimeHi)) - 0.5)
+                   * (uWobBaseHi + bandSel(uWobHiSrc) * uWobHi);
+  float detail   = (fbm(p * uDetFreq + vec3(17.1, iTime * uDetTime, 5.3)) - 0.5)
+                   * uDet * bandSel(uDetSrc);
   return d + dispLow + dispHigh + detail;
 }
-vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
-  return normalize(vec3(map(p+e.xyy)-map(p-e.xyy), map(p+e.yxy)-map(p-e.yxy), map(p+e.yyx)-map(p-e.yyx)));
+
+vec3 calcNormal(vec3 p) {
+  vec2 e = vec2(0.01, 0.0);
+  return normalize(vec3(
+    map(p + e.xyy) - map(p - e.xyy),
+    map(p + e.yxy) - map(p - e.yxy),
+    map(p + e.yyx) - map(p - e.yyx)
+  ));
 }
 
-void main(){
-  vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
-  vec3 ro = vec3(0.0, 0.0, -3.2);
-  vec3 rd = normalize(vec3(uv, 1.6 * uZoom));   // uZoom<1 on mobile → wider FOV → smaller sphere
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+  vec3 ro = vec3(0.0, 0.0, -uCamDist);
+  vec3 rd = normalize(vec3(uv, uCamFov));
   vec3 C = uAlbumColor;
-  vec3 col = C*0.04;
+  vec3 col = C * (uAmbient + bandSel(uAmbientSrc) * 0.1);
   float t = 0.0, glow = 0.0;
   bool hit = false;
-  for (int i = 0; i < 96; i++) {
-    vec3 p = ro + rd*t;
+
+  for (int i = 0; i < 200; i++) {
+    if (i >= uMaxSteps) break;
+    vec3 p = ro + rd * t;
     float d = map(p);
-    if (d < 0.001) { hit = true; break; }
-    if (t > 6.0) break;
-    glow += exp(-max(d, 0.0)*5.0) * 0.013;
+    if (d < uHitEps) { hit = true; break; }
+    if (t > uMaxDist) break;
+    glow += exp(-max(d, 0.0) * 5.0) * uGlowAcc;
     t += d;
   }
+
   if (hit) {
-    vec3 p = ro + rd*t;
+    vec3 p = ro + rd * t;
     vec3 n = calcNormal(p);
-    float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
-    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.45;
-    col = C*diff + rim*(C + vec3(0.3)) + C*0.28*uBass;
+    float diff = uDiffBase + (uDiffAmt + bandSel(uDiffSrc) * 0.3)
+                 * max(dot(n, normalize(vec3(uLightX, uLightY, uLightZ))), 0.0);
+    float rim = pow(1.0 - max(dot(n, -rd), 0.0), uRimPow)
+                * (uRimStr + bandSel(uRimSrc) * 0.5);
+    col = C * diff + rim * (C + vec3(0.3)) + C * uFlash * bandSel(uFlashSrc);
   }
-  col += C * glow * (0.6 + uLevel*2.1);
+
+  col += C * glow * (uGlowBase + bandSel(uGlowSrc) * uGlowAmt);
   col = clamp(col, 0.0, 1.0);
-  col = (col - 0.5) * 1.2 + 0.5;
+  col = (col - 0.5) * (uContrast + bandSel(uContrastSrc) * 0.5) + 0.5;
   col = clamp(col, 0.0, 1.0);
-  col = 1.0 - exp(-col * 1.1);
-  float sh = pow(smoothstep(0.35, 0.95, fbm(vec3(uv * 1.5 + iTime * 0.05, iTime * 0.10))), 2.0) * (0.04 + uLevel * 0.14 + uBass * 0.08);
-  col += col * sh + C * sh * 0.3;
+  col = 1.0 - exp(-col * (uExposure + bandSel(uExposureSrc) * 0.5));
+
+  float sh = pow(smoothstep(uShimLo, uShimHi, fbm(vec3(uv * 1.5 + iTime * 0.05, iTime * 0.10))), uShimPow)
+             * (uShimBase + bandSel(uShimSrc) * uShimLvl + uBass * uShimBass);
+  col += col * sh + C * sh * uShimColor;
   col = clamp(col, 0.0, 1.0);
-  float scan = 0.95 + 0.05 * sin(gl_FragCoord.y * 1.5 + iTime * 4.0);
-  float vig = 1.0 - 0.15 * dot(uv, uv * vec2(1.2, 1.0));
-  float grain = (hash(vec3(gl_FragCoord.xy, iTime)) - 0.5) * 0.03;
+
+  float scan = 0.95 + (uScanAmt + bandSel(uScanSrc) * 0.1) * sin(gl_FragCoord.y * uScanFreq + iTime * uScanTime);
+  float vig = 1.0 - (uVigAmt + bandSel(uVigSrc) * 0.2) * dot(uv, uv * vec2(uVigX, uVigY));
+  float grain = (hash(vec3(gl_FragCoord.xy, iTime)) - 0.5) * (uGrainAmt + bandSel(uGrainSrc) * 0.05);
   col = col * scan * vig + grain;
-  float a = hit ? 1.0 : clamp(glow * 8.0, 0.0, 1.0);   // transparent outside the sphere/halo
-  fragColor = vec4(clamp(col, 0.0, 1.0), a);
+
+  // Transparent background: full alpha on hit, partial alpha for glow
+  float alpha = hit ? 1.0 : clamp(glow * (0.6 + bandSel(uGlowSrc) * uGlowAmt) * 3.0, 0.0, 1.0);
+  fragColor = vec4(clamp(col, 0.0, 1.0), alpha);
 }`
     }
   ],
@@ -108,6 +165,49 @@ void main(){
   VERT: `#version 300 es
 in vec2 aPos;
 void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
+
+  // "my best settings v2" — hardcoded production values. Static uniforms set
+  // once at program build; only bands/time/res/color/camFov are per-frame.
+  STATIC_UNIFORMS: {
+    uRadAmt: 0.25, uRadBase: 0.5, uRadSrc: 1, uRadLvl: 0.055, uRadLvlSrc: 2,
+    uWobLo: 0.64, uWobLoSrc: 2, uWobBaseLo: 0.014, uWobFreqLo: 1.2, uWobTimeLo: 0.08,
+    uWobHi: 0.36, uWobHiSrc: 5, uWobBaseHi: 0.038, uWobFreqHi: 2.1, uWobTimeHi: 0.12,
+    uDet: 0.34, uDetSrc: 4, uDetFreq: 4.1, uDetTime: 0.7,
+    uCamDist: 3.8, uMaxDist: 5.5, uHitEps: 0.0025, uGlowAcc: 0.014, uGlowBase: 0.65,
+    uAmbient: 0.125, uAmbientSrc: 1, uDiffBase: 0.0, uDiffAmt: 0.0, uDiffSrc: 0,
+    uLightX: 0.2, uLightY: 0.65, uLightZ: -0.3,
+    uRimPow: 4.0, uRimStr: 1.04, uRimSrc: 4,
+    uGlowAmt: 0.9, uGlowSrc: 5, uFlash: 0.24, uFlashSrc: 1,
+    uShimLvl: 0.27, uShimSrc: 1, uShimBase: 0.095, uShimBass: 0.14, uShimColor: 0.3,
+    uShimPow: 2.5, uShimLo: 0.3, uShimHi: 0.64,
+    uContrast: 1.3, uContrastSrc: 0, uExposure: 1.2, uExposureSrc: 0,
+    uScanAmt: 0.0, uScanSrc: 0, uScanFreq: 2.0, uScanTime: 8.0,
+    uVigAmt: 0.0, uVigSrc: 0, uVigX: 3.0, uVigY: 1.8,
+    uGrainAmt: 0.062, uGrainSrc: 0,
+    uMaxSteps: 148
+  },
+
+  // All uniform names (static + dynamic) for location lookup.
+  UNIFORM_NAMES: [
+    'iTime', 'iResolution',
+    'uBass', 'uMidLow', 'uMidHigh', 'uTreble', 'uLevel',
+    'uAlbumColor', 'uCamFov',
+    'uRadAmt', 'uRadBase', 'uRadSrc', 'uRadLvl', 'uRadLvlSrc',
+    'uWobLo', 'uWobLoSrc', 'uWobBaseLo', 'uWobFreqLo', 'uWobTimeLo',
+    'uWobHi', 'uWobHiSrc', 'uWobBaseHi', 'uWobFreqHi', 'uWobTimeHi',
+    'uDet', 'uDetSrc', 'uDetFreq', 'uDetTime',
+    'uCamDist', 'uMaxDist', 'uHitEps', 'uGlowAcc', 'uGlowBase',
+    'uAmbient', 'uAmbientSrc', 'uDiffBase', 'uDiffAmt', 'uDiffSrc',
+    'uLightX', 'uLightY', 'uLightZ',
+    'uRimPow', 'uRimStr', 'uRimSrc',
+    'uGlowAmt', 'uGlowSrc', 'uFlash', 'uFlashSrc',
+    'uShimLvl', 'uShimSrc', 'uShimBase', 'uShimBass', 'uShimColor', 'uShimPow', 'uShimLo', 'uShimHi',
+    'uContrast', 'uContrastSrc', 'uExposure', 'uExposureSrc',
+    'uScanAmt', 'uScanSrc', 'uScanFreq', 'uScanTime',
+    'uVigAmt', 'uVigSrc', 'uVigX', 'uVigY',
+    'uGrainAmt', 'uGrainSrc',
+    'uMaxSteps'
+  ],
 
   state: -1,        // -1 = off, >=0 = shader index
   gl: null,
@@ -206,27 +306,29 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       gl.attachShader(prog, fs);
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('[viz] link fail:', gl.getProgramInfoLog(prog)); return null; }
-      return {
-        prog,
-        loc: {
-          aPos: gl.getAttribLocation(prog, 'aPos'),
-          iTime: gl.getUniformLocation(prog, 'iTime'),
-          iResolution: gl.getUniformLocation(prog, 'iResolution'),
-          uBass: gl.getUniformLocation(prog, 'uBass'),
-          uMidLow: gl.getUniformLocation(prog, 'uMidLow'),
-          uMidHigh: gl.getUniformLocation(prog, 'uMidHigh'),
-          uTreble: gl.getUniformLocation(prog, 'uTreble'),
-          uLevel: gl.getUniformLocation(prog, 'uLevel'),
-          uAlbumColor: gl.getUniformLocation(prog, 'uAlbumColor'),
-          uZoom: gl.getUniformLocation(prog, 'uZoom')
-        }
-      };
+      const entry = { prog, loc: { aPos: gl.getAttribLocation(prog, 'aPos') } };
+      for (const n of this.UNIFORM_NAMES) entry.loc[n] = gl.getUniformLocation(prog, n);
+      // Static uniforms are set once here (program must be active to set them).
+      gl.useProgram(prog);
+      this._setStaticUniforms(gl, entry);
+      return entry;
     });
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     this._vbuf = buf;
     return true;
+  },
+
+  // Apply STATIC_UNIFORMS once per program. uMaxSteps is the only int; rest are float.
+  _setStaticUniforms(gl, p) {
+    const s = this.STATIC_UNIFORMS;
+    for (const name in s) {
+      const loc = p.loc[name];
+      if (loc == null) continue;
+      if (name === 'uMaxSteps') gl.uniform1i(loc, s[name]);
+      else gl.uniform1f(loc, s[name]);
+    }
   },
 
   _ensureAudio() {
@@ -237,7 +339,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const src = actx.createMediaElementSource(Player.audio);
       const an = actx.createAnalyser();
       an.fftSize = 1024;
-      an.smoothingTimeConstant = 0.3;
+      an.smoothingTimeConstant = 0.4;
       src.connect(an);
       an.connect(actx.destination);
       this._actx = actx;
@@ -257,14 +359,14 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   _bandDyn(slot, v, dt) {
     // ---- tunables (test-bench) ----
     const BYPASS    = false;  // skip dynamics, return raw v
-    const DECAY     = 6.5;    // RANGE_DECAY: vMax/vMin trailing time constant (s)
-    const RANGE_LO  = 0.0;    // GUARD_LO: range-guard smoothstep lower bound
-    const RANGE_HI  = 0.11;   // GUARD_HI: range-guard smoothstep upper bound
-    const FLOOR_RNG = 0.04;   // min range in normalizer (avoids divide-by-noise)
-    const GAMMA     = 2.8;    // shaping exponent on normalized value (n^GAMMA)
-    const STRENGTH  = 0.35;   // confidence blend weight toward stretched signal
-    const ATK = [0.22, 0.11, 0.17, 0.85];   // per-band attack  (bass, midLow, midHigh, treble)
-    const REL = [0.10, 0.20, 0.17, 0.445];  // per-band release
+    const DECAY     = 3;      // RANGE_DECAY: vMax/vMin trailing time constant (s)
+    const RANGE_LO  = 0.03;   // GUARD_LO: range-guard smoothstep lower bound
+    const RANGE_HI  = 0.12;   // GUARD_HI: range-guard smoothstep upper bound
+    const FLOOR_RNG = 0.03;   // min range in normalizer (avoids divide-by-noise)
+    const GAMMA     = 1.4;    // shaping exponent on normalized value (n^GAMMA)
+    const STRENGTH  = 0.45;   // confidence blend weight toward stretched signal
+    const ATK = [0.6, 0.37, 0.65, 0.4];    // per-band attack  (bass, midLow, midHigh, treble)
+    const REL = [0.395, 0.245, 0.17, 0.355]; // per-band release
     // --------------------------------
     if (BYPASS) return v;
     if (!this._bd) {
@@ -387,25 +489,25 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     let b = 0, ml = 0, mh = 0, tr = 0;
     if (this._analyser) {
       this._analyser.getByteFrequencyData(this._freq);
-      for (let i = 0; i < 12; i++) b += this._freq[i];
-      for (let i = 12; i < 40; i++) ml += this._freq[i];
-      for (let i = 40; i < 72; i++) mh += this._freq[i];
-      for (let i = 72; i < 200; i++) tr += this._freq[i];
-      b /= 12 * 255; ml /= 28 * 255; mh /= 32 * 255; tr /= 128 * 255;
-      b = Math.max(0, Math.min(1, b * 1.1 - 0.01)); ml = Math.max(0, Math.min(1, ml * 1.3 - 0.01)); mh = Math.max(0, Math.min(1, mh * 1 - 0.01)); tr = Math.max(0, Math.min(1, tr * 1.4 - 0.01));
+      for (let i = 0; i < 13; i++) b += this._freq[i];
+      for (let i = 13; i < 40; i++) ml += this._freq[i];
+      for (let i = 40; i < 73; i++) mh += this._freq[i];
+      for (let i = 73; i < 184; i++) tr += this._freq[i];
+      b /= 13 * 255; ml /= 27 * 255; mh /= 33 * 255; tr /= 111 * 255;
+      b = Math.max(0, Math.min(1, b * 1.0 - 0.01)); ml = Math.max(0, Math.min(1, ml * 0.9 - 0.01)); mh = Math.max(0, Math.min(1, mh * 0.9 - 0.01)); tr = Math.max(0, Math.min(1, tr * 1.4 - 0.01));
       b = this._bandDyn(0, b, dt); ml = this._bandDyn(1, ml, dt); mh = this._bandDyn(2, mh, dt); tr = this._bandDyn(3, tr, dt);
     }
     const follow = (cur, prev, atk, rel) => {
       if (cur > prev) return prev + (cur - prev) * atk;
-      const dynRel = Math.min(1, rel * (1 + prev * 1.5));
+      const dynRel = Math.min(1, rel * (1 + prev * 1.4));
       return prev + (cur - prev) * dynRel;
     };
-    this._bands.bass = follow(b, this._bands.bass, 0.9, 0.18);
-    this._bands.midLow = follow(ml, this._bands.midLow, 0.5, 0.30);
-    this._bands.midHigh = follow(mh, this._bands.midHigh, 0.55, 0.22);
-    this._bands.treble = follow(tr, this._bands.treble, 0.78, 0.3);
+    this._bands.bass = follow(b, this._bands.bass, 0.67, 0.205);
+    this._bands.midLow = follow(ml, this._bands.midLow, 0.42, 0.09);
+    this._bands.midHigh = follow(mh, this._bands.midHigh, 0.02, 0.22);
+    this._bands.treble = follow(tr, this._bands.treble, 0.39, 0.3);
     const lvl = (this._bands.bass + this._bands.midLow + this._bands.midHigh + this._bands.treble) / 4;
-    this._bands.level = follow(lvl, this._bands.level, 0.5, 0.2);
+    this._bands.level = follow(lvl, this._bands.level, 0.55, 0.16);
 
     this._sampleCoverColor();
     let cr = 0.83, cg = 0.94, cb = 0.25;
@@ -438,7 +540,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       gl.uniform1f(p.loc.uTreble, this._bands.treble);
       gl.uniform1f(p.loc.uLevel, this._bands.level);
       gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
-      gl.uniform1f(p.loc.uZoom, ((window.innerWidth || 9999) <= 768) ? 0.85 : 1.0);
+      gl.uniform1f(p.loc.uCamFov, ((window.innerWidth || 9999) <= 768) ? 2.1 : 1.75);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     } else if (this._miniCanvas && this._ensureMiniGL()) {
       let mb = 0, mml = 0, mmh = 0, mtr = 0;
