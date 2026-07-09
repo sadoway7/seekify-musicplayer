@@ -31,11 +31,11 @@ float fbm(vec3 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a*
 // ripples the displacement. Color is uAlbumColor, now fed by the working
 // self-sampling pipeline (_sampleCoverColor), so it tracks the cover.
 float map(vec3 p){
-  float r = 1.0 + 1.5*uBass + 0.08*uLevel;
+  float r = 0.5 + 0.3*uBass + 0.08*uLevel;
   float d = length(p) - r;
-  float dispLow = (fbm(p*2.0 + vec3(11.3, 7.7, iTime*0.08)) - 0.5) * (0.03 + uMidLow*0.3);
-  float dispHigh = (fbm(p*3.2 + vec3(4.2, 9.6, iTime*0.12)) - 0.5) * (0.02 + uMidHigh*0.2);
-  float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.4, 5.3)) - 0.5) * 0.22 * uTreble;
+  float dispLow = (fbm(p*2.0 + vec3(11.3, 7.7, iTime*0.08)) - 0.5) * (0.03 + uMidLow*0.36);
+  float dispHigh = (fbm(p*3.2 + vec3(4.2, 9.6, iTime*0.12)) - 0.5) * (0.02 + uMidHigh*0.44);
+  float detail = (fbm(p*4.0 + vec3(17.1, iTime*0.4, 5.3)) - 0.5) * 0.28 * uTreble;
   return d + dispLow + dispHigh + detail;
 }
 vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
@@ -63,9 +63,9 @@ void main(){
     vec3 n = calcNormal(p);
     float diff = 0.35 + 0.65*max(dot(n, normalize(vec3(0.6, 0.7, -0.8))), 0.0);
     float rim = pow(1.0 - max(dot(n, -rd), 0.0), 4.0) * 0.45;
-    col = C*diff + rim*(C + vec3(0.3)) + C*0.12*uBass;
+    col = C*diff + rim*(C + vec3(0.3)) + C*0.28*uBass;
   }
-  col += C * glow * (0.6 + uLevel*1.3);
+  col += C * glow * (0.6 + uLevel*2.1);
   col = clamp(col, 0.0, 1.0);
   col = (col - 0.5) * 1.2 + 0.5;
   col = clamp(col, 0.0, 1.0);
@@ -234,7 +234,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const src = actx.createMediaElementSource(Player.audio);
       const an = actx.createAnalyser();
       an.fftSize = 1024;
-      an.smoothingTimeConstant = 0.5;
+      an.smoothingTimeConstant = 0.3;
       src.connect(an);
       an.connect(actx.destination);
       this._actx = actx;
@@ -252,18 +252,18 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // flat/noisy content falls back to the raw band value (no flicker, no static
   // expansion). 8 slots: 0-3 full viz (b,ml,mh,tr), 4-7 mini (mb,mml,mmh,mtr).
   _bandDyn(slot, v, dt) {
-    // ---- tunables ----
-    const DECAY     = 4.0;    // vMax/vMin trailing time constant (s)
-    const RANGE_LO  = 0.04;   // range-guard smoothstep lower bound
-    const RANGE_HI  = 0.12;   // range-guard smoothstep upper bound
+    // ---- tunables (test-bench) ----
+    const BYPASS    = false;  // skip dynamics, return raw v
+    const DECAY     = 6.5;    // RANGE_DECAY: vMax/vMin trailing time constant (s)
+    const RANGE_LO  = 0.0;    // GUARD_LO: range-guard smoothstep lower bound
+    const RANGE_HI  = 0.11;   // GUARD_HI: range-guard smoothstep upper bound
     const FLOOR_RNG = 0.04;   // min range in normalizer (avoids divide-by-noise)
-    const GAMMA     = 1.4;    // shaping exponent on normalized value (n^GAMMA)
-    const STRENGTH  = 0.8;    // confidence blend weight toward stretched signal
-    const ATK_LOW   = 0.25;   // bass slots (0, 4) attack
-    const REL_LOW   = 0.06;   // bass slots release
-    const ATK_MID   = 0.5;    // other slots attack
-    const REL_MID   = 0.10;   // other slots release
-    // ------------------
+    const GAMMA     = 2.8;    // shaping exponent on normalized value (n^GAMMA)
+    const STRENGTH  = 0.35;   // confidence blend weight toward stretched signal
+    const ATK = [0.22, 0.11, 0.17, 0.85];   // per-band attack  (bass, midLow, midHigh, treble)
+    const REL = [0.10, 0.20, 0.17, 0.445];  // per-band release
+    // --------------------------------
+    if (BYPASS) return v;
     if (!this._bd) {
       this._bd = new Array(8);
       for (let i = 0; i < 8; i++) this._bd[i] = { vMin: 0, vMax: 0, sm: 0, init: false, needReset: false };
@@ -278,8 +278,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     // Range tracking: vMax instant-rise / slow-decay; vMin instant-drop / slow-rise.
     if (v > s.vMax) s.vMax = v; else s.vMax += (v - s.vMax) * (1 - decay);
     if (v < s.vMin) s.vMin = v; else s.vMin += (v - s.vMin) * (1 - decay);
-    const isLow = slot === 0 || slot === 4;
-    const rel = isLow ? REL_LOW : REL_MID;
+    const bi = slot % 4;
+    const rel = REL[bi];
     if (v < 0.01) {                          // silence → output 0, vMax still decays
       s.sm += (0 - s.sm) * rel;
       return s.sm;
@@ -292,7 +292,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (n < 0) n = 0; else if (n > 1) n = 1;
     n = Math.pow(n, GAMMA);                  // shape: squash floor, preserve peaks
     const out = v + (n - v) * conf * STRENGTH;  // mix(v, n, conf*STRENGTH); no dynamics → raw
-    const atk = isLow ? ATK_LOW : ATK_MID;
+    const atk = ATK[bi];
     s.sm += (out - s.sm) * (out > s.sm ? atk : rel);
     return s.sm;
   },
@@ -386,7 +386,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       for (let i = 40; i < 72; i++) mh += this._freq[i];
       for (let i = 72; i < 200; i++) tr += this._freq[i];
       b /= 12 * 255; ml /= 28 * 255; mh /= 32 * 255; tr /= 128 * 255;
-      b = Math.max(0, Math.min(1, b * 2.5 - 0.01)); ml = Math.max(0, Math.min(1, ml * 1.4 - 0.01)); mh = Math.max(0, Math.min(1, mh * 1.2 - 0.01)); tr = Math.max(0, Math.min(1, tr * 2.2 - 0.01));
+      b = Math.max(0, Math.min(1, b * 1.1 - 0.01)); ml = Math.max(0, Math.min(1, ml * 1.3 - 0.01)); mh = Math.max(0, Math.min(1, mh * 1 - 0.01)); tr = Math.max(0, Math.min(1, tr * 1.4 - 0.01));
       b = this._bandDyn(0, b, dt); ml = this._bandDyn(1, ml, dt); mh = this._bandDyn(2, mh, dt); tr = this._bandDyn(3, tr, dt);
     }
     const follow = (cur, prev, atk, rel) => {
