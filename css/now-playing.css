@@ -196,7 +196,7 @@
 
 /* ── Visualizer (#3) ── canvas crossfades into the disc frame when viz is on */
 #np-viz-canvas {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -226,6 +226,7 @@
 }
 .now-playing.viz-on .np-art-wrapper {
   transform: none;
+  box-shadow: none;
 }
 
 .np-viz-btn.active {

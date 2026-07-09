@@ -444,16 +444,20 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _resize() {
+    // Canvas is position:fixed fullscreen → clientWidth/Height = viewport.
+    // Non-square (fills the screen), higher scale than the old disc-constrained
+    // square crop. maxEdge caps 4K/high-DPI so the 148-step raymarch stays affordable.
     const mobile = (window.innerWidth || 9999) <= 768;
-    const RENDER_SCALE = mobile ? 0.4 : 0.5;   // raymarch is heavy; lower on mobile for fps (tunable)
-    const dprCap = mobile ? 1.0 : 1.5;
-    const d = Math.min(window.devicePixelRatio || 1, dprCap) * RENDER_SCALE;
-    const css = this.canvas.clientWidth || (this.canvas.parentElement && this.canvas.parentElement.clientWidth) || 300;
-    const size = Math.max(64, Math.min(css, 960));
-    const px = Math.round(size * d);
-    if (this.canvas.width !== px || this.canvas.height !== px) {
-      this.canvas.width = px; this.canvas.height = px;
-      this.gl.viewport(0, 0, px, px);
+    const scale = mobile ? 0.6 : 0.85;
+    const d = Math.min(window.devicePixelRatio || 1, 2.0) * scale;
+    let w = Math.round((this.canvas.clientWidth || 300) * d);
+    let h = Math.round((this.canvas.clientHeight || 300) * d);
+    const maxEdge = 1920;
+    const long = Math.max(w, h);
+    if (long > maxEdge) { const k = maxEdge / long; w = Math.round(w * k); h = Math.round(h * k); }
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w; this.canvas.height = h;
+      this.gl.viewport(0, 0, w, h);
     }
   },
 
