@@ -245,62 +245,56 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     } catch (e) { console.warn('[viz] audio init failed:', e); }
   },
 
-  // ponytail: per-bin spectral-flux-style pre-processing. Loud/clipped masters
-  // peg raw bins near 255 with no movement; this re-centers each bin on its own
-  // ~2s moving average so dynamics survive. Writes back into this._freq as
-  // 0–255 ints — downstream band aggregators (lines 323–328, 377–384) untouched.
-  // Ceiling: O(n) per frame, n=512. State: two Float32Array(512) on this.
-  _preprocessFreq() {
+  // Band-level dynamics processor — replaces the old per-bin _preprocessFreq
+  // (per-bin deviation amplified raw FFT noise). Operates on post-boost band
+  // values, which are ~10-100x cleaner. Auto-range-normalizes each band against
+  // its own recent min/max, and gates the expansion by a confidence measure so
+  // flat/noisy content falls back to the raw band value (no flicker, no static
+  // expansion). 8 slots: 0-3 full viz (b,ml,mh,tr), 4-7 mini (mb,mml,mmh,mtr).
+  _bandDyn(slot, v, dt) {
     // ---- tunables ----
-    const SILENCE  = 4;      // raw byte below this → bin output forced dark
-    const TAU      = 2.0;    // moving-average time constant (s)
-    const DEADZONE = 0.03;   // normalized dev below this → target 0 (kills noise flicker)
-    const GAMMA    = 1.8;    // expansion exponent (>1 widens small deviations)
-    const GAIN     = 1.4;    // linear gain after expansion
-    const FLOOR    = 0.35;   // blend weight of raw level (keeps loud sustains faintly lit)
-    const ATTACK   = 0.4;    // per-frame coefficient when rising  (fast attack)
-    const RELEASE  = 0.08;   // per-frame coefficient when falling (slow release)
+    const DECAY     = 4.0;    // vMax/vMin trailing time constant (s)
+    const RANGE_LO  = 0.04;   // range-guard smoothstep lower bound
+    const RANGE_HI  = 0.12;   // range-guard smoothstep upper bound
+    const FLOOR_RNG = 0.04;   // min range in normalizer (avoids divide-by-noise)
+    const GAMMA     = 1.4;    // shaping exponent on normalized value (n^GAMMA)
+    const STRENGTH  = 0.8;    // confidence blend weight toward stretched signal
+    const ATK_LOW   = 0.25;   // bass slots (0, 4) attack
+    const REL_LOW   = 0.06;   // bass slots release
+    const ATK_MID   = 0.5;    // other slots attack
+    const REL_MID   = 0.10;   // other slots release
     // ------------------
-    const f = this._freq;
-    const n = f.length;
-    const now = performance.now();
-    const dt = this._fpLastT ? Math.min(0.1, (now - this._fpLastT) / 1000) : 1 / 60;
-    this._fpLastT = now;
-    if (!this._fpAvg || this._fpAvg.length !== n) {
-      this._fpAvg = new Float32Array(n);
-      this._fpOut = new Float32Array(n);
-      this._fpInit = false;
+    if (!this._bd) {
+      this._bd = new Array(8);
+      for (let i = 0; i < 8; i++) this._bd[i] = { vMin: 0, vMax: 0, sm: 0, init: false, needReset: false };
     }
-    const a = 1 - Math.exp(-dt / TAU);   // EMA coefficient, frame-rate independent
-    if (!this._fpInit) {                 // seed from first frame → no startup flash
-      for (let i = 0; i < n; i++) this._fpAvg[i] = f[i];
-      this._fpInit = true;
+    const s = this._bd[slot];
+    if (!s.init || s.needReset) {           // first frame ever, or first frame after a seek
+      s.vMin = s.vMax = s.sm = v;
+      s.init = true; s.needReset = false;
+      return v;
     }
-    const invGamma = 1 / GAMMA;
-    for (let i = 0; i < n; i++) {
-      const raw = f[i];
-      if (raw < SILENCE) {
-        this._fpAvg[i] += (raw - this._fpAvg[i]) * a;        // keep baseline tracking through silence
-        f[i] = 0;                                            // only output forced dark
-        continue;
-      }
-      this._fpAvg[i] += (raw - this._fpAvg[i]) * a;          // slow per-bin average
-      let dev = (raw - this._fpAvg[i]) / 255;                // signed deviation, ~[-1,1]
-      if (dev < 0) dev = 0;                                  // negative excursions stay dark
-      let target;
-      if (dev < DEADZONE) {
-        target = 0;                                          // dead-zone: noise → target 0
-      } else {
-        target = Math.pow(dev - DEADZONE, invGamma) * GAIN;  // gamma-expand + gain
-        if (target > 1) target = 1;
-      }
-      const blend = FLOOR * (raw / 255) + (1 - FLOOR) * target;  // floor raw level + deviation target
-      const prev = this._fpOut[i];
-      const k = blend > prev ? ATTACK : RELEASE;            // smooth the blend → FLOOR jitter low-passed too
-      const sm = prev + (blend - prev) * k;
-      this._fpOut[i] = sm;
-      f[i] = sm >= 1 ? 255 : (sm * 255) | 0;                // write back as 0..255 int
+    const decay = Math.exp(-dt / DECAY);     // trailing-bound move factor this frame
+    // Range tracking: vMax instant-rise / slow-decay; vMin instant-drop / slow-rise.
+    if (v > s.vMax) s.vMax = v; else s.vMax += (v - s.vMax) * (1 - decay);
+    if (v < s.vMin) s.vMin = v; else s.vMin += (v - s.vMin) * (1 - decay);
+    const isLow = slot === 0 || slot === 4;
+    const rel = isLow ? REL_LOW : REL_MID;
+    if (v < 0.01) {                          // silence → output 0, vMax still decays
+      s.sm += (0 - s.sm) * rel;
+      return s.sm;
     }
+    const range = s.vMax - s.vMin;
+    let ct = (range - RANGE_LO) / (RANGE_HI - RANGE_LO);   // confidence via smoothstep
+    if (ct < 0) ct = 0; else if (ct > 1) ct = 1;
+    const conf = ct * ct * (3 - 2 * ct);
+    let n = (v - s.vMin) / (range > FLOOR_RNG ? range : FLOOR_RNG);
+    if (n < 0) n = 0; else if (n > 1) n = 1;
+    n = Math.pow(n, GAMMA);                  // shape: squash floor, preserve peaks
+    const out = v + (n - v) * conf * STRENGTH;  // mix(v, n, conf*STRENGTH); no dynamics → raw
+    const atk = isLow ? ATK_LOW : ATK_MID;
+    s.sm += (out - s.sm) * (out > s.sm ? atk : rel);
+    return s.sm;
   },
 
   _ensureMiniGL() {
@@ -375,16 +369,25 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (this._actx && this._actx.state === 'suspended') this._actx.resume();
     if (this._t0 == null) this._t0 = performance.now() / 1000;
 
+    // _bandDyn frame inputs: dt + seek-edge → mark all 8 slots for reset. Runs
+    // every frame because _bandDyn isn't called during seek, so it can't see the edge.
+    const _bdNow = performance.now();
+    const dt = this._bdLastT ? Math.min(0.1, (_bdNow - this._bdLastT) / 1000) : 1 / 60;
+    this._bdLastT = _bdNow;
+    const _seeking = !!(Player.audio && Player.audio.seeking);
+    if (this._bd && this._bdSeeking && !_seeking) for (let i = 0; i < 8; i++) this._bd[i].needReset = true;
+    this._bdSeeking = _seeking;
+
     let b = 0, ml = 0, mh = 0, tr = 0;
     if (this._analyser && !(Player.audio && Player.audio.seeking)) {
       this._analyser.getByteFrequencyData(this._freq);
-      this._preprocessFreq();
       for (let i = 0; i < 12; i++) b += this._freq[i];
       for (let i = 12; i < 40; i++) ml += this._freq[i];
       for (let i = 40; i < 72; i++) mh += this._freq[i];
       for (let i = 72; i < 200; i++) tr += this._freq[i];
       b /= 12 * 255; ml /= 28 * 255; mh /= 32 * 255; tr /= 128 * 255;
       b = Math.max(0, Math.min(1, b * 2.5 - 0.01)); ml = Math.max(0, Math.min(1, ml * 1.4 - 0.01)); mh = Math.max(0, Math.min(1, mh * 1.2 - 0.01)); tr = Math.max(0, Math.min(1, tr * 2.2 - 0.01));
+      b = this._bandDyn(0, b, dt); ml = this._bandDyn(1, ml, dt); mh = this._bandDyn(2, mh, dt); tr = this._bandDyn(3, tr, dt);
     }
     const follow = (cur, prev, atk, rel) => {
       if (cur > prev) return prev + (cur - prev) * atk;
@@ -442,15 +445,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         mmh = Math.pow(Math.min(1, mmh / (58 * 255) * 1.0), 0.65);
         mtr = Math.pow(Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 1.5), 0.65);
       }
-      // ponytail: pass-through. af was a second deviation centerer built to fight
-      // raw pegged-FFT input; preprocess already centers, so af would double-subtract.
-      // Mini now consumes the preprocessed signal directly, like the full viz.
-      const af = (raw, key) => raw;
       const mf = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
-      this._miniBands.bass = mf(af(mb, 'bass'), this._miniBands.bass, 0.7, 0.12);
-      this._miniBands.midLow = mf(af(mml, 'midLow'), this._miniBands.midLow, 0.5, 0.15);
-      this._miniBands.midHigh = mf(af(mmh, 'midHigh'), this._miniBands.midHigh, 0.55, 0.17);
-      this._miniBands.treble = mf(af(mtr, 'treble'), this._miniBands.treble, 0.7, 0.19);
+      this._miniBands.bass = mf(this._bandDyn(4, mb, dt), this._miniBands.bass, 0.7, 0.12);
+      this._miniBands.midLow = mf(this._bandDyn(5, mml, dt), this._miniBands.midLow, 0.5, 0.15);
+      this._miniBands.midHigh = mf(this._bandDyn(6, mmh, dt), this._miniBands.midHigh, 0.55, 0.17);
+      this._miniBands.treble = mf(this._bandDyn(7, mtr, dt), this._miniBands.treble, 0.7, 0.19);
       const mlvl = (this._miniBands.bass + this._miniBands.midLow + this._miniBands.midHigh + this._miniBands.treble) / 4;
       this._miniBands.level = mf(mlvl, this._miniBands.level, 0.5, 0.12);
       const gl = this._miniGL;
