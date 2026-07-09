@@ -15,6 +15,7 @@ uniform float iTime;
 uniform vec2 iResolution;
 uniform float uBass, uMidLow, uMidHigh, uTreble, uLevel;
 uniform vec3 uAlbumColor;
+uniform float uZoom;          // mobile zoom-out (smaller sphere on small screens)
 out vec4 fragColor;
 
 float hash(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
@@ -45,7 +46,7 @@ vec3 calcNormal(vec3 p){ vec2 e = vec2(0.01, 0.0);
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*iResolution.xy) / iResolution.y;
   vec3 ro = vec3(0.0, 0.0, -3.2);
-  vec3 rd = normalize(vec3(uv, 1.6));
+  vec3 rd = normalize(vec3(uv, 1.6 * uZoom));   // uZoom<1 on mobile → wider FOV → smaller sphere
   vec3 C = uAlbumColor;
   vec3 col = C*0.04;
   float t = 0.0, glow = 0.0;
@@ -216,7 +217,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
           uMidHigh: gl.getUniformLocation(prog, 'uMidHigh'),
           uTreble: gl.getUniformLocation(prog, 'uTreble'),
           uLevel: gl.getUniformLocation(prog, 'uLevel'),
-          uAlbumColor: gl.getUniformLocation(prog, 'uAlbumColor')
+          uAlbumColor: gl.getUniformLocation(prog, 'uAlbumColor'),
+          uZoom: gl.getUniformLocation(prog, 'uZoom')
         }
       };
     });
@@ -340,8 +342,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _resize() {
-    const RENDER_SCALE = 0.6;   // render below device pixels — raymarch is heavy (bench "Med"); lower for fps
-    const d = Math.min(window.devicePixelRatio || 1, 1.5) * RENDER_SCALE;
+    const mobile = (window.innerWidth || 9999) <= 768;
+    const RENDER_SCALE = mobile ? 0.4 : 0.5;   // raymarch is heavy; lower on mobile for fps (tunable)
+    const dprCap = mobile ? 1.0 : 1.5;
+    const d = Math.min(window.devicePixelRatio || 1, dprCap) * RENDER_SCALE;
     const css = this.canvas.clientWidth || (this.canvas.parentElement && this.canvas.parentElement.clientWidth) || 300;
     const size = Math.max(64, Math.min(css, 960));
     const px = Math.round(size * d);
@@ -434,6 +438,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       gl.uniform1f(p.loc.uTreble, this._bands.treble);
       gl.uniform1f(p.loc.uLevel, this._bands.level);
       gl.uniform3f(p.loc.uAlbumColor, cr, cg, cb);
+      gl.uniform1f(p.loc.uZoom, ((window.innerWidth || 9999) <= 768) ? 0.85 : 1.0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     } else if (this._miniCanvas && this._ensureMiniGL()) {
       let mb = 0, mml = 0, mmh = 0, mtr = 0;
