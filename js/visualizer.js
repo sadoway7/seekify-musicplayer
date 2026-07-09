@@ -254,7 +254,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     // ---- tunables ----
     const SILENCE  = 4;      // raw byte below this → bin output forced dark
     const TAU      = 2.0;    // moving-average time constant (s)
-    const DEADZONE = 0.02;   // normalized dev below this → target 0 (kills noise flicker)
+    const DEADZONE = 0.03;   // normalized dev below this → target 0 (kills noise flicker)
     const GAMMA    = 1.8;    // expansion exponent (>1 widens small deviations)
     const GAIN     = 1.4;    // linear gain after expansion
     const FLOOR    = 0.35;   // blend weight of raw level (keeps loud sustains faintly lit)
@@ -294,12 +294,12 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         target = Math.pow(dev - DEADZONE, invGamma) * GAIN;  // gamma-expand + gain
         if (target > 1) target = 1;
       }
+      const blend = FLOOR * (raw / 255) + (1 - FLOOR) * target;  // floor raw level + deviation target
       const prev = this._fpOut[i];
-      const k = target > prev ? ATTACK : RELEASE;            // fast-attack / slow-release
-      const sm = prev + (target - prev) * k;
+      const k = blend > prev ? ATTACK : RELEASE;            // smooth the blend → FLOOR jitter low-passed too
+      const sm = prev + (blend - prev) * k;
       this._fpOut[i] = sm;
-      const blend = FLOOR * (raw / 255) + (1 - FLOOR) * sm;  // floor keeps loud sustains faintly lit
-      f[i] = blend >= 1 ? 255 : (blend * 255) | 0;           // write back as 0..255 int
+      f[i] = sm >= 1 ? 255 : (sm * 255) | 0;                // write back as 0..255 int
     }
   },
 
@@ -442,10 +442,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         mmh = Math.pow(Math.min(1, mmh / (58 * 255) * 1.0), 0.65);
         mtr = Math.pow(Math.min(1, mtr / (Math.min(139, this._freq.length - 93) * 255) * 1.5), 0.65);
       }
-      const af = (raw, key) => {
-        this._miniFloor[key] = this._miniFloor[key] * 0.96 + raw * 0.04;
-        return Math.min(1, Math.max(0, raw - this._miniFloor[key] * 0.75) * 2.5);
-      };
+      // ponytail: pass-through. af was a second deviation centerer built to fight
+      // raw pegged-FFT input; preprocess already centers, so af would double-subtract.
+      // Mini now consumes the preprocessed signal directly, like the full viz.
+      const af = (raw, key) => raw;
       const mf = (cur, prev, atk, rel) => cur > prev ? prev + (cur - prev) * atk : prev + (cur - prev) * rel;
       this._miniBands.bass = mf(af(mb, 'bass'), this._miniBands.bass, 0.7, 0.12);
       this._miniBands.midLow = mf(af(mml, 'midLow'), this._miniBands.midLow, 0.5, 0.15);
