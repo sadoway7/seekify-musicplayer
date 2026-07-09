@@ -549,7 +549,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       // sphere to canvas height, so zoom out (lower uCamFov) proportional to
       // aspect so the sphere fits the narrow width instead of clipping.
       const _asp = (window.innerWidth || 1) / (window.innerHeight || 1);
-      gl.uniform1f(p.loc.uCamFov, _asp >= 1 ? 1.55 : 1.75 * _asp);
+      gl.uniform1f(p.loc.uCamFov, _asp >= 1 ? 1.3 : 1.75 * _asp);
       // Shift the sphere so it sits where the album disc was (artwork region
       // center), not viewport center. Canvas is fullscreen → rect = viewport.
       const _c = this._computeCenter();
