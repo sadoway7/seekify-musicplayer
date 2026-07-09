@@ -28,6 +28,7 @@ uniform float uWobFreqLo, uWobFreqHi, uDetFreq, uWobTimeLo, uWobTimeHi, uDetTime
 uniform float uScanFreq, uScanTime, uVigX, uVigY, uLightX, uLightY, uLightZ;
 uniform int uMaxSteps;
 uniform vec3 uAlbumColor;
+uniform vec2 uCenter;   // sphere screen-center offset (uv units) → aligns sphere to disc
 
 out vec4 fragColor;
 
@@ -92,7 +93,7 @@ vec3 calcNormal(vec3 p) {
 void main() {
   vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
   vec3 ro = vec3(0.0, 0.0, -uCamDist);
-  vec3 rd = normalize(vec3(uv, uCamFov));
+  vec3 rd = normalize(vec3(uv - uCenter, uCamFov));
   vec3 C = uAlbumColor;
   vec3 col = C * (uAmbient + bandSel(uAmbientSrc) * 0.1);
   float t = 0.0, glow = 0.0;
@@ -191,7 +192,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   UNIFORM_NAMES: [
     'iTime', 'iResolution',
     'uBass', 'uMidLow', 'uMidHigh', 'uTreble', 'uLevel',
-    'uAlbumColor', 'uCamFov',
+    'uAlbumColor', 'uCenter', 'uCamFov',
     'uRadAmt', 'uRadBase', 'uRadSrc', 'uRadLvl', 'uRadLvlSrc',
     'uWobLo', 'uWobLoSrc', 'uWobBaseLo', 'uWobFreqLo', 'uWobTimeLo',
     'uWobHi', 'uWobHiSrc', 'uWobBaseHi', 'uWobFreqHi', 'uWobTimeHi',
@@ -549,6 +550,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       // aspect so the sphere fits the narrow width instead of clipping.
       const _asp = (window.innerWidth || 1) / (window.innerHeight || 1);
       gl.uniform1f(p.loc.uCamFov, _asp >= 1 ? 1.75 : 1.75 * _asp);
+      // Shift the sphere so it sits where the album disc was (artwork region
+      // center), not viewport center. Canvas is fullscreen → rect = viewport.
+      const _c = this._computeCenter();
+      gl.uniform2f(p.loc.uCenter, _c[0], _c[1]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     } else if (this._miniCanvas && this._ensureMiniGL()) {
       let mb = 0, mml = 0, mmh = 0, mtr = 0;
@@ -603,6 +608,21 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // Self-sufficient color source: sample the live album cover (#np-art, same-origin)
   // directly and derive the dominant RGB ourselves. UI._albumColor turned out to be
   // null at render time (nulled on hide, async-populated), so push/poll never landed
+  // Disc (.np-art-wrapper) center in shader-uv units relative to the canvas.
+  // Shader gl_FragCoord is bottom-up, CSS rects are top-down → flip y.
+  // Lets the fullscreen sphere render where the album disc sits instead of at
+  // viewport center (which is below the disc, since controls take bottom space).
+  _computeCenter() {
+    const disc = document.querySelector('.np-art-wrapper');
+    const cr = this.canvas.getBoundingClientRect();
+    if (!disc || !cr || cr.height < 2) return [0, 0];
+    const dr = disc.getBoundingClientRect();
+    const cx = (dr.left + dr.width / 2) - cr.left;
+    const cy = (dr.top + dr.height / 2) - cr.top;
+    const H = cr.height;
+    return [(cx - cr.width / 2) / H, (H / 2 - cy) / H];
+  },
+
   // and the viz stayed on the lime fallback. Sampling the img is robust to all that
   // and retints the moment a new cover loads.
   _sampleCoverColor() {
