@@ -77,7 +77,8 @@ void main(){
   float vig = 1.0 - 0.15 * dot(uv, uv * vec2(1.2, 1.0));
   float grain = (hash(vec3(gl_FragCoord.xy, iTime)) - 0.5) * 0.03;
   col = col * scan * vig + grain;
-  fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+  float a = hit ? 1.0 : clamp(glow * 8.0, 0.0, 1.0);   // transparent outside the sphere/halo
+  fragColor = vec4(clamp(col, 0.0, 1.0), a);
 }`
     }
   ],
@@ -191,7 +192,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
 
   _ensureGL() {
     if (this.gl) return true;
-    const gl = this.canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false });
+    const gl = this.canvas.getContext('webgl2', { antialias: false, alpha: true, premultipliedAlpha: false });
     if (!gl) { console.warn('[viz] WebGL2 unavailable'); return false; }
     this.gl = gl;
     const vs = this._compile(gl.VERTEX_SHADER, this.VERT);
@@ -341,8 +342,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   _resize() {
     const RENDER_SCALE = 0.6;   // render below device pixels — raymarch is heavy (bench "Med"); lower for fps
     const d = Math.min(window.devicePixelRatio || 1, 1.5) * RENDER_SCALE;
-    const wrap = this.canvas.parentElement;
-    const size = Math.max(64, Math.min(wrap.clientWidth, 640));
+    const css = this.canvas.clientWidth || (this.canvas.parentElement && this.canvas.parentElement.clientWidth) || 300;
+    const size = Math.max(64, Math.min(css, 960));
     const px = Math.round(size * d);
     if (this.canvas.width !== px || this.canvas.height !== px) {
       this.canvas.width = px; this.canvas.height = px;
