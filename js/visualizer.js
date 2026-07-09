@@ -210,7 +210,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     'uMaxSteps'
   ],
 
-  state: -1,        // -1 = off, >=0 = shader index
+  state: 0,         // default ON (viz); -1 = off, >=0 = shader index
   gl: null,
   _audioReady: false,
   _bands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
@@ -228,7 +228,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this.btn = document.querySelector('.np-viz-btn');
     try {
       const p = JSON.parse(localStorage.getItem('musicapp:viz') || '{}');
-      if (typeof p.which === 'number' && p.which >= 0 && p.which < this.SHADERS.length) this.state = p.which;
+      if (typeof p.which === 'number' && p.which >= -1 && p.which < this.SHADERS.length) this.state = p.which;
     } catch (e) {}
     if (this.btn) this.btn.addEventListener('click', () => this.cycle());
     const disc = document.querySelector('.np-artwork');
