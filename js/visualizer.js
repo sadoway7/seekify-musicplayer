@@ -380,7 +380,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._bdSeeking = _seeking;
 
     let b = 0, ml = 0, mh = 0, tr = 0;
-    if (this._analyser && !(Player.audio && Player.audio.seeking)) {
+    if (this._analyser) {
       this._analyser.getByteFrequencyData(this._freq);
       for (let i = 0; i < 12; i++) b += this._freq[i];
       for (let i = 12; i < 40; i++) ml += this._freq[i];
@@ -392,7 +392,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     }
     const follow = (cur, prev, atk, rel) => {
       if (cur > prev) return prev + (cur - prev) * atk;
-      const dynRel = Math.min(0.85, rel * (1 + prev * 3));
+      const dynRel = Math.min(1, rel * (1 + prev * 1.5));
       return prev + (cur - prev) * dynRel;
     };
     this._bands.bass = follow(b, this._bands.bass, 0.9, 0.18);
