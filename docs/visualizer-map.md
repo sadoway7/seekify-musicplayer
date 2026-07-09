@@ -82,16 +82,18 @@ even when toggled back off.
 
 ## 4. Tunable surface (everything that changes the picture)
 
-### A. Pre-processing constants — top of `_preprocessFreq()` (lines 254–260)
+### A. Pre-processing constants — top of `_preprocessFreq()` (lines 254–262)
 
-| Const    | Default | Plain language                                                                                       |
-|----------|---------|------------------------------------------------------------------------------------------------------|
-| `SILENCE`| 4       | Raw byte below this → that bin is forced dark and the pipeline is skipped. Keeps pauses/endings black. |
-| `TAU`    | 2.0 s   | How slowly each bin's moving average tracks the signal. Larger = slower baseline = more deviation passes through = more motion. |
-| `GAMMA`  | 1.8     | Expansion exponent on the deviation. Higher widens small deviations (more motion out of loud/clipped tracks). Implemented as `pow(dev, 1/γ)`. |
-| `GAIN`   | 1.6     | Linear multiplier after expansion. Raises overall brightness of the processed signal.                |
-| `ATTACK` | 0.6     | Per-frame coefficient when a bin is rising. High = transients (kicks, snares) snap up fast.           |
-| `RELEASE`| 0.08    | Per-frame coefficient when a bin is falling. Low = peaks hang/decay slowly for a visible tail.        |
+| Const     | Default | Plain language                                                                                       |
+|-----------|---------|------------------------------------------------------------------------------------------------------|
+| `SILENCE` | 4       | Raw byte below this → that bin is forced dark (output 0); the moving average still tracks. Keeps pauses/endings black. |
+| `TAU`     | 2.0 s   | How slowly each bin's moving average tracks the signal. Larger = slower baseline = more deviation passes through = more motion. |
+| `DEADZONE`| 0.03    | Normalized deviation below this → target 0. Gate for noise-level flicker; quiet content under this contributes nothing. Gamma is steep near zero, so the margin matters. |
+| `GAMMA`   | 1.8     | Expansion exponent on the deviation. Higher widens small deviations (more motion out of loud/clipped tracks). Implemented as `pow(dev, 1/γ)`. |
+| `GAIN`    | 1.4     | Linear multiplier on the expanded deviation (the "accent" layer).                                    |
+| `FLOOR`   | 0.35    | Blend weight of raw level: `blend = FLOOR·(raw/255) + (1−FLOOR)·target`. Keeps loud sustained content lit (the lava-lamp base). The whole blend is then run through ATTACK/RELEASE, so raw FFT jitter on the FLOOR term is smoothed too. |
+| `ATTACK`  | 0.4     | Per-frame coefficient when the blend is rising. High = transients snap up fast.                      |
+| `RELEASE` | 0.08    | Per-frame coefficient when the blend is falling. Low = peaks hang/decay slowly for a visible tail.   |
 
 ### B. Per-band boosts + envelopes
 
@@ -104,8 +106,11 @@ Mini viz boosts (lines 428–431): bass `*1.2`, midLow `*1.0`, midHigh `*1.0`,
 treble `*1.5`, each inside `pow(min(1, v/(N*255)), 0.65)`.
 Mini viz `mf` attack/release (lines 438–444): bass 0.7/0.12, midLow 0.5/0.15,
 midHigh 0.55/0.17, treble 0.7/0.19, level 0.5/0.12.
-Mini viz adaptive-floor factor: `0.04` (line 434) and the `*0.75` / `*2.5`
-restorer on the same line.
+Mini viz adaptive floor (`af`): **now a pass-through** — `af = (raw, key) => raw`.
+It was a second deviation centerer built for raw pegged-FFT input that no longer
+exists (preprocess already centers the signal), so it double-subtracted
+already-centered data. Mini now consumes the preprocessed signal directly, like
+the full viz. The `_miniFloor` state is left in place but unused.
 
 ### C. Analyser settings (do not change without reason)
 
