@@ -10,17 +10,15 @@ not read the GLSL. All line numbers refer to `js/visualizer.js`.
    │  createMediaElementSource  (only when full viz is ON — state >= 0)
    ▼
 AnalyserNode  (fftSize=1024, 512 bins, smoothing=0.5, dB range −100..−30)
-   │  getByteFrequencyData(this._freq)        [Uint8Array(512), 0..255]
+   │  getByteFrequencyData(this._freq)   [Uint8Array(512), 0..255] — RAW bytes,
+   │                                      no per-bin processing anymore.
    ▼
-_preprocessFreq()   ← NEW. Per-bin: silence gate → 2s moving-average deviation
-   │                 → gamma expand → fast-attack/slow-release → write 0..255
-   │                 back into this._freq IN PLACE. Runs every frame.
-   ▼
-this._freq  (still Uint8Array(512), still 0..255 — same shape downstream always saw)
+this._freq  (raw analyser data)
    │
-   ├──► FULL-VIZ path (state >= 0): 4 band sums → /255 → boost+clamp → follow() → uniforms
-   └──► MINI-VIZ path (state < 0):  4 band sums → /255 → pow(,0.65) → adaptive floor
-                                      → mf() smoothing → uniforms
+   ├──► FULL-VIZ path (state >= 0): 4 band sums → /255 → boost+clamp
+   │        → _bandDyn(slots 0-3) → follow() → uniforms
+   └──► MINI-VIZ path (state < 0):  4 band sums → /255 → pow(,0.65)
+            → _bandDyn(slots 4-7) → mf() smoothing → uniforms
    ▼
 GLSL uniforms:  uBass  uMidLow  uMidHigh  uTreble  uLevel  uAlbumColor  iTime
    ▼
@@ -28,7 +26,9 @@ drawArrays (one full-screen triangle) → canvas
 ```
 
 One `requestAnimationFrame` loop (`_loop` → `_frame`). Both visual modes share
-the single analyser read and the single `_preprocessFreq` call.
+the single analyser read. Audio-reactive dynamics live at the band level in
+`_bandDyn` (applied after boost, before the envelopes) — it replaced the old
+per-bin `_preprocessFreq`, which amplified raw FFT bin noise.
 
 ## 2. Band table
 
@@ -49,9 +49,9 @@ release that decays faster when the previous value is already high.
 
 ### Mini viz (decorative, state < 0)
 
-Extra stage before smoothing: an adaptive noise floor
-(`floor = floor*0.96 + raw*0.04`, then `raw − floor*0.75`) and a `pow(.,0.65)`
-gamma, both per band.
+The mini bands get the same `pow(.,0.65)` gamma boost shown below, then run
+through `_bandDyn` (slots 4-7) just like the full viz — there is no longer a
+separate mini adaptive floor (`af` was removed; `_bandDyn` now centers both paths).
 
 | Band    | Bins       | ~Hz         | Boost & clamp                              | Attack / Release | Drives (mini shader)            |
 |---------|------------|-------------|--------------------------------------------|------------------|---------------------------------|
@@ -82,35 +82,44 @@ even when toggled back off.
 
 ## 4. Tunable surface (everything that changes the picture)
 
-### A. Pre-processing constants — top of `_preprocessFreq()` (lines 254–262)
+### A. Band-dynamics constants — top of `_bandDyn()`
 
-| Const     | Default | Plain language                                                                                       |
-|-----------|---------|------------------------------------------------------------------------------------------------------|
-| `SILENCE` | 4       | Raw byte below this → that bin is forced dark (output 0); the moving average still tracks. Keeps pauses/endings black. |
-| `TAU`     | 2.0 s   | How slowly each bin's moving average tracks the signal. Larger = slower baseline = more deviation passes through = more motion. |
-| `DEADZONE`| 0.03    | Normalized deviation below this → target 0. Gate for noise-level flicker; quiet content under this contributes nothing. Gamma is steep near zero, so the margin matters. |
-| `GAMMA`   | 1.8     | Expansion exponent on the deviation. Higher widens small deviations (more motion out of loud/clipped tracks). Implemented as `pow(dev, 1/γ)`. |
-| `GAIN`    | 1.4     | Linear multiplier on the expanded deviation (the "accent" layer).                                    |
-| `FLOOR`   | 0.35    | Blend weight of raw level: `blend = FLOOR·(raw/255) + (1−FLOOR)·target`. Keeps loud sustained content lit (the lava-lamp base). The whole blend is then run through ATTACK/RELEASE, so raw FFT jitter on the FLOOR term is smoothed too. |
-| `ATTACK`  | 0.4     | Per-frame coefficient when the blend is rising. High = transients snap up fast.                      |
-| `RELEASE` | 0.08    | Per-frame coefficient when the blend is falling. Low = peaks hang/decay slowly for a visible tail.   |
+`_bandDyn(slot, v, dt)` runs per band after the boost/clamp, before the
+envelopes. 8 slots: 0-3 full viz (b,ml,mh,tr), 4-7 mini (mb,mml,mmh,mtr). It
+auto-range-normalizes each band against a trailing vMin/vMax and gates expansion
+by a confidence measure so flat/noisy content falls back to the raw band value.
+
+| Const       | Default | Plain language                                                                                       |
+|-------------|---------|------------------------------------------------------------------------------------------------------|
+| `DECAY`     | 4.0 s   | Time constant for the trailing vMax (slow decay) and vMin (slow rise). Sets how fast the band's recent range adapts. |
+| `RANGE_LO`  | 0.04    | smoothstep lower bound on the confidence input (range). Below this range → zero confidence → raw passthrough (no expansion of noise). |
+| `RANGE_HI`  | 0.12    | smoothstep upper bound. At/above this range → full confidence → fully stretched signal.              |
+| `FLOOR_RNG` | 0.04    | Minimum range used in the normalizer denominator; prevents divide-by-noise on near-flat content.      |
+| `GAMMA`     | 1.4     | Shaping exponent on the normalized value (`n^GAMMA`): squashes the floor, preserves peaks → punchier pulses. |
+| `STRENGTH`  | 0.8     | Blend weight toward the stretched signal: `out = mix(v, n, conf*STRENGTH)`.                          |
+| `ATK_LOW` / `REL_LOW`  | 0.25 / 0.06 | Bass slots (0, 4) smoothing: punchy attack, slow release.                                    |
+| `ATK_MID` / `REL_MID`  | 0.5 / 0.10  | Other slots smoothing.                                                                        |
+
+Edge cases: silence (`v < 0.01`) outputs 0 while vMax still decays; on the first
+frame after a seek all 8 slots reset to that frame's values (no flare). First
+frame ever also seeds vMin/vMax/sm to v.
 
 ### B. Per-band boosts + envelopes
 
-Full viz boosts (line 375): bass `*2.5`, midLow `*1.4`, midHigh `*1.2`,
-treble `*2.2`, all `− 0.01` then clamp 0..1.
-Full viz `follow` attack/release (lines 382–388): bass 0.9/0.18, midLow
-0.5/0.30, midHigh 0.55/0.22, treble 0.78/0.30, level 0.5/0.20.
+Full viz boosts (in `_frame`, band-sum loop): bass `*2.5`, midLow `*1.4`,
+midHigh `*1.2`, treble `*2.2`, all `− 0.01` then clamp 0..1 — then each passes
+through `_bandDyn` (slots 0-3) before `follow`.
+Full viz `follow` attack/release: bass 0.9/0.18, midLow 0.5/0.30,
+midHigh 0.55/0.22, treble 0.78/0.30, level 0.5/0.20.
 
-Mini viz boosts (lines 428–431): bass `*1.2`, midLow `*1.0`, midHigh `*1.0`,
-treble `*1.5`, each inside `pow(min(1, v/(N*255)), 0.65)`.
-Mini viz `mf` attack/release (lines 438–444): bass 0.7/0.12, midLow 0.5/0.15,
+Mini viz boosts: bass `*1.2`, midLow `*1.0`, midHigh `*1.0`, treble `*1.5`,
+each inside `pow(min(1, v/(N*255)), 0.65)` — then each passes through `_bandDyn`
+(slots 4-7) before `mf`.
+Mini viz `mf` attack/release: bass 0.7/0.12, midLow 0.5/0.15,
 midHigh 0.55/0.17, treble 0.7/0.19, level 0.5/0.12.
-Mini viz adaptive floor (`af`): **now a pass-through** — `af = (raw, key) => raw`.
-It was a second deviation centerer built for raw pegged-FFT input that no longer
-exists (preprocess already centers the signal), so it double-subtracted
-already-centered data. Mini now consumes the preprocessed signal directly, like
-the full viz. The `_miniFloor` state is left in place but unused.
+
+The old mini adaptive floor (`af`) is removed entirely — `_bandDyn` now handles
+both paths. `_miniFloor` is left declared but unused.
 
 ### C. Analyser settings (do not change without reason)
 
