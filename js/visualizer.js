@@ -339,10 +339,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const RENDER_SCALE = 0.6;   // render below device pixels — raymarch is heavy (bench "Med"); lower for fps
+    const d = Math.min(window.devicePixelRatio || 1, 1.5) * RENDER_SCALE;
     const wrap = this.canvas.parentElement;
     const size = Math.max(64, Math.min(wrap.clientWidth, 640));
-    const px = Math.round(size * dpr);
+    const px = Math.round(size * d);
     if (this.canvas.width !== px || this.canvas.height !== px) {
       this.canvas.width = px; this.canvas.height = px;
       this.gl.viewport(0, 0, px, px);
