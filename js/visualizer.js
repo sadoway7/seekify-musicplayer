@@ -230,7 +230,15 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const raw = localStorage.getItem('musicapp:viz');
       if (raw) {
         const p = JSON.parse(raw);
-        if (typeof p.which === 'number' && p.which >= -1 && p.which < this.SHADERS.length) this.state = p.which;
+        // Only honour a saved preference if the user explicitly toggled
+        // (userChose flag). Without the flag, the admin default applies —
+        // this lets the admin's choice reach users who have a stale
+        // localStorage entry from before this setting existed.
+        if (p.userChose && typeof p.which === 'number' && p.which >= -1 && p.which < this.SHADERS.length) {
+          this.state = p.which;
+        } else {
+          this._needsServerDefault = true;
+        }
       } else {
         this._needsServerDefault = true;
       }
@@ -272,6 +280,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (art) art.style.setProperty('transition', 'opacity 0.35s ease', 'important');
     if (bg) bg.style.setProperty('transition', 'opacity 0.35s ease', 'important');
     this.state = (this.state < 0) ? 0 : -1;
+    this._userChose = true;
     this._persist();
     this._applyVisualState();
     setTimeout(() => {
@@ -281,16 +290,16 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _persist() {
-    try { localStorage.setItem('musicapp:viz', JSON.stringify({ which: this.state })); } catch (e) {}
+    try { localStorage.setItem('musicapp:viz', JSON.stringify({ which: this.state, userChose: this._userChose || false })); } catch (e) {}
   },
 
   // Called by App.init() after Store has loaded public settings. If the user
-  // has no localStorage preference yet, apply the admin-configured default.
+  // hasn't explicitly toggled yet, apply the admin-configured default.
   applyServerDefault() {
     if (!this._needsServerDefault) return;
     this._needsServerDefault = false;
     const def = Store.defaultNowPlayingView;
-    if (def === 'album_art') this.state = -1;
+    this.state = def === 'album_art' ? -1 : 0;
     this._applyVisualState();
   },
 

@@ -99,6 +99,7 @@ One concern per change. Don't mix a refactor with a bug fix or a feature in the 
 File layout: splitting or adding files within root-level package main is fine. Moving .go files into subdirectories creates new packages — get approval first. New <script> tags in index.html must respect load order (shared global scope, no module system, no ES imports).
 No new frameworks, build steps, or frontend libraries. No new Go dependencies without approval; if approved, run go mod vendor and commit vendor/.
 Don't touch Dockerfile, CI, ports, volumes, env vars, or admin auth unless explicitly asked.
+Update CHANGELOG.md with every user-facing change (bug fix, feature, UX change). Add one line to the top of the Unreleased block. Commit it in the same commit as the change or immediately after.
 
 
 Task-specific expectations:
