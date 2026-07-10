@@ -237,6 +237,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       this.cycle();
     });
     this._applyVisualState();
+    // Invalidate the cached disc-center on resize/scroll (getBoundingClientRect
+    // is expensive and was called every frame, forcing layout reflow at 30fps).
+    window.addEventListener('resize', () => this._invalidateCenter());
+    window.addEventListener('scroll', () => this._invalidateCenter(), true);
     // Safety net: if viz is on + now-playing visible but the loop died or
     // never rendered, restart it. Catches deep links, delayed layout, and
     // any path that doesn't explicitly call onShowNowPlaying.
@@ -466,6 +470,15 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     // Scheduler: always re-arms the next frame even if _frame throws, so a
     // transient first-open error can't permanently kill the render loop
     // (which left a blank canvas until the user toggled off→on).
+    // Throttled to 30fps: the raymarcher is expensive and 60fps saturates the
+    // main thread, starving the <audio> element's timeupdate events and causing
+    // playback stutter/speed drift. 30fps keeps audio scheduling smooth.
+    const now = performance.now();
+    if (this._lastFrameT && now - this._lastFrameT < 33) {
+      this._raf = requestAnimationFrame(() => this._loop());
+      return;
+    }
+    this._lastFrameT = now;
     try { this._frame(); }
     catch (e) { console.warn('[viz] frame error:', e); }
     this._raf = requestAnimationFrame(() => this._loop());
@@ -612,7 +625,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // Shader gl_FragCoord is bottom-up, CSS rects are top-down → flip y.
   // Lets the fullscreen sphere render where the album disc sits instead of at
   // viewport center (which is below the disc, since controls take bottom space).
+  // Cached + invalidated on resize/scroll to avoid forced layout reflow at 30fps.
   _computeCenter() {
+    if (this._centerCache != null) return this._centerCache;
     const disc = document.querySelector('.np-art-wrapper');
     const cr = this.canvas.getBoundingClientRect();
     if (!disc || !cr || cr.height < 2) return [0, 0];
@@ -620,8 +635,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const cx = (dr.left + dr.width / 2) - cr.left;
     const cy = (dr.top + dr.height / 2) - cr.top;
     const H = cr.height;
-    return [(cx - cr.width / 2) / H, (H / 2 - cy) / H];
+    this._centerCache = [(cx - cr.width / 2) / H, (H / 2 - cy) / H];
+    return this._centerCache;
   },
+
+  _invalidateCenter() { this._centerCache = null; },
 
   // and the viz stayed on the lime fallback. Sampling the img is robust to all that
   // and retints the moment a new cover loads.

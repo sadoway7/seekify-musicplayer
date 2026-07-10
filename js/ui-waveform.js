@@ -799,10 +799,20 @@ Object.assign(UI, {
     const pg = this._waveformPointGap * (window.devicePixelRatio || 1);
     const totalWidth = data.length * (pw + pg);
 
-    const styleComp = getComputedStyle(document.documentElement);
-    const playedColor = styleComp.getPropertyValue('--waveform-played').trim() || '#D4F040';
-    const unplayedColor = styleComp.getPropertyValue('--waveform-unplayed').trim() || 'rgba(255, 255, 255, 0.22)';
-    const hoverPlayed = styleComp.getPropertyValue('--waveform-hover').trim() || 'rgba(212, 240, 64, 0.8)';
+    // Cache CSS custom property reads — getComputedStyle forces style recalc
+    // and was called on every paint (~4x/sec from timeupdate + on every seek/hover).
+    // Invalidate when the played color changes (album color update sets it).
+    const playedKey = document.documentElement.style.getPropertyValue('--waveform-played');
+    if (this._wfColorKey !== playedKey) {
+      this._wfColorKey = playedKey;
+      const sc = getComputedStyle(document.documentElement);
+      this._wfPlayedColor = sc.getPropertyValue('--waveform-played').trim() || '#D4F040';
+      this._wfUnplayedColor = sc.getPropertyValue('--waveform-unplayed').trim() || 'rgba(255, 255, 255, 0.22)';
+      this._wfHoverPlayed = sc.getPropertyValue('--waveform-hover').trim() || 'rgba(212, 240, 64, 0.8)';
+    }
+    const playedColor = this._wfPlayedColor;
+    const unplayedColor = this._wfUnplayedColor;
+    const hoverPlayed = this._wfHoverPlayed;
     const hoverUnplayed = 'rgba(255,255,255,0.45)';
 
     ctx.clearRect(0, 0, w, h);
