@@ -25,8 +25,9 @@ func SettingsGetHandler(w http.ResponseWriter, r *http.Request) {
 // the admin-only /api/settings, and writes stay admin-only.
 func PublicSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{
-		"waveform_style":    store.GetSetting("waveform_style", "rounded"),
-		"downloads_enabled": store.GetSetting("downloads_enabled", "true"),
+		"waveform_style":           store.GetSetting("waveform_style", "rounded"),
+		"downloads_enabled":        store.GetSetting("downloads_enabled", "true"),
+		"default_now_playing_view": store.GetSetting("default_now_playing_view", "visualizer"),
 	})
 }
 

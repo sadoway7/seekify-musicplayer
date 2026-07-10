@@ -227,8 +227,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     }
     this.btn = document.querySelector('.np-viz-btn');
     try {
-      const p = JSON.parse(localStorage.getItem('musicapp:viz') || '{}');
-      if (typeof p.which === 'number' && p.which >= -1 && p.which < this.SHADERS.length) this.state = p.which;
+      const raw = localStorage.getItem('musicapp:viz');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p.which === 'number' && p.which >= -1 && p.which < this.SHADERS.length) this.state = p.which;
+      } else {
+        this._needsServerDefault = true;
+      }
     } catch (e) {}
     if (this.btn) this.btn.addEventListener('click', () => this.cycle());
     const disc = document.querySelector('.np-artwork');
@@ -270,6 +275,16 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
 
   _persist() {
     try { localStorage.setItem('musicapp:viz', JSON.stringify({ which: this.state })); } catch (e) {}
+  },
+
+  // Called by App.init() after Store has loaded public settings. If the user
+  // has no localStorage preference yet, apply the admin-configured default.
+  applyServerDefault() {
+    if (!this._needsServerDefault) return;
+    this._needsServerDefault = false;
+    const def = Store.defaultNowPlayingView;
+    if (def === 'album_art') this.state = -1;
+    this._applyVisualState();
   },
 
   // DOM/visual only. GL start/stop is gated on now-playing visibility.

@@ -55,6 +55,15 @@ Object.assign(UI, {
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-waveform-style">' + Icons.check() + '<span>Save</span></button>'
       + '</div>'
+      + '<div class="settings-section-desc" style="margin-top:20px">Choose what shows by default on the Now Playing screen. Users can still toggle between the two at any time — this sets the initial view for first-time visitors.</div>'
+      + '<div class="settings-field"><label>Default Now Playing View</label>'
+      + '<select id="setting-default-np-view" class="settings-select">'
+      + '<option value="visualizer">Visualizer</option>'
+      + '<option value="album_art">Album Art</option>'
+      + '</select></div>'
+      + '<div class="settings-actions" style="margin-top:12px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-save-default-np-view">' + Icons.check() + '<span>Save</span></button>'
+      + '</div>'
       + '</div>';
 
     // --- Tab: Downloads (logical flow: sources → auth → quality → org → permissions → import) ---
@@ -357,6 +366,15 @@ Object.assign(UI, {
     const wfSaveBtn = document.getElementById('btn-save-waveform-style');
     if (wfSaveBtn) {
       wfSaveBtn.addEventListener('click', () => this._saveWaveformStyle());
+    }
+
+    const npViewSelect = document.getElementById('setting-default-np-view');
+    if (npViewSelect) {
+      npViewSelect.value = Store.defaultNowPlayingView;
+    }
+    const npViewSaveBtn = document.getElementById('btn-save-default-np-view');
+    if (npViewSaveBtn) {
+      npViewSaveBtn.addEventListener('click', () => this._saveDefaultNowPlayingView());
     }
 
     // Users tab (admin only): load registration settings + user list, bind actions.
@@ -1126,6 +1144,18 @@ Object.assign(UI, {
       this._showToast('Waveform style saved');
     } catch (e) {
       this._showToast('Failed to save waveform style');
+    }
+  },
+
+  async _saveDefaultNowPlayingView() {
+    const sel = document.getElementById('setting-default-np-view');
+    if (!sel) return;
+    try {
+      await Api.saveSettings({ default_now_playing_view: sel.value });
+      Store.defaultNowPlayingView = sel.value;
+      this._showToast('Default Now Playing view saved');
+    } catch (e) {
+      this._showToast('Failed to save setting');
     }
   },
 

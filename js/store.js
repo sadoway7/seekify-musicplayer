@@ -11,6 +11,7 @@ const Store = {
   loading: false,
   downloadsEnabled: true,
   waveformStyle: 'rounded',
+  defaultNowPlayingView: 'visualizer',
   reviewCounts: { unchecked: 0, needs_review: 0, reviewed_ok: 0 },
   user: null,
   registrationMode: 'off',
@@ -83,6 +84,7 @@ const Store = {
         const ps = await Api.getPublicSettings();
         this.downloadsEnabled = ps.downloads_enabled !== 'false';
         this.waveformStyle = ps.waveform_style || 'rounded';
+        this.defaultNowPlayingView = ps.default_now_playing_view || 'visualizer';
       } catch(e) {}
       if (!this.isGuest) {
         try { this.reviewCounts = await Api.getReviewCounts(); } catch(e) {}

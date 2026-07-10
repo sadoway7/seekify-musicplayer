@@ -54,6 +54,8 @@ const App = {
 
     await Store.init();
 
+    if (window.Visualizer) Visualizer.applyServerDefault();
+
     // URL-based routing
     const path = window.location.pathname;
     if (path === '/settings' || path === '/settings/') {

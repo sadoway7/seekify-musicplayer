@@ -24,6 +24,7 @@ func InitSettingsTable() {
 	MigrateSetting("cover_fetch_enabled", "true")
 	MigrateSetting("artist_art_fetch_enabled", "true")
 	MigrateSetting("waveform_style", "rounded")
+	MigrateSetting("default_now_playing_view", "visualizer")
 	MigrateSetting("review_enabled", "true")
 	MigrateSetting("review_recheck_hours", "24")
 	MigrateSetting("review_flag_missing_title", "true")
