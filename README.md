@@ -121,6 +121,14 @@ waveforms, and python for Soulseek. Everything else, like download format, sourc
 Soulseek login, and what the needs-attention checker looks for, you set inside
 the app.
 
+> **Soulseek account**: you need a Soulseek account before you can use the
+> Soulseek download source. Seekify logs in with one you already have — it does
+> not register one for you. Create an account in a regular Soulseek client first
+> (such as [Nicotine+](https://nicotine-plus.org) or the official Soulseek
+> client), then enter those credentials in Seekify's settings. You can uninstall
+> the client afterward. (Seekify may one day create the account for you; it
+> can't yet.)
+
 ## scripts
 The scripts folder has simple start and stop scripts: a version for Mac and
 Linux (start.sh / stop.sh), one for Windows (start.bat / stop.bat), and a
