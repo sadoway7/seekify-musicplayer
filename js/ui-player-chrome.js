@@ -186,6 +186,7 @@ Object.assign(UI, {
     if (window.innerWidth >= 768) {
       this.els.queuePanel.classList.remove('hidden');
     }
+    if (window.Visualizer) Visualizer._invalidateCenter();
     if (window.Visualizer) Visualizer.onShowNowPlaying();
   },
 
@@ -227,12 +228,14 @@ Object.assign(UI, {
     document.querySelectorAll('.tab-item').forEach(t => {
       t.classList.toggle('active', t.dataset.tab === Store.currentTab);
     });
+    if (window.Visualizer) Visualizer._invalidateCenter();
     if (window.Visualizer) Visualizer.onHideNowPlaying();
   },
 
   showQueue() {
     this._renderQueue();
     this.els.queuePanel.classList.remove('hidden');
+    if (window.Visualizer) Visualizer._invalidateCenter();
   },
 
   hideQueue() {
@@ -241,6 +244,7 @@ Object.assign(UI, {
     setTimeout(() => {
       panel.classList.add('hidden');
       panel.style.animation = '';
+      if (window.Visualizer) Visualizer._invalidateCenter();
     }, 250);
   },
 
