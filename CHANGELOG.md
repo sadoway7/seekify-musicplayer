@@ -6,8 +6,10 @@ flight. When a batch goes out, the date gets filled in and a new `Unreleased`
 block opens. Newest entries go at the top of their block.
 
 ## Unreleased
-- Visualizer: reposition correctly when queue panel opens/closes on desktop (ResizeObserver on disc wrapper).
-- Admin setting: choose default Now Playing view (visualizer vs album art) for first-time users. Users can still toggle individually.
+
+## 2026-07-10
+- Visualizer: reposition correctly when queue panel opens/closes on desktop (ResizeObserver on queue panel + player column).
+- Admin setting: choose default Now Playing view (visualizer vs album art). Default is album art. Users can still toggle individually; admin default applies until they do.
 - Visualizer: throttle render loop to 30fps and cache per-frame layout/property reads — fixes audio stutter, speed drift, and pause hiccups caused by main-thread saturation.
 - README and repo polish for the public GitHub mirror.
 
