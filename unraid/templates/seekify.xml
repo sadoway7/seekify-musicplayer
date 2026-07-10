@@ -7,7 +7,11 @@
   <Privileged>false</Privileged>
   <Icon>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/icon.png</Icon>
   <WebUI>http://[IP]:[PORT:8081]</WebUI>
-  <Overview>Self-hosted music server. Scans local libraries, streams audio, fetches MusicBrainz metadata/cover art, and downloads via yt-dlp. Single Go binary + vanilla JS SPA.
+  <Overview>Self-hosted music server that rips what's missing. Downloads tracks and albums from YouTube (via yt-dlp) and Soulseek, tags them, and sorts them into your library. Then plays everything: browse by artist/album/playlist, now-playing with waveform and visualizer, favorites, history, and a needs-attention view that flags missing metadata, duplicates, and messy names. Single Go binary + vanilla JS SPA.
+
+Downloads: search a track or a whole album, pull from YouTube or Soulseek (you choose which to prefer), or bulk-import by pasting a list. Watched YouTube playlists auto-fetch new videos as they appear. Everything is tagged and filed into Artist/Album folders for you.
+
+Soulseek needs a free Soulseek account (create one in a regular client like Nicotine+ first; Seekify doesn't register accounts).
 
 WARNING: Seekify performs automatic actions on your music library — it re-tags files, sorts them into Artist/Album folders, downloads new tracks, and reorganizes as part of its housekeeping. Do NOT point it at a precious or irreplaceable library. Use a copy, a dedicated share, or a library you're fine with Seekify modifying. Mount your music share at /music (you can change this path at install); the default is /mnt/user/Media/music.</Overview>
   <Project>https://github.com/sadoway7/seekify-musicplayer</Project>
