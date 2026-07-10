@@ -244,8 +244,15 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._applyVisualState();
     // Invalidate the cached disc-center on resize/scroll (getBoundingClientRect
     // is expensive and was called every frame, forcing layout reflow at 30fps).
+    // A ResizeObserver on the disc wrapper also catches the queue panel
+    // opening/closing on desktop, which resizes the now-playing column without
+    // firing a window resize event.
     window.addEventListener('resize', () => this._invalidateCenter());
     window.addEventListener('scroll', () => this._invalidateCenter(), true);
+    const discWrap = document.querySelector('.np-art-wrapper');
+    if (discWrap && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => this._invalidateCenter()).observe(discWrap);
+    }
     // Safety net: if viz is on + now-playing visible but the loop died or
     // never rendered, restart it. Catches deep links, delayed layout, and
     // any path that doesn't explicitly call onShowNowPlaying.
