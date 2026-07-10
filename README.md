@@ -1,125 +1,141 @@
 <div align="center">
-<img src="icon-rounded.png" width="400" alt="Seekify">
+<img src="icon-rounded.png" width="160" alt="Seekify">
 
-<pre>
-                     __             ___             
-                    /\ \      __  /'___\            
-  ____     __     __\ \ \/'\ /\_\/\ \__/  __  __    
- /',__\  /'__`\ /'__`\ \ , < \/\ \ \ ,__\/\ \/\ \   
-/\__, `\/\  __//\  __/\ \ \\`\\ \ \ \ \_/\ \ \_\ \  
-\/\____/\ \____\ \____\\ \_\ \_\ \_\ \_\  \/`____ \ 
- \/___/  \/____/\/____/ \/_/\/_/\/_/\/_/   `/___/> \
-                                              /\___/
-                                              \/__/ 
-</pre>
+# Seekify
 
-a self-hosted music player. rip what's missing.
+**a self-hosted music player. rip what's missing.**
 
 Seekify is a music player you run yourself. Point it at your music and listen
 in any browser. It can also find and download tracks you don't have yet, tag
 them, and keep your library tidy.
-</div>
+
+<br>
 
 <details>
-<summary><strong>see it on a phone</strong></summary>
+<summary><h2>see it on a phone</h2></summary>
 
 The whole thing works on a phone too. Open it in the browser, or install it as
 an app for a full-screen player.
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-01.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-02.png" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-01.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-02.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-03.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-04.png" width="180" alt="mobile UI"></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-03.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-04.png" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-05.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-06.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-07.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-08.png" width="180" alt="mobile UI"></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-05.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-06.png" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-09.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-10.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/mobile-11.png" width="180" alt="mobile UI"></td>
+    <td width="25%" align="center"></td>
+  </tr>
+</table>
+
+</details>
+
+<br>
+
+<details>
+<summary><h2>see it on a computer</h2></summary>
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/01-home-library.png" width="420" alt="home library"><br><sub>home</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/02-now-playing-menu.png" width="420" alt="now playing + menu"><br><sub>now playing</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-07.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-08.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/05-downloads-all.png" width="420" alt="downloads all"><br><sub>live queue</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/06-bulk-import.png" width="420" alt="bulk import"><br><sub>bulk import</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-09.png" alt="mobile UI"></td>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-10.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/04-downloads-done.png" width="420" alt="downloads done"><br><sub>done</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/07-artist-albums.png" width="420" alt="artist albums"><br><sub>artist / albums</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/mobile-11.png" alt="mobile UI"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/08-artist-tracks.png" width="420" alt="artist tracks"><br><sub>artist / tracks</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/09-home-artists.png" width="420" alt="home artists + favorites"><br><sub>favorites + new</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/03-now-playing-history.png" width="420" alt="now playing + history"><br><sub>history</sub></td>
     <td width="50%" align="center"></td>
   </tr>
 </table>
 
 </details>
 
-<details>
-<summary><strong>see it on a computer</strong></summary>
+<br>
 
-<table>
-  <tr><td align="center"><img src="docs/screenshots/01-home-library.png" alt="home library"><br><sub>home</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/02-now-playing-menu.png" alt="now playing + menu"><br><sub>now playing</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/05-downloads-all.png" alt="downloads all"><br><sub>live queue</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/06-bulk-import.png" alt="bulk import"><br><sub>bulk import</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/04-downloads-done.png" alt="downloads done"><br><sub>done</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/07-artist-albums.png" alt="artist albums"><br><sub>artist / albums</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/08-artist-tracks.png" alt="artist tracks"><br><sub>artist / tracks</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/09-home-artists.png" alt="home artists + favorites"><br><sub>favorites + new</sub></td></tr>
-  <tr><td align="center"><img src="docs/screenshots/03-now-playing-history.png" alt="now playing + history"><br><sub>history</sub></td></tr>
-</table>
+<sub>Screenshots are from an early beta, June 2026. The interface keeps moving, so what's here is a snapshot, not a promise.</sub>
 
-</details>
+</div>
 
 ---
 
-### █ the player
+## the player
 - browse albums, artists, playlists, and favorites, with a history of what you've played
 - now-playing screen with a waveform, queue, shuffle, and repeat
 - floating mini-player; lock-screen and media-key controls when you install it as an app
 - per-track menu to queue, add to a playlist, fix the tags, jump to the album or artist, or favorite
 
-### █ the ripper
+## the visualizer
+- a full-screen, audio-reactive visualizer written in raw WebGL2 fragment shaders
+- it reads the live audio through an `AnalyserNode` tapped off the player, so what you see is what you hear
+- the palette tints to the current album cover, so the visualizer matches the rest of the now-playing screen
+- more shader looks can be dropped in; each one is a self-contained GLSL program
+
+## the ripper
 - search for a single track or a whole album and download it
 - pull from Soulseek or YouTube, and you choose which to prefer
 - bulk import: paste a list of songs and download them all at once
 - watch each job live, from searching to downloading to tagging to done
 
-### █ housekeeping
+## guided scraping
+- point Seekify at a YouTube playlist and it watches it for you: every new video is fetched, tagged, and filed into your library automatically
+- watched playlists sync on a schedule, so a playlist you follow keeps feeding your library new tracks as they appear
+- the ripper's job queue shows every step of the pipeline, so you see search, download, tag, and sort as they happen
+- you stay in control: pause a playlist, drop one you've stopped following, or re-point one at any time
+
+## housekeeping
 - downloaded music is tagged and sorted into artist and album folders for you
 - a needs-attention view flags the rough stuff: missing info, messy names, duplicates, missing artwork
 - fix problems inline, fetch new artwork, or re-look-up the details
 - approve a track once and it stays approved
 
-### █ how to use it
+## how to use it
 1. put your music files in your music folder
 2. open Seekify in a browser and your library shows up on its own
 3. press play; search for and download anything you're missing
 4. keep the needs-attention list tidy and your library stays clean
 
-### █ runs anywhere
+## runs anywhere
 Seekify runs as one program and works on its own. Optional helpers add more,
 and it runs fine without them: yt-dlp for YouTube, ffmpeg for converting and
 waveforms, and python for Soulseek. Everything else, like download format, sources,
 Soulseek login, and what the needs-attention checker looks for, you set inside
 the app.
 
-### █ scripts
+## scripts
 The scripts folder has simple start and stop scripts: a version for Mac and
 Linux (start.sh / stop.sh), one for Windows (start.bat / stop.bat), and a
 double-click starter for Mac. They install anything Seekify needs, build it,
 and run it, or stop it.
 
-### █ the .env file
-.env is a plain-text settings file that sits next to the app. It's a short, optional
-list of preferences, one per line, written as NAME=value. Open it in any text
+## the .env file
+`.env` is a plain-text settings file that sits next to the app. It's a short, optional
+list of preferences, one per line, written as `NAME=value`. Open it in any text
 editor, change a value, and save. You don't need it to run; it's there for the
 few things you might want to set before starting.
 
 If you ever lose it or mess it up, here's the whole file to copy back in:
 
-<pre>
+```
 # Copy to .env and edit. Real environment variables override this file.
 
 # A passcode that locks the settings screen (download options, Soulseek login,
@@ -139,7 +155,7 @@ MUSIC_DIR=./music
 
 # HTTP listen port.
 PORT=8081
-</pre>
+```
 
 Everything else, like download format, sources, Soulseek login, and the
 needs-attention checker, lives in the app's own settings screen. That screen is
@@ -147,11 +163,11 @@ the only thing a passcode guards; your music and the player stay open either way
 And if you set the same thing as a real environment variable on your system, that
 takes priority.
 
-### █ running it
+## running it
 Once it's running, Seekify lives at **http://localhost:8081** on the machine you
 started it on. It's local access for you and anything else on that machine.
 
-There's an example GitLab pipeline (the .gitlab-ci.yml file) that builds a
+There's an example GitLab pipeline (the `.gitlab-ci.yml` file) that builds a
 Docker image and drops it on an Unraid-style server. It's just an example. Use
 it, adapt it, or ignore it.
 
@@ -162,7 +178,19 @@ A couple of things are on you, and a little beyond what Seekify covers:
 - **starting it automatically**: Seekify runs while you start it. Making it
   launch on boot is something you set up with your own operating system.
 
-### █ credits
+## roadmap
+Seekify moves fast and changes often. There's no version number to chase; what's
+in `main` is the app. Things being looked at (not promised, not scheduled) are
+listed in [ROADMAP.md](ROADMAP.md). If a thing lands, it lands; if it doesn't,
+the roadmap said so up front.
+
+## changelog
+This project doesn't ship numbered releases. Instead there's a running
+[CHANGELOG.md](CHANGELOG.md) of what changed, grouped by date. There's always an
+`Unreleased` block at the top for whatever's in flight, and dated entries below
+for what's already out. It's a log, not a version stamp.
+
+## credits
 Written in Go, with a vanilla JavaScript and CSS front end, plus a little
 Python and shell.
 
@@ -179,4 +207,4 @@ Powered by:
 
 ---
 
-<div align="center"><pre>rip it. play it. repeat.</pre></div>
+<div align="center"><sub>rip it. play it. repeat.</sub></div>
