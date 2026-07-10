@@ -13,7 +13,7 @@ Downloads: search a track or a whole album, pull from YouTube or Soulseek (you c
 
 Soulseek needs a free Soulseek account (create one in a regular client like Nicotine+ first; Seekify doesn't register accounts).
 
-Setup: mount your music share here, pick a port, install, then open the WebUI. Paths and port are set in this dialog; everything else — Soulseek login, download format, source preference, admin passcode — is configured inside the app under Settings, and persists across updates.
+Setup: mount your music share here, pick a port, install, then open the WebUI. On first launch you'll be asked to create an admin account (username + password) — this is one-time and unlocks the player. Paths and port are set in this dialog; everything else — Soulseek login, download format, source preference, admin passcode — is configured inside the app under Settings, and persists across updates.
 
 WARNING: Seekify performs automatic actions on your music library — it re-tags files, sorts them into Artist/Album folders, downloads new tracks, and reorganizes as part of its housekeeping. Do NOT point it at a precious or irreplaceable library. Use a copy, a dedicated share, or a library you're fine with Seekify modifying. Mount your music share at /music (you can change this path at install); the default is /mnt/user/Media/music.</Overview>
   <Project>https://github.com/sadoway7/seekify-musicplayer</Project>
