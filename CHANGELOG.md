@@ -7,6 +7,8 @@ block opens. Newest entries go at the top of their block.
 
 ## Unreleased
 
+- Unraid: publish an explicit template release date and real interface screenshots so Community Applications can display accurate update and app-detail information.
+
 ## 2026-07-15
 
 - Home discovery: keep the rotating Artist and Album showcases artwork-first by omitting entries without usable art; the complete library remains available through See all and Search.

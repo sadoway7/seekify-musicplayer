@@ -21,11 +21,14 @@ WARNING: Seekify performs automatic actions on your music library — it re-tags
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/unraid/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>Initial Community Apps submission.</Changes>
+  <Changes>2026-07-15: Playback, visualizer, discovery, metadata, queue, mobile, reliability, and security improvements.</Changes>
+  <Date>2026-07-15</Date>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
-  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/assets/seekify.jpg</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/assets/seekify3.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/03-now-playing-history.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/05-downloads-all.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/mobile-01.png</Screenshot>
 
   <Config Name="WebUI" Target="8081" Default="8081" Mode="tcp" Description="HTTP port for the WebUI." Type="Port" Display="always" Required="true" Mask="false"/>
   <Config Name="Appdata" Target="/app/data" Default="/mnt/user/appdata/seekify/data" Mode="rw" Description="SQLite database, cover/waveform cache, download jobs." Type="Path" Display="always" Required="true" Mask="false"/>
