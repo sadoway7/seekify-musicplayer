@@ -6,12 +6,13 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./visualizer.js', import.meta.url), 'utf8')
   .replace('const Visualizer = {', 'globalThis.Visualizer = {');
 
-function loadVisualizer({ captureStream = null } = {}) {
+function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
   const connections = [];
+  const contexts = [];
 
   class FakeNode {
     connect(target) { connections.push([this, target]); return target; }
-    disconnect() { this.disconnected = true; }
+    disconnect() { this.disconnectCalls = (this.disconnectCalls || 0) + 1; }
   }
 
   class FakeAnalyser extends FakeNode {
@@ -29,45 +30,41 @@ function loadVisualizer({ captureStream = null } = {}) {
       this.destination = new FakeNode();
       this.mediaElementSources = [];
       this.mediaStreamSources = [];
+      this.suspendCalls = 0;
       contexts.push(this);
     }
     createMediaElementSource(media) {
-      this.mediaElementSources.push(media);
-      return new FakeNode();
+      const node = new FakeNode();
+      this.mediaElementSources.push({ media, node });
+      return node;
     }
     createMediaStreamSource(stream) {
-      this.mediaStreamSources.push(stream);
-      return new FakeNode();
+      const node = new FakeNode();
+      this.mediaStreamSources.push({ stream, node });
+      return node;
     }
-    createAnalyser() { return new FakeAnalyser(); }
+    createAnalyser() {
+      if (analyserError) throw new Error('analyser setup failed');
+      return new FakeAnalyser();
+    }
     createGain() {
       const gain = new FakeNode();
       gain.gain = { value: 1 };
       return gain;
     }
-    resume() { this.state = 'running'; return Promise.resolve(); }
-    suspend() { this.state = 'suspended'; return Promise.resolve(); }
+    resume() {
+      this.resumeCalls = (this.resumeCalls || 0) + 1;
+      this.state = 'running';
+      return Promise.resolve();
+    }
+    suspend() {
+      this.suspendCalls++;
+      this.state = 'suspended';
+      return Promise.resolve();
+    }
     close() { this.state = 'closed'; return Promise.resolve(); }
   }
 
-  class FakeAudio {
-    constructor() {
-      this.paused = true;
-      this.readyState = 1;
-      this.currentTime = 0;
-      this.playbackRate = 1;
-      this.listeners = new Map();
-      mirrors.push(this);
-    }
-    addEventListener(type, fn) { this.listeners.set(type, fn); }
-    removeAttribute(name) { if (name === 'src') this.src = ''; }
-    load() { this.paused = true; this.loadCalls = (this.loadCalls || 0) + 1; }
-    play() { this.paused = false; this.playCalls = (this.playCalls || 0) + 1; return Promise.resolve(); }
-    pause() { this.paused = true; this.pauseCalls = (this.pauseCalls || 0) + 1; }
-  }
-
-  const contexts = [];
-  const mirrors = [];
   const primary = {
     currentSrc: '/api/stream/track-one',
     src: '/api/stream/track-one',
@@ -79,7 +76,6 @@ function loadVisualizer({ captureStream = null } = {}) {
   if (captureStream) primary.captureStream = captureStream;
 
   const context = vm.createContext({
-    Audio: FakeAudio,
     Date,
     Math,
     Uint8Array,
@@ -95,141 +91,144 @@ function loadVisualizer({ captureStream = null } = {}) {
     setTimeout: () => 1
   });
   vm.runInContext(source, context);
-  return { Visualizer: context.Visualizer, primary, contexts, mirrors, connections };
+  return { Visualizer: context.Visualizer, primary, contexts, connections };
 }
 
-test('Safari fallback analyzes an isolated mirror and never reroutes Player.audio', async () => {
-  const { Visualizer, primary, contexts, mirrors } = loadVisualizer();
+test('Safari fallback analyzes the real Player.audio element', async () => {
+  const { Visualizer, primary, contexts, connections } = loadVisualizer();
 
-  Visualizer._vizVisible = true;
   Visualizer._ensureAudio(true);
   await Promise.resolve();
 
-  assert.equal(Visualizer._audioMode, 'mirror');
-  assert.equal(mirrors.length, 1);
-  assert.notEqual(mirrors[0], primary);
-  assert.deepEqual(contexts[0].mediaElementSources, [mirrors[0]]);
-  assert.equal(contexts[0].mediaElementSources.includes(primary), false);
-  assert.equal(Visualizer._silentGain.gain.value, 0);
-  assert.equal(mirrors[0].src, primary.currentSrc);
-  assert.equal(mirrors[0].currentTime, primary.currentTime);
-  assert.equal(mirrors[0].playCalls, 1);
-  assert.equal(Visualizer._mirrorActivated, true);
+  const actx = contexts[0];
+  const sourceNode = actx.mediaElementSources[0].node;
+  assert.equal(Visualizer._audioMode, 'element');
+  assert.equal(actx.mediaElementSources.length, 1);
+  assert.equal(actx.mediaElementSources[0].media, primary);
+  assert.equal(connections.some(([from, to]) => from === sourceNode && to === Visualizer._analyser), true);
+  assert.equal(connections.some(([from, to]) => from === Visualizer._analyser && to === actx.destination), true);
+  assert.equal(actx.state, 'running');
 });
 
-test('Safari mirror is reused across tracks and suspended when visualization stops', async () => {
-  const { Visualizer, primary, contexts, mirrors } = loadVisualizer();
-  Visualizer._vizVisible = true;
+test('Safari waits for a user gesture before rerouting the player', () => {
+  const { Visualizer, contexts } = loadVisualizer();
+
+  Visualizer._ensureAudio(false);
+
+  assert.equal(contexts.length, 0);
+  assert.notEqual(Visualizer._audioReady, true);
+});
+
+test('Safari source is reused when Player.audio changes songs', async () => {
+  const { Visualizer, primary, contexts } = loadVisualizer();
+  Visualizer.state = 0;
   Visualizer._ensureAudio(true);
   await Promise.resolve();
-  const mirror = mirrors[0];
+  const actx = contexts[0];
+  const sourceNode = Visualizer._audioSource;
 
-  // Browsers may leave currentSrc on the previous resource briefly after the
-  // player assigns src for an automatic track change.
   primary.src = '/api/stream/track-two';
+  primary.currentSrc = primary.src;
   primary.currentTime = 7;
   Visualizer.onTrackChange({ id: 'track-two' });
+  Visualizer._ensureAudio(true);
 
-  assert.equal(mirrors.length, 1);
-  assert.equal(Visualizer._mirrorAudio, mirror);
-  assert.equal(mirror.src, primary.src);
-  assert.equal(mirror.currentTime, 7);
-
-  Visualizer._pauseMirror();
-  await Promise.resolve();
-  assert.equal(mirror.paused, true);
-  assert.equal(contexts[0].state, 'suspended');
+  assert.equal(contexts.length, 1);
+  assert.equal(actx.mediaElementSources.length, 1);
+  assert.equal(Visualizer._audioSource, sourceNode);
+  assert.equal(sourceNode.disconnectCalls || 0, 0);
 });
 
-test('track changes cannot restart the Safari mirror while now-playing is hidden', async () => {
-  const { Visualizer, primary, contexts, mirrors } = loadVisualizer();
-  Visualizer._vizVisible = true;
+test('hiding now playing does not suspend the audible Safari graph', async () => {
+  const { Visualizer, contexts } = loadVisualizer();
   Visualizer._ensureAudio(true);
   await Promise.resolve();
-  const mirror = mirrors[0];
 
   Visualizer.onHideNowPlaying();
-  primary.src = '/api/stream/hidden-track-change';
-  primary.currentTime = 3;
-  Visualizer.onTrackChange({ id: 'hidden-track-change' });
-
-  assert.equal(Visualizer._vizVisible, false);
-  assert.equal(mirror.paused, true);
-  assert.equal(contexts[0].state, 'suspended');
-  assert.notEqual(mirror.src, primary.src);
-});
-
-test('clearing the final track releases and suspends the Safari mirror', async () => {
-  const { Visualizer, primary, contexts, mirrors } = loadVisualizer();
-  Visualizer._vizVisible = true;
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-  const mirror = mirrors[0];
-
-  primary.paused = true;
-  primary.src = '';
-  primary.currentSrc = '';
-  Visualizer.onTrackChange(null);
-  await Promise.resolve();
-
-  assert.equal(mirror.paused, true);
-  assert.equal(mirror.src, '');
-  assert.equal(Visualizer._mirrorSrc, null);
-  assert.equal(contexts[0].state, 'suspended');
-});
-
-test('a stale play rejection cannot disable analysis for a newer track', async () => {
-  const { Visualizer, primary, mirrors } = loadVisualizer();
-  Visualizer._vizVisible = true;
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-  const mirror = mirrors[0];
-  const pending = [];
-  mirror.play = () => {
-    mirror.paused = false;
-    return new Promise((resolve, reject) => pending.push({ resolve, reject }));
-  };
-
-  primary.src = '/api/stream/track-a';
-  Visualizer.onTrackChange({ id: 'track-a' });
-  primary.src = '/api/stream/track-b';
-  Visualizer.onTrackChange({ id: 'track-b' });
-  assert.equal(pending.length, 2);
-
-  pending[1].resolve();
-  await Promise.resolve();
-  pending[0].reject(new Error('obsolete track failed'));
-  await Promise.resolve();
-
-  assert.equal(Visualizer._audioMode, 'mirror');
-  assert.equal(Visualizer._audioReady, true);
-  assert.equal(Visualizer._mirrorActivated, true);
-  assert.equal(mirror.src, primary.src);
-});
-
-test('an interrupted Safari AudioContext is resumed while the visualizer is active', async () => {
-  const { Visualizer, contexts, mirrors } = loadVisualizer();
-  Visualizer._vizVisible = true;
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-
-  contexts[0].state = 'interrupted';
-  mirrors[0].pause();
-  Visualizer._syncMirror(true);
-  await Promise.resolve();
 
   assert.equal(contexts[0].state, 'running');
-  assert.equal(mirrors[0].paused, false);
+  assert.equal(contexts[0].suspendCalls, 0);
 });
 
-test('captureStream browsers keep the existing capture path', () => {
+test('analyser setup failure preserves Safari audio across track changes', async () => {
+  const { Visualizer, contexts, connections } = loadVisualizer({ analyserError: true });
+  Visualizer.state = 0;
+  Visualizer._ensureAudio(true);
+  await Promise.resolve();
+  const actx = contexts[0];
+  const sourceNode = Visualizer._audioSource;
+
+  assert.equal(Visualizer._audioMode, 'element-bypass');
+  assert.equal(connections.some(([from, to]) => from === sourceNode && to === actx.destination), true);
+  assert.equal(actx.state, 'running');
+
+  Visualizer.onTrackChange({ id: 'track-two' });
+  assert.equal(Visualizer._audioMode, 'element-bypass');
+  assert.equal(Visualizer._audioSource, sourceNode);
+});
+
+test('an interrupted Safari AudioContext is resumed without rebuilding it', async () => {
+  const { Visualizer, contexts } = loadVisualizer();
+  Visualizer._ensureAudio(true);
+  await Promise.resolve();
+  await Promise.resolve();
+  const actx = contexts[0];
+  const sourceNode = Visualizer._audioSource;
+
+  actx.state = 'interrupted';
+  Visualizer._resumeAudioContext();
+  await Promise.resolve();
+
+  assert.equal(actx.state, 'running');
+  assert.equal(contexts.length, 1);
+  assert.equal(Visualizer._audioSource, sourceNode);
+});
+
+test('a foreground resume still pending cannot block the next user gesture', async () => {
+  const { Visualizer, contexts } = loadVisualizer();
+  Visualizer._ensureAudio(true);
+  await Promise.resolve();
+  await Promise.resolve();
+  const actx = contexts[0];
+  let resolveForeground;
+  actx.state = 'interrupted';
+  actx.resume = () => new Promise((resolve) => { resolveForeground = resolve; });
+  Visualizer._resumeAudioContext(false);
+  assert.equal(Visualizer._audioResumePending, true);
+
+  actx.resume = () => {
+    actx.state = 'running';
+    return Promise.resolve();
+  };
+  Visualizer._resumeAudioContext(true);
+  await Promise.resolve();
+
+  assert.equal(actx.state, 'running');
+  resolveForeground();
+});
+
+test('captureStream browsers keep native playback outside Web Audio', () => {
   const stream = { getAudioTracks: () => [{}] };
-  const { Visualizer, contexts, mirrors } = loadVisualizer({ captureStream: () => stream });
+  const { Visualizer, contexts } = loadVisualizer({ captureStream: () => stream });
 
   Visualizer._ensureAudio(true);
 
   assert.equal(Visualizer._audioMode, 'capture');
-  assert.equal(mirrors.length, 0);
-  assert.deepEqual(contexts[0].mediaStreamSources, [stream]);
+  assert.equal(contexts[0].mediaStreamSources.length, 1);
+  assert.equal(contexts[0].mediaStreamSources[0].stream, stream);
   assert.equal(contexts[0].mediaElementSources.length, 0);
+  assert.equal(Visualizer._silentGain.gain.value, 0);
+});
+
+test('captureStream input is replaced when a song changes', () => {
+  const stream = { getAudioTracks: () => [{}] };
+  const { Visualizer } = loadVisualizer({ captureStream: () => stream });
+  Visualizer._ensureAudio(true);
+  const oldSource = Visualizer._audioSource;
+
+  Visualizer.onTrackChange({ id: 'track-two' });
+
+  assert.equal(oldSource.disconnectCalls, 1);
+  assert.equal(Visualizer._audioReady, false);
+  assert.equal(Visualizer._audioSource, null);
 });

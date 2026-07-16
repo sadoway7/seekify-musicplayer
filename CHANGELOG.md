@@ -9,7 +9,7 @@ block opens. Newest entries go at the top of their block.
 
 ## 2026-07-16
 
-- Visualizer: restore real bass, midrange, and treble reactivity on iPhone with an isolated Safari analyser stream that does not reroute the primary player through Web Audio.
+- Visualizer: feed iPhone Safari from the real player audio again, preserving live frequency-band response across song changes and recovering interrupted audio contexts without recreating the player source.
 
 ## 2026-07-15
 
