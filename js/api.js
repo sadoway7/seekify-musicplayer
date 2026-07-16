@@ -90,7 +90,7 @@ const Api = {
   getReviewTracks(offset = 0, limit = 200, flags = []) {
     let url = '/api/review/tracks?offset=' + offset + '&limit=' + limit;
     for (const f of flags) url += '&flag=' + encodeURIComponent(f);
-    return this._req(url, { fallback: { tracks: [], total: 0 } }).then(d => {
+    return this._req(url, { errMsg: 'Failed to load review queue' }).then(d => {
       if (!d || !Array.isArray(d.tracks)) return { tracks: [], total: 0 };
       return d;
     });

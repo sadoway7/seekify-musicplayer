@@ -28,13 +28,28 @@ func AdminHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "admin.html")
 }
 
+// pathWithinRoot resolves path elements beneath root and reports whether the
+// result is root itself or one of its descendants. filepath.Rel avoids the
+// false positives of string-prefix checks (for example, /music-old vs /music).
+func pathWithinRoot(root string, elem ...string) (string, bool) {
+	root = filepath.Clean(root)
+	parts := make([]string, 0, len(elem)+1)
+	parts = append(parts, root)
+	parts = append(parts, elem...)
+	target := filepath.Clean(filepath.Join(parts...))
+
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return target, true
+}
+
 func FileListHandler(w http.ResponseWriter, r *http.Request) {
 	subPath := r.URL.Query().Get("path")
 
-	dirPath := filepath.Join(store.MusicDir, subPath)
-	dirPath = filepath.Clean(dirPath)
-
-	if !strings.HasPrefix(dirPath, store.MusicDir) {
+	dirPath, ok := pathWithinRoot(store.MusicDir, subPath)
+	if !ok {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -107,10 +122,8 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	subPath := r.FormValue("path")
-	targetDir := filepath.Join(store.MusicDir, subPath)
-	targetDir = filepath.Clean(targetDir)
-
-	if !strings.HasPrefix(targetDir, store.MusicDir) {
+	targetDir, ok := pathWithinRoot(store.MusicDir, subPath)
+	if !ok {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -165,17 +178,8 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 func DeleteFileHandler(w http.ResponseWriter, r *http.Request) {
 	subPath := r.URL.Query().Get("path")
-	subPath = filepath.Clean(subPath)
-
-	if strings.Contains(subPath, "..") {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	fullPath := filepath.Join(store.MusicDir, subPath)
-	fullPath = filepath.Clean(fullPath)
-
-	if !strings.HasPrefix(fullPath, store.MusicDir) {
+	fullPath, ok := pathWithinRoot(store.MusicDir, subPath)
+	if !ok || fullPath == filepath.Clean(store.MusicDir) {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
@@ -204,10 +208,8 @@ func CreateFolderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetPath := filepath.Join(store.MusicDir, body.Path, body.Name)
-	targetPath = filepath.Clean(targetPath)
-
-	if !strings.HasPrefix(targetPath, store.MusicDir) {
+	targetPath, ok := pathWithinRoot(store.MusicDir, body.Path, body.Name)
+	if !ok {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}

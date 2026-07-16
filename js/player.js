@@ -7,16 +7,19 @@ const Player = {
   repeat: 'off',
   playing: false,
   volume: 1,
+  _lastNonZeroVolume: 1,
   source: null,
   onStateChange: null,
   onTimeUpdate: null,
   onTrackChange: null,
   onQueueChange: null,
+  onVolumeChange: null,
   _consecutiveErrors: 0,
   _errorHandledForCurrent: false,
   _loadTimeout: null,
 
   init() {
+    this._restoreVolume();
     this.audio = new Audio();
     this.audio.volume = this.volume;
     this.audio.addEventListener('timeupdate', () => {
@@ -36,8 +39,6 @@ const Player = {
     });
     this.audio.addEventListener('play', () => {
       this.playing = true;
-      this._consecutiveErrors = 0;
-      this._clearLoadTimeout();
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
       if (this.onStateChange) this.onStateChange();
     });
@@ -54,6 +55,10 @@ const Player = {
     // registered: iOS forces a choice between seek-skip and track-skip, and we
     // want track-skip. seekto is kept so the lock-screen scrubber still works.
     this.audio.addEventListener('playing', () => {
+      // `play` means playback was requested; `playing` means media data is
+      // actually flowing. Only now is the current source known to be healthy.
+      this._consecutiveErrors = 0;
+      this._clearLoadTimeout();
       if (!('mediaSession' in navigator)) return;
       navigator.mediaSession.setActionHandler('play', () => { this.audio.play().catch(() => {}); });
       navigator.mediaSession.setActionHandler('pause', () => { this.audio.pause(); });
@@ -136,7 +141,19 @@ const Player = {
     this.audio.play().then(() => {
       this.playing = true;
       if (this.onStateChange) this.onStateChange();
-    }).catch((e) => { if (e && e.name === 'AbortError') return; this._onMediaError(); });
+    }).catch((e) => {
+      if (e && e.name === 'AbortError') return;
+      if (e && e.name === 'NotAllowedError') {
+        // Browser autoplay policy is not a broken file. Keep the selected
+        // track queued so a user gesture can start it without skipping ahead.
+        this._clearLoadTimeout();
+        this.playing = false;
+        if (this.onStateChange) this.onStateChange();
+        if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('Tap play to start listening');
+        return;
+      }
+      this._onMediaError();
+    });
     this._loadTimeout = setTimeout(() => this._onMediaError(), 10000);
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
@@ -240,8 +257,38 @@ const Player = {
   },
 
   setVolume(v) {
-    this.volume = Math.max(0, Math.min(1, v));
+    const value = Number(v);
+    if (!isFinite(value)) return;
+    this.volume = Math.max(0, Math.min(1, value));
+    if (this.volume > 0) this._lastNonZeroVolume = this.volume;
     this.audio.volume = this.volume;
+    this._persistVolume();
+    if (this.onVolumeChange) this.onVolumeChange(this.volume);
+  },
+
+  toggleMute() {
+    this.setVolume(this.volume > 0 ? 0 : this._lastNonZeroVolume || 1);
+  },
+
+  _restoreVolume() {
+    try {
+      const savedVolume = Number(localStorage.getItem('player_volume'));
+      if (isFinite(savedVolume) && savedVolume > 0 && savedVolume <= 1) {
+        this._lastNonZeroVolume = savedVolume;
+      }
+      this.volume = localStorage.getItem('player_muted') === 'true'
+        ? 0
+        : this._lastNonZeroVolume;
+    } catch (e) {
+      this.volume = this._lastNonZeroVolume;
+    }
+  },
+
+  _persistVolume() {
+    try {
+      localStorage.setItem('player_volume', String(this._lastNonZeroVolume));
+      localStorage.setItem('player_muted', String(this.volume === 0));
+    } catch (e) { /* Storage can be unavailable in private browsing. */ }
   },
 
   toggleShuffle() {
@@ -316,16 +363,32 @@ const Player = {
       this.currentIndex--;
     } else if (index === this.currentIndex) {
       if (this.queue.length === 0) {
-        this.currentIndex = -1;
-        this.audio.pause();
-        this.playing = false;
-        if (this.onStateChange) this.onStateChange();
+        this._clearPlayback();
       } else {
         this.currentIndex = Math.min(this.currentIndex, this.queue.length - 1);
         this._loadAndPlay(this.queue[this.currentIndex]);
       }
     }
     if (this.onQueueChange) this.onQueueChange();
+  },
+
+  _clearPlayback() {
+    this._clearLoadTimeout();
+    this.currentIndex = -1;
+    this.source = null;
+    this.playing = false;
+    this._consecutiveErrors = 0;
+    this._errorHandledForCurrent = false;
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+    }
+    if (this.onTrackChange) this.onTrackChange(null);
+    if (this.onTimeUpdate) this.onTimeUpdate();
+    if (this.onStateChange) this.onStateChange();
   },
 
   moveInQueue(fromIndex, toIndex) {
@@ -341,6 +404,39 @@ const Player = {
     } else if (fromIndex > this.currentIndex && toIndex <= this.currentIndex) {
       this.currentIndex++;
     }
+    if (this.onQueueChange) this.onQueueChange();
+  },
+
+  moveToPlayNext(index) {
+    if (index < 0 || index >= this.queue.length) return;
+    if (index === this.currentIndex || this.currentIndex < 0) return;
+
+    const track = this.queue[index];
+    const current = this.getCurrentTrack();
+    this.queue.splice(index, 1);
+    if (index < this.currentIndex) this.currentIndex--;
+    this.queue.splice(this.currentIndex + 1, 0, track);
+
+    // Shuffle keeps an unshuffled snapshot for restoring the queue. Mirror
+    // this explicit ordering choice there so disabling shuffle neither loses
+    // the selected track nor moves it away from the next position.
+    if (this.shuffle && this._originalQueue.length > 0 && current) {
+      let originalTrackIndex = this._originalQueue.indexOf(track);
+      if (originalTrackIndex === -1) {
+        originalTrackIndex = this._originalQueue.findIndex(t => t.id === track.id);
+      }
+      if (originalTrackIndex !== -1) this._originalQueue.splice(originalTrackIndex, 1);
+
+      let originalCurrentIndex = this._originalQueue.indexOf(current);
+      if (originalCurrentIndex === -1) {
+        originalCurrentIndex = this._originalQueue.findIndex(t => t.id === current.id);
+      }
+      const originalInsertAt = originalCurrentIndex === -1
+        ? this._originalQueue.length
+        : originalCurrentIndex + 1;
+      this._originalQueue.splice(originalInsertAt, 0, track);
+    }
+
     if (this.onQueueChange) this.onQueueChange();
   },
 

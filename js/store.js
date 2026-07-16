@@ -55,6 +55,7 @@ const Store = {
 
   async init() {
     this.loading = true;
+    let loaded = true;
     try {
       // Resolve current user first (guest returns {guest:true}).
       try { this.user = await Api.getMe(); } catch(e) { this.user = { guest: true }; }
@@ -90,14 +91,16 @@ const Store = {
         try { this.reviewCounts = await Api.getReviewCounts(); } catch(e) {}
       }
     } catch (err) {
+      loaded = false;
       UI.showToast('Failed to load library');
       UI.els.content.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;color:#aaa">'
         + '<div style="font-size:48px;margin-bottom:16px">&#9835;</div>'
         + '<div style="font-size:16px;margin-bottom:16px;color:#fff">Could not load your library</div>'
-        + '<button onclick="App.init()" style="padding:10px 24px;border-radius:8px;border:1px solid #444;background:#222;color:#fff;font-size:14px;cursor:pointer">Retry</button>'
+        + '<button onclick="window.location.reload()" style="padding:10px 24px;border-radius:8px;border:1px solid #444;background:#222;color:#fff;font-size:14px;cursor:pointer">Retry</button>'
         + '</div>';
     }
     this.loading = false;
+    return loaded;
   },
 
   async refreshLibrary() {

@@ -287,6 +287,7 @@ Object.assign(UI, {
       + '<img class="settings-about-logo" src="/icon.png" alt="">'
       + '<div class="settings-about-name">Seekify</div>'
       + '<div class="settings-about-tag" style="color:var(--text3);font-size:13px">Personal music library with MusicBrainz integration</div>'
+      + '<a class="settings-about-link" href="https://github.com/sadoway7/seekify-musicplayer" target="_blank" rel="noopener noreferrer">View project on GitHub</a>'
       + '</div>'
       + '</div>';
 
@@ -309,7 +310,6 @@ Object.assign(UI, {
     });
 
     this._loadMetadataStatus();
-    this._loadWorkers();
 
     this.els.content.querySelectorAll('.stoggle').forEach(el => {
       el.addEventListener('click', () => el.classList.toggle('active'));
@@ -325,7 +325,9 @@ Object.assign(UI, {
       });
     }
 
-    this._loadFinderSettings();
+    this._loadFinderSettings().then(loaded => {
+      if (loaded) this._loadWorkers();
+    });
 
     const saveUserDlBtn = document.getElementById('btn-save-user-downloads');
     if (saveUserDlBtn) {
@@ -664,6 +666,7 @@ Object.assign(UI, {
         try {
           await Api.reviewRecheckAll();
           this._showToast('Recheck started');
+          this._startReviewProgressPoll();
         } catch (e) {
           this._showToast('Failed to recheck');
           recheckBtn.disabled = false;
@@ -684,7 +687,15 @@ Object.assign(UI, {
       });
 
       this._startReviewProgressPoll();
-    } catch (e) {}
+      return true;
+    } catch (e) {
+      this._showToast('Failed to load settings');
+      ['btn-save-finder-settings', 'btn-save-worker-settings'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = true;
+      });
+      return false;
+    }
   },
 
   _startReviewProgressPoll() {
@@ -1116,11 +1127,7 @@ Object.assign(UI, {
   },
 
   async _saveReviewSettings() {
-    const revRecheckHours = document.getElementById('setting-review-recheck-hours');
-    const data = {
-      review_enabled: String(this._stoggleVal('setting-review-enabled')),
-      review_recheck_hours: revRecheckHours ? revRecheckHours.value : '24'
-    };
+    const data = {};
     const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
     flagKeys.forEach(key => {
       data['review_flag_' + key.replace(/-/g, '_')] = String(this._stoggleVal('setting-review-flag-' + key));
@@ -1213,6 +1220,7 @@ Object.assign(UI, {
       + '<img class="settings-about-logo" src="/icon.png" alt="">'
       + '<div class="settings-about-name">Seekify</div>'
       + '<div class="settings-about-tag" style="color:var(--text3);font-size:13px">Personal music library</div>'
+      + '<a class="settings-about-link" href="https://github.com/sadoway7/seekify-musicplayer" target="_blank" rel="noopener noreferrer">View project on GitHub</a>'
       + '</div></div>';
     html += '</div>';
     this.els.content.innerHTML = html;

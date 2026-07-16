@@ -33,6 +33,7 @@ const UI = {
     this._lastColorAlbumId = null;
     this._renderQueue();
     this._setupMiniVolume();
+    this._updateVolumeBar();
     this._bindResize();
     this._bindQueueSwipe();
     this._bindQueueDrag();
@@ -394,26 +395,13 @@ const UI = {
       document.body.removeChild(a);
     });
 
-    let prevVolume = 1;
     this.els.volumeBtn.addEventListener('click', () => {
-      if (Player.volume > 0) {
-        prevVolume = Player.volume;
-        Player.setVolume(0);
-      } else {
-        Player.setVolume(prevVolume || 1);
-      }
-      this._updateVolumeBar();
+      Player.toggleMute();
     });
 
     if (this.els.queueVolumeBtn) {
       this.els.queueVolumeBtn.addEventListener('click', () => {
-        if (Player.volume > 0) {
-          prevVolume = Player.volume;
-          Player.setVolume(0);
-        } else {
-          Player.setVolume(prevVolume || 1);
-        }
-        this._updateVolumeBar();
+        Player.toggleMute();
       });
     }
   },
@@ -467,12 +455,23 @@ const UI = {
       Player.seek(f);
     };
 
+    const onCancel = () => {
+      if (!this.seeking) return;
+      this.seeking = false;
+      this._waveformHoverX = -1;
+      const duration = Player.audio.duration;
+      const f = duration && isFinite(duration) ? Player.audio.currentTime / duration : 0;
+      this._waveformProgress = f;
+      this._paintWaveform(f);
+    };
+
     canvas.addEventListener('mousedown', onStart);
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onEnd);
     canvas.addEventListener('touchstart', onStart, { passive: true });
     document.addEventListener('touchmove', onMove, { passive: false });
     document.addEventListener('touchend', onEnd);
+    document.addEventListener('touchcancel', onCancel);
 
     canvas.addEventListener('mousemove', (e) => {
       if (this.seeking) return;
@@ -594,15 +593,8 @@ const UI = {
     this.els.miniVolumeFill = wrap.querySelector('.mini-volume-fill');
 
     // Toggle mute
-    let prevVolume = 0.5;
     this.els.miniVolumeBtn.addEventListener('click', () => {
-      if (Player.volume > 0) {
-        prevVolume = Player.volume;
-        Player.setVolume(0);
-      } else {
-        Player.setVolume(prevVolume || 0.5);
-      }
-      this._updateVolumeBar();
+      Player.toggleMute();
     });
 
     // Drag bar — independent state, keeps wrap active during drag
@@ -1027,7 +1019,14 @@ const UI = {
       { sel: '[data-action="rip-more"]', fn: (el) => this._handleRipMore(el) },
       { sel: '.detail-action-btn, .home-review-card', fn: (el) => this._handleAction(el.dataset.action) },
       { sel: '.hero-action-btn', fn: (el) => this._handleHeroAction(el) },
-      { sel: '.section-header-link', fn: (el) => { if (el.dataset.navigate) this.navigateTo(el.dataset.navigate); } },
+      { sel: '.section-header-link', fn: (el) => {
+        if (el.dataset.libraryFilter) {
+          this.libFilter = el.dataset.libraryFilter;
+          this.navigateTo('library');
+        } else if (el.dataset.navigate) {
+          this.navigateTo(el.dataset.navigate);
+        }
+      } },
       { sel: '.list-item-more', fn: (el) => this._showPlaylistMoreMenu(el) },
       { sel: '.list-item', fn: (el) => this._handleListItemClick(el) },
       { sel: '.show-more-btn', fn: (el) => { if (el.dataset.action === 'show-more-new') { this._newSongsLimit = (this._newSongsLimit || 6) + 12; this.renderHome(); } } },
@@ -1317,6 +1316,22 @@ const UI = {
         html += '<div style="height:16px"></div>';
       }
 
+      const albumMatches = Store.library.albums.filter(a => {
+        return ((a.name || '') + ' ' + (a.artist || '')).toLowerCase().includes(q);
+      });
+      if (albumMatches.length > 0) {
+        html += '<div class="search-results-header">Albums</div>';
+        albumMatches.forEach(a => {
+          html += '<div class="list-item lib-item" data-type="album" data-id="' + a.id + '" style="cursor:pointer">'
+            + '<div class="list-item-art"><img src="' + Api.coverUrl(a.id) + '" alt=""></div>'
+            + '<div class="list-item-info">'
+            + '<div class="list-item-title">' + this._esc(a.name) + '</div>'
+            + '<div class="list-item-subtitle">' + this._esc(a.artist) + '</div>'
+            + '</div></div>';
+        });
+        html += '<div style="height:16px"></div>';
+      }
+
       const results = Store.library.tracks.filter(t => {
         const haystack = (t.title + ' ' + t.artist + ' ' + t.album + ' ' + (t.genre || '')).toLowerCase();
         return words.every(w => haystack.includes(w));
@@ -1327,15 +1342,17 @@ const UI = {
       });
       this._viewTrackList = results;
 
-      if (artistMatches.length === 0 && results.length === 0) {
+      if (artistMatches.length === 0 && albumMatches.length === 0 && results.length === 0) {
         container.innerHTML = this._emptyState('No results', 'Try different keywords', Icons.search());
       } else {
-        html += '<div class="detail-actions">'
-          + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
-          + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
-          + '</div>';
-        html += '<div class="search-results-header">' + results.length + ' track' + (results.length !== 1 ? 's' : '') + '</div>';
-        html += this.renderTrackList(results, { showArt: true });
+        if (results.length > 0) {
+          html += '<div class="detail-actions">'
+            + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
+            + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+            + '</div>';
+          html += '<div class="search-results-header">' + results.length + ' track' + (results.length !== 1 ? 's' : '') + '</div>';
+          html += this.renderTrackList(results, { showArt: true });
+        }
         container.innerHTML = html;
       }
     } else if (this.searchGenre) {

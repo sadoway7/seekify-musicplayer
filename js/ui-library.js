@@ -15,7 +15,7 @@ Object.assign(UI, {
       + '<div class="lib-search-row">'
       + '<div class="search-container">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
-      + '<input class="search-input lib-search-input" type="search" enterkeyhint="search" placeholder="">'
+      + '<input class="search-input lib-search-input" type="search" enterkeyhint="search" placeholder="Filter ' + this.libFilter + '...">'
       + '</div>'
       + (Store.isAdmin ? '<button class="lib-upload-btn" id="lib-upload-btn" aria-label="Upload music">' + Icons.upload() + '</button>' : '')
       + '</div>'
@@ -40,6 +40,9 @@ Object.assign(UI, {
             case 'albums': results.innerHTML = this._renderLibAlbums(); break;
             case 'artists': results.innerHTML = this._renderLibArtists(); break;
           }
+          const input = this.els.content.querySelector('.lib-search-input');
+          const query = input ? input.value.trim().toLowerCase() : '';
+          if (query) this._filterLibResults(query);
         }
       }
     });
@@ -54,7 +57,7 @@ Object.assign(UI, {
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         const q = e.target.value.trim().toLowerCase();
-        if (q.length >= 2) {
+        if (q.length >= 1) {
           this._filterLibResults(q);
         } else {
           this._filterLibResults('');
@@ -72,18 +75,33 @@ Object.assign(UI, {
     const container = this.els.content.querySelector('.lib-results');
     if (!container) return;
 
+    let noMatches = container.querySelector('.lib-filter-empty');
+    if (!noMatches) {
+      noMatches = document.createElement('div');
+      noMatches.className = 'lib-filter-empty empty-state';
+      noMatches.style.display = 'none';
+      noMatches.innerHTML = '<div class="empty-state-title">No matches</div>'
+        + '<div class="empty-state-text">Try a different filter</div>';
+      container.appendChild(noMatches);
+    }
+
     if (!query) {
       // Show all items, restore current filter
       container.querySelectorAll('.lib-item').forEach(el => el.style.display = '');
+      noMatches.style.display = 'none';
       return;
     }
 
-    container.querySelectorAll('.lib-item').forEach(el => {
+    let matches = 0;
+    const items = container.querySelectorAll('.lib-item');
+    items.forEach(el => {
       const title = (el.dataset.title || '').toLowerCase();
       const subtitle = (el.dataset.subtitle || '').toLowerCase();
       const match = title.includes(query) || subtitle.includes(query);
       el.style.display = match ? '' : 'none';
+      if (match) matches++;
     });
+    noMatches.style.display = items.length > 0 && matches === 0 ? '' : 'none';
   },
 
   _renderLibPlaylists() {
@@ -438,7 +456,17 @@ Object.assign(UI, {
     let data;
     try {
       data = await Api.getReviewTracks(0, 200, flags);
-    } catch (e) { data = { tracks: [], total: 0 }; }
+    } catch (e) {
+      this.els.content.innerHTML = '<div class="page-header">'
+        + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
+        + '<span class="page-header-title">Needs Review</span></div>'
+        + this._emptyState('Could not load review queue', 'Check the connection and try again', Icons.warning())
+        + '<div style="display:flex;justify-content:center;padding:0 24px 32px">'
+        + '<button class="settings-btn settings-btn-primary" id="review-load-retry">Retry</button></div>';
+      const retry = document.getElementById('review-load-retry');
+      if (retry) retry.addEventListener('click', () => this.renderNeedsReview());
+      return;
+    }
     const tracks = data.tracks || [];
     this._reviewTotal = data.total || 0;
     this._reviewOffset = tracks.length;
@@ -455,8 +483,8 @@ Object.assign(UI, {
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" id="review-recheck-btn">' + Icons.refresh() + '<span>Recheck</span></button>'
       + '<button class="detail-action-btn" id="review-enrich-btn">' + Icons.search() + '<span>Rescan Meta &amp; Art</span></button>'
-      + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn" data-action="approve-review-shown">' + Icons.check() + '<span>Approve Shown</span></button>' : '')
-      + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-shown">' + Icons.trash() + '<span>Delete Shown</span></button>' : '')
+      + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn" data-action="approve-review-shown">' + Icons.check() + '<span>Approve All Matching</span></button>' : '')
+      + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-shown">' + Icons.trash() + '<span>Delete All Matching</span></button>' : '')
       + '</div>'
       + '</div>';
 
@@ -596,7 +624,13 @@ Object.assign(UI, {
     let data;
     try {
       data = await Api.getReviewTracks(this._reviewOffset, 200, this._reviewFlags || []);
-    } catch (e) { data = { tracks: [], total: 0 }; }
+    } catch (e) {
+      if (trigger) {
+        trigger.textContent = 'Could not load more — tap to retry';
+        trigger.addEventListener('click', () => this._loadMoreReviewTracks(), { once: true });
+      }
+      return;
+    }
     const more = data.tracks || [];
     this._reviewTotal = data.total || this._reviewTotal;
 
@@ -620,9 +654,8 @@ Object.assign(UI, {
       newTrigger.style.cssText = 'text-align:center;padding:24px;color:var(--text-muted)';
       newTrigger.textContent = 'Scroll for more...';
       this.els.content.appendChild(newTrigger);
-    this._setupReviewScrollLoader();
+      this._setupReviewScrollLoader();
     }
-    this._setupReviewFilters();
   },
 
   _renderReviewTrackList(reviewTracks) {
@@ -652,7 +685,6 @@ Object.assign(UI, {
         + '</button>'
         + '</div>';
     });
-    html += '</div>';
     return html;
   },
 

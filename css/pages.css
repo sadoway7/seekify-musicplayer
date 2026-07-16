@@ -321,6 +321,19 @@
   pointer-events: none;
 }
 
+.mega-title .section-header-link {
+  position: absolute;
+  right: var(--page-margin);
+  bottom: 2px;
+  z-index: 1;
+  border: 0;
+  padding: 6px 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .quick-play-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

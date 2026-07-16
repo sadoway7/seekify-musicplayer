@@ -227,7 +227,12 @@ const ReviewUI = {
 
   async saveEditMeta() {
     const modal = document.getElementById('edit-meta-modal');
-    if (!modal || !modal._trackId) return;
+    if (!modal || !modal._trackId || modal._saving) return;
+
+    const trackId = modal._trackId;
+    const saveButton = modal.querySelector('.edit-meta-save');
+    modal._saving = true;
+    if (saveButton) saveButton.disabled = true;
 
     const fields = {};
     modal.querySelectorAll('.edit-meta-field input').forEach(input => {
@@ -242,7 +247,6 @@ const ReviewUI = {
     });
 
     try {
-      const trackId = modal._trackId;
       await Api.reviewEditMeta(trackId, fields);
       if (modal._coverFile) {
         await Api.uploadCustomCover(trackId, modal._coverFile);
@@ -266,6 +270,9 @@ const ReviewUI = {
       UI.showToast('Metadata updated');
     } catch (e) {
       UI.showToast('Failed to update metadata');
+    } finally {
+      modal._saving = false;
+      if (saveButton) saveButton.disabled = false;
     }
   },
 

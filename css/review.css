@@ -791,6 +791,27 @@
   padding-left: 4px;
 }
 
+@media (max-width: 600px) {
+  .review-settings-status,
+  .review-page-header .detail-actions {
+    flex-wrap: wrap;
+  }
+
+  .review-settings-status {
+    gap: 8px 16px;
+  }
+
+  .review-page-header .detail-actions {
+    display: flex;
+    padding-left: 0;
+  }
+
+  .review-page-header .detail-actions > button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
 .track-review-flags {
   display: flex;
   flex-wrap: wrap;

@@ -151,6 +151,7 @@ Object.assign(UI, {
     if (recentCards.length === 0 && !currentTrack) return '';
 
     let html = '';
+    html += '<div class="mega-title"><span>Listen Again</span></div>';
     html += '<div class="quick-play-grid" style="margin-top:24px">';
 
     html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
@@ -198,11 +199,19 @@ Object.assign(UI, {
   },
 
   _homeArtists() {
-    const namedArtists = Store.library.artists.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
+    const artistsWithArt = new Set(Store.library.albums
+      .filter(a => a.hasCover && a.artist)
+      .map(a => a.artist.trim().toLowerCase()));
+    const namedArtists = Store.library.artists.filter(a => {
+      return a.name && a.name !== 'Unknown' && artistsWithArt.has(a.name.trim().toLowerCase());
+    });
     const artistLimit = window.innerWidth >= 768 ? 10 : 6;
-    const newArtists = namedArtists.sort((a, b) => this._stableHash(a.name) - this._stableHash(b.name)).slice(0, artistLimit);
+    const newArtists = namedArtists.sort((a, b) => {
+      return this._homeDiscoveryScore(a.name) - this._homeDiscoveryScore(b.name) || a.name.localeCompare(b.name);
+    }).slice(0, artistLimit);
     if (newArtists.length === 0) return '';
-    let html = '<div class="mega-title"><span>Artists</span></div>';
+    let html = '<div class="mega-title"><span>Artists</span>'
+      + '<button class="section-header-link" data-library-filter="artists">See all</button></div>';
     html += '<div class="scroll-row artist-row">';
     newArtists.forEach(a => {
       html += '<div class="quick-play-card-inline artist-pill" data-type="artist" data-id="' + this._esc(a.name) + '">'
@@ -215,10 +224,15 @@ Object.assign(UI, {
   },
 
   _homeAlbums() {
-    const namedAlbums = Store.library.albums.filter(a => a.name && a.name !== '' && a.name !== 'Unknown');
+    const namedAlbums = Store.library.albums.filter(a => {
+      return a.hasCover && a.name && a.name !== 'Unknown';
+    });
     if (namedAlbums.length === 0) return '';
-    let html = '<div class="mega-title"><span>Albums</span></div>';
-    const shuffledAlbums = namedAlbums.sort((a, b) => this._stableHash(a.name) - this._stableHash(b.name)).slice(0, 15);
+    let html = '<div class="mega-title"><span>Albums</span>'
+      + '<button class="section-header-link" data-library-filter="albums">See all</button></div>';
+    const shuffledAlbums = namedAlbums.sort((a, b) => {
+      return this._homeDiscoveryScore(a.id) - this._homeDiscoveryScore(b.id) || a.id.localeCompare(b.id);
+    }).slice(0, 15);
     html += '<div class="scroll-row">';
     shuffledAlbums.forEach(a => {
       html += '<div class="card" data-album-id="' + a.id + '">'
@@ -288,6 +302,12 @@ Object.assign(UI, {
     html += this.renderTrackList(favTracks.slice(0, limit), { showArt: true });
     html += '</div>';
     return html;
+  },
+
+  _homeDiscoveryScore(key) {
+    const now = new Date();
+    const day = now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate();
+    return this._stableHash(day + '|' + key);
   },
 
   _bindHomeEvents() {

@@ -320,14 +320,16 @@ const RipperV2 = {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         this._showToast(err.error || 'Failed');
-        return;
+        return false;
       }
       this._showToast('Download queued with enrichment');
       this._refreshJobs();
       const container = this.els.content.querySelector('#v2-url-resolve');
       if (container) container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--accent);font-weight:600">Queued for download + enrichment</div>';
+      return true;
     } catch (e) {
       this._showToast('Failed to queue');
+      return false;
     }
   },
 
@@ -402,27 +404,28 @@ const RipperV2 = {
       btn.addEventListener('click', async (e) => {
         if (Store.isGuest) { UI._showAccountRequired(); return; }
         e.stopPropagation();
-        const badge = document.createElement('span');
-        badge.className = 'finder-status-badge finder-in-queue';
-        badge.textContent = 'Queued';
-        btn.replaceWith(badge);
-        try {
-          await this._queueV2Download(
-            btn.dataset.artist + ' - ' + btn.dataset.title,
-            { artist: btn.dataset.artist, title: btn.dataset.title },
-            {
-              artist: btn.dataset.artist,
-              title: btn.dataset.title,
-              album: btn.dataset.album,
-              recording_id: btn.dataset.recordingId,
-              release_id: btn.dataset.releaseId,
-              artist_id: btn.dataset.artistId,
-              genre: btn.dataset.genre,
-              year: btn.dataset.year,
-            }
-          );
-        } catch (err) {
-          this._showToast(err.message || 'Failed');
+        btn.disabled = true;
+        const queued = await this._queueV2Download(
+          btn.dataset.artist + ' - ' + btn.dataset.title,
+          { artist: btn.dataset.artist, title: btn.dataset.title },
+          {
+            artist: btn.dataset.artist,
+            title: btn.dataset.title,
+            album: btn.dataset.album,
+            recording_id: btn.dataset.recordingId,
+            release_id: btn.dataset.releaseId,
+            artist_id: btn.dataset.artistId,
+            genre: btn.dataset.genre,
+            year: btn.dataset.year,
+          }
+        );
+        if (queued) {
+          const badge = document.createElement('span');
+          badge.className = 'finder-status-badge finder-in-queue';
+          badge.textContent = 'Queued';
+          btn.replaceWith(badge);
+        } else {
+          btn.disabled = false;
         }
       });
     });

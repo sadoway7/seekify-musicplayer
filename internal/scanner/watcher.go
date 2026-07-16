@@ -1,24 +1,31 @@
 package scanner
 
 import (
+	"hash/fnv"
 	"log"
 	"musicapp/internal/store"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
 var (
-	watcherMu      sync.Mutex
-	lastFileCounts map[string]int
-	lastPrune      time.Time
+	watcherMu        sync.Mutex
+	lastFileSnapshot map[string]audioSnapshot
+	lastPrune        time.Time
 )
 
+type audioSnapshot struct {
+	count     int
+	signature uint64
+}
+
 func init() {
-	lastFileCounts = make(map[string]int)
+	lastFileSnapshot = make(map[string]audioSnapshot)
 	lastPrune = time.Now()
 }
 
@@ -26,8 +33,20 @@ func init() {
 // Soulseek share folder so it doesn't trigger rescans or defeat the
 // startup scan-skip optimization.
 func CountAudioFiles(dir string) int {
+	return snapshotAudioFiles(dir).count
+}
+
+// snapshotAudioFiles is used by the running watcher to detect replacements,
+// renames, and modifications that leave the total file count unchanged. The
+// startup scan-skip remains count-only.
+func snapshotAudioFiles(dir string) audioSnapshot {
 	skipDir := filepath.Clean(store.SlskShareDir())
-	count := 0
+	return snapshotAudioFilesSkipping(dir, skipDir)
+}
+
+func snapshotAudioFilesSkipping(dir, skipDir string) audioSnapshot {
+	snapshot := audioSnapshot{}
+	h := fnv.New64a()
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -40,11 +59,22 @@ func CountAudioFiles(dir string) int {
 		}
 		ext := strings.ToLower(filepath.Ext(path))
 		if _, ok := store.AudioExtensions[ext]; ok {
-			count++
+			snapshot.count++
+			rel, relErr := filepath.Rel(dir, path)
+			if relErr != nil {
+				rel = path
+			}
+			h.Write([]byte(filepath.ToSlash(rel)))
+			h.Write([]byte{0})
+			h.Write([]byte(strconv.FormatInt(info.Size(), 10)))
+			h.Write([]byte{0})
+			h.Write([]byte(strconv.FormatInt(info.ModTime().UnixNano(), 10)))
+			h.Write([]byte{0})
 		}
 		return nil
 	})
-	return count
+	snapshot.signature = h.Sum64()
+	return snapshot
 }
 
 // StartWatcher polls music directories for changes.
@@ -53,12 +83,12 @@ func CountAudioFiles(dir string) int {
 func StartWatcher() {
 	// Record initial counts after startup scan
 	watcherMu.Lock()
-	lastFileCounts[store.MusicDir] = CountAudioFiles(store.MusicDir)
+	lastFileSnapshot[store.MusicDir] = snapshotAudioFiles(store.MusicDir)
 	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
-		lastFileCounts[dir] = CountAudioFiles(dir)
+		lastFileSnapshot[dir] = snapshotAudioFiles(dir)
 	}
 	watcherMu.Unlock()
 
@@ -111,12 +141,12 @@ func ForceRescan() {
 
 	// Update file counts so the watcher doesn't immediately re-trigger
 	watcherMu.Lock()
-	lastFileCounts[store.MusicDir] = CountAudioFiles(store.MusicDir)
+	lastFileSnapshot[store.MusicDir] = snapshotAudioFiles(store.MusicDir)
 	for prefix, dir := range store.MusicDirs {
 		if prefix == "" {
 			continue
 		}
-		lastFileCounts[dir] = CountAudioFiles(dir)
+		lastFileSnapshot[dir] = snapshotAudioFiles(dir)
 	}
 	watcherMu.Unlock()
 }
@@ -149,10 +179,10 @@ func CheckAndRescan() {
 	}
 
 	for _, d := range dirs {
-		current := CountAudioFiles(d.dir)
+		current := snapshotAudioFiles(d.dir)
 
 		watcherMu.Lock()
-		previous := lastFileCounts[d.dir]
+		previous := lastFileSnapshot[d.dir]
 		watcherMu.Unlock()
 
 		if current == previous {
@@ -161,12 +191,12 @@ func CheckAndRescan() {
 
 		// Debounce: wait 5s and re-check to filter transient changes
 		time.Sleep(5 * time.Second)
-		current = CountAudioFiles(d.dir)
+		current = snapshotAudioFiles(d.dir)
 		if current == previous {
 			continue
 		}
 
-		diff := current - previous
+		diff := current.count - previous.count
 		if diff < 0 {
 			diff = -diff
 		}
@@ -175,7 +205,11 @@ func CheckAndRescan() {
 		if d.prefix != "" {
 			label = d.prefix + ":" + d.dir
 		}
-		log.Printf("[watcher] %s: file count changed %d → %d (+%d), triggering rescan", label, previous, current, diff)
+		if current.count == previous.count {
+			log.Printf("[watcher] %s: audio files changed with count still at %d, triggering rescan", label, current.count)
+		} else {
+			log.Printf("[watcher] %s: file count changed %d → %d (+%d), triggering rescan", label, previous.count, current.count, diff)
+		}
 
 		// Rescan the changed directory
 		if d.prefix == "" {
@@ -196,7 +230,7 @@ func CheckAndRescan() {
 		ExtractEmbeddedCovers()
 
 		watcherMu.Lock()
-		lastFileCounts[d.dir] = current
+		lastFileSnapshot[d.dir] = current
 		watcherMu.Unlock()
 
 		if LibraryVersionAdd != nil {

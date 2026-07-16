@@ -59,13 +59,17 @@ type DownloadJob struct {
 	UserID         string `json:"userId,omitempty"`
 }
 
-var ErrDownloadLimit = errors.New("download limit reached")
+var (
+	ErrDownloadLimit      = errors.New("download limit reached")
+	ErrInvalidOverrideDir = errors.New("download destination must be inside the music directory")
+)
 
 var (
 	DownloadMu     sync.Mutex
 	DownloadActive int
 	ActiveJobs     = make(map[string]*exec.Cmd)
 	ActiveJobTime  = make(map[string]time.Time)
+	createJobMu    sync.Mutex
 )
 
 // MaxConcurrentDownloads returns the configured concurrency limit (default 3).
@@ -466,7 +470,7 @@ func DbGetQueuedJobs() ([]DownloadJob, error) {
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
 		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id
-		FROM download_jobs WHERE status = 'queued' ORDER BY created_at DESC`)
+		FROM download_jobs WHERE status = 'queued' ORDER BY created_at DESC LIMIT 1`)
 	if err != nil {
 		return nil, err
 	}
@@ -596,6 +600,17 @@ func ScanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 }
 
 func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, trackNum, trackTotal int, overrideDir, videoID string) (*DownloadJob, error) {
+	var err error
+	overrideDir, err = constrainOverrideDir(overrideDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Keep limit checks, duplicate detection, and insertion atomic relative to
+	// other job creators. The database claim still controls queue processing.
+	createJobMu.Lock()
+	defer createJobMu.Unlock()
+
 	if err := EnforceDownloadLimits(userID); err != nil {
 		return nil, err
 	}
@@ -657,6 +672,65 @@ func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, tr
 
 	store.SafeGo("process-queue", func() { ProcessDownloadQueue() })
 	return job, nil
+}
+
+// constrainOverrideDir normalizes a caller-provided destination and rejects
+// paths outside the primary music directory. Blank means "use the normal
+// artist/album layout" and intentionally stays blank.
+func constrainOverrideDir(overrideDir string) (string, error) {
+	if strings.TrimSpace(overrideDir) == "" {
+		return "", nil
+	}
+
+	root, err := filepath.Abs(store.MusicDir)
+	if err != nil {
+		return "", ErrInvalidOverrideDir
+	}
+	target := overrideDir
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(root, target)
+	}
+	target, err = filepath.Abs(target)
+	if err != nil || !pathInside(root, target) {
+		return "", ErrInvalidOverrideDir
+	}
+
+	// Resolve existing path components so a symlink below MusicDir cannot
+	// redirect a download outside it. The final directory may not exist yet.
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		resolvedRoot = root
+	}
+	resolvedTarget, err := evalExistingPath(target)
+	if err != nil || !pathInside(resolvedRoot, resolvedTarget) {
+		return "", ErrInvalidOverrideDir
+	}
+	return target, nil
+}
+
+func pathInside(root, target string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// evalExistingPath resolves symlinks in the deepest existing ancestor, then
+// appends any not-yet-created suffix without following it.
+func evalExistingPath(path string) (string, error) {
+	current := filepath.Clean(path)
+	var suffix []string
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			parts := append([]string{resolved}, suffix...)
+			return filepath.Join(parts...), nil
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+		current = parent
+	}
 }
 
 func ProcessDownloadQueue() {

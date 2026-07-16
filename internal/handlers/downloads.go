@@ -36,10 +36,15 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 
 	store.Mu.RLock()
 	track, exists := store.Tracks[id]
+	downloadEnabled := exists && track.DownloadEnabled
 	store.Mu.RUnlock()
 
 	if !exists {
 		http.Error(w, "Track not found", http.StatusNotFound)
+		return
+	}
+	if !downloadEnabled {
+		http.Error(w, "Downloads are disabled for this track", http.StatusForbidden)
 		return
 	}
 
@@ -224,6 +229,8 @@ func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 		status := http.StatusInternalServerError
 		if errors.Is(err, downloads.ErrDownloadLimit) {
 			status = http.StatusTooManyRequests
+		} else if errors.Is(err, downloads.ErrInvalidOverrideDir) {
+			status = http.StatusBadRequest
 		} else if strings.Contains(err.Error(), "already in library") || strings.Contains(err.Error(), "already in download queue") {
 			status = http.StatusConflict
 		}
@@ -484,6 +491,9 @@ func DownloadTogglePauseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	paused := !store.GetSettingBool("download_paused", false)
 	store.SetSetting("download_paused", strconv.FormatBool(paused))
+	if !paused {
+		store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
+	}
 	writeJSON(w, map[string]bool{"paused": paused})
 }
 

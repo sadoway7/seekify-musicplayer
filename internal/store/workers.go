@@ -114,12 +114,15 @@ func TriggerWorker(name string) error {
 		w.mu.Unlock()
 		return fmt.Errorf("worker %s is already running", name)
 	}
+	// Claim the worker before releasing the lock. Marking it inside the new
+	// goroutine leaves a window where concurrent Run Now requests can both pass.
+	w.status.Running = true
+	w.status.Error = ""
 	w.mu.Unlock()
 
-	go func() {
-		WorkerStart(name)
+	SafeGo("worker-"+name, func() {
 		defer WorkerDone(name, nil)
 		w.run()
-	}()
+	})
 	return nil
 }

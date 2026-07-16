@@ -804,6 +804,9 @@ func ScanSingleFile(filePath string) {
 	store.Mu.Unlock()
 
 	store.DbUpsertTrack(track)
+	if LibraryVersionAdd != nil {
+		LibraryVersionAdd(1)
+	}
 	if SeedReviewUnchecked != nil {
 		SeedReviewUnchecked(trackID)
 	}

@@ -6,6 +6,8 @@ import (
 	"musicapp/internal/store"
 )
 
+const sessionRefreshInterval = 24 * time.Hour
+
 func CreateSession(userID, ip, ua string) (string, error) {
 	tok, err := newToken()
 	if err != nil {
@@ -23,9 +25,14 @@ func CreateSession(userID, ip, ua string) (string, error) {
 }
 
 // lookupSession validates a token and returns the owning user, or nil.
-// Expired tokens are deleted; valid ones get a rolling expiry refresh.
+// Expired tokens are deleted. Valid sessions retain a rolling expiry, but the
+// database expiry is refreshed at most once per day instead of on every request.
 // Disabled users are treated as not found.
 func lookupSession(token string) *User {
+	return lookupSessionAt(token, time.Now())
+}
+
+func lookupSessionAt(token string, now time.Time) *User {
 	var userID string
 	var expiresAt int64
 	err := store.DB.QueryRow(
@@ -34,7 +41,8 @@ func lookupSession(token string) *User {
 	if err != nil {
 		return nil
 	}
-	if time.Now().Unix() > expiresAt {
+	nowUnix := now.Unix()
+	if nowUnix > expiresAt {
 		store.DB.Exec(`DELETE FROM sessions WHERE token=?`, token)
 		return nil
 	}
@@ -42,8 +50,11 @@ func lookupSession(token string) *User {
 	if err != nil || u.Disabled {
 		return nil
 	}
-	store.DB.Exec(`UPDATE sessions SET expires_at=? WHERE token=?`,
-		time.Now().Unix()+int64(sessionTTL.Seconds()), token)
+	refreshThreshold := nowUnix + int64((sessionTTL - sessionRefreshInterval).Seconds())
+	if expiresAt <= refreshThreshold {
+		store.DB.Exec(`UPDATE sessions SET expires_at=? WHERE token=?`,
+			nowUnix+int64(sessionTTL.Seconds()), token)
+	}
 	return u
 }
 

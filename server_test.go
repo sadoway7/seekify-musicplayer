@@ -70,3 +70,53 @@ func TestGzipMiddleware_SkipsStreamAndNoAccept(t *testing.T) {
 	}
 	resp2.Body.Close()
 }
+
+func TestMetadataRoutesRequireAdminAndEnforceMethods(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/metadata-preview"},
+		{http.MethodPost, "/api/metadata/scan"},
+		{http.MethodPost, "/api/metadata/rescan/track-id"},
+		{http.MethodPost, "/api/metadata/rescan-sync/track-id"},
+		{http.MethodGet, "/api/metadata/search?q=artist+-+title"},
+		{http.MethodPost, "/api/metadata/update-track/track-id"},
+		{http.MethodGet, "/api/metadata/scan-progress"},
+		{http.MethodGet, "/api/metadata/pending"},
+		{http.MethodGet, "/api/metadata/all"},
+		{http.MethodPost, "/api/metadata/approve/match-id"},
+		{http.MethodPost, "/api/metadata/reject/match-id"},
+		{http.MethodPost, "/api/metadata/approve-all"},
+		{http.MethodPost, "/api/metadata/clear"},
+		{http.MethodGet, "/api/metadata/counts"},
+		{http.MethodPost, "/api/metadata/undo/match-id"},
+	}
+
+	mux := http.NewServeMux()
+	registerMetadataRoutes(mux)
+	// Match the production mux's SPA/API catch-all; method mismatches must not
+	// fall through to it as a 404.
+	mux.HandleFunc("/", http.NotFound)
+	for _, route := range routes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.path, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("anonymous status = %d, want %d", rec.Code, http.StatusForbidden)
+			}
+
+			wrongMethod := http.MethodPost
+			if route.method == http.MethodPost {
+				wrongMethod = http.MethodGet
+			}
+			req = httptest.NewRequest(wrongMethod, route.path, nil)
+			rec = httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("wrong-method status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+			}
+		})
+	}
+}

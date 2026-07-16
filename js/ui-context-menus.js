@@ -302,14 +302,7 @@ Object.assign(UI, {
       }},
       { label: 'Play Next', icon: Icons.play(), action: () => {
         this.hideContextMenu();
-        if (index === Player.currentIndex) return;
-        const t = Player.queue.splice(index, 1)[0];
-        const insertAt = Player.currentIndex + 1;
-        Player.queue.splice(insertAt, 0, t);
-        if (index < Player.currentIndex) {
-          Player.currentIndex--;
-        }
-        if (Player.onQueueChange) Player.onQueueChange();
+        Player.moveToPlayNext(index);
       }},
       { type: 'divider' },
       { label: 'Go to Album', icon: Icons.library(), action: () => {
@@ -325,7 +318,7 @@ Object.assign(UI, {
       { type: 'divider' },
       { label: 'Share', icon: Icons.share(), action: async () => {
         this.hideContextMenu();
-        const shareUrl = window.location.origin + '/?track=' + encodeURIComponent(track.id);
+        const shareUrl = window.location.origin + '/?play=' + encodeURIComponent(track.id);
         if (navigator.share) {
           try { await navigator.share({ title: track.title, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
         } else {

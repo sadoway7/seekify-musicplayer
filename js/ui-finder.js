@@ -97,9 +97,7 @@ Object.assign(UI, {
         const newType = chip.dataset.finderType;
         if (newType === this._finderType) return;
         this._finderType = newType;
-        if (this._finderQuery && this._finderResults) {
-          this._renderFinderResultsList(document.getElementById('finder-results'), this._finderResults);
-        } else if (this._finderQuery) {
+        if (this._finderQuery) {
           this._renderFinderResults();
         } else {
           this.renderFinder();
@@ -297,6 +295,7 @@ Object.assign(UI, {
       if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
       html += '<div class="queue-stats-actions">'
         + (Store.isAdmin ? '<button class="settings-btn" id="btn-dl-settings">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>' : '')
+        + (Store.isAdmin ? '<button class="settings-btn" id="btn-dl-pause">' + (this._downloadPaused ? '&#x25b6; Resume' : '&#x23f8; Pause') + '</button>' : '')
         + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed">&#x21bb; Retry All</button>' : '')
         + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history">Clear History</button>' : '')
         + '</div>';
@@ -690,7 +689,16 @@ Object.assign(UI, {
     const container = this.els.content.querySelector('#finder-results');
     if (!container) return;
 
-    if (!this._finderQuery) {
+    const requestId = (this._finderSearchRequestId || 0) + 1;
+    this._finderSearchRequestId = requestId;
+    const query = this._finderQuery;
+    const type = this._finderType;
+    const isCurrentRequest = () => requestId === this._finderSearchRequestId
+      && query === this._finderQuery
+      && type === this._finderType
+      && this.els.content.querySelector('#finder-results') === container;
+
+    if (!query) {
       container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
         + '<div class="empty-state-text">Search for songs, artists, or albums on MusicBrainz</div></div>';
       return;
@@ -699,19 +707,24 @@ Object.assign(UI, {
     container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
 
     try {
-      if (this._finderType === 'recording' || this._finderType === 'youtube') {
-        try { this._downloadJobs = await Api.getQueue(); } catch(e) { this._downloadJobs = []; }
+      if (type === 'recording' || type === 'youtube') {
+        let downloadJobs;
+        try { downloadJobs = await Api.getQueue(); } catch(e) { downloadJobs = []; }
+        if (!isCurrentRequest()) return;
+        this._downloadJobs = downloadJobs;
       }
       let results;
-      if (this._finderType === 'youtube') {
-        results = await Api.finderYouTubeSearch(this._finderQuery);
+      if (type === 'youtube') {
+        results = await Api.finderYouTubeSearch(query);
       } else {
-        results = await Api.finderSearch(this._finderQuery, this._finderType);
+        results = await Api.finderSearch(query, type);
       }
+      if (!isCurrentRequest()) return;
       this._finderResults = results;
-      this._addSearchHistory(this._finderQuery);
+      this._addSearchHistory(query);
       this._renderFinderResultsList(container, results);
     } catch (err) {
+      if (!isCurrentRequest()) return;
       container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
         + '<div class="empty-state-text">Search failed. MusicBrainz may be rate-limited — try again in a moment.</div></div>';
     }
@@ -832,7 +845,7 @@ Object.assign(UI, {
     const container = this.els.content.querySelector('#finder-results');
     if (!container) return;
 
-    container.addEventListener('click', (e) => {
+    container.addEventListener('click', async (e) => {
       const previewBtn = e.target.closest('.finder-preview-btn');
       if (previewBtn) {
         e.stopPropagation();
@@ -844,16 +857,21 @@ Object.assign(UI, {
       if (dlBtn) {
         if (Store.isGuest) { this._showAccountRequired(); return; }
         e.stopPropagation();
-        const badge = document.createElement('span');
-        badge.className = 'finder-status-badge finder-in-queue';
-        badge.textContent = 'Queued';
-        dlBtn.replaceWith(badge);
-        this._addToQueue({
+        dlBtn.disabled = true;
+        const queued = await this._addToQueue({
           artist: dlBtn.dataset.artist,
           title: dlBtn.dataset.title,
           album: dlBtn.dataset.album || '',
           albumMbid: dlBtn.dataset.albumMbid || ''
         });
+        if (queued) {
+          const badge = document.createElement('span');
+          badge.className = 'finder-status-badge finder-in-queue';
+          badge.textContent = 'Queued';
+          dlBtn.replaceWith(badge);
+        } else {
+          dlBtn.disabled = false;
+        }
         return;
       }
 
@@ -906,6 +924,7 @@ Object.assign(UI, {
       await Api.queueAdd(track);
       this._showToast('Added to download queue');
       try { this._downloadJobs = await Api.getQueue(); } catch(e) {}
+      return true;
     } catch (err) {
       const msg = err.message || 'Failed to add to queue';
       if (msg.includes('already in library') || msg.includes('already')) {
@@ -913,6 +932,7 @@ Object.assign(UI, {
       } else {
         this._showToast(msg);
       }
+      return false;
     }
   },
 
@@ -1145,18 +1165,15 @@ Object.assign(UI, {
           row.style.display = match ? '' : 'none';
           if (match) visible++;
         });
-        if (countEl) countEl.firstElementChild.textContent = q ? visible + ' of ' + allTracks.length + ' tracks' : allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '');
+        if (countEl) countEl.textContent = q ? visible + ' of ' + allTracks.length + ' tracks' : allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '');
       });
     }
 
     container.querySelectorAll('.finder-track-dl').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const badge = document.createElement('span');
-        badge.className = 'finder-status-badge finder-in-queue';
-        badge.textContent = 'Queued';
-        btn.replaceWith(badge);
-        this._addToQueue({
+        btn.disabled = true;
+        const queued = await this._addToQueue({
           artist: btn.dataset.artist,
           title: btn.dataset.title,
           album: btn.dataset.album || '',
@@ -1164,6 +1181,14 @@ Object.assign(UI, {
           trackNumber: parseInt(btn.dataset.trackNumber) || 0,
           trackTotal: parseInt(btn.dataset.trackTotal) || 0
         });
+        if (queued) {
+          const badge = document.createElement('span');
+          badge.className = 'finder-status-badge finder-in-queue';
+          badge.textContent = 'Queued';
+          btn.replaceWith(badge);
+        } else {
+          btn.disabled = false;
+        }
       });
     });
   },
@@ -1246,13 +1271,10 @@ Object.assign(UI, {
       container.innerHTML = thtml;
 
       container.querySelectorAll('.finder-track-dl').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          const badge = document.createElement('span');
-          badge.className = 'finder-status-badge finder-in-queue';
-          badge.textContent = 'Queued';
-          btn.replaceWith(badge);
-          this._addToQueue({
+          btn.disabled = true;
+          const queued = await this._addToQueue({
             artist: btn.dataset.artist,
             title: btn.dataset.title,
             album: btn.dataset.album || '',
@@ -1260,6 +1282,14 @@ Object.assign(UI, {
             trackNumber: parseInt(btn.dataset.trackNumber) || 0,
             trackTotal: parseInt(btn.dataset.trackTotal) || 0
           });
+          if (queued) {
+            const badge = document.createElement('span');
+            badge.className = 'finder-status-badge finder-in-queue';
+            badge.textContent = 'Queued';
+            btn.replaceWith(badge);
+          } else {
+            btn.disabled = false;
+          }
         });
       });
     }).catch(() => {

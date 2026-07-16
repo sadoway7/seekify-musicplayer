@@ -7,6 +7,29 @@ block opens. Newest entries go at the top of their block.
 
 ## Unreleased
 
+## 2026-07-15
+
+- Home discovery: keep the rotating Artist and Album showcases artwork-first by omitting entries without usable art; the complete library remains available through See all and Search.
+- Security: keep every custom download destination inside the music library (including symlink escapes), require admin access and correct methods for metadata tools, and honor per-track download restrictions.
+- Queue controls: Play Next now works from both queue history and upcoming tracks, and queue mutations immediately refresh Now Playing controls and playing-track highlights.
+- Finder, Ripper, and Review: only show successful queue additions, recover failed action buttons, prevent Review settings from changing worker state, and fix repeated filters, malformed pagination markup, and artist result counts.
+- Interface polish: keyboard playback shortcuts ignore buttons and links, Settings and Review layouts wrap cleanly on phones, and Settings → About links to the public GitHub project.
+- Inputs: replace the browser-blue search clear button with a neutral app-styled icon and hover state.
+- Metadata rescrape: rank likely original official albums and singles above compilations, live/remix releases, bootlegs, and Various Artists collections.
+- Now Playing: reduce the centered action tray and adjacent playlist toggle by 10% on both desktop and mobile.
+- Player state: removing the current or final queued track now loads the correct successor or fully clears stale playback UI; volume and mute persist and stay synchronized across every control surface.
+- Finder and metadata: stale searches can no longer replace newer results, changing result type always refetches, and metadata Save is protected from duplicate submissions.
+- File security: admin list, upload, delete, and create-folder operations now use path-aware library containment and cannot escape into similarly named sibling folders or delete the library root.
+- Streaming and sessions: support suffix byte ranges used by media clients, return correct invalid-range metadata, and reduce rolling-session SQLite writes from every request to at most once daily.
+- Visualizer: keep the main player on native audio output so enabling visuals cannot alter or stop background playback, and rebind audio analysis when songs change; unsupported capture browsers use decorative mode.
+- Downloads: prevent concurrent requests from bypassing limits or duplicate checks, make Resume immediate, and expose the admin Pause/Resume control.
+- Home and search: rotate Artists and Albums daily, add full-library links, label quick play, return Albums in search, and show clearer Library filter feedback.
+- Playback: keep unavailable-file detection active until audio truly starts, handle autoplay blocking without skipping tracks, and fix repeat-one Next state, shared track links, and cancelled touch seeks.
+- UI reliability: load failures now stay visible instead of becoming empty/default states; Settings waits for saved values before rendering workers, and Review bulk actions describe their full scope.
+- Library: detect renamed/replaced audio files even when the file count is unchanged, and keep clients updated after later downloads or filesystem changes.
+- Reliability: manual workers can no longer start twice or crash the server, and admin log capture is safe during concurrent writes.
+- Security: bulk and playlist imports now reject anonymous requests instead of risking a server panic.
+
 ## 2026-07-10
 - Visualizer: reposition correctly when queue panel opens/closes on desktop at all breakpoints (direct invalidation on toggle + ResizeObserver fallback).
 - Admin setting: choose default Now Playing view (visualizer vs album art). Default is album art. Users can still toggle individually; admin default applies until they do.

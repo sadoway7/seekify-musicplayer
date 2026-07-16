@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -93,6 +94,58 @@ func TestSessionLifecycle(t *testing.T) {
 		t.Fatal("disabled user's session should be rejected")
 	}
 	DeleteSession(tok)
+}
+
+func TestLookupSessionRefreshesAtMostDaily(t *testing.T) {
+	setupTestDB(t)
+	u, err := CreateUser("alice", "password123", RoleUser, "")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	now := time.Unix(1_700_000_000, 0)
+	token := "session-token"
+	initialExpiry := now.Add(sessionTTL).Unix()
+	if _, err := store.DB.Exec(
+		`INSERT INTO sessions(token, user_id, created_at, expires_at) VALUES(?,?,?,?)`,
+		token, u.ID, now.Unix(), initialExpiry,
+	); err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	assertExpiry := func(want int64) {
+		t.Helper()
+		var got int64
+		if err := store.DB.QueryRow(`SELECT expires_at FROM sessions WHERE token=?`, token).Scan(&got); err != nil {
+			t.Fatalf("read expiry: %v", err)
+		}
+		if got != want {
+			t.Fatalf("expires_at = %d, want %d", got, want)
+		}
+	}
+
+	if got := lookupSessionAt(token, now); got == nil || got.ID != u.ID {
+		t.Fatalf("initial lookup = %v, want user %s", got, u.ID)
+	}
+	assertExpiry(initialExpiry)
+
+	justBeforeRefresh := now.Add(sessionRefreshInterval - time.Second)
+	if got := lookupSessionAt(token, justBeforeRefresh); got == nil {
+		t.Fatal("session rejected before refresh interval")
+	}
+	assertExpiry(initialExpiry)
+
+	refreshTime := now.Add(sessionRefreshInterval)
+	if got := lookupSessionAt(token, refreshTime); got == nil {
+		t.Fatal("session rejected at refresh interval")
+	}
+	refreshedExpiry := refreshTime.Add(sessionTTL).Unix()
+	assertExpiry(refreshedExpiry)
+
+	if got := lookupSessionAt(token, refreshTime.Add(time.Second)); got == nil {
+		t.Fatal("session rejected after refresh")
+	}
+	assertExpiry(refreshedExpiry)
 }
 
 func TestDeleteLastAdminRefused(t *testing.T) {

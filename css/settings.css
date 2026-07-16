@@ -83,6 +83,13 @@
   gap: 0 20px;
 }
 
+@media (max-width: 600px) {
+  .settings-form-grid,
+  .settings-checks-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .settings-subsection-label {
   font-size: 15px;
   font-weight: 700;
@@ -239,6 +246,14 @@
 }
 .settings-about-tag {
   max-width: 320px;
+}
+.settings-about-link {
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+}
+.settings-about-link:hover {
+  text-decoration: underline;
 }
 
 .review-actions {

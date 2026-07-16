@@ -6,6 +6,11 @@ Object.assign(UI, {
   updateMiniPlayer() {
     const track = Player.getCurrentTrack();
     if (!track) {
+      this.els.miniArt.style.backgroundImage = '';
+      this.els.miniTitle.textContent = '';
+      this.els.miniArtist.textContent = '';
+      this.els.miniPlayBtn.innerHTML = Icons.play();
+      this.els.miniProgress.style.setProperty('--progress', '0%');
       if (!this.els.miniPlayer.classList.contains('hidden')) {
         this.els.miniPlayer.style.animation = 'miniPlayerSlideDown 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards';
         clearTimeout(this._miniAnimTimer);
@@ -51,7 +56,26 @@ Object.assign(UI, {
 
   updateNowPlaying() {
     const track = Player.getCurrentTrack();
-    if (!track) return;
+    if (!track) {
+      this._lastArtTrackId = null;
+      this._lastArtAlbumId = null;
+      this._lastArtSrc = null;
+      this._currentWaveformTrackId = null;
+      this.els.npArt.removeAttribute('src');
+      this.els.npArtBg.removeAttribute('src');
+      this.els.npTitle.textContent = '';
+      this.els.npArtist.textContent = '';
+      this.els.npPlay.innerHTML = Icons.play();
+      this.els.npTimeCurrent.textContent = '0:00';
+      this.els.npTimeTotal.textContent = '0:00';
+      this.els.nowPlaying.classList.remove('playing');
+      if (this.els.npHeaderText) this.els.npHeaderText.textContent = '';
+      if (!this.els.nowPlaying.classList.contains('hidden')) {
+        this._applyNowPlayingHiddenState();
+        this._afterHideNowPlaying();
+      }
+      return;
+    }
 
     const newSrc = Api.coverUrl(track.albumID);
     const artChanged = !this._lastArtTrackId || this._lastArtTrackId !== track.id || this._lastArtAlbumId !== track.albumID || this._lastArtSrc !== newSrc;
@@ -113,7 +137,7 @@ Object.assign(UI, {
     this.els.npRepeat.innerHTML = Player.repeat === 'one' ? Icons.repeatOne() : Icons.repeat();
 
     // Grey out prev/next when no track available in that direction
-    const hasNext = Player.repeat !== 'off' || Player.currentIndex < Player.queue.length - 1;
+    const hasNext = Player.repeat === 'all' || Player.currentIndex < Player.queue.length - 1;
     const hasPrev = Player.currentIndex > 0;
     this.els.npNext.style.opacity = hasNext ? '' : '0.3';
     this.els.npNext.style.pointerEvents = hasNext ? '' : 'none';
@@ -387,27 +411,41 @@ Object.assign(UI, {
     el.addEventListener('click', (e) => { if (e.target === el) this._fadeOutRemove(el, 200); });
   },
 
+  _clearTrackHighlights(trackId) {
+    const selector = trackId
+      ? '.track-row[data-track-id="' + trackId + '"]'
+      : '.track-row';
+    document.querySelectorAll(selector).forEach(row => {
+      const titleEl = row.querySelector('.track-title');
+      const eqEl = row.querySelector('.eq');
+      const durationEl = row.querySelector('.track-duration');
+      if (titleEl) titleEl.classList.remove('on');
+      if (eqEl) {
+        eqEl.remove();
+        if (!durationEl) {
+          const dur = document.createElement('div');
+          dur.className = 'track-duration';
+          const track = Store.getTrack(row.dataset.trackId);
+          dur.textContent = this._formatTime(track ? track.duration : 0);
+          row.appendChild(dur);
+        }
+      }
+    });
+  },
+
   updateTrackHighlights() {
     const current = Player.getCurrentTrack();
-    if (!current) return;
+    if (!current) {
+      // Clear every rendered row, not just the cached ID. A page may have
+      // rendered its current marker after the cache was last updated.
+      this._clearTrackHighlights();
+      this._lastHighlightedId = null;
+      document.querySelectorAll('.queue-item.active').forEach(item => item.classList.remove('active'));
+      return;
+    }
     if (this._lastHighlightedId === current.id) return;
     if (this._lastHighlightedId) {
-      document.querySelectorAll('.track-row[data-track-id="' + this._lastHighlightedId + '"]').forEach(row => {
-        const titleEl = row.querySelector('.track-title');
-        const eqEl = row.querySelector('.eq');
-        const durationEl = row.querySelector('.track-duration');
-        if (titleEl) titleEl.classList.remove('on');
-        if (eqEl) {
-          eqEl.remove();
-          if (!durationEl) {
-            const dur = document.createElement('div');
-            dur.className = 'track-duration';
-            const track = Store.getTrack(row.dataset.trackId);
-            dur.textContent = this._formatTime(track ? track.duration : 0);
-            row.appendChild(dur);
-          }
-        }
-      });
+      this._clearTrackHighlights(this._lastHighlightedId);
     }
     this._lastHighlightedId = current.id;
     document.querySelectorAll('.track-row[data-track-id="' + current.id + '"]').forEach(row => {
@@ -504,6 +542,7 @@ Object.assign(UI, {
     const pct = (Player.volume * 100) + '%';
     const icon = Player.volume === 0 ? Icons.volumeMute() : Icons.volume();
     if (this.els.volumeFill) this.els.volumeFill.style.width = pct;
+    if (this.els.volumeBar) this.els.volumeBar.setAttribute('aria-valuenow', String(Math.round(Player.volume * 100)));
     if (this.els.volumeBtn) this.els.volumeBtn.innerHTML = icon;
     if (this.els.queueVolumeFill) this.els.queueVolumeFill.style.width = pct;
     if (this.els.queueVolumeBtn) this.els.queueVolumeBtn.innerHTML = icon;

@@ -17,6 +17,7 @@ var (
 
 // RingBuffer is a fixed-size byte buffer that overwrites oldest data.
 type RingBuffer struct {
+	mu   sync.Mutex
 	buf  []byte
 	r    int // read position
 	w    int // write position
@@ -28,6 +29,9 @@ func NewRingBuffer(size int) *RingBuffer {
 }
 
 func (rb *RingBuffer) Write(p []byte) (int, error) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
 	n := len(p)
 	for _, b := range p {
 		rb.buf[rb.w] = b
@@ -44,6 +48,9 @@ func (rb *RingBuffer) Write(p []byte) (int, error) {
 }
 
 func (rb *RingBuffer) Bytes() []byte {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
 	if rb.w == rb.r && !rb.full {
 		return nil
 	}

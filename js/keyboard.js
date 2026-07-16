@@ -11,6 +11,10 @@ const Keyboard = {
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
   },
 
+  _isInteractive(t) {
+    return !!(t && t.closest && t.closest('input, textarea, select, button, a[href], summary, [role="button"], [contenteditable="true"]'));
+  },
+
   _onKey(e) {
     const typing = this._isTyping(e.target);
 
@@ -21,6 +25,7 @@ const Keyboard = {
       return;
     }
     if (typing) return;
+    if (this._isInteractive(e.target)) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;  // don't shadow browser/OS shortcuts
 
     switch (e.key) {
@@ -49,16 +54,10 @@ const Keyboard = {
 
   _bumpVolume(delta) {
     Player.setVolume(Player.volume + delta);
-    UI.updateMiniPlayer();
-    if (UI.updateNowPlaying) UI.updateNowPlaying();
   },
 
   _toggleMute() {
-    // Reuse the existing volume button so mute-state + prevVolume stay
-    // consistent with click handling. Hidden buttons still dispatch.
-    const btn = document.querySelector('.mini-volume-btn');
-    if (btn) btn.click();
-    else Player.setVolume(Player.volume > 0 ? 0 : 1);
+    Player.toggleMute();
   },
 
   _toggleFavorite() {

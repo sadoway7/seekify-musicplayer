@@ -1,9 +1,10 @@
 // Visualizer — raw WebGL2 fullscreen fragment shaders, audio-reactive.
 // One shared stack; each entry in SHADERS is a distinct GLSL look.
-// Audio: lazy AnalyserNode tapped off Player.audio (createMediaElementSource,
-// permanent per-element → guarded one-shot), analyser→destination so playback
-// is unaffected. Album-derived color (UI._albumColor) drives the palette so the
-// viz tints to the current cover, matching the rest of now-playing.
+// Audio: where supported, an AnalyserNode reads a silent captureStream copy of
+// Player.audio. The primary media element stays on its native output path so a
+// suspended AudioContext cannot affect background playback. Browsers without
+// captureStream keep the visual decorative. Album-derived color (UI._albumColor)
+// drives the palette so the viz matches the rest of now-playing.
 const Visualizer = {
   // Each fragment shader MUST begin with `#version 300 es`.
   SHADERS: [
@@ -252,9 +253,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._applyVisualState();
     // Invalidate the cached disc-center on resize/scroll (getBoundingClientRect
     // is expensive and was called every frame, forcing layout reflow at 30fps).
-    // A ResizeObserver on the queue panel catches it opening/closing on desktop,
-    // which shifts .np-art-wrapper's position without changing its size or
-    // firing a window resize event.
+    // Also invalidate when the queue panel or player column resizes — the queue
+    // opening/closing on desktop shifts .np-art-wrapper's position without
+    // changing its size or firing a window resize event.
     window.addEventListener('resize', () => this._invalidateCenter());
     window.addEventListener('scroll', () => this._invalidateCenter(), true);
     if (typeof ResizeObserver !== 'undefined') {
@@ -285,6 +286,12 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._userChose = true;
     this._persist();
     this._applyVisualState();
+    if (this.state >= 0) {
+      this._ensureAudio();
+      if (this._actx && this._actx.state === 'suspended') {
+        this._actx.resume().catch(() => {});
+      }
+    }
     setTimeout(() => {
       if (art) art.style.removeProperty('transition');
       if (bg) bg.style.removeProperty('transition');
@@ -318,6 +325,19 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   onHideNowPlaying() { this._stop(); },
+
+  // captureStream tracks can end when the media element changes source. Drop
+  // only that captured input so the next frame attaches the new song while the
+  // native audio element and reusable AudioContext remain uninterrupted.
+  onTrackChange() {
+    if (this._audioSource) {
+      try { this._audioSource.disconnect(); } catch (e) {}
+    }
+    this._audioSource = null;
+    this._captureStream = null;
+    this._audioReady = false;
+    this._audioRetryAt = 0;
+  },
 
   // --- GL lifecycle ---
   _compile(type, src) {
@@ -370,22 +390,49 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _ensureAudio() {
-    if (this._audioReady) return;
+    if (this._audioReady || Date.now() < (this._audioRetryAt || 0)) return;
+    let actx = null;
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      const actx = new Ctx();
-      const src = actx.createMediaElementSource(Player.audio);
-      const an = actx.createAnalyser();
-      an.fftSize = 1024;
-      an.smoothingTimeConstant = 0.4;
+      const capture = Player.audio.captureStream || Player.audio.mozCaptureStream;
+      if (!Ctx || !capture) {
+        this._audioReady = true;
+        return;
+      }
+
+      const stream = capture.call(Player.audio);
+      if (!stream.getAudioTracks || stream.getAudioTracks().length === 0) {
+        // The visualizer can initialize before a selected track has started.
+        // Retry later rather than locking this browser into decorative mode.
+        this._audioRetryAt = Date.now() + 1000;
+        return;
+      }
+
+      actx = this._actx || new Ctx();
+      const src = actx.createMediaStreamSource(stream);
+      const an = this._analyser || actx.createAnalyser();
+      const silent = this._silentGain || actx.createGain();
+      if (!this._analyser) {
+        an.fftSize = 1024;
+        an.smoothingTimeConstant = 0.4;
+        silent.gain.value = 0;
+        an.connect(silent);
+        silent.connect(actx.destination);
+      }
       src.connect(an);
-      an.connect(actx.destination);
       this._actx = actx;
+      this._captureStream = stream;
+      this._audioSource = src;
+      this._silentGain = silent;
       this._analyser = an;
       this._freq = new Uint8Array(an.frequencyBinCount);
       this._wave = new Uint8Array(an.fftSize);
       this._audioReady = true;
-    } catch (e) { console.warn('[viz] audio init failed:', e); }
+    } catch (e) {
+      this._audioReady = true;
+      if (actx && !this._actx) actx.close().catch(() => {});
+      console.warn('[viz] audio capture unavailable; using decorative mode:', e);
+    }
   },
 
   // Band-level dynamics processor — replaces the old per-bin _preprocessFreq
@@ -518,14 +565,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _frame() {
-    // Only route the <audio> element through Web Audio when the full viz is
-    // explicitly ON. createMediaElementSource ties playback to the
-    // AudioContext's state; on iOS/Android the context suspends on
-    // background/lock, which pauses the media element and stops music. The
-    // mini-viz (state < 0) is decorative — it renders flat rather than
-    // breaking background playback.
+    // Audio analysis uses a captured copy when supported; native playback is
+    // never routed through this context. Unsupported browsers render flat.
     if (this.state >= 0) this._ensureAudio();
-    if (this._actx && this._actx.state === 'suspended') this._actx.resume();
+    if (this._actx && this._actx.state === 'suspended') this._actx.resume().catch(() => {});
     if (this._t0 == null) this._t0 = performance.now() / 1000;
 
     // _bandDyn frame inputs: dt + seek-edge → mark all 8 slots for reset. Runs

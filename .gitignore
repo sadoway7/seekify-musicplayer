@@ -19,6 +19,7 @@ __pycache__/
 *.pyc
 
 # Tool artifacts
+.codex/
 .codebase-memory/
 .hermes/
 

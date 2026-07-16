@@ -528,45 +528,100 @@ func ReleaseTypePriority(rgType string) int {
 	}
 }
 
+// EffectiveReleaseType folds MusicBrainz secondary types into the label used
+// for ranking and display. MusicBrainz commonly reports a compilation as a
+// primary "Album" plus secondary "Compilation"; looking only at the primary
+// type makes compilations incorrectly outrank the original release.
+func EffectiveReleaseType(primaryType string, secondaryTypes []string) string {
+	secondaryPriority := []string{"Compilation", "Soundtrack", "Live", "Remix", "DJ-mix", "Mixtape/Street"}
+	for _, wanted := range secondaryPriority {
+		for _, actual := range secondaryTypes {
+			if strings.EqualFold(actual, wanted) {
+				return wanted
+			}
+		}
+	}
+	return primaryType
+}
+
+func recordingReleasePriority(primaryType string, secondaryTypes []string, title, artist, status string) int {
+	effectiveType := EffectiveReleaseType(primaryType, secondaryTypes)
+	priority := ReleaseTypePriority(effectiveType) * 100
+	if IsCompilationTitle(title) {
+		priority -= 500
+	}
+	if strings.EqualFold(strings.TrimSpace(artist), "Various Artists") {
+		priority -= 300
+	}
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "official":
+		priority += 20
+	case "bootleg":
+		priority -= 200
+	}
+	return priority
+}
+
+func earlierReleaseDate(candidate, current string) bool {
+	return candidate != "" && (current == "" || candidate < current)
+}
+
 // MbLookupBestRelease looks up a recording by MBID and returns the best release
-// (real album preferred over compilation).
-func MbLookupBestRelease(recordingID string) (string, string) {
+// (real album preferred over compilation): title, id, and release-group type.
+func MbLookupBestRelease(recordingID string) (string, string, string) {
 	reqURL := fmt.Sprintf("%s/recording/%s?inc=releases+release-groups&fmt=json", MbBaseURL, recordingID)
 
 	body, err := MbDoRequest(reqURL)
 	if err != nil {
-		return "", ""
+		return "", "", ""
 	}
 
 	var lookupResp struct {
 		Releases []struct {
-			ID    string `json:"id"`
-			Title string `json:"title"`
+			ID           string          `json:"id"`
+			Title        string          `json:"title"`
+			Date         string           `json:"date"`
+			Status       string           `json:"status"`
+			ArtistCredit []MbArtistCredit `json:"artist-credit"`
 			ReleaseGroup struct {
-				Type  string `json:"type"`
-				Title string `json:"title"`
+				Type           string   `json:"type"`
+				PrimaryType    string   `json:"primary-type"`
+				SecondaryTypes []string `json:"secondary-types"`
+				Title          string   `json:"title"`
 			} `json:"release-group"`
 		} `json:"releases"`
 	}
 
 	if err := json.Unmarshal(body, &lookupResp); err != nil {
-		return "", ""
+		return "", "", ""
 	}
 
 	bestTitle := ""
 	bestID := ""
-	bestPriority := -1
+	bestType := ""
+	bestPriority := -1 << 30
+	bestDate := ""
 
 	for _, r := range lookupResp.Releases {
-		p := ReleaseTypePriority(r.ReleaseGroup.Type)
-		if p > bestPriority {
+		primaryType := r.ReleaseGroup.PrimaryType
+		if primaryType == "" {
+			primaryType = r.ReleaseGroup.Type
+		}
+		artistName := ""
+		if len(r.ArtistCredit) > 0 {
+			artistName = r.ArtistCredit[0].Name
+		}
+		p := recordingReleasePriority(primaryType, r.ReleaseGroup.SecondaryTypes, r.Title, artistName, r.Status)
+		if p > bestPriority || (p == bestPriority && earlierReleaseDate(r.Date, bestDate)) {
 			bestPriority = p
 			bestTitle = r.Title
 			bestID = r.ID
+			bestType = EffectiveReleaseType(primaryType, r.ReleaseGroup.SecondaryTypes)
+			bestDate = r.Date
 		}
 	}
 
-	return bestTitle, bestID
+	return bestTitle, bestID, bestType
 }
 
 func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, error) {
@@ -590,8 +645,8 @@ func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, e
 
 	var searchResp struct {
 		Recordings []struct {
-			ID           string          `json:"id"`
-			Title        string          `json:"title"`
+			ID           string           `json:"id"`
+			Title        string           `json:"title"`
 			ArtistCredit []MbArtistCredit `json:"artist-credit"`
 			Releases     []struct {
 				ID    string `json:"id"`
@@ -613,8 +668,9 @@ func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, e
 		// Use the full release list via lookup to find the real album
 		albumName := ""
 		albumID := ""
+		rgType := ""
 		if rec.ID != "" {
-			albumName, albumID = MbLookupBestRelease(rec.ID)
+			albumName, albumID, rgType = MbLookupBestRelease(rec.ID)
 		}
 
 		// Fallback to the search results if lookup failed
@@ -629,6 +685,7 @@ func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, e
 			Artist:      artistName,
 			Album:       albumName,
 			AlbumID:     albumID,
+			ReleaseType: rgType,
 		})
 	}
 
@@ -670,10 +727,14 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 			Title        string           `json:"title"`
 			ArtistCredit []MbArtistCredit `json:"artist-credit"`
 			Releases     []struct {
-				ID    string `json:"id"`
-				Title string `json:"title"`
+				ID           string           `json:"id"`
+				Title        string           `json:"title"`
+				Date         string           `json:"date"`
+				Status       string           `json:"status"`
+				ArtistCredit []MbArtistCredit `json:"artist-credit"`
 				ReleaseGroup struct {
-					Type string `json:"primary-type"`
+					Type           string   `json:"primary-type"`
+					SecondaryTypes []string `json:"secondary-types"`
 				} `json:"release-group"`
 			} `json:"releases"`
 		} `json:"recordings"`
@@ -694,16 +755,21 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 		// compilations in many MB responses. No extra HTTP call.
 		albumName := ""
 		albumID := ""
-		bestPriority := -1
+		rgType := ""
+		bestPriority := -1 << 30
+		bestDate := ""
 		for _, rel := range rec.Releases {
-			p := ReleaseTypePriority(rel.ReleaseGroup.Type)
-			if IsCompilationTitle(rel.Title) {
-				p -= 5
+			releaseArtist := ""
+			if len(rel.ArtistCredit) > 0 {
+				releaseArtist = rel.ArtistCredit[0].Name
 			}
-			if p > bestPriority {
+			p := recordingReleasePriority(rel.ReleaseGroup.Type, rel.ReleaseGroup.SecondaryTypes, rel.Title, releaseArtist, rel.Status)
+			if p > bestPriority || (p == bestPriority && earlierReleaseDate(rel.Date, bestDate)) {
 				bestPriority = p
 				albumName = rel.Title
 				albumID = rel.ID
+				rgType = EffectiveReleaseType(rel.ReleaseGroup.Type, rel.ReleaseGroup.SecondaryTypes)
+				bestDate = rel.Date
 			}
 		}
 		results = append(results, MbRecordingResult{
@@ -712,6 +778,7 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 			Artist:      artistName,
 			Album:       albumName,
 			AlbumID:     albumID,
+			ReleaseType: rgType,
 		})
 	}
 

@@ -50,42 +50,19 @@ func StreamHandler(w http.ResponseWriter, r *http.Request) {
 
 	rangeHeader := r.Header.Get("Range")
 	if rangeHeader != "" {
-		rangeStr := strings.TrimPrefix(rangeHeader, "bytes=")
-		parts := strings.Split(rangeStr, "-")
-		if len(parts) != 2 {
+		start, end, ok := parseByteRange(rangeHeader, fileSize)
+		if !ok {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", fileSize))
 			http.Error(w, "Invalid range", http.StatusRequestedRangeNotSatisfiable)
 			return
 		}
 
-		var start, end int64
-		start, err = strconv.ParseInt(parts[0], 10, 64)
-		if err != nil {
-			http.Error(w, "Invalid range", http.StatusRequestedRangeNotSatisfiable)
+		if _, err := file.Seek(start, io.SeekStart); err != nil {
+			http.Error(w, "Could not seek file", http.StatusInternalServerError)
 			return
-		}
-
-		if parts[1] == "" {
-			end = fileSize - 1
-		} else {
-			end, err = strconv.ParseInt(parts[1], 10, 64)
-			if err != nil {
-				http.Error(w, "Invalid range", http.StatusRequestedRangeNotSatisfiable)
-				return
-			}
-		}
-
-		if start > end || start >= fileSize {
-			http.Error(w, "Invalid range", http.StatusRequestedRangeNotSatisfiable)
-			return
-		}
-
-		if end >= fileSize {
-			end = fileSize - 1
 		}
 
 		contentLength := end - start + 1
-		file.Seek(start, io.SeekStart)
-
 		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, fileSize))
@@ -99,6 +76,48 @@ func StreamHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		io.Copy(w, file)
 	}
+}
+
+// parseByteRange parses the single byte-range form used by audio clients.
+// It supports explicit, open-ended, and suffix ranges (for example bytes=-500).
+func parseByteRange(header string, fileSize int64) (start, end int64, ok bool) {
+	if fileSize <= 0 || !strings.HasPrefix(header, "bytes=") {
+		return 0, 0, false
+	}
+
+	rangeSpec := strings.TrimPrefix(header, "bytes=")
+	startText, endText, found := strings.Cut(rangeSpec, "-")
+	if !found || (startText == "" && endText == "") || strings.Contains(endText, ",") {
+		return 0, 0, false
+	}
+
+	if startText == "" {
+		suffixLength, err := strconv.ParseInt(endText, 10, 64)
+		if err != nil || suffixLength <= 0 {
+			return 0, 0, false
+		}
+		if suffixLength > fileSize {
+			suffixLength = fileSize
+		}
+		return fileSize - suffixLength, fileSize - 1, true
+	}
+
+	start, err := strconv.ParseInt(startText, 10, 64)
+	if err != nil || start < 0 || start >= fileSize {
+		return 0, 0, false
+	}
+	if endText == "" {
+		return start, fileSize - 1, true
+	}
+
+	end, err = strconv.ParseInt(endText, 10, 64)
+	if err != nil || end < start {
+		return 0, 0, false
+	}
+	if end >= fileSize {
+		end = fileSize - 1
+	}
+	return start, end, true
 }
 
 func CoverHandler(w http.ResponseWriter, r *http.Request) {

@@ -13,6 +13,7 @@ const App = {
     };
 
     Player.onTrackChange = async (track) => {
+      if (typeof Visualizer !== 'undefined') Visualizer.onTrackChange(track);
       UI.updateMiniPlayer();
       UI.updateNowPlaying();
       UI._renderQueue();
@@ -34,6 +35,12 @@ const App = {
 
     Player.onQueueChange = () => {
       UI.updateQueueIfVisible();
+      UI.updateNowPlaying();
+      UI.updateTrackHighlights();
+    };
+
+    Player.onVolumeChange = () => {
+      UI._updateVolumeBar();
     };
 
     UI.init();
@@ -52,7 +59,8 @@ const App = {
 
     UI.homeSkeleton();
 
-    await Store.init();
+    const storeLoaded = await Store.init();
+    if (!storeLoaded) return;
 
     if (window.Visualizer) Visualizer.applyServerDefault();
 
@@ -151,9 +159,10 @@ const App = {
         stableCount++;
       }
       const stillEmpty = !Store.library.tracks || Store.library.tracks.length === 0;
-      if (stillEmpty || stableCount < 3) {
-        setTimeout(poll, 5000);
-      }
+      // Stay responsive while the library is changing, then keep a cheap idle
+      // poll alive so downloads and external file changes appear later too.
+      const nextDelay = stillEmpty || stableCount < 3 ? 5000 : 30000;
+      setTimeout(poll, nextDelay);
     };
     setTimeout(poll, 3000);
   }

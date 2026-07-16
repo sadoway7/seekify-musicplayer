@@ -281,7 +281,6 @@ func main() {
 	mux.HandleFunc("/api/artist-art-fetch/", handlers.ArtistArtFetchHandler)
 	mux.HandleFunc("/api/scan", auth.RequireAdmin(handlers.ScanHandler))
 	mux.HandleFunc("/api/library-upload", auth.RequireAdmin(handlers.LibraryUploadHandler))
-	mux.HandleFunc("/api/metadata-preview", handlers.MetadataPreviewHandler)
 	mux.HandleFunc("/api/playlists", auth.RequireUser(handlers.PlaylistsHandler))
 	mux.HandleFunc("/api/playlists/", auth.RequireUser(handlers.PlaylistHandler))
 	mux.HandleFunc("/api/favorites", auth.RequireUser(handlers.FavoritesHandler))
@@ -337,20 +336,7 @@ func main() {
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
 	})
-	mux.HandleFunc("/api/metadata/scan", handlers.MetadataScanHandler)
-	mux.HandleFunc("/api/metadata/rescan/", handlers.MetadataRescanHandler)
-	mux.HandleFunc("/api/metadata/rescan-sync/", handlers.MetadataRescanSyncHandler)
-	mux.HandleFunc("/api/metadata/search", handlers.MetadataSearchHandler)
-	mux.HandleFunc("/api/metadata/update-track/", handlers.MetadataUpdateTrackHandler)
-	mux.HandleFunc("/api/metadata/scan-progress", handlers.MetadataScanProgressHandler)
-	mux.HandleFunc("/api/metadata/pending", handlers.MetadataPendingHandler)
-	mux.HandleFunc("/api/metadata/all", handlers.MetadataAllHandler)
-	mux.HandleFunc("/api/metadata/approve/", handlers.MetadataApproveHandler)
-	mux.HandleFunc("/api/metadata/reject/", handlers.MetadataRejectHandler)
-	mux.HandleFunc("/api/metadata/approve-all", handlers.MetadataApproveAllHandler)
-	mux.HandleFunc("/api/metadata/clear", handlers.MetadataClearHandler)
-	mux.HandleFunc("/api/metadata/counts", handlers.MetadataCountsHandler)
-	mux.HandleFunc("/api/metadata/undo/", handlers.MetadataUndoHandler)
+	registerMetadataRoutes(mux)
 
 	mux.HandleFunc("/api/finder/search", handlers.FinderSearchHandler)
 	mux.HandleFunc("/api/finder/artist/", handlers.FinderArtistReleasesHandler)
@@ -366,7 +352,7 @@ func main() {
 	mux.HandleFunc("/api/queue/add-batch", auth.RequireUser(handlers.DownloadQueueAddBatchHandler))
 	mux.HandleFunc("/api/queue/counts", auth.RequireUser(handlers.QueueCountsHandler))
 	mux.HandleFunc("/api/queue/clear-completed", auth.RequireUser(handlers.QueueClearCompletedHandler))
-	mux.HandleFunc("/api/queue/toggle-pause", auth.RequireUser(handlers.DownloadTogglePauseHandler))
+	mux.HandleFunc("/api/queue/toggle-pause", auth.RequireAdmin(handlers.DownloadTogglePauseHandler))
 	mux.HandleFunc("/api/soulseek/connect", auth.RequireAdmin(handlers.SoulseekConnectHandler))
 	mux.HandleFunc("/api/queue/", auth.RequireUser(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -381,12 +367,12 @@ func main() {
 		}
 	}))
 
-	mux.HandleFunc("/api/bulk-import", handlers.BulkImportHandler)
+	mux.HandleFunc("/api/bulk-import", auth.RequireUser(handlers.BulkImportHandler))
 
 	mux.HandleFunc("/api/shared-queue", handlers.SharedQueueCreateHandler)
 	mux.HandleFunc("/api/shared-queue/", handlers.SharedQueueGetHandler)
 
-	mux.HandleFunc("/api/playlist-import", handlers.PlaylistImportHandler)
+	mux.HandleFunc("/api/playlist-import", auth.RequireUser(handlers.PlaylistImportHandler))
 	mux.HandleFunc("/api/watch/", handlers.WatchedPlaylistsHandler)
 	mux.HandleFunc("/api/watch", handlers.WatchedPlaylistsHandler)
 
@@ -476,6 +462,36 @@ func main() {
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server error: %v", err)
+	}
+}
+
+func registerMetadataRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/api/metadata-preview", adminMethod(http.MethodPost, handlers.MetadataPreviewHandler))
+	mux.HandleFunc("/api/metadata/scan", adminMethod(http.MethodPost, handlers.MetadataScanHandler))
+	mux.HandleFunc("/api/metadata/rescan/", adminMethod(http.MethodPost, handlers.MetadataRescanHandler))
+	mux.HandleFunc("/api/metadata/rescan-sync/", adminMethod(http.MethodPost, handlers.MetadataRescanSyncHandler))
+	mux.HandleFunc("/api/metadata/search", adminMethod(http.MethodGet, handlers.MetadataSearchHandler))
+	mux.HandleFunc("/api/metadata/update-track/", adminMethod(http.MethodPost, handlers.MetadataUpdateTrackHandler))
+	mux.HandleFunc("/api/metadata/scan-progress", adminMethod(http.MethodGet, handlers.MetadataScanProgressHandler))
+	mux.HandleFunc("/api/metadata/pending", adminMethod(http.MethodGet, handlers.MetadataPendingHandler))
+	mux.HandleFunc("/api/metadata/all", adminMethod(http.MethodGet, handlers.MetadataAllHandler))
+	mux.HandleFunc("/api/metadata/approve/", adminMethod(http.MethodPost, handlers.MetadataApproveHandler))
+	mux.HandleFunc("/api/metadata/reject/", adminMethod(http.MethodPost, handlers.MetadataRejectHandler))
+	mux.HandleFunc("/api/metadata/approve-all", adminMethod(http.MethodPost, handlers.MetadataApproveAllHandler))
+	mux.HandleFunc("/api/metadata/clear", adminMethod(http.MethodPost, handlers.MetadataClearHandler))
+	mux.HandleFunc("/api/metadata/counts", adminMethod(http.MethodGet, handlers.MetadataCountsHandler))
+	mux.HandleFunc("/api/metadata/undo/", adminMethod(http.MethodPost, handlers.MetadataUndoHandler))
+}
+
+func adminMethod(method string, next http.HandlerFunc) http.HandlerFunc {
+	adminNext := auth.RequireAdmin(next)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != method {
+			w.Header().Set("Allow", method)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		adminNext(w, r)
 	}
 }
 
