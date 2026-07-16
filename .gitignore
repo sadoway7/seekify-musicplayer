@@ -13,6 +13,7 @@ docs/*
 !docs/screenshots/
 research/
 lists/
+.lists/
 tests/
 waveform-test.html
 __pycache__/
