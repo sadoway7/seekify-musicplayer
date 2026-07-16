@@ -7,10 +7,13 @@ block opens. Newest entries go at the top of their block.
 
 ## Unreleased
 
-- Unraid: publish an explicit template release date and real interface screenshots so Community Applications can display accurate update and app-detail information.
+## 2026-07-16
+
+- Visualizer: restore real bass, midrange, and treble reactivity on iPhone with an isolated Safari analyser stream that does not reroute the primary player through Web Audio.
 
 ## 2026-07-15
 
+- Unraid: publish an explicit template release date and real interface screenshots so Community Applications can display accurate update and app-detail information.
 - Home discovery: keep the rotating Artist and Album showcases artwork-first by omitting entries without usable art; the complete library remains available through See all and Search.
 - Security: keep every custom download destination inside the music library (including symlink escapes), require admin access and correct methods for metadata tools, and honor per-track download restrictions.
 - Queue controls: Play Next now works from both queue history and upcoming tracks, and queue mutations immediately refresh Now Playing controls and playing-track highlights.

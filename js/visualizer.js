@@ -1,10 +1,10 @@
 // Visualizer — raw WebGL2 fullscreen fragment shaders, audio-reactive.
 // One shared stack; each entry in SHADERS is a distinct GLSL look.
 // Audio: where supported, an AnalyserNode reads a silent captureStream copy of
-// Player.audio. The primary media element stays on its native output path so a
-// suspended AudioContext cannot affect background playback. Browsers without
-// captureStream keep the visual decorative. Album-derived color (UI._albumColor)
-// drives the palette so the viz matches the rest of now-playing.
+// Player.audio. Safari uses a separate synchronized analyser-only media element
+// because it has no captureStream. The primary media element always stays on its
+// native output path so a suspended AudioContext cannot affect background
+// playback. Album-derived color drives the now-playing palette.
 const Visualizer = {
   // Each fragment shader MUST begin with `#version 300 es`.
   SHADERS: [
@@ -214,6 +214,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   state: 0,         // default ON (viz); -1 = off, >=0 = shader index
   gl: null,
   _audioReady: false,
+  _audioMode: null,
+  _vizVisible: false,
   _bands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
   _miniBands: { bass: 0, midLow: 0, midHigh: 0, treble: 0, level: 0 },
   _miniFloor: { bass: 0, midLow: 0, midHigh: 0, treble: 0 },
@@ -264,6 +266,23 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const npCol = document.querySelector('.np-player-col');
       if (npCol) new ResizeObserver(() => this._invalidateCenter()).observe(npCol);
     }
+    // Safari/iOS does not expose HTMLMediaElement.captureStream(). Its safe
+    // live-audio fallback uses a separate analyser-only media element, which
+    // must be started directly from a user gesture. UI click handlers run
+    // before this document-level listener, so a track/play click has already
+    // updated Player.audio by the time we mirror it here.
+    document.addEventListener('click', () => {
+      if (!this._mirrorCanRun()) return;
+      this._ensureAudio(true);
+      if (this._audioMode === 'mirror') this._syncMirror(true);
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this._pauseMirror();
+      } else if (this._mirrorCanRun() && this._mirrorActivated) {
+        this._syncMirror(true);
+      }
+    });
     // Safety net: if viz is on + now-playing visible but the loop died or
     // never rendered, restart it. Catches deep links, delayed layout, and
     // any path that doesn't explicitly call onShowNowPlaying.
@@ -287,10 +306,12 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._persist();
     this._applyVisualState();
     if (this.state >= 0) {
-      this._ensureAudio();
-      if (this._actx && this._actx.state === 'suspended') {
+      this._ensureAudio(true);
+      if (this._audioMode === 'capture' && this._actx && this._actx.state !== 'running' && this._actx.state !== 'closed') {
         this._actx.resume().catch(() => {});
       }
+    } else {
+      this._pauseMirror();
     }
     setTimeout(() => {
       if (art) art.style.removeProperty('transition');
@@ -321,22 +342,38 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   onShowNowPlaying() {
+    this._vizVisible = true;
     this._start();
   },
 
-  onHideNowPlaying() { this._stop(); },
+  onHideNowPlaying() {
+    this._vizVisible = false;
+    this._stop();
+    this._pauseMirror();
+  },
 
   // captureStream tracks can end when the media element changes source. Drop
   // only that captured input so the next frame attaches the new song while the
   // native audio element and reusable AudioContext remain uninterrupted.
-  onTrackChange() {
-    if (this._audioSource) {
+  onTrackChange(track) {
+    if (this._audioMode === 'capture' && this._audioSource) {
       try { this._audioSource.disconnect(); } catch (e) {}
     }
-    this._audioSource = null;
     this._captureStream = null;
-    this._audioReady = false;
     this._audioRetryAt = 0;
+    if (this._audioMode === 'mirror' && this._mirrorAudio) {
+      if (!track) {
+        this._releaseMirrorSource();
+        return;
+      }
+      this._mirrorSrc = null;
+      if (this._mirrorCanRun()) this._syncMirror(this._mirrorActivated);
+      else this._pauseMirror();
+      return;
+    }
+    this._audioSource = null;
+    this._audioMode = null;
+    this._audioReady = false;
   },
 
   // --- GL lifecycle ---
@@ -389,14 +426,20 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     }
   },
 
-  _ensureAudio() {
-    if (this._audioReady || Date.now() < (this._audioRetryAt || 0)) return;
+  _ensureAudio(userGesture) {
+    if (this._audioReady || (!userGesture && Date.now() < (this._audioRetryAt || 0))) return;
     let actx = null;
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       const capture = Player.audio.captureStream || Player.audio.mozCaptureStream;
-      if (!Ctx || !capture) {
+      if (!Ctx) {
+        this._audioMode = 'decorative';
         this._audioReady = true;
+        return;
+      }
+      if (!capture) {
+        this._audioMode = 'mirror-pending';
+        if (userGesture) this._ensureMirrorAudio(Ctx);
         return;
       }
 
@@ -427,11 +470,162 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       this._analyser = an;
       this._freq = new Uint8Array(an.frequencyBinCount);
       this._wave = new Uint8Array(an.fftSize);
+      this._audioMode = 'capture';
       this._audioReady = true;
     } catch (e) {
+      this._audioMode = 'decorative';
       this._audioReady = true;
       if (actx && !this._actx) actx.close().catch(() => {});
       console.warn('[viz] audio capture unavailable; using decorative mode:', e);
+    }
+  },
+
+  // iPhone Safari has no HTMLMediaElement.captureStream(). A MediaElementSource
+  // attached to Player.audio would reroute the audible player through Web Audio
+  // and can go silent when iOS suspends the context in the background. Instead,
+  // keep one separate media element whose graph ends at zero gain. It supplies
+  // real FFT data while the native player remains completely untouched.
+  _ensureMirrorAudio(Ctx) {
+    try {
+      const actx = this._actx || new Ctx();
+      if (!this._mirrorAudio) {
+        const mirror = new Audio();
+        mirror.preload = 'auto';
+        mirror.disableRemotePlayback = true;
+        const src = actx.createMediaElementSource(mirror);
+        const an = actx.createAnalyser();
+        const silent = actx.createGain();
+        an.fftSize = 1024;
+        an.smoothingTimeConstant = 0.4;
+        silent.gain.value = 0;
+        src.connect(an);
+        an.connect(silent);
+        silent.connect(actx.destination);
+        this._mirrorAudio = mirror;
+        this._audioSource = src;
+        this._analyser = an;
+        this._silentGain = silent;
+      }
+      this._actx = actx;
+      this._freq = new Uint8Array(this._analyser.frequencyBinCount);
+      this._wave = new Uint8Array(this._analyser.fftSize);
+      this._audioMode = 'mirror';
+      this._audioReady = true;
+      if (actx.state !== 'running' && actx.state !== 'closed') actx.resume().catch(() => {});
+      this._syncMirror(true);
+    } catch (e) {
+      this._audioMode = 'mirror-pending';
+      this._audioReady = false;
+      this._audioRetryAt = Date.now() + 1000;
+      console.warn('[viz] Safari analyser mirror unavailable; using decorative mode:', e);
+    }
+  },
+
+  _syncMirror(canStart) {
+    const mirror = this._mirrorAudio;
+    const primary = Player.audio;
+    if (!mirror || !primary) return;
+    if (!this._mirrorCanRun()) {
+      this._pauseMirror();
+      return;
+    }
+    // Player assigns .src before currentSrc advances to the new resource, so
+    // prefer .src here or an automatic track change can briefly mirror the old
+    // song and feed the wrong bands into the shader.
+    const src = primary.src || primary.currentSrc;
+    if (!src) {
+      this._releaseMirrorSource();
+      return;
+    }
+
+    if (this._mirrorSrc !== src) {
+      this._mirrorSrc = src;
+      const sourceGeneration = (this._mirrorSourceGeneration || 0) + 1;
+      this._mirrorSourceGeneration = sourceGeneration;
+      this._mirrorPlayAttempt = (this._mirrorPlayAttempt || 0) + 1;
+      mirror.src = src;
+      mirror.load();
+      const seekWhenReady = () => {
+        if (sourceGeneration !== this._mirrorSourceGeneration || this._mirrorSrc !== src) return;
+        if (isFinite(primary.currentTime)) {
+          try { mirror.currentTime = primary.currentTime; } catch (e) {}
+        }
+      };
+      if (mirror.readyState >= 1) seekWhenReady();
+      else mirror.addEventListener('loadedmetadata', seekWhenReady, { once: true });
+    }
+
+    mirror.playbackRate = primary.playbackRate || 1;
+    if (primary.paused) {
+      if (!mirror.paused) mirror.pause();
+      return;
+    }
+
+    const now = Date.now();
+    if (now - (this._mirrorSyncAt || 0) >= 500) {
+      this._mirrorSyncAt = now;
+      if (mirror.readyState >= 1 && isFinite(primary.currentTime) &&
+          Math.abs((mirror.currentTime || 0) - primary.currentTime) > 0.2) {
+        try { mirror.currentTime = primary.currentTime; } catch (e) {}
+      }
+    }
+
+    if (this._actx && this._actx.state !== 'running' && this._actx.state !== 'closed' && (canStart || this._mirrorActivated)) {
+      this._actx.resume().catch(() => {});
+    }
+    if (mirror.paused && (canStart || this._mirrorActivated)) {
+      const attempt = (this._mirrorPlayAttempt || 0) + 1;
+      const sourceGeneration = this._mirrorSourceGeneration || 0;
+      this._mirrorPlayAttempt = attempt;
+      try {
+        mirror.play().then(() => {
+          if (attempt !== this._mirrorPlayAttempt || sourceGeneration !== (this._mirrorSourceGeneration || 0)) return;
+          if (!this._mirrorCanRun()) {
+            mirror.pause();
+            return;
+          }
+          this._mirrorActivated = true;
+        }).catch((e) => {
+          if (attempt !== this._mirrorPlayAttempt || sourceGeneration !== (this._mirrorSourceGeneration || 0)) return;
+          if (e && e.name === 'AbortError') return;
+          this._mirrorActivated = false;
+          this._audioReady = false;
+          this._audioMode = 'mirror-pending';
+          console.warn('[viz] Safari analyser mirror needs a playback gesture:', e);
+        });
+      } catch (e) {
+        if (attempt === this._mirrorPlayAttempt) {
+          this._mirrorActivated = false;
+          this._audioReady = false;
+          this._audioMode = 'mirror-pending';
+        }
+      }
+    }
+  },
+
+  _mirrorCanRun() {
+    return this.state >= 0 && this._vizVisible && !document.hidden;
+  },
+
+  _pauseMirror() {
+    this._mirrorPlayAttempt = (this._mirrorPlayAttempt || 0) + 1;
+    if (this._mirrorAudio && !this._mirrorAudio.paused) this._mirrorAudio.pause();
+    if (this._audioMode === 'mirror' && this._actx && this._actx.state !== 'suspended' && this._actx.state !== 'closed') {
+      this._actx.suspend().catch(() => {});
+    }
+  },
+
+  _releaseMirrorSource() {
+    this._mirrorSourceGeneration = (this._mirrorSourceGeneration || 0) + 1;
+    this._mirrorPlayAttempt = (this._mirrorPlayAttempt || 0) + 1;
+    this._mirrorSrc = null;
+    if (this._mirrorAudio) {
+      if (!this._mirrorAudio.paused) this._mirrorAudio.pause();
+      this._mirrorAudio.removeAttribute('src');
+      this._mirrorAudio.load();
+    }
+    if (this._audioMode === 'mirror' && this._actx && this._actx.state !== 'suspended' && this._actx.state !== 'closed') {
+      this._actx.suspend().catch(() => {});
     }
   },
 
@@ -565,10 +759,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _frame() {
-    // Audio analysis uses a captured copy when supported; native playback is
-    // never routed through this context. Unsupported browsers render flat.
-    if (this.state >= 0) this._ensureAudio();
-    if (this._actx && this._actx.state === 'suspended') this._actx.resume().catch(() => {});
+    // Audio analysis uses a captured copy when supported or Safari's isolated
+    // analyser mirror. Native playback is never routed through this context.
+    if (this.state >= 0) this._ensureAudio(false);
+    if (this.state >= 0 && this._audioMode === 'mirror') this._syncMirror(false);
+    if (this._actx && this._actx.state === 'suspended' && this._audioMode === 'capture') {
+      this._actx.resume().catch(() => {});
+    }
     if (this._t0 == null) this._t0 = performance.now() / 1000;
 
     // _bandDyn frame inputs: dt + seek-edge → mark all 8 slots for reset. Runs

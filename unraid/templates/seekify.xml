@@ -21,8 +21,8 @@ WARNING: Seekify performs automatic actions on your music library — it re-tags
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/unraid/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>2026-07-15: Playback, visualizer, discovery, metadata, queue, mobile, reliability, and security improvements.</Changes>
-  <Date>2026-07-15</Date>
+  <Changes>2026-07-16: Restore live iPhone visualizer audio reactivity without rerouting the primary player through Web Audio.</Changes>
+  <Date>2026-07-16</Date>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
   <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.png</Screenshot>
