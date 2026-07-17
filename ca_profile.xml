@@ -5,7 +5,7 @@
     via yt-dlp. Single Go binary serving a vanilla JS SPA. One container in this
     repository.
   </Profile>
-  <Icon>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/icon-rounded.png</Icon>
   <WebPage>https://github.com/sadoway7/seekify-musicplayer</WebPage>
   <!-- Create a support thread at forums.unraid.net, then uncomment: -->
   <!-- <Forum>https://forums.unraid.net/topic/YOUR_SUPPORT_TOPIC</Forum> -->

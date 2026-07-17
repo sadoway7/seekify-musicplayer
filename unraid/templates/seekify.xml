@@ -5,7 +5,7 @@
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Icon>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/icon-rounded.png</Icon>
   <WebUI>http://[IP]:[PORT:8081]</WebUI>
   <Overview>Self-hosted music server that rips what's missing. Downloads tracks and albums from YouTube (via yt-dlp) and Soulseek, tags them, and sorts them into your library. Then plays everything: browse by artist/album/playlist, now-playing with waveform and visualizer, favorites, history, and a needs-attention view that flags missing metadata, duplicates, and messy names. Single Go binary + vanilla JS SPA.
 
