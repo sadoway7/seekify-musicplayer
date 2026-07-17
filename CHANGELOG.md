@@ -9,6 +9,7 @@ block opens. Newest entries go at the top of their block.
 
 ## 2026-07-16
 
+- Playback: keep iPhone lock-screen and background audio active when the visualizer routes music through Web Audio, using Safari's playback audio session where supported.
 - Visualizer: feed iPhone Safari from the real player audio again, preserving live frequency-band response across song changes and recovering interrupted audio contexts without recreating the player source.
 
 ## 2026-07-15

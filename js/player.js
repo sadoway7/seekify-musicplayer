@@ -19,6 +19,14 @@ const Player = {
   _loadTimeout: null,
 
   init() {
+    // Safari otherwise treats a Web Audio-routed media element as short-lived
+    // JavaScript audio and suspends it when iOS locks or backgrounds the page.
+    // Declaring long-form playback keeps lock-screen audio eligible to run.
+    try {
+      if (navigator.audioSession && 'type' in navigator.audioSession) {
+        navigator.audioSession.type = 'playback';
+      }
+    } catch (e) { /* Experimental API: unsupported browsers safely ignore it. */ }
     this._restoreVolume();
     this.audio = new Audio();
     this.audio.volume = this.volume;

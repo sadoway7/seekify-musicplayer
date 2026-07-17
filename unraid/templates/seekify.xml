@@ -21,7 +21,7 @@ WARNING: Seekify performs automatic actions on your music library — it re-tags
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/unraid/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>2026-07-16: Restore live iPhone visualizer frequency response across playback and song changes.</Changes>
+  <Changes>2026-07-16: Restore iPhone visualizer frequency response and lock-screen/background playback.</Changes>
   <Date>2026-07-16</Date>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
