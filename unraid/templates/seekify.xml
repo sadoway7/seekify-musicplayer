@@ -21,8 +21,8 @@ WARNING: Seekify performs automatic actions on your music library — it re-tags
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/unraid/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>2026-07-16: Restore iPhone visualizer frequency response and lock-screen/background playback.</Changes>
-  <Date>2026-07-16</Date>
+  <Changes>2026-07-17: Multi-genre support — tracks can hold up to 3 genres and appear in every matching genre list. Genre cards on Search pick varied cover art. Worker "Last run" timestamps now reflect real work, not polling ticks.</Changes>
+  <Date>2026-07-17</Date>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
   <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.png</Screenshot>
