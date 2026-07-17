@@ -110,6 +110,7 @@ Object.assign(UI, {
 
     this.els.content.innerHTML = html;
 
+    if (window.ShuffleDie) window.ShuffleDie.mountAll(this.els.content);
     this._bindHomeEvents();
   },
 
@@ -154,17 +155,12 @@ Object.assign(UI, {
     html += '<div class="mega-title"><span>Listen Again</span></div>';
     html += '<div class="quick-play-grid" style="margin-top:24px">';
 
-    html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all">'
-      + '<div class="quick-play-art" style="background:linear-gradient(135deg, #ffffff, #f5f5f5);display:flex;align-items:center;justify-content:center;box-shadow:inset 6px 6px 8px rgba(255,255,255,0.75), inset -8px -8px 12px rgba(0,0,0,0.4), inset 0 0 18px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.5)">'
-      + '<svg viewBox="0 0 100 100" width="100%" height="100%">'
-      + '<circle cx="25" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
-      + '<circle cx="75" cy="25" r="9" fill="rgba(168,200,48,0.85)"/>'
-      + '<circle cx="50" cy="50" r="9" fill="rgba(168,200,48,0.85)"/>'
-      + '<circle cx="25" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
-      + '<circle cx="75" cy="75" r="9" fill="rgba(168,200,48,0.85)"/>'
-      + '</svg>'
-      + '<div style="position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:14px;overflow:hidden"><span style="font-family:Arial Black,Gadget,sans-serif;font-size:clamp(14px, 4vw, 28px);font-weight:900;color:rgba(0,0,0,0.9);letter-spacing:-0.06em;display:block;white-space:nowrap;filter:drop-shadow(0 0 4px rgba(255,255,255,1)) drop-shadow(0 0 10px rgba(255,255,255,0.9)) drop-shadow(0 0 20px rgba(255,255,255,0.7)) drop-shadow(0 0 40px rgba(255,255,255,0.5)) drop-shadow(0 0 60px rgba(255,255,255,0.3));display:none">SHUFFLED</span></div>'
-      + '</div>'
+    html += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all" aria-label="Shuffle all">'
+      + '<div class="quick-play-art">'
+      + '<div class="shuffle-die-stage">'
+      + '<img class="shuffle-die-fallback" src="/assets/shuffle-die.png" alt="" aria-hidden="true">'
+      + '<canvas class="shuffle-die-canvas" aria-hidden="true"></canvas>'
+      + '</div></div>'
       + '</div>';
 
     const cols = window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;

@@ -222,17 +222,82 @@
 }
 
 .quick-play-card-shuffle .quick-play-art {
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+
+.shuffle-die-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  touch-action: none;
+}
+
+.shuffle-die-stage::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 73%;
+  width: 55%;
+  height: 10%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.34);
+  filter: blur(7px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.shuffle-die-canvas,
+.shuffle-die-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  transform: scale(1.12);
+  transform-origin: center;
+}
+
+.shuffle-die-fallback {
+  z-index: 1;
+  object-fit: contain;
+  padding: 6%;
+}
+
+.shuffle-die-canvas {
+  z-index: 2;
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.shuffle-die-canvas:active {
+  cursor: grabbing;
+}
+
+.shuffle-die-stage.is-live .shuffle-die-canvas {
+  opacity: 1;
+}
+
+.shuffle-die-stage.is-live .shuffle-die-fallback {
+  opacity: 0;
 }
 
 .quick-play-card-shuffle {
-  transform: rotate(-2deg) scale(0.95);
+  overflow: visible;
+  background: transparent;
+  border-radius: 0;
+  transform: none;
   transition: transform 0.2s ease;
-  box-shadow: 4px 6px 0 rgba(255, 255, 255, 0.15);
+  box-shadow: none;
 }
 
 .quick-play-card-shuffle:active {
-  transform: rotate(0deg) scale(0.91);
-  box-shadow: 2px 3px 0 rgba(255, 255, 255, 0.1);
+  transform: scale(0.96);
+  box-shadow: none;
 }
 
 .quick-play-card-inline {

@@ -7,6 +7,8 @@ block opens. Newest entries go at the top of their block.
 
 ## Unreleased
 
+- Home: replace Shuffle All artwork with a larger, unframed, low-power cel-shaded 3D die that drifts slowly, has concave lime pips, tumbles immediately on press, supports drag rotation, and keeps a static fallback for browsers without WebGL.
+
 ## 2026-07-16
 
 - Playback: keep iPhone lock-screen and background audio active when the visualizer routes music through Web Audio, using Safari's playback audio session where supported.
