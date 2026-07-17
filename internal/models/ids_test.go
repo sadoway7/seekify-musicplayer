@@ -84,3 +84,67 @@ func TestGenerateUUID_unique(t *testing.T) {
 		ids[id] = true
 	}
 }
+
+func TestCanonicalGenre(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"canonical", "Rock", "Rock"},
+		{"alias", "alt. rock", "Alternative Rock"},
+		{"subgenre preserved", "shoegaze", "Shoegaze"},
+		{"ampersand spacing", "R & B", "R&B"},
+		{"hyphen", "hip-hop", "Hip-Hop"},
+		{"multiple values", "Rock, Pop", "Rock"},
+		{"id3 numeric", "17", "Rock"},
+		{"tech house", "Tech House", "Tech House"},
+		{"melodic house", "melodic house", "Melodic House"},
+		{"progressive trance", "Progressive Trance", "Progressive Trance"},
+		{"dubstep", "dubstep", "Dubstep"},
+		{"garage", "garage", "Garage"},
+		{"uk house", "uk house", "UK House"},
+		{"liquid drum and bass", "liquid drum and bass", "Liquid Drum & Bass"},
+		{"other genre", "gamelan fusion", "Gamelan Fusion"},
+		{"empty", "", ""},
+		{"year junk", "2023", ""},
+		{"mood junk", "Upbeat", ""},
+		{"url junk", "https://example.com/rock", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := models.CanonicalGenre(tt.raw); got != tt.want {
+				t.Fatalf("CanonicalGenre(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCanonicalGenres(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{"single", "Rock", []string{"Rock"}},
+		{"two", "Rock, Pop", []string{"Rock", "Pop"}},
+		{"three mixed", "Rock; Pop/electronic", []string{"Rock", "Pop", "Electronic"}},
+		{"dedup", "Rock, rock, ROCK", []string{"Rock"}},
+		{"empty", "", nil},
+		{"junk only", "Upbeat, Fast", nil},
+		{"url", "https://example.com/rock", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := models.CanonicalGenres(tt.raw)
+			if len(got) != len(tt.want) {
+				t.Fatalf("CanonicalGenres(%q) = %v, want %v", tt.raw, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("CanonicalGenres(%q)[%d] = %q, want %q", tt.raw, i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}

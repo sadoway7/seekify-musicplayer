@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -20,6 +24,7 @@ var MbClient = &http.Client{
 
 const MbBaseURL = "https://musicbrainz.org/ws/2"
 const CoverArtBaseURL = "https://coverartarchive.org"
+const musicBrainzRequestInterval = 1100 * time.Millisecond
 
 type MbSearchResponse struct {
 	Releases []MbRelease `json:"releases"`
@@ -39,6 +44,7 @@ type MbArtistCredit struct {
 
 type MbRecordingResult struct {
 	RecordingID string
+	ArtistID    string
 	Title       string
 	Artist      string
 	Album       string
@@ -67,11 +73,14 @@ func MbDoRequest(reqURL string) ([]byte, error) {
 }
 
 func MbDoRequestWithRetry(reqURL string, retries int) ([]byte, error) {
+	if _, err := reserveMusicBrainzSlot(musicbrainzRateFile(), musicBrainzRequestInterval); err != nil {
+		return nil, fmt.Errorf("MusicBrainz rate gate: %v", err)
+	}
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
+	req.Header.Set("User-Agent", "Seekify/1.0 (https://github.com/sadoway7/seekify-musicplayer)")
 
 	resp, err := MbClient.Do(req)
 	if err != nil {
@@ -96,6 +105,47 @@ func MbDoRequestWithRetry(reqURL string, retries int) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+func musicbrainzRateFile() string {
+	if path := os.Getenv("MUSICAPP_MB_RATE_FILE"); path != "" {
+		return path
+	}
+	return filepath.Join("data", "music.db.mb-rate")
+}
+
+func reserveMusicBrainzSlot(path string, interval time.Duration) (time.Time, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return time.Time{}, err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return time.Time{}, err
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+
+	data, _ := io.ReadAll(f)
+	if next, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil {
+		if wait := time.Until(time.Unix(0, next)); wait > 0 {
+			time.Sleep(wait)
+		}
+	}
+
+	reserved := time.Now()
+	if err := f.Truncate(0); err != nil {
+		return time.Time{}, err
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		return time.Time{}, err
+	}
+	if _, err := f.WriteString(strconv.FormatInt(reserved.Add(interval).UnixNano(), 10)); err != nil {
+		return time.Time{}, err
+	}
+	return reserved, nil
 }
 
 func EscapeLucene(s string) string {

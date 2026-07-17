@@ -482,7 +482,7 @@ Object.assign(UI, {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" id="review-recheck-btn">' + Icons.refresh() + '<span>Recheck</span></button>'
-      + '<button class="detail-action-btn" id="review-enrich-btn">' + Icons.search() + '<span>Rescan Meta &amp; Art</span></button>'
+      + '<button class="detail-action-btn" id="review-enrich-btn">' + Icons.search() + '<span>Rescan Meta, Art &amp; Genres</span></button>'
       + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn" data-action="approve-review-shown">' + Icons.check() + '<span>Approve All Matching</span></button>' : '')
       + (tracks.length > 0 || flags.length > 0 ? '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-review-shown">' + Icons.trash() + '<span>Delete All Matching</span></button>' : '')
       + '</div>'
@@ -523,16 +523,16 @@ Object.assign(UI, {
               if (pollCount < 600) { setTimeout(poll, 1500); return; }
             }
           } catch (e) {}
-          self._showToast('Rescan complete — refreshing list');
+          self._showToast('Rescan complete — refreshing genres and metadata');
           self.navigateTo('needs-review');
           enrichBtn.disabled = false;
-          enrichBtn.querySelector('span').textContent = 'Rescan Meta & Art';
+          enrichBtn.querySelector('span').textContent = 'Rescan Meta, Art & Genres';
         };
         setTimeout(poll, 1000);
       } catch (e) {
         this._showToast('Rescan failed');
         enrichBtn.disabled = false;
-        enrichBtn.querySelector('span').textContent = 'Rescan Meta & Art';
+        enrichBtn.querySelector('span').textContent = 'Rescan Meta, Art & Genres';
       }
     });
 

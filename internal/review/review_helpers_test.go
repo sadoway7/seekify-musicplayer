@@ -3,6 +3,7 @@ package review
 import (
 	"musicapp/internal/models"
 	"musicapp/internal/store"
+	"path/filepath"
 	"testing"
 )
 
@@ -153,4 +154,97 @@ func TestTrackHasEffectiveCover(t *testing.T) {
 	store.Mu.Lock()
 	delete(store.Albums, "album-mb")
 	store.Mu.Unlock()
+}
+
+func TestSaveGenreResultPersistsSourceAndTimestamp(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "genre.db"))
+	track := &models.Track{ID: "genre-result", Title: "Song", FilePath: "Song.mp3"}
+	store.Mu.Lock()
+	store.Tracks = map[string]*models.Track{track.ID: track}
+	store.Mu.Unlock()
+	store.DbUpsertTrack(track)
+
+	if !saveGenreResult(track.ID, "Rock", "musicbrainz", 123) {
+		t.Fatal("saveGenreResult returned false for a valid track")
+	}
+	loaded := store.DbGetTrackByID(track.ID)
+	if loaded.GenreCanonical != "Rock" || loaded.GenreSource != "musicbrainz" || loaded.GenreCheckedAt != 123 {
+		t.Fatalf("saved result = %#v, want Rock/musicbrainz/123", loaded)
+	}
+
+	empty := &models.Track{ID: "genre-empty", Title: "Empty", FilePath: "Empty.mp3"}
+	store.Mu.Lock()
+	store.Tracks[empty.ID] = empty
+	store.Mu.Unlock()
+	store.DbUpsertTrack(empty)
+	if !saveGenreResult(empty.ID, "", "none", 456) {
+		t.Fatal("saveGenreResult returned false for a valid empty result")
+	}
+	loaded = store.DbGetTrackByID(empty.ID)
+	if loaded.GenreCanonical != "" || loaded.GenreSource != "none" || loaded.GenreCheckedAt != 456 {
+		t.Fatalf("saved empty result = %#v, want empty/none/456", loaded)
+	}
+}
+
+func TestCheckMetadataCompletenessUsesCanonicalGenre(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
+	track := &models.Track{
+		Title: "Song", Artist: "Artist", Album: "Album", HasCover: true,
+		Genre: "Upbeat", GenreCanonical: "Tech House",
+	}
+	for _, flag := range CheckMetadataCompleteness(track) {
+		if flag == "missing_genre" {
+			t.Fatal("canonical genre was incorrectly flagged as missing")
+		}
+	}
+	track.GenreCanonical = ""
+	flags := CheckMetadataCompleteness(track)
+	found := false
+	for _, flag := range flags {
+		if flag == "missing_genre" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("empty canonical genre was not flagged")
+	}
+}
+
+func TestDbUpdateTrackMetaAcceptsMultipleGenres(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "multi-genre.db"))
+	track := &models.Track{ID: "multi", Title: "Song", Artist: "Artist", FilePath: "Song.mp3", HasCover: true}
+	store.Mu.Lock()
+	store.Tracks = map[string]*models.Track{track.ID: track}
+	store.Mu.Unlock()
+	store.DbUpsertTrack(track)
+
+	DbUpdateTrackMeta(track.ID, map[string]interface{}{
+		"title": track.Title, "artist": track.Artist, "album": "Album",
+		"albumArtist": track.Artist, "genreCanonical": "Rock, Pop, Electronic",
+	})
+	loaded := store.DbGetTrackByID(track.ID)
+	if loaded.GenreCanonical != "Rock, Pop, Electronic" {
+		t.Fatalf("DbUpdateTrackMeta genre = %q, want Rock, Pop, Electronic", loaded.GenreCanonical)
+	}
+	if loaded.GenreSource != "manual" {
+		t.Fatalf("DbUpdateTrackMeta genre source = %q, want manual", loaded.GenreSource)
+	}
+}
+
+func TestSaveGenreResultLeavesMemoryOnDatabaseError(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "genre-error.db"))
+	track := &models.Track{ID: "genre-error", Title: "Song", FilePath: "Song.mp3"}
+	store.Mu.Lock()
+	store.Tracks = map[string]*models.Track{track.ID: track}
+	store.Mu.Unlock()
+	store.DbUpsertTrack(track)
+	store.DB.Close()
+	t.Cleanup(func() { store.InitDB(filepath.Join(t.TempDir(), "genre-error-restore.db")) })
+
+	if saveGenreResult(track.ID, "Rock", "musicbrainz", 123) {
+		t.Fatal("saveGenreResult succeeded with a closed database")
+	}
+	if track.GenreCanonical != "" || track.GenreCheckedAt != 0 {
+		t.Fatalf("memory changed after failed save: %#v", track)
+	}
 }

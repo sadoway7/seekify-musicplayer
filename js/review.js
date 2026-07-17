@@ -161,6 +161,7 @@ const ReviewUI = {
       const field = input.dataset.field;
       if (field === 'trackNumber') input.value = track.trackNumber || '';
       else if (field === 'year') input.value = track.year || '';
+      else if (field === 'genreCanonical') input.value = track.genreCanonical || track.genre || '';
       else if (track[field] !== undefined) input.value = track[field] || '';
     });
 

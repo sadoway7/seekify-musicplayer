@@ -14,8 +14,11 @@ Based on youtune (github.com/jschof1/youtune) approach:
 """
 
 import json
+import fcntl
+import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -93,12 +96,37 @@ def parse_title(raw):
 # ─── MusicBrainz ──────────────────────────────────────────────────
 
 _mb_initialized = False
+_MB_INTERVAL = 1.1
+
+
+def _mb_call(fn, *args, **kwargs):
+    rate_file = Path(os.environ.get("MUSICAPP_MB_RATE_FILE", "data/music.db.mb-rate"))
+    rate_file.parent.mkdir(parents=True, exist_ok=True)
+    with rate_file.open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            lock.seek(0)
+            try:
+                next_ns = int(lock.read().strip())
+            except ValueError:
+                next_ns = 0
+            wait = (next_ns - time.time_ns()) / 1_000_000_000
+            if wait > 0:
+                time.sleep(wait)
+            lock.seek(0)
+            lock.truncate()
+            lock.write(str(time.time_ns() + int(_MB_INTERVAL * 1_000_000_000)))
+            lock.flush()
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+    return fn(*args, **kwargs)
 
 
 def init_mb():
     global _mb_initialized
     if not _mb_initialized and musicbrainzngs:
         musicbrainzngs.set_useragent("musicapp-ripper-v2", "1.0", "https://github.com/musicapp")
+        musicbrainzngs.set_rate_limit(_MB_INTERVAL)
         _mb_initialized = True
 
 
@@ -168,7 +196,7 @@ def _get_genre(recording_id):
     if not recording_id or not musicbrainzngs:
         return ""
     try:
-        detail = musicbrainzngs.get_recording_by_id(recording_id, includes=["genres"])
+        detail = _mb_call(musicbrainzngs.get_recording_by_id, recording_id, includes=["genres"])
         genres = detail.get("recording", {}).get("genre-list", [])
         if genres:
             top = sorted(genres, key=lambda g: int(g.get("count", 0)), reverse=True)[:2]
@@ -176,7 +204,7 @@ def _get_genre(recording_id):
     except Exception:
         pass
     try:
-        detail = musicbrainzngs.get_recording_by_id(recording_id, includes=["tags"])
+        detail = _mb_call(musicbrainzngs.get_recording_by_id, recording_id, includes=["tags"])
         tags = detail.get("recording", {}).get("tag-list", [])
         music_genres = [
             "rock", "pop", "hip hop", "rap", "jazz", "blues", "classical",
@@ -218,13 +246,13 @@ def search_musicbrainz(artist, title, limit=5):
     # Fetch more results than needed so we can rank and pick the best
     recordings = []
     try:
-        result = musicbrainzngs.search_recordings(query=query, limit=25)
+        result = _mb_call(musicbrainzngs.search_recordings, query=query, limit=25)
         recordings = result.get("recording-list", [])
     except Exception:
         pass
     if not recordings and artist:
         try:
-            result = musicbrainzngs.search_recordings(query=f'recording:"{title}"', limit=25)
+            result = _mb_call(musicbrainzngs.search_recordings, query=f'recording:"{title}"', limit=25)
             recordings = result.get("recording-list", [])
         except Exception:
             pass

@@ -7,6 +7,12 @@ block opens. Newest entries go at the top of their block.
 
 ## Unreleased
 
+## 2026-07-17
+
+- Search: genre cards now pick varied cover art across the grid instead of all showing the same album (most-constrained genres claim first, multi-album genres prefer covers not already used), with a proper Fisher-Yates shuffle replacing the biased sort-based pick.
+- Genres: allow a track to have multiple canonical genres (comma-separated) so it appears in every matching genre list; MusicBrainz enrichment and manual edits both store up to three validated genres, and the Search browse grid and genre filter now split multi-genre tracks correctly.
+- Tasks: Settings worker "Last run" timestamps now reflect the last meaningful pass, not the last polling tick (scanner and review keep their previous run time when the cycle did no work), and the download-watchdog row no longer shows a disabled "Run Now" button.
+- Genres: preserve detailed subgenres while normalizing variants, enrich missing genres through cached, rate-limited MusicBrainz metadata (recording first, then artist fallback), let the edit-metadata modal and Rescan Meta action work on existing approved tracks without writing permanent "none" placeholders, refresh the Search page from live library data so genre cards appear after enrichment, and stop Rescan Meta from overwriting existing metadata/album covers.
 - Home: add a subtle diffused lime glow behind the 3D shuffle die without restoring a visible tile or container.
 - Home: supersample the 3D shuffle die canvas for smoother anti-aliased edges as it rotates.
 - Home: remove the shuffle die's remaining stepped shadow ramps and increase its passive rotation to 2.2× the original speed.

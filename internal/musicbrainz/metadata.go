@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -624,6 +625,52 @@ func MbLookupBestRelease(recordingID string) (string, string, string) {
 	return bestTitle, bestID, bestType
 }
 
+func parseRecordingGenres(body []byte) ([]string, error) {
+	var response struct {
+		Genres []struct {
+			Name  string `json:"name"`
+			Count int    `json:"count"`
+		} `json:"genres"`
+		Tags []struct {
+			Name  string `json:"name"`
+			Count int    `json:"count"`
+		} `json:"tags"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(response.Genres, func(i, j int) bool {
+		return response.Genres[i].Count > response.Genres[j].Count
+	})
+	sort.SliceStable(response.Tags, func(i, j int) bool {
+		return response.Tags[i].Count > response.Tags[j].Count
+	})
+	names := make([]string, 0, len(response.Genres)+len(response.Tags))
+	for _, genre := range response.Genres {
+		if strings.TrimSpace(genre.Name) != "" {
+			names = append(names, genre.Name)
+		}
+	}
+	for _, tag := range response.Tags {
+		if strings.TrimSpace(tag.Name) != "" {
+			names = append(names, tag.Name)
+		}
+	}
+	return names, nil
+}
+
+func MbLookupRecordingGenres(recordingID string) ([]string, error) {
+	if recordingID == "" {
+		return nil, fmt.Errorf("missing recording id")
+	}
+	reqURL := fmt.Sprintf("%s/recording/%s?inc=genres+tags&fmt=json", MbBaseURL, url.PathEscape(recordingID))
+	body, err := MbDoRequest(reqURL)
+	if err != nil {
+		return nil, err
+	}
+	return parseRecordingGenres(body)
+}
+
 func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, error) {
 	var results []MbRecordingResult
 
@@ -645,10 +692,15 @@ func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, e
 
 	var searchResp struct {
 		Recordings []struct {
-			ID           string           `json:"id"`
-			Title        string           `json:"title"`
-			ArtistCredit []MbArtistCredit `json:"artist-credit"`
-			Releases     []struct {
+			ID           string `json:"id"`
+			Title        string `json:"title"`
+			ArtistCredit []struct {
+				Name   string `json:"name"`
+				Artist struct {
+					ID string `json:"id"`
+				} `json:"artist"`
+			} `json:"artist-credit"`
+			Releases []struct {
 				ID    string `json:"id"`
 				Title string `json:"title"`
 			} `json:"releases"`
@@ -661,8 +713,10 @@ func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, e
 
 	for _, rec := range searchResp.Recordings {
 		artistName := ""
+		artistID := ""
 		if len(rec.ArtistCredit) > 0 {
 			artistName = rec.ArtistCredit[0].Name
+			artistID = rec.ArtistCredit[0].Artist.ID
 		}
 
 		// Use the full release list via lookup to find the real album
@@ -681,6 +735,7 @@ func MbSearchRecordings(artist, title string, limit int) ([]MbRecordingResult, e
 
 		results = append(results, MbRecordingResult{
 			RecordingID: rec.ID,
+			ArtistID:    artistID,
 			Title:       rec.Title,
 			Artist:      artistName,
 			Album:       albumName,
@@ -723,10 +778,15 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 	var searchResp struct {
 		Count      int `json:"count"`
 		Recordings []struct {
-			ID           string           `json:"id"`
-			Title        string           `json:"title"`
-			ArtistCredit []MbArtistCredit `json:"artist-credit"`
-			Releases     []struct {
+			ID           string `json:"id"`
+			Title        string `json:"title"`
+			ArtistCredit []struct {
+				Name   string `json:"name"`
+				Artist struct {
+					ID string `json:"id"`
+				} `json:"artist"`
+			} `json:"artist-credit"`
+			Releases []struct {
 				ID           string           `json:"id"`
 				Title        string           `json:"title"`
 				Date         string           `json:"date"`
@@ -746,8 +806,10 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 
 	for _, rec := range searchResp.Recordings {
 		artistName := ""
+		artistID := ""
 		if len(rec.ArtistCredit) > 0 {
 			artistName = rec.ArtistCredit[0].Name
+			artistID = rec.ArtistCredit[0].Artist.ID
 		}
 		// Pick the release whose release-group primary-type ranks highest
 		// (Album > EP > Single > Compilation), matching the non-paged path.
@@ -774,6 +836,7 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 		}
 		results = append(results, MbRecordingResult{
 			RecordingID: rec.ID,
+			ArtistID:    artistID,
 			Title:       rec.Title,
 			Artist:      artistName,
 			Album:       albumName,
@@ -783,4 +846,48 @@ func MbSearchRecordingsPaged(artist, title string, limit, offset int) ([]MbRecor
 	}
 
 	return results, searchResp.Count, nil
+}
+
+// MbLookupArtistGenres fetches the top genres/tags for an artist. Used as a
+// fallback when a recording has no genre tags of its own.
+func MbLookupArtistGenres(artistID string) ([]string, error) {
+	if artistID == "" {
+		return nil, fmt.Errorf("missing artist id")
+	}
+	reqURL := fmt.Sprintf("%s/artist/%s?inc=genres+tags&fmt=json", MbBaseURL, url.PathEscape(artistID))
+	body, err := MbDoRequest(reqURL)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Genres []struct {
+			Name  string `json:"name"`
+			Count int    `json:"count"`
+		} `json:"genres"`
+		Tags []struct {
+			Name  string `json:"name"`
+			Count int    `json:"count"`
+		} `json:"tags"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(response.Genres, func(i, j int) bool {
+		return response.Genres[i].Count > response.Genres[j].Count
+	})
+	sort.SliceStable(response.Tags, func(i, j int) bool {
+		return response.Tags[i].Count > response.Tags[j].Count
+	})
+	names := make([]string, 0, len(response.Genres)+len(response.Tags))
+	for _, g := range response.Genres {
+		if strings.TrimSpace(g.Name) != "" {
+			names = append(names, g.Name)
+		}
+	}
+	for _, t := range response.Tags {
+		if strings.TrimSpace(t.Name) != "" {
+			names = append(names, t.Name)
+		}
+	}
+	return names, nil
 }

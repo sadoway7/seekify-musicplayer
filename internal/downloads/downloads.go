@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"musicapp/internal/models"
 	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
@@ -25,6 +26,72 @@ import (
 
 	"github.com/google/uuid"
 )
+
+func enrichDownloadGenre(trackID string, job *DownloadJob) {
+	var names []string
+	var err error
+	if job.RecordingID != "" {
+		names, err = musicbrainz.MbLookupRecordingGenres(job.RecordingID)
+		if err != nil {
+			log.Printf("[download-genre] recording genre lookup failed for %s: %v", trackID, err)
+		}
+	}
+	var bestMatch *musicbrainz.MbRecordingResult
+	if len(names) == 0 && job.Artist != "" && job.Title != "" {
+		cands, _, searchErr := musicbrainz.MbSearchRecordingsPaged(job.Artist, job.Title, 5, 0)
+		if searchErr == nil && len(cands) > 0 {
+			best := cands[0]
+			if musicbrainz.ScoreMatch(job.Artist, job.Title, best.Artist, best.Title, best.Album) >= 0.7 {
+				bestMatch = &best
+				names, err = musicbrainz.MbLookupRecordingGenres(best.RecordingID)
+				if err != nil {
+					log.Printf("[download-genre] search genre lookup failed for %s: %v", trackID, err)
+				}
+			}
+		}
+	}
+	if len(names) == 0 && job.ArtistID != "" {
+		names, err = musicbrainz.MbLookupArtistGenres(job.ArtistID)
+		if err != nil {
+			log.Printf("[download-genre] artist genre lookup failed for %s: %v", trackID, err)
+		}
+	}
+	if len(names) == 0 && bestMatch != nil && bestMatch.ArtistID != "" {
+		names, err = musicbrainz.MbLookupArtistGenres(bestMatch.ArtistID)
+		if err != nil {
+			log.Printf("[download-genre] artist genre lookup failed for %s: %v", trackID, err)
+		}
+	}
+	var canonical []string
+	seen := map[string]bool{}
+	for _, name := range names {
+		for _, g := range models.CanonicalGenres(name) {
+			if !seen[g] {
+				seen[g] = true
+				canonical = append(canonical, g)
+			}
+		}
+	}
+	const maxGenres = 3
+	if len(canonical) > maxGenres {
+		canonical = canonical[:maxGenres]
+	}
+	if len(canonical) > 0 {
+		joined := strings.Join(canonical, ", ")
+		store.Mu.Lock()
+		track, ok := store.Tracks[trackID]
+		if ok && track.GenreSource != "manual" {
+			if _, dbErr := store.DB.Exec(`UPDATE tracks SET genre = ?, genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?`,
+				joined, joined, "musicbrainz", time.Now().Unix(), trackID); dbErr == nil {
+				track.GenreCanonical = joined
+				track.GenreSource = "musicbrainz"
+				track.GenreCheckedAt = time.Now().Unix()
+				log.Printf("[download-genre] set %s to %s for %s", trackID, joined, job.Title)
+			}
+		}
+		store.Mu.Unlock()
+	}
+}
 
 type DownloadJob struct {
 	ID             string `json:"id"`
@@ -924,6 +991,20 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 	// Scan synchronously — we hold a download slot and this eliminates the
 	// race where AutoSort moves the file between the sleep and ScanSingleFile.
 	scanner.ScanSingleFile(audioFile)
+
+	// Enrich canonical genre from MusicBrainz now that the track is in memory.
+	store.Mu.Lock()
+	var enrichedTrack *models.Track
+	for _, tr := range store.Tracks {
+		if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+			enrichedTrack = tr
+			break
+		}
+	}
+	store.Mu.Unlock()
+	if enrichedTrack != nil && enrichedTrack.GenreCanonical == "" && enrichedTrack.GenreSource != "manual" {
+		go enrichDownloadGenre(enrichedTrack.ID, job)
+	}
 
 	// Persist the ffprobe-probed duration immediately. The scanner inserts
 	// duration=0 (the tag library doesn't compute it) and duration is otherwise

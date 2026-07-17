@@ -1261,17 +1261,15 @@ const UI = {
     }
   },
 
-  renderSearch() {
+  async renderSearch() {
     this._viewTrackList = [];
     let html = '<div class="library-search-bar">'
       + '<span class="search-icon">' + Icons.search() + '</span>'
       + '<input class="search-input" type="search" enterkeyhint="search" placeholder="Songs, artists, or albums" value="' + this._esc(this.searchQuery) + '">'
       + '</div>'
-      + '<div id="search-results" style="margin-top:12px"></div>';
-
-    if (!this.searchQuery && !this.searchGenre) {
-      html += this._renderBrowseGrid();
-    }
+      + '<div id="search-results" style="margin-top:12px">'
+      + (this.searchQuery || this.searchGenre ? '' : '<div class="loading-spinner" style="margin-top:24px"></div>')
+      + '</div>';
 
     this.els.content.innerHTML = html;
 
@@ -1287,6 +1285,15 @@ const UI = {
 
     if (this.searchQuery || this.searchGenre) {
       this._renderSearchResults();
+      return;
+    }
+
+    // Load fresh library before rendering the genre grid so enrichment results
+    // appear immediately and view-transition snapshots don't capture stale data.
+    await Store.refreshLibrary();
+    if (Store.currentView === 'search' && !this.searchQuery && !this.searchGenre) {
+      const container = this.els.content.querySelector('#search-results');
+      if (container) container.innerHTML = this._renderBrowseGrid();
     }
   },
 
@@ -1333,7 +1340,7 @@ const UI = {
       }
 
       const results = Store.library.tracks.filter(t => {
-        const haystack = (t.title + ' ' + t.artist + ' ' + t.album + ' ' + (t.genre || '')).toLowerCase();
+        const haystack = (t.title + ' ' + t.artist + ' ' + t.album + ' ' + (t.genre || '') + ' ' + (t.genreCanonical || '')).toLowerCase().replace(/[,;/]/g, ' ');
         return words.every(w => haystack.includes(w));
       }).sort((a, b) => {
         const aTitle = a.title.toLowerCase().includes(q) ? 3 : a.title.toLowerCase().split(/\s+/).some(w => words.includes(w)) ? 2 : 0;
@@ -1356,9 +1363,12 @@ const UI = {
         container.innerHTML = html;
       }
     } else if (this.searchGenre) {
-      const results = Store.library.tracks.filter(t =>
-        t.genre && t.genre.toLowerCase() === this.searchGenre.toLowerCase()
-      );
+      const target = this.searchGenre.toLowerCase();
+      const results = Store.library.tracks.filter(t => {
+        const genre = (t.genreCanonical !== undefined ? t.genreCanonical : t.genre || '').trim();
+        if (!genre) return false;
+        return genre.split(/[,;/]/).some(p => p.trim().toLowerCase() === target);
+      });
       this._viewTrackList = results;
       if (results.length === 0) {
         container.innerHTML = this._emptyState('No tracks in this genre', 'Try a different category', Icons.music());
@@ -1377,10 +1387,14 @@ const UI = {
   _renderBrowseGrid() {
     const found = {};
     Store.library.tracks.forEach(t => {
-      if (t.genre && t.genre.trim()) {
-        const key = t.genre.trim().toLowerCase();
-        if (!found[key]) found[key] = t.genre.trim();
-      }
+      const raw = (t.genreCanonical !== undefined ? t.genreCanonical : t.genre || '').trim();
+      if (!raw) return;
+      raw.split(/[,;/]/).forEach(part => {
+        const g = part.trim();
+        if (!g) return;
+        const key = g.toLowerCase();
+        if (!found[key]) found[key] = g;
+      });
     });
     const genres = Object.values(found).sort(() => Math.random() - 0.5);
     if (genres.length === 0) {
@@ -1392,23 +1406,49 @@ const UI = {
     const albumCoverMap = {};
     Store.library.albums.forEach(a => { albumCoverMap[a.id] = a.hasCover; });
     Store.library.tracks.forEach(t => {
-      if (t.genre && t.genre.trim() && t.albumID) {
-        const key = t.genre.trim().toLowerCase();
+      const raw = (t.genreCanonical !== undefined ? t.genreCanonical : t.genre || '').trim();
+      if (!raw || !t.albumID) return;
+      raw.split(/[,;/]/).forEach(part => {
+        const g = part.trim();
+        if (!g) return;
+        const key = g.toLowerCase();
         if (!genreAlbums[key]) genreAlbums[key] = [];
         if (!genreAlbums[key].includes(t.albumID)) {
           genreAlbums[key].push(t.albumID);
         }
-      }
+      });
     });
+
+    // Assign one cover per genre card. Process most-constrained genres first
+    // (fewest candidate albums) so single-album genres claim their only option,
+    // then multi-album genres prefer covers not already shown elsewhere on the
+    // grid. Falls back to any candidate when everything is taken — that's the
+    // "only one song in this genre" case and repetition is unavoidable.
+    const used = new Set();
+    const picks = {};
+    const byConstraint = genres
+      .map(g => g.toLowerCase())
+      .sort((a, b) => (genreAlbums[a] || []).length - (genreAlbums[b] || []).length);
+    for (const key of byConstraint) {
+      const albumIds = genreAlbums[key] || [];
+      const withCovers = albumIds.filter(id => albumCoverMap[id]);
+      const pool = (withCovers.length > 0 ? withCovers : albumIds).slice();
+      // shuffle so repeated renders vary
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      // prefer an album not yet claimed by another card
+      let chosen = pool.find(id => !used.has(id));
+      if (chosen === undefined && pool.length > 0) {
+        chosen = pool[0]; // all taken — single-album collision, reuse
+      }
+      if (chosen) { used.add(chosen); picks[key] = chosen; }
+    }
 
     return '<div class="browse-grid">' + genres.map(g => {
       const key = g.toLowerCase();
-      const albumIds = genreAlbums[key] || [];
-      // Pick a random album that has a cover, fall back to any
-      const withCovers = albumIds.filter(id => albumCoverMap[id]);
-      const pick = withCovers.length > 0
-        ? withCovers[Math.floor(Math.random() * withCovers.length)]
-        : (albumIds.length > 0 ? albumIds[Math.floor(Math.random() * albumIds.length)] : null);
+      const pick = picks[key];
       let coverHtml = '';
       if (pick) {
         coverHtml = '<img src="' + Api.coverUrl(pick) + '" alt="" class="category-card-bg" onerror="this.style.display=\'none\'">';
@@ -1490,7 +1530,7 @@ const UI = {
             + '<div class="worker-freq">' + this._esc(w.frequency) + '</div>'
             + controls
             + '<div class="worker-last"></div>'
-            + '<button class="settings-btn worker-run-btn"><span></span></button>'
+            + (w.canTrigger ? '<button class="settings-btn worker-run-btn"><span></span></button>' : '')
             + '</div>';
         }).join('');
 
@@ -1515,19 +1555,17 @@ const UI = {
         row.querySelector('.worker-last').textContent = w.running ? 'Running...' : this._timeAgo(w.lastRun);
 
         const btn = row.querySelector('.worker-run-btn');
-        const btnSpan = btn.querySelector('span');
-        if (w.running) {
-          btn.disabled = true;
-          btn.removeAttribute('data-worker');
-          btnSpan.textContent = 'Running';
-        } else if (w.canTrigger) {
-          btn.disabled = false;
-          btn.dataset.worker = w.name;
-          btnSpan.textContent = 'Run Now';
-        } else {
-          btn.disabled = true;
-          btn.removeAttribute('data-worker');
-          btnSpan.textContent = '—';
+        if (btn) {
+          const btnSpan = btn.querySelector('span');
+          if (w.running) {
+            btn.disabled = true;
+            btn.removeAttribute('data-worker');
+            btnSpan.textContent = 'Running';
+          } else if (w.canTrigger) {
+            btn.disabled = false;
+            btn.dataset.worker = w.name;
+            btnSpan.textContent = 'Run Now';
+          }
         }
 
         if (w.error) {

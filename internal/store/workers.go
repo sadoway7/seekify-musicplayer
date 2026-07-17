@@ -63,6 +63,14 @@ func WorkerStart(name string) {
 
 // WorkerDone marks a worker as finished, records timestamp and optional error.
 func WorkerDone(name string, err error) {
+	WorkerDoneTick(name, true, err)
+}
+
+// WorkerDoneTick is like WorkerDone but only refreshes LastRun when didWork is
+// true. Use this from polling workers (scanner/review) that tick on a fixed
+// cadence; without this, the displayed "Last run" reflects the last wake, not
+// the last meaningful pass, and never ages.
+func WorkerDoneTick(name string, didWork bool, err error) {
 	workersMu.RLock()
 	w, ok := workers[name]
 	workersMu.RUnlock()
@@ -71,7 +79,9 @@ func WorkerDone(name string, err error) {
 	}
 	w.mu.Lock()
 	w.status.Running = false
-	w.status.LastRun = time.Now().Format(time.RFC3339)
+	if didWork || w.status.LastRun == "" {
+		w.status.LastRun = time.Now().Format(time.RFC3339)
+	}
 	if err != nil {
 		w.status.Error = err.Error()
 	} else {

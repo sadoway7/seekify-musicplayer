@@ -45,6 +45,38 @@ func ResolveFilePath(filePath string) string {
 	return filepath.Join(store.MusicDir, filePath)
 }
 
+func applyScannedGenre(track, existing *models.Track) {
+	if existing != nil && existing.HasMetadata {
+		track.Genre = existing.Genre
+		track.GenreCanonical = existing.GenreCanonical
+		track.GenreSource = existing.GenreSource
+		track.GenreCheckedAt = existing.GenreCheckedAt
+		track.HasMetadata = existing.HasMetadata
+		return
+	}
+	if existing != nil && existing.GenreSource == "manual" {
+		track.GenreCanonical = existing.GenreCanonical
+		track.GenreSource = existing.GenreSource
+		track.GenreCheckedAt = existing.GenreCheckedAt
+		return
+	}
+	if genres := models.CanonicalGenres(track.Genre); len(genres) > 0 {
+		track.GenreCanonical = strings.Join(genres, ", ")
+		track.GenreSource = "tag"
+		track.GenreCheckedAt = 0
+		return
+	}
+	if existing != nil && existing.GenreSource == "musicbrainz" {
+		track.GenreCanonical = existing.GenreCanonical
+		track.GenreSource = existing.GenreSource
+		track.GenreCheckedAt = existing.GenreCheckedAt
+		return
+	}
+	track.GenreCanonical = ""
+	track.GenreSource = "none"
+	track.GenreCheckedAt = 0
+}
+
 // MusicDirForPath returns the music directory root for a given FilePath.
 // Used to determine where to write images/covers for a track.
 func MusicDirForPath(filePath string) string {
@@ -145,22 +177,28 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		}
 		fileModTime := fileInfo.ModTime().Unix()
 		store.Mu.RLock()
-		if existing, ok := store.Tracks[trackID]; ok && existing.ModTime == fileModTime {
+		existing := store.Tracks[trackID]
+		var existingSnapshot *models.Track
+		if existing != nil {
+			snapshot := *existing
+			existingSnapshot = &snapshot
+		}
+		if existing != nil && existing.ModTime == fileModTime {
 			store.Mu.RUnlock()
 			// Still include it in the new tracks map so it isn't deleted
 			newTracks[trackID] = existing
-			if existing.Album != "" {
-				if _, exists := newAlbums[existing.AlbumID]; !exists {
-					newAlbums[existing.AlbumID] = &models.Album{
-						ID:         existing.AlbumID,
-						Name:       existing.Album,
-						Artist:     existing.AlbumArtist,
-						Year:       existing.Year,
-						HasCover:   existing.HasCover,
+			if existingSnapshot.Album != "" {
+				if _, exists := newAlbums[existingSnapshot.AlbumID]; !exists {
+					newAlbums[existingSnapshot.AlbumID] = &models.Album{
+						ID:         existingSnapshot.AlbumID,
+						Name:       existingSnapshot.Album,
+						Artist:     existingSnapshot.AlbumArtist,
+						Year:       existingSnapshot.Year,
+						HasCover:   existingSnapshot.HasCover,
 						TrackCount: 1,
 					}
 				} else {
-					newAlbums[existing.AlbumID].TrackCount++
+					newAlbums[existingSnapshot.AlbumID].TrackCount++
 				}
 			}
 			continue
@@ -234,6 +272,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		if track.AlbumArtist == "" {
 			track.AlbumArtist = track.Artist
 		}
+		applyScannedGenre(track, existingSnapshot)
 
 		if hasRealTags {
 			track.HasMetadata = true
@@ -450,7 +489,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 // probed by ffprobe yet. We must not delete legitimately downloaded music.
 func PruneTruncatedTracks() int {
 	store.Mu.RLock()
-	var toDelete []string
+	toDelete := make(map[string]string)
 	for id, t := range store.Tracks {
 		if t.Duration != 0 {
 			continue
@@ -459,17 +498,13 @@ func PruneTruncatedTracks() int {
 		fp := ResolveFilePath(t.FilePath)
 		info, err := os.Stat(fp)
 		if err != nil || info.Size() < 10240 {
-			toDelete = append(toDelete, id)
+			toDelete[id] = fp
 		}
 	}
 	store.Mu.RUnlock()
 
-	for _, id := range toDelete {
-		t, ok := store.Tracks[id]
-		if ok {
-			fp := ResolveFilePath(t.FilePath)
-			os.Remove(fp) // best-effort
-		}
+	for id, fp := range toDelete {
+		os.Remove(fp) // best-effort
 		store.DbDeleteTrack(id)
 		store.Mu.Lock()
 		delete(store.Tracks, id)
@@ -655,9 +690,9 @@ func ExtractEmbeddedCovers() {
 		coverPath := filepath.Join(coverDir, j.albumID+".jpg")
 		if err := os.WriteFile(coverPath, pic.Data, 0644); err != nil {
 			continue
-	}
+		}
 
-	store.Mu.Lock()
+		store.Mu.Lock()
 		if a, ok := store.Albums[j.albumID]; ok {
 			a.HasCover = true
 		}
@@ -753,6 +788,15 @@ func ScanSingleFile(filePath string) {
 	if track.AlbumArtist == "" {
 		track.AlbumArtist = track.Artist
 	}
+	store.Mu.RLock()
+	existing := store.Tracks[trackID]
+	var existingSnapshot *models.Track
+	if existing != nil {
+		snapshot := *existing
+		existingSnapshot = &snapshot
+	}
+	store.Mu.RUnlock()
+	applyScannedGenre(track, existingSnapshot)
 	if hasRealTags {
 		track.HasMetadata = true
 	}

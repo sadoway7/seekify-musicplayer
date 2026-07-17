@@ -1,8 +1,11 @@
 package scanner_test
 
 import (
+	"musicapp/internal/models"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -104,6 +107,34 @@ func TestMusicDirForPath_media(t *testing.T) {
 		t.Errorf("MusicDirForPath(%q) = %q, want /media", "media:track.mp3", got)
 	}
 }
+
+func TestScanSingleFilePreservesApprovedGenre(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Song.mp3")
+	if err := os.WriteFile(path, []byte("not an audio file"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	store.InitDB(filepath.Join(dir, "genre.db"))
+	store.MusicDir = dir
+	store.MusicDirs = map[string]string{"": dir}
+	id := models.GenerateID("Song.mp3")
+	store.Mu.Lock()
+	store.Tracks = map[string]*models.Track{id: {
+		ID: id, FilePath: "Song.mp3", Genre: "Rock", GenreCanonical: "Rock",
+		GenreSource: "tag", HasMetadata: true,
+	}}
+	store.Albums = map[string]*models.Album{}
+	store.Mu.Unlock()
+
+	scanner.ScanSingleFile(path)
+	store.Mu.RLock()
+	track := *store.Tracks[id]
+	store.Mu.RUnlock()
+	if track.Genre != "Rock" || track.GenreCanonical != "Rock" || track.GenreSource != "tag" {
+		t.Fatalf("approved genre after scan = %#v, want Rock/tag", track)
+	}
+}
+
 
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||

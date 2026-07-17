@@ -84,6 +84,9 @@ func InitDB(path string) {
 		track_number INTEGER NOT NULL DEFAULT 0,
 		year INTEGER NOT NULL DEFAULT 0,
 		genre TEXT NOT NULL DEFAULT '',
+		genre_canonical TEXT NOT NULL DEFAULT '',
+		genre_source TEXT NOT NULL DEFAULT '',
+		genre_checked_at INTEGER NOT NULL DEFAULT 0,
 		duration INTEGER NOT NULL DEFAULT 0,
 		file_path TEXT NOT NULL,
 		has_cover INTEGER NOT NULL DEFAULT 0,
@@ -132,12 +135,15 @@ func InitDB(path string) {
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN orig_album TEXT NOT NULL DEFAULT ''`)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN orig_album_artist TEXT NOT NULL DEFAULT ''`)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN orig_album_id TEXT NOT NULL DEFAULT ''`)
+	DB.Exec(`ALTER TABLE tracks ADD COLUMN genre_canonical TEXT NOT NULL DEFAULT ''`)
+	DB.Exec(`ALTER TABLE tracks ADD COLUMN genre_source TEXT NOT NULL DEFAULT ''`)
+	DB.Exec(`ALTER TABLE tracks ADD COLUMN genre_checked_at INTEGER NOT NULL DEFAULT 0`)
 
 	// Add added_at to favorites for ordering (newest first)
 	DB.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)
 
 	// Multi-user accounts (additive; safe on existing DBs)
-		DB.Exec(`CREATE TABLE IF NOT EXISTS users (
+	DB.Exec(`CREATE TABLE IF NOT EXISTS users (
 		id            TEXT PRIMARY KEY,
 		username      TEXT UNIQUE NOT NULL,
 		password_hash TEXT NOT NULL,
@@ -279,163 +285,163 @@ func dedupTracksByFilePath() {
 					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
 				}
 				tx.Commit()
-			log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
+				log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
+			}
 		}
-	}
 
-	// Pass 3: same song (artist+title) at different file paths with same
-	// duration — likely a download + AutoSort move that left a stale entry.
-	// Only merge when duration matches (avoids merging different versions).
-	rows, err = DB.Query(`SELECT LOWER(artist), LOWER(title), duration, COUNT(*) as cnt
+		// Pass 3: same song (artist+title) at different file paths with same
+		// duration — likely a download + AutoSort move that left a stale entry.
+		// Only merge when duration matches (avoids merging different versions).
+		rows, err = DB.Query(`SELECT LOWER(artist), LOWER(title), duration, COUNT(*) as cnt
 		FROM tracks
 		WHERE artist != '' AND title != '' AND duration > 0
 		GROUP BY LOWER(artist), LOWER(title), duration
 		HAVING cnt > 1`)
-	if err == nil {
+		if err == nil {
 		type songKey struct{ artist, title string; duration int }
-		var dups []songKey
-		for rows.Next() {
-			var a, t string
-			var d, c int
-			rows.Scan(&a, &t, &d, &c)
-			dups = append(dups, songKey{a, t, d})
-		}
-		rows.Close()
-		if len(dups) > 0 {
-			log.Printf("[db] Found %d same-song duplicate groups, deduplicating...", len(dups))
-			for _, dk := range dups {
-				r, err := DB.Query(`SELECT id FROM tracks WHERE LOWER(artist)=? AND LOWER(title)=? AND duration=? ORDER BY has_metadata DESC, mod_time DESC`, dk.artist, dk.title, dk.duration)
-				if err != nil {
-					continue
+			var dups []songKey
+			for rows.Next() {
+				var a, t string
+				var d, c int
+				rows.Scan(&a, &t, &d, &c)
+				dups = append(dups, songKey{a, t, d})
+			}
+			rows.Close()
+			if len(dups) > 0 {
+				log.Printf("[db] Found %d same-song duplicate groups, deduplicating...", len(dups))
+				for _, dk := range dups {
+					r, err := DB.Query(`SELECT id FROM tracks WHERE LOWER(artist)=? AND LOWER(title)=? AND duration=? ORDER BY has_metadata DESC, mod_time DESC`, dk.artist, dk.title, dk.duration)
+					if err != nil {
+						continue
+					}
+					var ids []string
+					for r.Next() {
+						var id string
+						r.Scan(&id)
+						ids = append(ids, id)
+					}
+					r.Close()
+					if len(ids) <= 1 {
+						continue
+					}
+					keepID := ids[0]
+					tx, _ := DB.Begin()
+					for _, dupID := range ids[1:] {
+						tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+					}
+					tx.Commit()
+					log.Printf("[db] Song deduped %s - %s (%ds): kept %s, removed %d", dk.artist, dk.title, dk.duration, keepID, len(ids)-1)
 				}
-				var ids []string
-				for r.Next() {
-					var id string
-					r.Scan(&id)
-					ids = append(ids, id)
-				}
-				r.Close()
-				if len(ids) <= 1 {
-					continue
-				}
-				keepID := ids[0]
-				tx, _ := DB.Begin()
-				for _, dupID := range ids[1:] {
-					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
-				}
-				tx.Commit()
-				log.Printf("[db] Song deduped %s - %s (%ds): kept %s, removed %d", dk.artist, dk.title, dk.duration, keepID, len(ids)-1)
 			}
 		}
-	}
 
-	// Pass 4: same song (artist+title) where one copy has duration=0 — common
-	// when a freshly-downloaded file hasn't been probed yet, or the same song
-	// exists in both media:shared and the primary library with incomplete
-	// metadata. Keep the entry with the best metadata, delete incomplete copies.
-	rows, err = DB.Query(`SELECT LOWER(artist), LOWER(title), COUNT(*) as cnt
+		// Pass 4: same song (artist+title) where one copy has duration=0 — common
+		// when a freshly-downloaded file hasn't been probed yet, or the same song
+		// exists in both media:shared and the primary library with incomplete
+		// metadata. Keep the entry with the best metadata, delete incomplete copies.
+		rows, err = DB.Query(`SELECT LOWER(artist), LOWER(title), COUNT(*) as cnt
 		FROM tracks
 		WHERE artist != '' AND title != ''
 		GROUP BY LOWER(artist), LOWER(title)
 		HAVING cnt > 1`)
-	if err == nil {
-		type nameKey struct{ artist, title string }
-		var nameDupes []nameKey
-		for rows.Next() {
-			var a, t string
-			var c int
-			rows.Scan(&a, &t, &c)
-			nameDupes = append(nameDupes, nameKey{a, t})
-		}
-		rows.Close()
-		if len(nameDupes) > 0 {
-			deduped := 0
-			for _, nk := range nameDupes {
-				r, err := DB.Query(`SELECT id, duration FROM tracks WHERE LOWER(artist)=? AND LOWER(title)=? ORDER BY has_metadata DESC, duration DESC, mod_time DESC`, nk.artist, nk.title)
-				if err != nil {
-					continue
-				}
-				var ids []string
-				durations := map[string]int{}
-				for r.Next() {
-					var id string
-					var dur int
-					r.Scan(&id, &dur)
-					ids = append(ids, id)
-					durations[id] = dur
-				}
-				r.Close()
-				if len(ids) <= 1 {
-					continue
-				}
-				// Keep the best entry (already sorted: has_metadata DESC, duration
-				// DESC, mod_time DESC). Remove the rest from DB AND delete the
-				// duplicate files from disk so the scanner doesn't re-add them.
-				// When all durations are 0 (un-probed Soulseek downloads), still
-				// dedup — keep the one with best metadata / most recent mod_time.
-				keepID := ids[0]
-				removed := 0
-				var deletedFiles []string
-				tx, _ := DB.Begin()
-				for _, dupID := range ids[1:] {
-					// If both have non-zero but different durations, keep both
-					// (could be different versions/remixes).
-					if durations[dupID] > 0 && durations[keepID] > 0 && durations[dupID] != durations[keepID] {
+		if err == nil {
+			type nameKey struct{ artist, title string }
+			var nameDupes []nameKey
+			for rows.Next() {
+				var a, t string
+				var c int
+				rows.Scan(&a, &t, &c)
+				nameDupes = append(nameDupes, nameKey{a, t})
+			}
+			rows.Close()
+			if len(nameDupes) > 0 {
+				deduped := 0
+				for _, nk := range nameDupes {
+					r, err := DB.Query(`SELECT id, duration FROM tracks WHERE LOWER(artist)=? AND LOWER(title)=? ORDER BY has_metadata DESC, duration DESC, mod_time DESC`, nk.artist, nk.title)
+					if err != nil {
 						continue
 					}
-					// Get the file path before deleting the DB row
-					var fp string
-					tx.QueryRow(`SELECT file_path FROM tracks WHERE id = ?`, dupID).Scan(&fp)
-					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
-					// Resolve and delete the physical file (primary library only).
-					// media: prefixed paths point into the read-only /media-music
-					// Docker mount (mounted as -v $MEDIA_MUSIC_PATH:/media-music),
-					// so the file cannot be deleted — os.Remove() would silently
-					// fail and the scanner would keep re-adding the orphaned track.
-					// For media: duplicates we only remove the DB entry; the shared
-					// file itself must stay for other services that read the mount.
-					if fp != "" && !strings.HasPrefix(fp, "media:") {
-						full := fp
-						if !filepath.IsAbs(full) {
-							full = filepath.Join(MusicDir, full)
-						}
-						if !strings.HasPrefix(full, MusicDir) {
-							full = filepath.Join(MusicDir, fp)
-						}
-						deletedFiles = append(deletedFiles, full)
-					} else if fp != "" {
-						log.Printf("[db] Skipping file deletion for media: path (read-only mount): %s", fp)
+					var ids []string
+					durations := map[string]int{}
+					for r.Next() {
+						var id string
+						var dur int
+						r.Scan(&id, &dur)
+						ids = append(ids, id)
+						durations[id] = dur
 					}
-					removed++
+					r.Close()
+					if len(ids) <= 1 {
+						continue
+					}
+					// Keep the best entry (already sorted: has_metadata DESC, duration
+					// DESC, mod_time DESC). Remove the rest from DB AND delete the
+					// duplicate files from disk so the scanner doesn't re-add them.
+					// When all durations are 0 (un-probed Soulseek downloads), still
+					// dedup — keep the one with best metadata / most recent mod_time.
+					keepID := ids[0]
+					removed := 0
+					var deletedFiles []string
+					tx, _ := DB.Begin()
+					for _, dupID := range ids[1:] {
+						// If both have non-zero but different durations, keep both
+						// (could be different versions/remixes).
+						if durations[dupID] > 0 && durations[keepID] > 0 && durations[dupID] != durations[keepID] {
+							continue
+						}
+						// Get the file path before deleting the DB row
+						var fp string
+						tx.QueryRow(`SELECT file_path FROM tracks WHERE id = ?`, dupID).Scan(&fp)
+						tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+						tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+						// Resolve and delete the physical file (primary library only).
+						// media: prefixed paths point into the read-only /media-music
+						// Docker mount (mounted as -v $MEDIA_MUSIC_PATH:/media-music),
+						// so the file cannot be deleted — os.Remove() would silently
+						// fail and the scanner would keep re-adding the orphaned track.
+						// For media: duplicates we only remove the DB entry; the shared
+						// file itself must stay for other services that read the mount.
+						if fp != "" && !strings.HasPrefix(fp, "media:") {
+							full := fp
+							if !filepath.IsAbs(full) {
+								full = filepath.Join(MusicDir, full)
+							}
+							if !strings.HasPrefix(full, MusicDir) {
+								full = filepath.Join(MusicDir, fp)
+							}
+							deletedFiles = append(deletedFiles, full)
+						} else if fp != "" {
+							log.Printf("[db] Skipping file deletion for media: path (read-only mount): %s", fp)
+						}
+						removed++
+					}
+					tx.Commit()
+					// Delete duplicate files after commit (best-effort, ignore errors)
+					for _, fp := range deletedFiles {
+						os.Remove(fp)
+					}
+					if removed > 0 {
+						deduped += removed
+						log.Printf("[db] Name deduped %s - %s: kept %s, removed %d duplicates", nk.artist, nk.title, keepID, removed)
+					}
 				}
-				tx.Commit()
-				// Delete duplicate files after commit (best-effort, ignore errors)
-				for _, fp := range deletedFiles {
-					os.Remove(fp)
+				if deduped > 0 {
+					log.Printf("[db] Pass 4: removed %d incomplete duplicates", deduped)
 				}
-				if removed > 0 {
-					deduped += removed
-					log.Printf("[db] Name deduped %s - %s: kept %s, removed %d duplicates", nk.artist, nk.title, keepID, removed)
-				}
-			}
-			if deduped > 0 {
-				log.Printf("[db] Pass 4: removed %d incomplete duplicates", deduped)
 			}
 		}
 	}
-}
 }
 
 func dedupByFilePath(path string) {
@@ -638,7 +644,7 @@ func DbAddUserRecent(userID, trackID string) error {
 }
 
 // DbGetPlaylists returns a user's own playlists plus shared/system playlists
-// (user_id = ''). Personal playlists are isolated per user.
+// (user_id = ”). Personal playlists are isolated per user.
 func DbGetPlaylists(userID string) []models.Playlist {
 	rows, err := DB.Query("SELECT id, name, created_at FROM playlists WHERE user_id = ? OR user_id = '' ORDER BY rowid", userID)
 	if err != nil {
@@ -924,8 +930,8 @@ func DbUpsertTrackWith(e DbExecer, t *models.Track) {
 		}
 		log.Printf("[track-new] id=%s path=%s caller=%s", t.ID, t.FilePath, caller)
 	}
-	e.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	e.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, genre_canonical, genre_source, genre_checked_at, duration, file_path, has_cover, mod_time, has_metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title=CASE WHEN tracks.has_metadata = 1 THEN tracks.title ELSE excluded.title END,
 			artist=CASE WHEN tracks.has_metadata = 1 THEN tracks.artist ELSE excluded.artist END,
@@ -935,13 +941,42 @@ func DbUpsertTrackWith(e DbExecer, t *models.Track) {
 			track_number=CASE WHEN tracks.has_metadata = 1 THEN tracks.track_number ELSE excluded.track_number END,
 			year=CASE WHEN tracks.has_metadata = 1 THEN tracks.year ELSE excluded.year END,
 			genre=CASE WHEN tracks.has_metadata = 1 THEN tracks.genre ELSE excluded.genre END,
+			genre_canonical=CASE
+				WHEN tracks.has_metadata = 1 THEN tracks.genre_canonical
+				WHEN excluded.genre_canonical <> '' THEN excluded.genre_canonical
+				WHEN excluded.genre_source = 'none' AND tracks.genre_source NOT IN ('musicbrainz', 'manual') THEN ''
+				ELSE tracks.genre_canonical END,
+			genre_source=CASE
+				WHEN tracks.has_metadata = 1 THEN tracks.genre_source
+				WHEN excluded.genre_canonical <> '' THEN excluded.genre_source
+				WHEN excluded.genre_source = 'none' AND tracks.genre_source NOT IN ('musicbrainz', 'manual') THEN 'none'
+				ELSE tracks.genre_source END,
+			genre_checked_at=CASE
+				WHEN tracks.has_metadata = 1 THEN tracks.genre_checked_at
+				WHEN excluded.genre_canonical <> '' THEN excluded.genre_checked_at
+				WHEN excluded.genre_source = 'none' AND tracks.genre_source NOT IN ('musicbrainz', 'manual') THEN 0
+				ELSE tracks.genre_checked_at END,
 			duration=CASE WHEN tracks.duration > 0 THEN tracks.duration ELSE excluded.duration END,
 			has_cover=excluded.has_cover,
 			mod_time=excluded.mod_time,
 			has_metadata=CASE WHEN tracks.has_metadata = 1 THEN 1 ELSE excluded.has_metadata END`,
 		t.ID, t.Title, t.Artist, t.Album, t.AlbumArtist, t.AlbumID,
-		t.TrackNumber, t.Year, t.Genre, t.Duration, t.FilePath,
+		t.TrackNumber, t.Year, t.Genre, t.GenreCanonical, t.GenreSource, t.GenreCheckedAt,
+		t.Duration, t.FilePath,
 		BoolToInt(t.HasCover), t.ModTime, BoolToInt(t.HasMetadata))
+}
+
+func hydrateTrackGenre(t *models.Track) {
+	if t.GenreCanonical != "" || t.GenreSource != "" {
+		return
+	}
+	genres := models.CanonicalGenres(t.Genre)
+	if len(genres) > 0 {
+		t.GenreCanonical = strings.Join(genres, ", ")
+		t.GenreSource = "tag"
+	} else {
+		t.GenreSource = "none"
+	}
 }
 
 func DbUpsertAlbum(a *models.Album) {
@@ -993,7 +1028,7 @@ func AlbumIDForTrack(trackID string) (string, bool) {
 }
 
 func DbLoadTracks() map[string]*models.Track {
-	rows, err := DB.Query(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata FROM tracks`)
+	rows, err := DB.Query(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, genre_canonical, genre_source, genre_checked_at, duration, file_path, has_cover, mod_time, has_metadata FROM tracks`)
 	if err != nil {
 		return map[string]*models.Track{}
 	}
@@ -1016,10 +1051,12 @@ func DbLoadTracks() map[string]*models.Track {
 		t := &models.Track{}
 		var hasCover, hasMetadata int
 		rows.Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist, &t.AlbumID,
-			&t.TrackNumber, &t.Year, &t.Genre, &t.Duration, &t.FilePath,
+			&t.TrackNumber, &t.Year, &t.Genre, &t.GenreCanonical, &t.GenreSource, &t.GenreCheckedAt,
+			&t.Duration, &t.FilePath,
 			&hasCover, &t.ModTime, &hasMetadata)
 		t.HasCover = hasCover == 1
 		t.HasMetadata = hasMetadata == 1
+		hydrateTrackGenre(t)
 		t.DownloadEnabled = !disabled[t.ID]
 		result[t.ID] = t
 	}
@@ -1050,15 +1087,17 @@ func DbLoadAlbums() map[string]*models.Album {
 func DbGetTrackByID(id string) *models.Track {
 	t := &models.Track{}
 	var hasCover, hasMetadata int
-	err := DB.QueryRow(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, duration, file_path, has_cover, mod_time, has_metadata FROM tracks WHERE id=?`, id).
+	err := DB.QueryRow(`SELECT id, title, artist, album, album_artist, album_id, track_number, year, genre, genre_canonical, genre_source, genre_checked_at, duration, file_path, has_cover, mod_time, has_metadata FROM tracks WHERE id=?`, id).
 		Scan(&t.ID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist, &t.AlbumID,
-			&t.TrackNumber, &t.Year, &t.Genre, &t.Duration, &t.FilePath,
+			&t.TrackNumber, &t.Year, &t.Genre, &t.GenreCanonical, &t.GenreSource, &t.GenreCheckedAt,
+			&t.Duration, &t.FilePath,
 			&hasCover, &t.ModTime, &hasMetadata)
 	if err != nil {
 		return nil
 	}
 	t.HasCover = hasCover == 1
 	t.HasMetadata = hasMetadata == 1
+	hydrateTrackGenre(t)
 	return t
 }
 

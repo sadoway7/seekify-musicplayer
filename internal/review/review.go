@@ -423,6 +423,27 @@ func DbInsertUncheckedReviews(newTracks map[string]*models.Track) {
 	tx.Commit()
 }
 
+func saveGenreResult(trackID, canonical, source string, checkedAt int64) bool {
+	store.Mu.Lock()
+	defer store.Mu.Unlock()
+	track, ok := store.Tracks[trackID]
+	if !ok {
+		return false
+	}
+	if track.GenreCanonical != "" || track.GenreCheckedAt != 0 {
+		return false
+	}
+	if _, err := store.DB.Exec(`UPDATE tracks SET genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?`,
+		canonical, source, checkedAt, trackID); err != nil {
+		log.Printf("[review-enrich] genre result save failed for %s: %v", trackID, err)
+		return false
+	}
+	track.GenreCanonical = canonical
+	track.GenreSource = source
+	track.GenreCheckedAt = checkedAt
+	return true
+}
+
 func DbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 	store.Mu.Lock()
 	track, exists := store.Tracks[trackID]
@@ -430,6 +451,7 @@ func DbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 		store.Mu.Unlock()
 		return
 	}
+	genreChanged := false
 	if v, ok := fields["title"].(string); ok && v != "" {
 		track.Title = v
 	}
@@ -448,8 +470,19 @@ func DbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 	if v, ok := fields["year"].(float64); ok {
 		track.Year = int(v)
 	}
-	if v, ok := fields["genre"].(string); ok {
-		track.Genre = v
+	if v, ok := fields["genreCanonical"].(string); ok {
+		genres := models.CanonicalGenres(v)
+		if len(genres) == 0 && strings.TrimSpace(v) != "" {
+			track.GenreCanonical = strings.TrimSpace(v)
+		} else if len(genres) > 0 {
+			track.GenreCanonical = strings.Join(genres, ", ")
+		}
+		track.GenreSource = "manual"
+		track.GenreCheckedAt = 0
+		if track.Genre != "" && track.GenreCanonical != "" {
+			track.Genre = track.GenreCanonical
+		}
+		genreChanged = true
 	}
 	if track.AlbumArtist == "" {
 		track.AlbumArtist = track.Artist
@@ -473,8 +506,9 @@ func DbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
 	if yr, ok := fields["year"].(float64); ok {
 		store.DB.Exec("UPDATE tracks SET year = ? WHERE id = ?", int(yr), track.ID)
 	}
-	if g, ok := fields["genre"].(string); ok {
-		store.DB.Exec("UPDATE tracks SET genre = ? WHERE id = ?", g, track.ID)
+	if genreChanged {
+		store.DB.Exec("UPDATE tracks SET genre = CASE WHEN ? = '' THEN genre ELSE ? END, genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?",
+			track.Genre, track.Genre, track.GenreCanonical, track.GenreSource, track.GenreCheckedAt, track.ID)
 	}
 
 	musicbrainz.RebuildAlbumsFromTracksLocked()
@@ -693,7 +727,7 @@ func CheckMetadataCompleteness(t *models.Track) []string {
 		}
 	}
 	if store.GetSettingBool("review_flag_missing_genre", true) {
-		if t.Genre == "" {
+		if t.GenreCanonical == "" {
 			flags = append(flags, "missing_genre")
 		}
 	}
@@ -987,7 +1021,7 @@ func QualityScore(t *models.Track) int {
 	if t.Year > 0 {
 		score += 1
 	}
-	if t.Genre != "" {
+	if t.GenreCanonical != "" {
 		score += 1
 	}
 	if t.Duration > 0 {
@@ -1057,7 +1091,7 @@ func StartReviewScheduler() {
 				if r := recover(); r != nil {
 					log.Printf("[review] panic recovered: %v\n%s", r, debug.Stack())
 				}
-				store.WorkerDone("review", nil)
+				store.WorkerDoneTick("review", didWork, nil)
 				ReviewMu.Lock()
 				ReviewActive = false
 				ReviewMu.Unlock()
@@ -1418,13 +1452,21 @@ func ReviewLogHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(logText))
 }
 
-// ReviewEnrichHandler batch-fetches cover art and metadata for all needs_review
-// tracks, then re-checks. Per track: MB metadata search (auto-apply if score
-// >= 0.7), then FetchAndCacheCover (which now has the album name from metadata).
+// ReviewEnrichHandler batch-fetches cover art and metadata for tracks missing
+// canonical genres or flagged for review. Per track: MB metadata search
+// (auto-apply if score >= 0.7), then genre lookup, then cover art.
 func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
-	// Diagnostic: check what we'd process BEFORE spawning goroutine
-	ids := DbGetTracksByReviewStatus("needs_review", 0)
-	log.Printf("[review-enrich] handler called, found %d needs_review IDs", len(ids))
+	store.Mu.RLock()
+	var ids []string
+	seen := make(map[string]bool)
+	for _, t := range store.Tracks {
+		if t.GenreCanonical == "" && t.GenreSource != "manual" && !seen[t.ID] {
+			ids = append(ids, t.ID)
+			seen[t.ID] = true
+		}
+	}
+	store.Mu.RUnlock()
+	log.Printf("[review-enrich] handler called, found %d tracks missing canonical genre", len(ids))
 
 	writeJSON(w, map[string]interface{}{"status": "started", "found": len(ids)})
 
@@ -1446,82 +1488,146 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 		enrichLastError = ""
 
 		if len(ids) == 0 {
-			log.Printf("[review-enrich] no needs_review tracks, aborting")
+			log.Printf("[review-enrich] no tracks missing canonical genre, aborting")
 			return
 		}
 
-		// Snapshot tracks (we'll modify under lock per-track)
+		// Snapshot IDs; each iteration re-reads the current track under the lock.
 		store.Mu.RLock()
-		var tracks []*models.Track
+		var trackIDs []string
 		for _, id := range ids {
-			if t, ok := store.Tracks[id]; ok {
-				tracks = append(tracks, t)
+			if _, ok := store.Tracks[id]; ok {
+				trackIDs = append(trackIDs, id)
 			}
 		}
 		store.Mu.RUnlock()
 
 		enrichProgress.Lock()
 		enrichProgress.Checked = 0
-		enrichProgress.Total = len(tracks)
+		enrichProgress.Total = len(trackIDs)
 		enrichProgress.CurrentTrack = "Starting..."
 		enrichProgress.Unlock()
 
-		log.Printf("[review-enrich] %d tracks to enrich", len(tracks))
+		log.Printf("[review-enrich] %d tracks to enrich", len(trackIDs))
 		fetchedCovers := 0
 		appliedMeta := 0
+		appliedGenres := 0
 
-		for i, t := range tracks {
+		for i, trackID := range trackIDs {
+			store.Mu.RLock()
+			current, ok := store.Tracks[trackID]
+			if !ok {
+				store.Mu.RUnlock()
+				continue
+			}
+			snapshot := *current
+			store.Mu.RUnlock()
+
 			enrichProgress.Lock()
 			enrichProgress.Checked = i
-			enrichProgress.CurrentTrack = t.Artist + " — " + t.Title
+			enrichProgress.CurrentTrack = snapshot.Artist + " — " + snapshot.Title
 			enrichProgress.Unlock()
 
 			// Phase A: metadata — fill missing/derived fields from MB
-			searchTitle := t.Title
-			searchArtist := t.Artist
+			searchTitle := snapshot.Title
+			searchArtist := snapshot.Artist
 			if searchTitle == "" {
 				continue
 			}
 
 			cands, _, err := musicbrainz.MbSearchRecordingsPaged(searchArtist, searchTitle, 5, 0)
-			if err == nil && len(cands) > 0 {
-				best := cands[0]
-				score := musicbrainz.ScoreMatch(searchArtist, searchTitle, best.Artist, best.Title, best.Album)
-				if score >= 0.7 {
-					store.Mu.Lock()
-					changed := false
-					if best.Artist != "" && t.Artist != best.Artist {
-						t.Artist = best.Artist
-						changed = true
-					}
-					if best.Title != "" && t.Title != best.Title {
-						t.Title = best.Title
-						changed = true
-					}
-					if best.Album != "" && t.Album != best.Album {
-						t.Album = best.Album
-						changed = true
-					}
-					if best.Artist != "" && t.AlbumArtist == "" {
-						t.AlbumArtist = best.Artist
-						changed = true
-					}
-					if changed {
-						if t.Album != "" {
-							t.AlbumID = models.GenerateAlbumID(t.AlbumArtist, t.Album)
-						}
-						t.HasMetadata = true
-						store.DbUpdateTrackMetadata(t.ID, t.Title, t.Artist, t.Album, t.AlbumArtist)
-						appliedMeta++
-					}
+		if err == nil && len(cands) > 0 {
+			best := cands[0]
+			score := musicbrainz.ScoreMatch(searchArtist, searchTitle, best.Artist, best.Title, best.Album)
+			if score >= 0.7 {
+				store.Mu.Lock()
+				current, ok = store.Tracks[trackID]
+				if !ok {
 					store.Mu.Unlock()
+					continue
+				}
+				// Only fill in missing fields; never overwrite existing metadata
+				// during a genre-enrich run so album IDs (and their covers) stay stable.
+				changed := false
+				if current.Artist == "" && best.Artist != "" {
+					current.Artist = best.Artist
+					changed = true
+				}
+				if current.Title == "" && best.Title != "" {
+					current.Title = best.Title
+					changed = true
+				}
+				if current.Album == "" && best.Album != "" {
+					current.Album = best.Album
+					changed = true
+				}
+				if current.AlbumArtist == "" && best.Artist != "" {
+					current.AlbumArtist = best.Artist
+					changed = true
+				}
+				if changed {
+					if current.Album != "" {
+						current.AlbumID = models.GenerateAlbumID(current.AlbumArtist, current.Album)
+					}
+					current.HasMetadata = true
+					store.DbUpdateTrackMetadata(current.ID, current.Title, current.Artist, current.Album, current.AlbumArtist)
+					appliedMeta++
+				}
+				store.Mu.Unlock()
+			}
+		}
+
+
+		if snapshot.GenreCanonical == "" && snapshot.GenreSource != "manual" && err == nil {
+			if len(cands) > 0 {
+				best := cands[0]
+				if musicbrainz.ScoreMatch(searchArtist, searchTitle, best.Artist, best.Title, best.Album) >= 0.7 {
+					names, genreErr := musicbrainz.MbLookupRecordingGenres(best.RecordingID)
+					if genreErr != nil {
+						log.Printf("[review-enrich] genre lookup failed for %s: %v", trackID, genreErr)
+					}
+					if len(names) == 0 && best.ArtistID != "" {
+						names, genreErr = musicbrainz.MbLookupArtistGenres(best.ArtistID)
+						if genreErr != nil {
+							log.Printf("[review-enrich] artist genre lookup failed for %s: %v", trackID, genreErr)
+						}
+					}
+				var canonical []string
+				seen := map[string]bool{}
+				for _, name := range names {
+					for _, g := range models.CanonicalGenres(name) {
+						if !seen[g] {
+							seen[g] = true
+							canonical = append(canonical, g)
+						}
+					}
+				}
+				const maxGenres = 3
+				if len(canonical) > maxGenres {
+					canonical = canonical[:maxGenres]
+				}
+				if len(canonical) > 0 {
+					joined := strings.Join(canonical, ", ")
+					if saveGenreResult(trackID, joined, "musicbrainz", time.Now().Unix()) {
+						appliedGenres++
+					}
+				}
+
 				}
 			}
+		}
+
 
 			// Phase B: cover — now album may be populated from metadata
-			albumID := t.AlbumID
-			artist := t.Artist
-			album := t.Album
+			store.Mu.RLock()
+			current = store.Tracks[trackID]
+			albumID, artist, album := "", "", ""
+			if current != nil {
+				albumID = current.AlbumID
+				artist = current.Artist
+				album = current.Album
+			}
+			store.Mu.RUnlock()
 			if albumID != "" && artist != "" && album != "" {
 				// Check if cover already exists
 				store.Mu.RLock()
@@ -1541,21 +1647,17 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(300 * time.Millisecond)
 		}
 
-		log.Printf("[review-enrich] done: %d meta applied, %d covers fetched", appliedMeta, fetchedCovers)
+		log.Printf("[review-enrich] done: %d meta applied, %d genres applied, %d covers fetched", appliedMeta, appliedGenres, fetchedCovers)
 
-		// Mark processed tracks unchecked so the periodic review worker
-		// re-evaluates them on its next tick (clears flags for tracks whose
-		// issues are now fixed). We do NOT call RunReviewBatch inline — that
-		// shares ReviewProgressData with the periodic worker and the two race,
-		// causing an infinite loop.
-		// ponytail: let the existing worker do the re-eval; enrich's only job
-		// is fetching meta+covers.
-		for _, t := range tracks {
-			status, _ := DbGetReviewForTrack(t.ID)
-			if status != "reviewed_ok" {
-				DbSetReviewStatus(t.ID, "unchecked", "[]", "enrich")
+		// Re-evaluate only tracks that were actually in needs_review before this
+		// run. Tracks enriched solely because they lacked a genre should not have
+		// their review status touched.
+		for _, trackID := range trackIDs {
+			status, _ := DbGetReviewForTrack(trackID)
+			if status == "needs_review" {
+				DbSetReviewStatus(trackID, "unchecked", "[]", "enrich")
 			}
 		}
-		log.Printf("[review-enrich] marked %d tracks for re-eval", len(tracks))
+		log.Printf("[review-enrich] marked %d needs_review tracks for re-eval", len(trackIDs))
 	})
 }

@@ -10,6 +10,9 @@ type Track struct {
 	TrackNumber      int    `json:"trackNumber"`
 	Year             int    `json:"year"`
 	Genre            string `json:"genre"`
+	GenreCanonical   string `json:"genreCanonical"`
+	GenreSource      string `json:"-"`
+	GenreCheckedAt   int64  `json:"-"`
 	Duration         int    `json:"duration"`
 	FilePath         string `json:"filePath"`
 	HasCover         bool   `json:"hasCover"`

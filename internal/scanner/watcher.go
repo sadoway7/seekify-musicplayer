@@ -153,7 +153,10 @@ func ForceRescan() {
 
 func CheckAndRescan() {
 	store.WorkerStart("scanner")
-	defer store.WorkerDone("scanner", nil)
+	didWork := false
+	defer func() {
+		store.WorkerDoneTick("scanner", didWork, nil)
+	}()
 
 	// Don't rescan while a scan is already running (e.g. startup scan still
 	// in progress); the next watcher tick will pick up the changes.
@@ -236,6 +239,7 @@ func CheckAndRescan() {
 		if LibraryVersionAdd != nil {
 			LibraryVersionAdd(1)
 		}
+		didWork = true
 	}
 
 	watcherMu.Lock()

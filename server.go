@@ -85,6 +85,7 @@ func main() {
 	store.CustomCovers = make(map[string]bool)
 
 	store.InitDB(filepath.Join("data", "music.db"))
+	_ = os.Setenv("MUSICAPP_MB_RATE_FILE", store.DBPath+".mb-rate")
 	store.LoadCustomCovers()
 	downloads.InitDownloadTables()
 	watched.InitWatchedTables()
