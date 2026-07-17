@@ -188,10 +188,8 @@ window.ShuffleDie = (() => {
       vec3 surface = mix(body, lime, pips);
 
       vec3 lightDirection = normalize(vec3(-0.62, 0.88, 0.68));
-      float diffuse = max(dot(normal, lightDirection), 0.0);
-      float midLight = smoothstep(0.18, 0.42, diffuse);
-      float brightLight = smoothstep(0.58, 0.84, diffuse);
-      float toonLight = 0.46 + midLight * 0.29 + brightLight * 0.28;
+      float wrappedLight = clamp((dot(normal, lightDirection) + 0.30) / 1.30, 0.0, 1.0);
+      float toonLight = mix(0.50, 1.05, smoothstep(0.0, 1.0, wrappedLight));
       vec3 viewDirection = normalize(rayOrigin - point);
       vec3 halfDirection = normalize(lightDirection + viewDirection);
       float specular = smoothstep(0.86, 0.94, max(dot(normal, halfDirection), 0.0)) * 0.065;
@@ -296,7 +294,7 @@ window.ShuffleDie = (() => {
     function draw(time) {
       if (disposed) return;
       resize();
-      const idleTime = time * 1.4;
+      const idleTime = time * 2.2;
       const idleX = reducedMotion || dragging ? 0
         : Math.sin(idleTime * 0.00009) * 0.36 + Math.sin(idleTime * 0.000031 + 1.7) * 0.18;
       const idleY = reducedMotion || dragging ? 0
