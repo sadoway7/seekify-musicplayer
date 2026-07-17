@@ -5,6 +5,21 @@ changed, grouped by date. The `Unreleased` block at the top holds whatever's in
 flight. When a batch goes out, the date gets filled in and a new `Unreleased`
 block opens. Newest entries go at the top of their block.
 
+## Looking at
+
+Not promised, not scheduled — just on the radar.
+
+- more visualizer shader looks
+- smarter duplicate detection across albums and sources
+- playlist import/export (m3u, xspf)
+- lyrics sync in the now-playing view
+- a cleaner first-run experience
+- stats page (most-played, listening time, 7/30-day rolls)
+- smart / auto-playlists by rule
+- rotating mood mix on the home screen
+- on-the-fly opus transcode
+- Spotify import → finder/autodownloader
+
 ## Unreleased
 
 ## 2026-07-17

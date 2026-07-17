@@ -1380,7 +1380,7 @@ const UI = {
           + this.renderTrackList(results, { showArt: true });
       }
     } else {
-      container.innerHTML = '';
+      container.innerHTML = this._renderBrowseGrid();
     }
   },
 
