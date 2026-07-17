@@ -236,11 +236,27 @@
   touch-action: none;
 }
 
+.shuffle-die-stage::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  z-index: 0;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(212, 240, 64, 0.18), rgba(212, 240, 64, 0.06) 45%, transparent 72%);
+  filter: blur(14px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
 .shuffle-die-stage::after {
   content: '';
   position: absolute;
   left: 50%;
   top: 73%;
+  z-index: 0;
   width: 55%;
   height: 10%;
   border-radius: 50%;

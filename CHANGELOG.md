@@ -7,6 +7,7 @@ block opens. Newest entries go at the top of their block.
 
 ## Unreleased
 
+- Home: add a subtle diffused lime glow behind the 3D shuffle die without restoring a visible tile or container.
 - Home: supersample the 3D shuffle die canvas for smoother anti-aliased edges as it rotates.
 - Home: remove the shuffle die's remaining stepped shadow ramps and increase its passive rotation to 2.2× the original speed.
 - Home: increase the 3D shuffle die's passive rotation speed without changing its press tumble or drag controls.
