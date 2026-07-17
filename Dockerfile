@@ -13,6 +13,7 @@ RUN apk add --no-cache python3 py3-pip ffmpeg \
 WORKDIR /app
 COPY --from=build /build/server .
 COPY index.html .
+COPY assets/ assets/
 COPY css/ css/
 COPY js/ js/
 COPY scripts/ scripts/
