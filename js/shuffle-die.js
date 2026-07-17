@@ -296,12 +296,13 @@ window.ShuffleDie = (() => {
     function draw(time) {
       if (disposed) return;
       resize();
+      const idleTime = time * 1.4;
       const idleX = reducedMotion || dragging ? 0
-        : Math.sin(time * 0.00009) * 0.36 + Math.sin(time * 0.000031 + 1.7) * 0.18;
+        : Math.sin(idleTime * 0.00009) * 0.36 + Math.sin(idleTime * 0.000031 + 1.7) * 0.18;
       const idleY = reducedMotion || dragging ? 0
-        : Math.sin(time * 0.000075 + 2.2) * 0.58 + Math.sin(time * 0.000023) * 0.25;
+        : Math.sin(idleTime * 0.000075 + 2.2) * 0.58 + Math.sin(idleTime * 0.000023) * 0.25;
       const idleZ = reducedMotion || dragging ? 0
-        : Math.sin(time * 0.000064 + 0.7) * 0.22 + Math.sin(time * 0.000019 + 2.8) * 0.10;
+        : Math.sin(idleTime * 0.000064 + 0.7) * 0.22 + Math.sin(idleTime * 0.000019 + 2.8) * 0.10;
 
       let spinX = 0;
       let spinY = 0;
