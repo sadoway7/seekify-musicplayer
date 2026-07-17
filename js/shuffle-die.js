@@ -282,7 +282,7 @@ window.ShuffleDie = (() => {
 
     function resize() {
       const cssSize = Math.min(stage.clientWidth, stage.clientHeight);
-      const scale = Math.min(devicePixelRatio || 1, 1.15);
+      const scale = Math.min(devicePixelRatio || 1, 1.6);
       const size = Math.max(1, Math.round(cssSize * scale));
       if (canvas.width !== size || canvas.height !== size) {
         canvas.width = size;
