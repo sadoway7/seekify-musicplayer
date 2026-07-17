@@ -189,17 +189,19 @@ window.ShuffleDie = (() => {
 
       vec3 lightDirection = normalize(vec3(-0.62, 0.88, 0.68));
       float diffuse = max(dot(normal, lightDirection), 0.0);
-      float toonLight = 0.43;
-      if (diffuse > 0.28) toonLight = 0.72;
-      if (diffuse > 0.66) toonLight = 1.08;
+      float midLight = smoothstep(0.18, 0.42, diffuse);
+      float brightLight = smoothstep(0.58, 0.84, diffuse);
+      float toonLight = 0.46 + midLight * 0.29 + brightLight * 0.28;
       vec3 viewDirection = normalize(rayOrigin - point);
       vec3 halfDirection = normalize(lightDirection + viewDirection);
-      float specular = step(0.9, max(dot(normal, halfDirection), 0.0)) * 0.075;
+      float specular = smoothstep(0.86, 0.94, max(dot(normal, halfDirection), 0.0)) * 0.065;
       float facing = max(dot(normal, viewDirection), 0.0);
       vec3 color = surface * toonLight + specular + lime * pips * 0.04;
       float outline = 1.0 - smoothstep(0.05, 0.20, facing);
       color = mix(color, vec3(0.075, 0.082, 0.072), outline * 0.82);
       color = pow(color, vec3(1.0 / 2.2));
+      float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+      color += (dither - 0.5) / 320.0;
       gl_FragColor = vec4(color, 1.0);
     }
   `;

@@ -7,6 +7,7 @@ block opens. Newest entries go at the top of their block.
 
 ## Unreleased
 
+- Home: soften the 3D shuffle die's lighting and specular transitions and add subtle dithering, preserving its cartoon character without visible color banding.
 - Docker: package the Shuffle All fallback artwork so iPhone and other browsers without an active WebGL renderer never show a broken image.
 - Home: replace Shuffle All artwork with a larger, unframed, low-power cel-shaded 3D die that drifts slowly, has concave lime pips, tumbles immediately on press, supports drag rotation, and keeps a static fallback for browsers without WebGL.
 
