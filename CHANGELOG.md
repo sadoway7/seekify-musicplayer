@@ -10,10 +10,8 @@ Not promised, not scheduled — just on the radar.
 
 - more visualizer shader looks
 - smarter duplicate detection across albums and sources
-- playlist import/export (m3u, xspf)
 - lyrics sync in the now-playing view
-- a cleaner first-run experience
-- stats page (most-played, listening time, 7/30-day rolls)
+- listening stats powering smart playlist generation, song-based playlists, genre mixing, and preference-based playlists
 - smart / auto-playlists by rule
 - rotating mood mix on the home screen
 - on-the-fly opus transcode
