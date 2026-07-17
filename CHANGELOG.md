@@ -11,8 +11,7 @@ Not promised, not scheduled — just on the radar.
 - more visualizer shader looks
 - smarter duplicate detection across albums and sources
 - lyrics sync in the now-playing view
-- listening stats powering smart playlist generation, song-based playlists, genre mixing, and preference-based playlists
-- smart / auto-playlists by rule
+- stats-driven smart playlists (song-based, genre mixing, preferences, rules)
 - rotating mood mix on the home screen
 - on-the-fly opus transcode
 - Spotify import → finder/autodownloader
