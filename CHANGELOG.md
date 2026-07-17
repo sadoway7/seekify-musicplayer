@@ -1,9 +1,8 @@
 # Changelog
 
 This project doesn't ship numbered releases. This is a running log of what
-changed, grouped by date. The `Unreleased` block at the top holds whatever's in
-flight. When a batch goes out, the date gets filled in and a new `Unreleased`
-block opens. Newest entries go at the top of their block.
+changed, grouped by date. The `Looking at` block at the top holds what's on the
+radar but not started. Newest entries go at the top of their dated block.
 
 ## Looking at
 
@@ -19,8 +18,6 @@ Not promised, not scheduled — just on the radar.
 - rotating mood mix on the home screen
 - on-the-fly opus transcode
 - Spotify import → finder/autodownloader
-
-## Unreleased
 
 ## 2026-07-17
 
