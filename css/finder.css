@@ -52,7 +52,7 @@
    row of sub-chips that cluttered the header. */
 .finder-search-container {
   position: relative;
-  margin: 12px 0 10px;
+  margin: 12px var(--page-margin) 10px;
 }
 .finder-type-dropdown {
   position: absolute;
@@ -1469,6 +1469,8 @@
   border-radius: 999px;
   cursor: pointer;
   transition: background 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .finder-load-more-btn:hover {
