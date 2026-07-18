@@ -1,7 +1,7 @@
 <Container version="2">
   <Name>Seekify</Name>
   <Repository>ghcr.io/sadoway7/seekify:latest</Repository>
-  <Registry>https://ghcr.io</Registry>
+  <Registry>https://github.com/sadoway7/seekify-musicplayer/pkgs/container/seekify</Registry>
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
