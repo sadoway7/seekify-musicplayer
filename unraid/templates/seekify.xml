@@ -21,7 +21,7 @@ WARNING: Seekify performs automatic actions on your music library - it re-tags f
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/unraid/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>Multi-genre support, varied genre card covers, worker last-run timestamps reflect real work.</Changes>
+  <Changes>Initial Community Apps submission.</Changes>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
   <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.png</Screenshot>
