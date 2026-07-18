@@ -363,12 +363,12 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		tx.Commit()
 	}
 
-	if InsertUncheckedReviews != nil {
-		InsertUncheckedReviews(newTracks)
-	}
-	if len(newTracks) > 0 && WakeReviewWorker != nil {
-		WakeReviewWorker()
-	}
+	// Review callbacks touch only the local newTracks map and their own DB
+	// tables — no store.Tracks/Albums access. Running them outside store.Mu
+	// avoids blocking all library reads (every /api/library, /api/stream,
+	// /api/cover handler takes Mu.RLock) during the review insert phase.
+	pendingReviews := newTracks
+	needsWake := len(newTracks) > 0
 
 	if prefix == "" {
 		for oldID, oldTrack := range store.Tracks {
@@ -452,19 +452,18 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	}
 	store.Mu.Unlock()
 
-	store.CoverMu.Lock()
+	// Review callbacks run after Mu is released — they snapshot newTracks
+	// (a local) and hit only the track_reviews table.
+	if pendingReviews != nil && InsertUncheckedReviews != nil {
+		InsertUncheckedReviews(pendingReviews)
+	}
+	if needsWake && WakeReviewWorker != nil {
+		WakeReviewWorker()
+	}
+
 	for id, data := range newCovers {
-		store.CoverCache[id] = data
-		store.CoverCacheOrder = append(store.CoverCacheOrder, id)
-		store.CoverCacheBytes += int64(len(data))
+		store.CacheCover(id, data)
 	}
-	for store.CoverCacheBytes > store.MaxCoverCacheBytes && len(store.CoverCacheOrder) > 1 {
-		oldest := store.CoverCacheOrder[0]
-		store.CoverCacheOrder = store.CoverCacheOrder[1:]
-		store.CoverCacheBytes -= int64(len(store.CoverCache[oldest]))
-		delete(store.CoverCache, oldest)
-	}
-	store.CoverMu.Unlock()
 
 	stats.Added = len(newTracks)
 	if prefix == "" {

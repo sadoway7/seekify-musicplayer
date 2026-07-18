@@ -22,6 +22,7 @@ Object.assign(UI, {
     sheet.style.removeProperty('bottom');
     sheet.style.removeProperty('left');
     sheet.style.removeProperty('right');
+    sheet.style.removeProperty('transform');
 
     if (triggerEl) {
       const rect = triggerEl.getBoundingClientRect();
@@ -49,6 +50,12 @@ Object.assign(UI, {
 
       sheet.style.top = top + 'px';
       sheet.style.left = left + 'px';
+    } else {
+      // No trigger (e.g. keyboard-activated): center instead of falling to the
+      // flex-end bottom of the inset:0 overlay.
+      sheet.style.top = '50%';
+      sheet.style.left = '50%';
+      sheet.style.transform = 'translate(-50%, -50%)';
     }
   },
 
@@ -293,6 +300,15 @@ Object.assign(UI, {
   _showQueueItemContextMenu(index, triggerEl) {
     const track = Player.queue[index];
     if (!track) return;
+    // "Play Next" on the currently-playing track is a silent no-op (Player
+    // .moveToPlayNext guards index === currentIndex) — omit it there so the
+    // user isn't offered a dead action.
+    const playNext = (index !== Player.currentIndex)
+      ? [{ label: 'Play Next', icon: Icons.play(), action: () => {
+            this.hideContextMenu();
+            Player.moveToPlayNext(index);
+          }}]
+      : [];
     const menuItems = [
       { label: 'Remove from Queue', icon: Icons.trash(), action: () => {
         this.hideContextMenu();
@@ -300,10 +316,7 @@ Object.assign(UI, {
           Player.removeFromQueue(index);
         });
       }},
-      { label: 'Play Next', icon: Icons.play(), action: () => {
-        this.hideContextMenu();
-        Player.moveToPlayNext(index);
-      }},
+      ...playNext,
       { type: 'divider' },
       { label: 'Go to Album', icon: Icons.library(), action: () => {
         this.hideContextMenu();
@@ -360,10 +373,13 @@ Object.assign(UI, {
     title.textContent = this._esc(track.title);
 
     const renderCandidates = (candidates, hasMore, append) => {
-      // Merge with already-shown candidates (dedup by recording id-ish key).
+      // Merge with already-shown candidates (dedup by a key that distinguishes
+      // the same recording across different releases — title+artist alone
+      // collapses legitimate alternate releases: singles, compilations, remasters).
+      const candKey = (c) => (c.albumId || (c.title + '|' + c.artist + '|' + (c.album || '')));
       if (append && this._rescanShown) {
-        const seen = new Set(this._rescanShown.map(c => c.title + '|' + c.artist));
-        candidates = candidates.filter(c => !seen.has(c.title + '|' + c.artist));
+        const seen = new Set(this._rescanShown.map(candKey));
+        candidates = candidates.filter(c => !seen.has(candKey(c)));
         this._rescanShown = this._rescanShown.concat(candidates);
         candidates = this._rescanShown;
       } else {

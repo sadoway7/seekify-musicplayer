@@ -9,7 +9,6 @@ Object.assign(UI, {
     if (!this._finderType) this._finderType = 'artist';
     if (!this._finderQuery) this._finderQuery = '';
     if (!this._finderResults) this._finderResults = null;
-    if (!this._finderHistory) this._finderHistory = JSON.parse(localStorage.getItem('finderHistory') || '[]');
     if (!this._finderTab) this._finderTab = 'search';
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
 
@@ -24,10 +23,10 @@ Object.assign(UI, {
 
     if (this._finderTab === 'downloads') {
       html += '</div>'
-        + '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
+        + '<div id="downloads-content" class="finder-constrained"><div class="loading-spinner" style="margin:40px auto"></div></div>';
     } else if (this._finderTab === 'bulk') {
       html += '</div>'
-        + '<div style="padding:16px">'
+        + '<div class="bulk-import-content" style="padding:16px">'
         + '<div class="settings-section-desc">Paste a list of tracks to download. One per line: "Artist - Title"</div>'
         + '<textarea id="bulk-import-input" class="settings-textarea" rows="10" style="margin-bottom:12px;font-size:14px" placeholder="Daft Punk - Around the World&#10;The Prodigy - Smack My Bitch Up&#10;Joey Valence and Brae - WATCH YO STEP&#10;Sisqo - Thong Song"></textarea>'
         + '<div class="settings-actions">'
@@ -37,25 +36,29 @@ Object.assign(UI, {
         + '<div id="bulk-import-result"></div>'
         + '</div>';
     } else {
-      const subChips = '<div class="finder-type-chips finder-sub-chips">'
-        + '<button class="chip finder-sub' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist">Artists</button>'
-        + '<button class="chip finder-sub' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording">Songs</button>'
-        + '<button class="chip finder-sub' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release">Albums</button>'
+      const typeLabel = { artist: 'Artists', recording: 'Songs', release: 'Albums' }[this._finderType] || 'Artists';
+      const typeMenu = '<div class="finder-type-dropdown">'
+        + '<button class="finder-type-toggle" data-finder-type-toggle aria-label="Search type" aria-haspopup="true" aria-expanded="false">'
+        + '<span>' + typeLabel + '</span>' + Icons.chevronDown()
+        + '</button>'
+        + '<div class="finder-type-menu" role="menu" hidden>'
+        + '<button class="finder-type-option' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist" role="menuitem">Artists</button>'
+        + '<button class="finder-type-option' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording" role="menuitem">Songs</button>'
+        + '<button class="finder-type-option' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release" role="menuitem">Albums</button>'
+        + '</div>'
         + '</div>';
       html += '<div class="search-container finder-search-container">'
         + '<span class="search-icon">' + Icons.search() + '</span>'
-        + '<input class="search-input finder-search-input" type="search" enterkeyhint="search" placeholder="Search artists, songs, albums..." value="' + this._esc(this._finderQuery) + '">'
-        + subChips
+        + '<input class="search-input finder-search-input" type="search" enterkeyhint="search" placeholder="Search ' + typeLabel.toLowerCase() + '..." value="' + this._esc(this._finderQuery) + '">'
+        + typeMenu
         + '</div>'
-        + '</div>'
-        + '<div class="finder-mobile-chips">' + subChips + '</div>';
+        + '</div>';
 
-      if (!this._finderQuery && this._finderHistory.length > 0) {
-        html += '<div class="finder-search-history">';
-        this._finderHistory.slice(0, 5).forEach(h => {
-          html += '<button class="finder-history-chip" data-history="' + this._esc(h) + '">' + this._esc(h) + '</button>';
-        });
-        html += '</div>';
+      if (!this._finderQuery) {
+        html += '<div class="empty-state" id="finder-empty-state" style="padding:48px 22px">'
+          + '<div class="empty-state-title">Find music to rip</div>'
+          + '<div class="empty-state-text">Search for an artist, song, or album. Pick a result to download it from Soulseek or YouTube.</div>'
+          + '</div>';
       }
 
       html += '<div id="finder-results"></div>';
@@ -92,18 +95,35 @@ Object.assign(UI, {
       });
     }
 
-    this.els.content.querySelectorAll('.finder-sub-chips .chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const newType = chip.dataset.finderType;
-        if (newType === this._finderType) return;
-        this._finderType = newType;
-        if (this._finderQuery) {
-          this._renderFinderResults();
-        } else {
-          this.renderFinder();
-        }
+    const typeToggle = this.els.content.querySelector('[data-finder-type-toggle]');
+    const typeMenu = this.els.content.querySelector('.finder-type-menu');
+    if (typeToggle && typeMenu) {
+      const closeTypeMenu = () => {
+        typeMenu.hidden = true;
+        typeToggle.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('click', onTypeOutside);
+      };
+      const onTypeOutside = (e) => {
+        if (!typeMenu.contains(e.target) && e.target !== typeToggle) closeTypeMenu();
+      };
+      typeToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = typeMenu.hidden;
+        typeMenu.hidden = !open;
+        typeToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) document.addEventListener('click', onTypeOutside);
+        else document.removeEventListener('click', onTypeOutside);
       });
-    });
+      typeMenu.querySelectorAll('.finder-type-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          const newType = opt.dataset.finderType;
+          closeTypeMenu();
+          if (newType === this._finderType) return;
+          this._finderType = newType;
+          this.renderFinder();
+        });
+      });
+    }
 
     if (this._finderQuery) {
       this._renderFinderResults();
@@ -111,14 +131,6 @@ Object.assign(UI, {
 
     this._clearPollTimers();
     this._pollFinderStatus();
-
-    this.els.content.querySelectorAll('.finder-history-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        this._finderQuery = chip.dataset.history;
-        this.renderFinder();
-        this._renderFinderResults();
-      });
-    });
 
     const bulkImportBtn = document.getElementById('btn-bulk-import');
     if (bulkImportBtn) bulkImportBtn.addEventListener('click', () => this._doBulkImport());
@@ -294,10 +306,10 @@ Object.assign(UI, {
       if (failedCount > 0) chips.push({ key: 'failed', label: 'Failed', count: failedCount });
       if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
       html += '<div class="queue-stats-actions">'
-        + (Store.isAdmin ? '<button class="settings-btn" id="btn-dl-settings">' + Icons.settings() + '<span style="margin-left:6px">Settings</span></button>' : '')
-        + (Store.isAdmin ? '<button class="settings-btn" id="btn-dl-pause">' + (this._downloadPaused ? '&#x25b6; Resume' : '&#x23f8; Pause') + '</button>' : '')
-        + (failedCount > 0 ? '<button class="settings-btn settings-btn-primary" id="btn-retry-all-failed">&#x21bb; Retry All</button>' : '')
-        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history">Clear History</button>' : '')
+        + (Store.isAdmin ? '<button class="settings-btn icon-btn" id="btn-dl-settings" title="Settings" aria-label="Download settings">' + Icons.gear() + '</button>' : '')
+        + (Store.isAdmin ? '<button class="settings-btn icon-btn" id="btn-dl-pause" title="' + (this._downloadPaused ? 'Resume' : 'Pause') + '" aria-label="' + (this._downloadPaused ? 'Resume downloads' : 'Pause downloads') + '">' + (this._downloadPaused ? Icons.play() : Icons.pause()) + '</button>' : '')
+        + (failedCount > 0 ? '<button class="settings-btn icon-btn" id="btn-retry-all-failed" title="Retry All" aria-label="Retry all failed">' + Icons.refresh() + '</button>' : '')
+        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" title="Clear History" aria-label="Clear completed history">Clear</button>' : '')
         + '</div>';
       let chipsHtml = '<div class="dl-chips">';
       chips.forEach(c => {
@@ -392,10 +404,10 @@ Object.assign(UI, {
       + '</div>'
           + '</div>'
       + '<div class="queue-job-actions">'
-      + (needsSelection ? '<button class="queue-item-select" data-job-id="' + this._esc(j.id) + '" title="Pick a source">&#x2699;</button>' : '')
+      + (needsSelection ? '<button class="queue-item-select" data-job-id="' + this._esc(j.id) + '" title="Pick a source" aria-label="Pick a source">&#x2699;</button>' : '')
       + (completed && j.filePath ? '<a class="queue-item-download" href="' + Api.downloadJobUrl(j.id) + '" title="Download file" download>' + Icons.download() + '</a>' : '')
-      + (failed ? '<button class="queue-item-retry" data-job-id="' + this._esc(j.id) + '" title="Retry">&#x21bb;</button>' : '')
-      + '<button class="queue-item-delete" data-job-id="' + this._esc(j.id) + '" title="Remove">&times;</button>'
+      + (failed ? '<button class="queue-item-retry" data-job-id="' + this._esc(j.id) + '" title="Retry" aria-label="Retry">&#x21bb;</button>' : '')
+      + '<button class="queue-item-delete" data-job-id="' + this._esc(j.id) + '" title="Remove" aria-label="Remove">&times;</button>'
       + '</div>'
           + '</div>';
       });
@@ -512,7 +524,9 @@ Object.assign(UI, {
           try {
             const res = await Api.toggleDownloadPause();
             this._downloadPaused = res.paused;
-            pauseBtn.innerHTML = res.paused ? '&#x25b6; Resume' : '&#x23f8; Pause';
+            pauseBtn.innerHTML = res.paused ? Icons.play() : Icons.pause();
+            pauseBtn.title = res.paused ? 'Resume' : 'Pause';
+            pauseBtn.setAttribute('aria-label', res.paused ? 'Resume downloads' : 'Pause downloads');
           } catch (e) {
             this.showToast('Failed to toggle pause');
           }
@@ -525,22 +539,27 @@ Object.assign(UI, {
 
   async _pollFinderStatus() {
     if (Store.isGuest) return;
+    const gen = (this._pollFinderGen = (this._pollFinderGen || 0) + 1);
     try {
       const counts = await Api.getQueueCounts();
+      if (gen !== this._pollFinderGen) return;
       this._updateDownloadBadge(counts);
       const active = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
       if (active > 0) {
         this._downloadJobs = await Api.getQueue();
+        if (gen !== this._pollFinderGen) return;
         this._updateFinderBadges();
         this._finderStatusPoll = setTimeout(() => this._pollFinderStatus(), 5000);
       } else {
         if (this._downloadJobs && this._downloadJobs.some(j => j.status === 'completed')) {
           this._downloadJobs = await Api.getQueue();
+          if (gen !== this._pollFinderGen) return;
           this._updateFinderBadges();
         }
         this._finderStatusPoll = setTimeout(() => this._pollFinderStatus(), 15000);
       }
     } catch (e) {
+      if (gen !== this._pollFinderGen) return;
       this._finderStatusPoll = setTimeout(() => this._pollFinderStatus(), 15000);
     }
   },
@@ -608,7 +627,7 @@ Object.assign(UI, {
     overlay.innerHTML = '<div class="candidate-modal">'
       + '<div class="candidate-modal-header">'
       + '<div class="candidate-modal-title">Pick a source for<br><strong>' + this._esc(job.artist || '') + (job.artist && job.title ? ' - ' : '') + this._esc(job.title || '') + '</strong></div>'
-      + '<button class="candidate-modal-close">&times;</button>'
+      + '<button class="candidate-modal-close" aria-label="Close">&times;</button>'
       + '</div>'
       + '<div class="candidate-modal-list">' + listHtml + '</div>'
       + '<div class="candidate-modal-actions">'
@@ -688,6 +707,9 @@ Object.assign(UI, {
   async _renderFinderResults() {
     const container = this.els.content.querySelector('#finder-results');
     if (!container) return;
+    // Clear the "Find music to rip" empty state once results start rendering.
+    const empty = this.els.content.querySelector('#finder-empty-state');
+    if (empty) empty.remove();
 
     const requestId = (this._finderSearchRequestId || 0) + 1;
     this._finderSearchRequestId = requestId;
@@ -721,22 +743,12 @@ Object.assign(UI, {
       }
       if (!isCurrentRequest()) return;
       this._finderResults = results;
-      this._addSearchHistory(query);
       this._renderFinderResultsList(container, results);
     } catch (err) {
       if (!isCurrentRequest()) return;
       container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
         + '<div class="empty-state-text">Search failed. MusicBrainz may be rate-limited — try again in a moment.</div></div>';
     }
-  },
-
-  _addSearchHistory(q) {
-    if (!q) return;
-    if (!this._finderHistory) this._finderHistory = JSON.parse(localStorage.getItem('finderHistory') || '[]');
-    this._finderHistory = this._finderHistory.filter(h => h !== q);
-    this._finderHistory.unshift(q);
-    if (this._finderHistory.length > 20) this._finderHistory = this._finderHistory.slice(0, 20);
-    localStorage.setItem('finderHistory', JSON.stringify(this._finderHistory));
   },
 
   _renderFinderResultsList(container, results) {
@@ -787,7 +799,7 @@ Object.assign(UI, {
           statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.channel) + '" data-title="' + this._esc(r.title) + '" aria-label="Download ' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
         }
         html += '<div class="finder-item">'
-          + '<button class="finder-preview-btn" data-preview="' + this._esc(r.videoId) + '" title="Preview">&#9654;</button>'
+          + '<button class="finder-preview-btn" data-preview="' + this._esc(r.videoId) + '" title="Preview" aria-label="Preview">&#9654;</button>'
           + '<div class="finder-item-art"><img src="https://i.ytimg.com/vi/' + this._esc(r.videoId) + '/default.jpg" alt="" onerror="this.style.display=\'none\'"></div>'
           + '<div class="finder-item-info">'
           + '<div class="finder-item-title">' + this._esc(r.title) + '</div>'
@@ -1073,7 +1085,6 @@ Object.assign(UI, {
       + '<input class="search-input artist-tracklist-search" type="search" enterkeyhint="search" placeholder="Filter tracks...">'
       + '</div>'
       + (hasMore ? '<button class="finder-load-more-btn" id="btn-load-more-tracks"><span>Load More</span></button>' : '')
-      + '<button class="settings-btn settings-btn-primary" id="btn-download-all-artist" style="display:none">' + Icons.download() + '<span>Download All</span></button>'
       + '</div>';
     html += '<div class="finder-results-count" style="font-size:15px;text-align:right;padding:12px var(--page-margin) var(--sp-2);color:var(--text1)">' + allTracks.length + ' unique track' + (allTracks.length !== 1 ? 's' : '') + '</div>';
     html += '<div class="finder-tracklist">';
@@ -1117,40 +1128,6 @@ Object.assign(UI, {
           this._artistTrackOffset += 100;
         }
         this._renderArtistTracklistDOM(container, this._artistTrackCache, this._artistTrackTotal, releases, artistName);
-      });
-    }
-
-    const dlAllBtn = container.querySelector('#btn-download-all-artist');
-    if (dlAllBtn) {
-      dlAllBtn.addEventListener('click', () => {
-        if (Store.isGuest) { this._showAccountRequired(); return; }
-        const toDownload = allTracks.filter(t => !t.inLibrary);
-        if (toDownload.length === 0) {
-          this._showToast('All tracks are already in your library');
-          return;
-        }
-        const trackList = toDownload.map((t, i) => ({
-          artist: t.artist,
-          title: t.title,
-          album: t.album || '',
-          albumMbid: t.albumId || '',
-          trackNumber: i + 1,
-          trackTotal: toDownload.length
-        }));
-        Api.queueAddBatch(trackList).then(() => {
-          this._showToast(toDownload.length + ' tracks added to queue');
-          container.querySelectorAll('.finder-track-dl').forEach(btn => {
-            const badge = document.createElement('span');
-            badge.className = 'finder-status-badge finder-in-queue';
-            badge.textContent = 'Queued';
-            btn.replaceWith(badge);
-          });
-          dlAllBtn.disabled = true;
-          dlAllBtn.innerHTML = Icons.download() + '<span>Queued</span>';
-          dlAllBtn.style.opacity = '0.6';
-        }).catch(() => {
-          this._showToast('Failed to add tracks to queue');
-        });
       });
     }
 

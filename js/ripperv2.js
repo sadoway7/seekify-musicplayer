@@ -161,10 +161,14 @@ const RipperV2 = {
     const results = [];
     for (const url of urls) {
       try {
+        // Per-URL timeout so one slow/hung source scrape doesn't freeze the
+        // whole batch. AbortSignal.timeout is native (no new dep); the catch
+        // maps a timeout to "Network error" like a real fetch failure.
         const res = await fetch('/api/v2/resolve-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url }),
+          signal: AbortSignal.timeout(20000),
         });
         if (res.ok) {
           const data = await res.json();

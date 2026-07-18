@@ -651,14 +651,13 @@
 
 .lib-sticky-header {
   position: sticky;
-  top: calc(-1 * var(--sp-3));
-  z-index: 10;
+  top: 0;
+  z-index: 100;
   background: var(--bg);
-  padding: var(--sp-3) 0 16px;
-  margin: 0 calc(-1 * var(--page-margin));
+  padding: 20px 0 8px;
+  margin: 0 calc(-1 * var(--page-margin)) 15px;
   padding-left: var(--page-margin);
   padding-right: var(--page-margin);
-  margin-top: calc(-1 * var(--sp-3));
 }
 
 .lib-tabs {
@@ -666,7 +665,15 @@
   gap: 10px;
   background: transparent;
   box-shadow: none;
-  padding: 6px var(--page-margin) var(--sp-4);
+  padding: 6px var(--page-margin) 20px;
+}
+
+@media (min-width: 768px) {
+  .lib-tabs {
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
 .lib-tab {

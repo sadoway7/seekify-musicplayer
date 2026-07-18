@@ -47,36 +47,92 @@
   padding-right: 16px;
 }
 
-.finder-sub-chips {
+/* Search-type dropdown: a compact button at the right edge of the search
+   input that opens a small menu (Artists/Songs/Albums). Replaces the old
+   row of sub-chips that cluttered the header. */
+.finder-search-container {
+  position: relative;
+  margin-bottom: 10px;
+}
+.finder-type-dropdown {
   position: absolute;
   right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  display: none;
-  gap: 3px;
-  background: none;
-  box-shadow: none;
-  padding: 0;
-  margin: 0;
-  z-index: 1;
-}
-
-.finder-mobile-chips {
   display: flex;
+  align-items: center;
+}
+.finder-type-toggle {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-  padding: 6px var(--page-margin) 0;
+  background: var(--accent);
+  border: none;
+  color: #111;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 8px 6px 10px;
+  border-radius: 16px;
+  cursor: pointer;
+  min-height: 32px;
+  white-space: nowrap;
 }
-
-/* The mobile wrapper reuses the .finder-sub-chips markup, whose base rule
-   hides it (display:none) + absolutely positions it. Undo that so the chips
-   actually render as a normal row on mobile. */
-.finder-mobile-chips .finder-sub-chips {
+.finder-type-toggle:hover { filter: brightness(1.05); }
+.finder-type-toggle svg { width: 12px; height: 12px; opacity: 0.8; }
+.finder-type-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--l2);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 4px;
+  min-width: 120px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 1000;
   display: flex;
-  position: static;
-  top: auto;
-  right: auto;
-  transform: none;
+  flex-direction: column;
 }
+.finder-type-menu[hidden] { display: none; }
+.finder-type-option {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+.finder-type-option:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.finder-type-option.active { color: var(--accent); font-weight: 700; }
+/* Keep the input text out from under the dropdown. */
+.finder-search-container .finder-search-input { padding-right: 96px; }
+
+/* The finder search bar hosts the type dropdown at its right edge. The
+   generic .search-container::after fade (pages.css) stays — we want it —
+   but the dropdown sits ABOVE it via z-index so it stays readable. */
+.finder-type-dropdown { z-index: 2; }
+
+/* finder-mobile-chips + finder-sub-chips removed (replaced by the dropdown).
+   Rules neutralize any stale markup. */
+.finder-mobile-chips { display: none; }
+.finder-sub-chips { display: none; }
+
+/* Square icon-only admin action buttons (settings/pause/retry/clear). */
+.queue-stats-actions .icon-btn {
+  flex: 0 0 44px;
+  min-width: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.queue-stats-actions .icon-btn svg { width: 18px; height: 18px; }
 
 .home-search-bar {
   position: relative;
@@ -107,6 +163,7 @@
   align-items: center;
   gap: 12px;
   margin: 8px var(--page-margin) 12px;
+  padding-top: 20px;
 }
 
 .home-menu-btn {
@@ -377,14 +434,8 @@
 }
 
 @media (min-width: 480px) {
-  .finder-mobile-chips {
-    display: none;
-  }
-  .finder-sub-chips {
-    display: flex;
-  }
   .finder-search-row .finder-search-input {
-    padding-right: 240px;
+    padding-right: 16px;
   }
 }
 
@@ -396,6 +447,9 @@
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 12px;
   flex: none;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .finder-sub-chips .chip.active {
@@ -417,6 +471,8 @@
 @media (min-width: 768px) {
   .finder-search-container {
     max-width: 550px !important;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
@@ -427,6 +483,19 @@
 .finder-search-container .search-input::placeholder {
   color: var(--text-primary);
   opacity: 0.5;
+}
+
+/* Cap the results area and center it on wide screens so long result lists
+   don't stretch edge-to-edge on desktop. */
+#finder-results,
+.bulk-import-content,
+.finder-constrained,
+.finder-tracklist,
+.tracklist-toolbar,
+.finder-results-count {
+  max-width: 850px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .finder-list {
@@ -819,6 +888,11 @@
   cursor: pointer;
   border-radius: 6px;
   flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .queue-item-delete:hover {
@@ -902,8 +976,8 @@
 .queue-stats {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  padding: 8px var(--page-margin) 10px;
+  gap: 10px;
+  padding: 6px var(--page-margin) 8px;
 }
 
 .queue-stats-badges {
@@ -914,6 +988,7 @@
 
 .queue-stats-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   width: 100%;
 }
@@ -927,9 +1002,15 @@
   padding: 9px 12px;
   min-height: 42px;
 }
+/* Primary action (Retry All) goes full-width on top so its label never
+   truncates on narrow screens; the rest share the next row. */
+.queue-stats-actions .settings-btn-primary {
+  flex: 1 1 100%;
+}
 @media (min-width: 640px) {
   .queue-stats-actions { width: auto; }
   .queue-stats-actions .settings-btn { flex: 0 0 auto; }
+  .queue-stats-actions .settings-btn-primary { flex: 0 0 auto; }
 }
 
 .stat-badge {
@@ -975,13 +1056,17 @@
   transition: background .12s, color .12s, border-color .12s;
 }
 .dl-chip b { font-weight: 700; opacity: .85; }
-.dl-chip:hover { color: var(--text, #fff); border-color: var(--text-muted, #555); }
+/* Hover lightens the chip without flipping to white text (which collides
+   with the active accent background). */
+.dl-chip:hover { border-color: var(--text-muted, #555); background: rgba(255,255,255,0.04); }
 .dl-chip-on {
   background: var(--accent, #d4f040);
   color: #000;
   border-color: var(--accent, #d4f040);
 }
 .dl-chip-on b { opacity: 1; }
+/* Active chip keeps its dark text on hover — don't override with white. */
+.dl-chip-on:hover { background: var(--accent, #d4f040); color: #000; }
 
 .queue-job-list {
   padding: 8px var(--page-margin);
@@ -1277,6 +1362,11 @@
   cursor: pointer;
   border-radius: 6px;
   opacity: 0.7;
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .watched-btn:hover {
@@ -1302,7 +1392,11 @@
   flex-shrink: 0;
   opacity: 0.5;
   transition: opacity 0.15s, color 0.15s;
-  min-width: 28px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .finder-preview-btn:hover {
@@ -1343,22 +1437,6 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-}
-
-.finder-history-chip {
-  font-size: 11px;
-  padding: 3px 10px;
-  background: var(--l2);
-  border: none;
-  border-radius: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.finder-history-chip:hover {
-  background: var(--l3);
-  color: var(--text-primary);
 }
 
 .progress-bar-track {

@@ -814,7 +814,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       let r = 0, g = 0, b = 0, n = 0;
       for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
       this.setColor(r / (n * 255), g / (n * 255), b / (n * 255));
-      console.log('[viz-color] sample →', this._color);
     } catch (e) { /* CORS/not-ready: keep prior color */ }
   },
   _rgbToHsl(r, g, b) {

@@ -18,6 +18,38 @@ Not promised, not scheduled — just on the radar.
 
 ## 2026-07-17
 
+- fix: finder type chips (Artists/Songs/Albums) now visible at all screen sizes — were hidden on mobile by a display:none + absolute-positioning scheme that also cramped the search bar on desktop
+- fix: finder search tab now shows an empty state ("Find music to rip") instead of blank space when there's no query and no history
+- fix: search history stays visible while typing (was disappearing the moment you typed, requiring you to clear the input to re-run a previous search)
+- fix: Escape no longer bricks the app after opening the candidate picker — the invisible overlay was left in the DOM swallowing all clicks; now uses the same fade-out removal as the close button
+- fix: finder status poll no longer leaks a background timer after navigating away from the finder (was hitting /api/queue/counts every 5-15s forever)
+- fix: finder preview audio now stops when navigating away from the finder (was leaving YouTube audio playing in the background with no visible control)
+- fix: bulk import button no longer relabels itself to "Import" (losing its icon) after the first run — preserves its original markup
+- a11y: icon-only buttons in the finder (pick source, retry, delete, preview, candidate close) now have aria-labels for screen readers
+- a11y: touch targets on finder chips, history chips, queue action buttons, watched buttons, and preview button bumped to ≥32-44px
+- responsive: downloads admin action buttons now wrap on narrow screens instead of truncating labels; the primary "Retry All" goes full-width on top
+
+- fix: Soulseek candidate selection no longer always fails with "Selected candidate no longer available" — the handler was clearing CandidatesJSON before the selection goroutine read it
+- fix: when all download slots are busy, a Soulseek selection now returns to needs_selection with a retry message instead of silently dropping the user's pick (the generic queue would then re-search and auto-pick a different candidate)
+- fix: watched-playlist tracks no longer get stuck perpetually "queued" when a download job already exists for that artist+title (marked completed since the existing job covers it)
+- fix: /api/track-duration now reports updated:false honestly when the track doesn't exist or already has a duration (was always true)
+- fix: /api/v2/resolve-url returns a clear "yt-dlp returned no metadata" 502 on empty output instead of a generic 500 parse error
+- fix: "Play Next" no longer offered on the currently-playing track in the queue context menu (was a silent dead click)
+- fix: ripper v2 batch URL resolve now has a 20s per-URL timeout so one slow/hung source doesn't freeze the whole batch
+- fix: rescan "Find More" no longer collapses distinct releases (singles vs compilations vs remasters) that share the same title+artist; dedup now keys on albumId or title+artist+album
+- fix: now-playing swipe-down no longer gets stuck invisible if a second swipe interrupts the first transition (fallback timeout guarantees cleanup)
+- fix: context menu centers on-screen when triggered without a position element (keyboard path) instead of falling to the viewport bottom
+- fix: per-user favorites and recents no longer orphaned when AutoSort moves a file or dedup merges duplicates (user_favorites/user_recent were missing from the ID-cascade; legacy favorites/recent were migrated but the per-user tables weren't)
+- fix: track deletion and orphan cleanup now also clear user_favorites/user_recent (was leaving stale rows that grew the DB unbounded)
+- fix: scanner no longer holds the library lock during review inserts — library reads and streaming no longer stall during a scan merge
+- fix: cover cache no longer double-counts bytes on overwrite during a scan (was causing premature eviction and extra disk/MusicBrainz fetches)
+- fix: session expiry now surfaces a login screen instead of failing personal actions silently (auth-required event was dispatched but never listened for)
+- fix: background library poll no longer discards in-progress home search input on every version change
+- fix: home menu click listener no longer leaks on every home re-render
+- fix: change-password now shows the server's "current password incorrect" message instead of a generic "Failed to update"
+- fix: Escape now closes the review dropdown before the review overlay (was leaving the dropdown orphaned open)
+- cleanup: removed leftover [recent-debug] and [viz-color] console.log output
+
 - Search: genre cards now pick varied cover art across the grid instead of all showing the same album (most-constrained genres claim first, multi-album genres prefer covers not already used), with a proper Fisher-Yates shuffle replacing the biased sort-based pick.
 - Genres: allow a track to have multiple canonical genres (comma-separated) so it appears in every matching genre list; MusicBrainz enrichment and manual edits both store up to three validated genres, and the Search browse grid and genre filter now split multi-genre tracks correctly.
 - Tasks: Settings worker "Last run" timestamps now reflect the last meaningful pass, not the last polling tick (scanner and review keep their previous run time when the cycle did no work), and the download-watchdog row no longer shows a disabled "Run Now" button.

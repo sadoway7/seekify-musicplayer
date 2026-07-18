@@ -27,7 +27,7 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-  padding-top: var(--sp-3);
+  padding-top: 0;
   /* Use --tab-bar-height (NOT --tab-bar-height-safe). The -safe variant adds
      env(safe-area-inset-bottom), which only behaves correctly under
      viewport-fit=cover — and cover breaks the PWA navbar. See #tab-bar. */

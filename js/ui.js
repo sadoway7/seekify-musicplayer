@@ -766,9 +766,14 @@ const UI = {
         const done = (ev) => {
           if (ev.target !== np) return;
           np.removeEventListener('transitionend', done);
+          clearTimeout(this._swipeHideFallback);
           this._applyNowPlayingHiddenState();
         };
         np.addEventListener('transitionend', done);
+        // Fallback in case a second swipe interrupts the transition and the
+        // transitionend never fires (leaving now-playing stuck invisible).
+        clearTimeout(this._swipeHideFallback);
+        this._swipeHideFallback = setTimeout(() => this._applyNowPlayingHiddenState(), 260);
         this._afterHideNowPlaying();
       } else {
         np.style.transition = 'transform 0.22s ease-out';
@@ -797,9 +802,15 @@ const UI = {
       d.spacer.style.height = itemH + 'px';
       list.insertBefore(d.spacer, item);
 
+      // Pin horizontal position from the item's own rect so it doesn't
+      // shift when it leaves the flex flow. Store it so moveDrag can
+      // re-assert it if any style recalc nudges it.
+      d.pinLeft = rect.left;
+
       item.classList.add('queue-item-dragging');
       item.style.position = 'fixed';
-      item.style.left = rect.left + 'px';
+      item.style.left = d.pinLeft + 'px';
+      item.style.right = 'auto';
       item.style.top = (clientY - d.offsetY) + 'px';
       item.style.width = itemW + 'px';
       item.style.zIndex = '200';
@@ -1213,8 +1224,14 @@ const UI = {
     if (this._downloadPollInterval) { clearInterval(this._downloadPollInterval); this._downloadPollInterval = null; }
     if (this._reviewScrollObserver) { this._reviewScrollObserver.disconnect(); this._reviewScrollObserver = null; }
     if (this._finderStatusPoll) { clearTimeout(this._finderStatusPoll); this._finderStatusPoll = null; }
+    // Bump the generation so any in-flight finder-status poll self-cancels
+    // on resolve instead of scheduling a new (uncleared) timeout after the
+    // user has navigated away from the finder.
+    this._pollFinderGen = (this._pollFinderGen || 0) + 1;
     if (this._workerPoll) { clearInterval(this._workerPoll); this._workerPoll = null; }
     if (typeof RipperV2 !== 'undefined' && RipperV2._pollTimer) { clearInterval(RipperV2._pollTimer); RipperV2._pollTimer = null; }
+    // Stop a finder preview that's still playing when the user leaves the finder.
+    if (this._previewAudio) { this._previewAudio.pause(); this._previewAudio = null; }
   },
 
   renderPage() {

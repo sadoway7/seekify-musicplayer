@@ -93,7 +93,15 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 0 {
+		writeJSONError(w, http.StatusBadGateway, "yt-dlp returned no metadata")
+		return
+	}
 	lastLine := lines[len(lines)-1]
+	if strings.TrimSpace(lastLine) == "" {
+		writeJSONError(w, http.StatusBadGateway, "yt-dlp returned no metadata")
+		return
+	}
 	if err := json.Unmarshal([]byte(lastLine), &info); err != nil {
 		http.Error(w, `{"error":"could not parse video info"}`, http.StatusInternalServerError)
 		return

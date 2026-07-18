@@ -345,9 +345,14 @@ Object.assign(UI, {
         e.stopPropagation();
         menuDropdown.classList.toggle('open');
       });
-      document.addEventListener('click', () => {
-        menuDropdown.classList.remove('open');
-      });
+      // Bind once: _renderHomeContent runs on every home re-render, so without
+      // removeEventListener each render would stack another closure on
+      // document and leak the (possibly detached) menuDropdown node.
+      if (this._homeOutsideClick) {
+        document.removeEventListener('click', this._homeOutsideClick);
+      }
+      this._homeOutsideClick = () => menuDropdown.classList.remove('open');
+      document.addEventListener('click', this._homeOutsideClick);
       menuDropdown.addEventListener('click', (e) => {
         e.stopPropagation();
         const item = e.target.closest('.home-menu-item');

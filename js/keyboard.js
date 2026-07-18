@@ -75,11 +75,12 @@ const Keyboard = {
   _closeTopmost() {
     const openDialog = document.querySelector('dialog[open]');
     if (openDialog) { openDialog.close(); return; }
-    if (typeof ReviewUI !== 'undefined' && ReviewUI.overlay && ReviewUI.overlay.classList.contains('visible')) {
-      ReviewUI.overlay.classList.remove('visible'); return;
+    if (typeof ReviewUI !== 'undefined') {
+      if (ReviewUI.dropdown && ReviewUI.dropdown.classList.contains('visible')) { ReviewUI.hideDropdown(); return; }
+      if (ReviewUI.overlay && ReviewUI.overlay.classList.contains('visible')) { ReviewUI.overlay.classList.remove('visible'); return; }
     }
     const cand = document.querySelector('.candidate-modal-overlay.show');
-    if (cand) { cand.classList.remove('show'); return; }
+    if (cand) { UI._fadeOutRemove(cand, 200); return; }
     const pm = UI.els && UI.els.playlistModal;
     if (pm && !pm.classList.contains('hidden')) { pm.classList.add('hidden'); return; }
     const cm = UI.els && UI.els.contextMenu;

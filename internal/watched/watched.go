@@ -347,7 +347,14 @@ func RefreshWatchedPlaylist(p *WatchedPlaylist) error {
 			job.PlaylistID = libraryPlaylistID
 			store.DB.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)
 		}
-		store.DB.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, 'queued')", p.ID, videoID, artist, title)
+		// If CreateDownloadJob returned nil, an existing job or library track
+		// already covers this item — mark it completed so the watched-playlist
+		// UI doesn't leave it perpetually "queued" with no linked job.
+		status := "queued"
+		if job == nil {
+			status = "completed"
+		}
+		store.DB.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, ?)", p.ID, videoID, artist, title, status)
 		newCount++
 	}
 

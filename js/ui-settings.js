@@ -1170,6 +1170,7 @@ Object.assign(UI, {
     const input = document.getElementById('bulk-import-input');
     const btn = document.getElementById('btn-bulk-import') || document.getElementById('bulk-import-btn');
     if (!input || !input.value.trim()) return;
+    const orig = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
     try {
       const result = await Api.bulkImport(input.value);
@@ -1178,7 +1179,7 @@ Object.assign(UI, {
     } catch (e) {
       this._showToast('Bulk import failed');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
     }
   },
 
@@ -1256,7 +1257,7 @@ Object.assign(UI, {
         if (msg) { msg.textContent = (d && (d.error || d.message)) || 'Failed to update'; msg.style.color = '#ff6b6b'; }
       }
     } catch (e) {
-      if (msg) { msg.textContent = 'Failed to update'; msg.style.color = '#ff6b6b'; }
+      if (msg) { msg.textContent = (e && e.message) || 'Failed to update'; msg.style.color = '#ff6b6b'; }
     }
   },
 

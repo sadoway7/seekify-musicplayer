@@ -413,9 +413,15 @@ func DownloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
 
 	job.VideoID = req.VideoID
 	job.Status = "queued"
-	job.CandidatesJSON = ""
 	job.ProgressStage = ""
 	job.Error = ""
+	// Soulseek selection resolves the picked candidate from CandidatesJSON
+	// inside ProcessSlskSelection; clearing it here (before the goroutine
+	// runs) would make the selection always fail with "candidate no longer
+	// available". Clear it only for the YouTube path, which doesn't use it.
+	if job.Source != "soulseek" {
+		job.CandidatesJSON = ""
+	}
 	downloads.DbUpdateJob(job)
 
 	if job.Source == "soulseek" {

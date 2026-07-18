@@ -253,15 +253,17 @@ func TrackDurationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store.Mu.Lock()
+	updated := false
 	if t, ok := store.Tracks[trackID]; ok {
 		if t.Duration == 0 {
 			t.Duration = body.Duration
 			store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", body.Duration, trackID)
+			updated = true
 		}
 	}
 	store.Mu.Unlock()
 
-	writeJSON(w, map[string]bool{"updated": true})
+	writeJSON(w, map[string]bool{"updated": updated})
 }
 
 func WaveformHandler(w http.ResponseWriter, r *http.Request) {

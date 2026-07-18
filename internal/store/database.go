@@ -275,17 +275,19 @@ func dedupTracksByFilePath() {
 				}
 				keepID := ids[0]
 				tx, _ := DB.Begin()
-				for _, dupID := range ids[1:] {
-					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
-				}
-				tx.Commit()
-				log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
+			for _, dupID := range ids[1:] {
+				tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+				tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+			}
+			tx.Commit()
+			log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
 			}
 		}
 
@@ -326,17 +328,19 @@ func dedupTracksByFilePath() {
 					}
 					keepID := ids[0]
 					tx, _ := DB.Begin()
-					for _, dupID := range ids[1:] {
-						tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
-					}
-					tx.Commit()
-					log.Printf("[db] Song deduped %s - %s (%ds): kept %s, removed %d", dk.artist, dk.title, dk.duration, keepID, len(ids)-1)
+				for _, dupID := range ids[1:] {
+					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+				}
+				tx.Commit()
+				log.Printf("[db] Song deduped %s - %s (%ds): kept %s, removed %d", dk.artist, dk.title, dk.duration, keepID, len(ids)-1)
 				}
 			}
 		}
@@ -389,23 +393,36 @@ func dedupTracksByFilePath() {
 					removed := 0
 					var deletedFiles []string
 					tx, _ := DB.Begin()
-					for _, dupID := range ids[1:] {
-						// If both have non-zero but different durations, keep both
-						// (could be different versions/remixes).
-						if durations[dupID] > 0 && durations[keepID] > 0 && durations[dupID] != durations[keepID] {
-							continue
-						}
+				for _, dupID := range ids[1:] {
+					// If both have non-zero but different durations, keep both
+					// (could be different versions/remixes).
+					if durations[dupID] > 0 && durations[keepID] > 0 && durations[dupID] != durations[keepID] {
+						continue
+					}
+					// Don't delete a freshly-downloaded file before ffprobe has
+					// run on it. When the keeper is probed (duration>0) but the
+					// dup is un-probed (duration=0), the keeper already wins on
+					// the ORDER BY and the dup's file would be irreversibly
+					// deleted — let the next pass handle it after probing. The
+					// all-zero case (both un-probed) below is intentional and
+					// still proceeds: the best-metadata/most-recent entry wins
+					// and its file survives.
+					if durations[dupID] == 0 && durations[keepID] > 0 {
+						continue
+					}
 						// Get the file path before deleting the DB row
 						var fp string
 						tx.QueryRow(`SELECT file_path FROM tracks WHERE id = ?`, dupID).Scan(&fp)
-						tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-						tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
-						// Resolve and delete the physical file (primary library only).
+					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
+					// Resolve and delete the physical file (primary library only).
 						// media: prefixed paths point into the read-only /media-music
 						// Docker mount (mounted as -v $MEDIA_MUSIC_PATH:/media-music),
 						// so the file cannot be deleted — os.Remove() would silently
@@ -464,6 +481,8 @@ func dedupByFilePath(path string) {
 	for _, dupID := range ids[1:] {
 		tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -1124,6 +1143,8 @@ func DbDeleteTrack(trackID string) {
 	tx.Exec(`DELETE FROM tracks WHERE id=?`, trackID)
 	tx.Exec(`DELETE FROM favorites WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM recent WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM user_favorites WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM user_recent WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM playlist_tracks WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM downloads WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM metadata_matches WHERE track_id=?`, trackID)
@@ -1137,10 +1158,12 @@ func DbDeleteAlbum(albumID string) {
 
 func DbCleanupFavorites() {
 	DB.Exec(`DELETE FROM favorites WHERE track_id NOT IN (SELECT id FROM tracks)`)
+	DB.Exec(`DELETE FROM user_favorites WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }
 
 func DbCleanupRecent() {
 	DB.Exec(`DELETE FROM recent WHERE track_id NOT IN (SELECT id FROM tracks)`)
+	DB.Exec(`DELETE FROM user_recent WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }
 
 // MigrateLegacyDataTo re-owns pre-user global data to the first admin, run once
@@ -1194,6 +1217,8 @@ func DbMigrateTrackID(oldID, newID, newPath string) {
 	if exists > 0 {
 		tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, newID, oldID)
@@ -1203,6 +1228,8 @@ func DbMigrateTrackID(oldID, newID, newPath string) {
 		tx.Exec(`UPDATE tracks SET id=?, file_path=? WHERE id=?`, newID, newPath, oldID)
 		tx.Exec(`UPDATE favorites SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE recent SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE user_favorites SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE user_recent SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE playlist_tracks SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE downloads SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE metadata_matches SET track_id=? WHERE track_id=?`, newID, oldID)

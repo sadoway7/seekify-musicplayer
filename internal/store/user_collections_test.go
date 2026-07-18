@@ -93,3 +93,72 @@ func TestUserPlaylistsIsolation(t *testing.T) {
 	}
 	_ = bobPL
 }
+
+// DbMigrateTrackID, DbDeleteTrack, and the dedup passes must cascade the new
+// track ID to user_favorites and user_recent — not just the legacy favorites/
+// recent tables. Otherwise AutoSort moves and dedup merges silently orphan
+// every user's favorites and recents. Regression for the per-user table
+// omission fixed alongside this test.
+func TestCascadeTouchesUserFavoritesAndRecent(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	prevDB := DB
+	DB = db
+	defer func() {
+		DB = prevDB
+		db.Close()
+	}()
+	for _, ddl := range []string{
+		`CREATE TABLE tracks (id TEXT PRIMARY KEY, file_path TEXT, duration INTEGER DEFAULT 0, has_metadata INTEGER DEFAULT 0, artist TEXT, title TEXT, album TEXT, mod_time INTEGER DEFAULT 0)`,
+		`CREATE TABLE favorites (track_id TEXT, added_at INTEGER DEFAULT 0)`,
+		`CREATE TABLE recent (track_id TEXT, position INTEGER)`,
+		`CREATE TABLE user_favorites (user_id TEXT NOT NULL, track_id TEXT NOT NULL, added_at INTEGER DEFAULT 0, PRIMARY KEY (user_id, track_id))`,
+		`CREATE TABLE user_recent (user_id TEXT NOT NULL, track_id TEXT NOT NULL, position INTEGER, PRIMARY KEY (user_id, track_id))`,
+		`CREATE TABLE playlist_tracks (playlist_id TEXT, track_id TEXT, position INTEGER)`,
+		`CREATE TABLE downloads (track_id TEXT, disabled INTEGER DEFAULT 0)`,
+		`CREATE TABLE metadata_matches (track_id TEXT)`,
+		`CREATE TABLE track_reviews (track_id TEXT)`,
+	} {
+		if _, err := db.Exec(ddl); err != nil {
+			t.Fatalf("create table: %v", err)
+		}
+	}
+
+	// Seed a track, favorite + play it as alice and bob.
+	db.Exec(`INSERT INTO tracks (id, file_path) VALUES ('oldID', 'old/path.mp3')`)
+	DbToggleUserFavorite("alice", "oldID")
+	DbToggleUserFavorite("bob", "oldID")
+	if err := DbAddUserRecent("alice", "oldID"); err != nil {
+		t.Fatalf("add alice recent: %v", err)
+	}
+	if err := DbAddUserRecent("bob", "oldID"); err != nil {
+		t.Fatalf("add bob recent: %v", err)
+	}
+
+	// Migrate the ID (simulates AutoSort moving the file).
+	DbMigrateTrackID("oldID", "newID", "new/path.mp3")
+
+	for _, u := range []string{"alice", "bob"} {
+		favs := DbGetUserFavorites(u)
+		if len(favs) != 1 || favs[0] != "newID" {
+			t.Fatalf("%s user_favorites after migrate = %v, want [newID]", u, favs)
+		}
+		got := DbGetUserRecent(u)
+		if len(got) != 1 || got[0] != "newID" {
+			t.Fatalf("%s user_recent after migrate = %v, want [newID]", u, got)
+		}
+	}
+
+	// DbDeleteTrack must also clear the per-user tables (no orphans left).
+	DbToggleUserFavorite("alice", "newID")
+	DbAddUserRecent("alice", "newID")
+	DbDeleteTrack("newID")
+	if favs := DbGetUserFavorites("alice"); len(favs) != 0 {
+		t.Fatalf("alice user_favorites after delete = %v, want empty", favs)
+	}
+	if got := DbGetUserRecent("alice"); len(got) != 0 {
+		t.Fatalf("alice user_recent after delete = %v, want empty", got)
+	}
+}

@@ -18,18 +18,11 @@ const App = {
       UI.updateNowPlaying();
       UI._renderQueue();
       UI.updateTrackHighlights();
-      if (track) {
-        if (!Store.isGuest) {
-          try {
-            await Api.addRecent(track.id);
-            await Store.refreshRecent();
-            console.log('[recent-debug] saved', track.id, '| count', Store.recent.length, '| top3', Store.recent.slice(0,3));
-          } catch (err) {
-            console.log('[recent-debug] FAILED', track.id, err.message);
-          }
-        } else {
-          console.log('[recent-debug] skipped (guest) for', track.id);
-        }
+      if (track && !Store.isGuest) {
+        try {
+          await Api.addRecent(track.id);
+          await Store.refreshRecent();
+        } catch (err) {}
       }
     };
 
@@ -61,6 +54,14 @@ const App = {
 
     const storeLoaded = await Store.init();
     if (!storeLoaded) return;
+
+    // Surface session expiry: api.js dispatches 'auth-required' on any 401
+    // (except the login/me/setup/library probes). Without this listener every
+    // personal action silently fails after a session expires and only a full
+    // reload recovers.
+    window.addEventListener('auth-required', () => {
+      if (typeof UI !== 'undefined' && UI.showLoginScreen) UI.showLoginScreen();
+    });
 
     if (window.Visualizer) Visualizer.applyServerDefault();
 
@@ -151,7 +152,15 @@ const App = {
         stableCount = 0;
         await Store.refreshLibrary();
         if (Store.currentView === 'home') {
-          UI.renderPage();
+          // Avoid blowing away an in-progress home search on every background
+          // poll re-render. If the search bar is focused, keep the DOM and
+          // only refresh track highlights.
+          const sb = document.querySelector('#home-search-bar .search-input');
+          if (!sb || document.activeElement !== sb) {
+            UI.renderPage();
+          } else {
+            UI.updateTrackHighlights();
+          }
         } else {
           UI.updateTrackHighlights();
         }

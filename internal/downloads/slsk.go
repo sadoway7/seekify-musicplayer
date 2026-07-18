@@ -791,8 +791,15 @@ func slskCleanupIncomplete(destDir string, preSnapshot ...map[string]bool) {
 // can be downloaded directly (no re-search), then runs the shared post-download
 // finalization (validate/tag/scan/playlist).
 func ProcessSlskSelection(job *DownloadJob, idx int) {
-	// Honor the same concurrency limit as the download queue
+	// Honor the same concurrency limit as the download queue. If no slot is
+	// free, put the job back into needs_selection so the user can retry from
+	// the picker instead of silently dropping the selection (which previously
+	// left the job "queued" until the generic queue re-searched and auto-
+	// picked a different candidate, ignoring the user's explicit choice).
 	if !tryAcquireSlot() {
+		job.Status = "needs_selection"
+		job.Error = "All download slots busy, please retry shortly"
+		DbUpdateJob(job)
 		return
 	}
 	defer releaseSlot()
@@ -815,6 +822,9 @@ func ProcessSlskSelection(job *DownloadJob, idx int) {
 			}
 		}
 	}
+	// Candidates have been resolved into locals; clear the stored list now so
+	// the job row no longer carries a stale picker payload.
+	job.CandidatesJSON = ""
 	if dlUsername == "" || dlFilename == "" {
 		job.Status = "failed"
 		job.Error = "Selected candidate no longer available"

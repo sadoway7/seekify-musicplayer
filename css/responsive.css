@@ -43,7 +43,7 @@
 
   #app-content {
     margin-left: 76px;
-    padding-top: var(--sp-5);
+    padding-top: 0;
   }
 
   body.mini-player-visible #app-content {
