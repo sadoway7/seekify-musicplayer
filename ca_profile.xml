@@ -1,6 +1,6 @@
 <CommunityApplications>
   <Profile>
-    Seekify — a self-hosted music server. Scans local music libraries, streams
+    Seekify - a self-hosted music server. Scans local music libraries, streams
     audio, fetches metadata and cover art from MusicBrainz, and downloads tracks
     via yt-dlp. Single Go binary serving a vanilla JS SPA. One container in this
     repository.
