@@ -119,11 +119,13 @@ Object.assign(UI, {
 
     if (Store.isAdmin) {
       const reviewCount = Store.reviewCounts.needs_review || 0;
-      html += '<div class="list-item" data-action="needs-review" style="cursor:pointer">'
-        + '<div class="list-item-art" style="background:rgba(255,107,107,.1);display:flex;align-items:center;justify-content:center;color:#ff6b6b">'
-        + Icons.warning() + '</div>'
-        + '<div class="list-item-info"><div class="list-item-title" style="color:#ff6b6b">Needs Review</div>'
-        + '<div class="list-item-subtitle">' + reviewCount + ' tracks flagged</div></div></div>';
+      if (reviewCount > 0) {
+        html += '<div class="list-item" data-action="needs-review" style="cursor:pointer">'
+          + '<div class="list-item-art" style="background:rgba(255,107,107,.1);display:flex;align-items:center;justify-content:center;color:#ff6b6b">'
+          + Icons.warning() + '</div>'
+          + '<div class="list-item-info"><div class="list-item-title" style="color:#ff6b6b">Needs Review</div>'
+          + '<div class="list-item-subtitle">' + reviewCount + ' tracks flagged</div></div></div>';
+      }
     }
 
     if (!Store.isGuest) {

@@ -18,7 +18,14 @@ Not promised, not scheduled — just on the radar.
 
 ## 2026-07-17
 
-- fix: finder type chips (Artists/Songs/Albums) now visible at all screen sizes — were hidden on mobile by a display:none + absolute-positioning scheme that also cramped the search bar on desktop
+- fix: "Needs Review" playlist entry hidden when there are 0 flagged tracks
+- fix: artist tracklist filter search centered on desktop (was stretched full-width)
+- fix: queue drag item no longer shifts horizontally (removed will-change:transform from queue-panel and now-playing that broke position:fixed coordinates)
+- fix: finder type dropdown (Artists/Songs/Albums) replaces hidden mobile chips; gradient kept, dropdown sits above it
+- fix: sticky header locked to top on desktop (removed padding-top gap)
+- fix: finder tabs/search/results/downloads/bulk/tracklist capped and centered on desktop
+- fix: downloads admin buttons use icons (gear/pause/retry) with aria-labels; filter chip hover no longer white-on-green
+- fix: finder search history removed; empty state added for first-time use
 - fix: finder search tab now shows an empty state ("Find music to rip") instead of blank space when there's no query and no history
 - fix: search history stays visible while typing (was disappearing the moment you typed, requiring you to clear the input to re-run a previous search)
 - fix: Escape no longer bricks the app after opening the candidate picker — the invisible overlay was left in the DOM swallowing all clicks; now uses the same fade-out removal as the close button

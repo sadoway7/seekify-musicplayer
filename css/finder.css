@@ -618,14 +618,15 @@
 .tracklist-toolbar {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   padding: var(--sp-3) var(--page-margin) var(--sp-2);
 }
 
 .tracklist-toolbar .search-container {
-  flex: 1;
+  flex: 0 1 550px;
   margin: 0;
-  max-width: none;
+  max-width: 550px;
   background: var(--l3);
   border-radius: var(--radius-full);
 }
