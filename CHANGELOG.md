@@ -16,6 +16,10 @@ Not promised, not scheduled — just on the radar.
 - on-the-fly opus transcode
 - Spotify import → finder/autodownloader
 
+## 2026-07-19
+
+- unraid: restore original CA template/profile/README structure; add `<Date>2026-07-15</Date>`; keep new icon and screenshots (fixes Community Apps popup crash)
+
 ## 2026-07-17
 
 - fix: "Needs Review" playlist entry hidden when there are 0 flagged tracks

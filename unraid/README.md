@@ -7,10 +7,6 @@ Files for the [Community Apps](https://ca.unraid.net) submission.
 - `../LICENSE` — MIT (required at repo root for submission).
 - `../icon.png` — app icon, reused by the template via raw GitHub URL.
 
-When publishing an update, set the template's `<Date>` to the release date in
-`YYYY-MM-DD` format and refresh `<Changes>`. Community Apps uses this metadata
-to display the app's update information.
-
 ## Image
 
 Built and published by `.github/workflows/docker-publish.yml` on every push to `main`:
