@@ -18,6 +18,7 @@ Not promised, not scheduled — just on the radar.
 
 ## 2026-07-23
 
+- fix: Unraid CA info panel - set <Registry> to the ghcr.io registry endpoint (was a github.com HTML package page the plugin couldn't use to locate the image); now matches the official CA starter template exactly
 - fix: Unraid Community Apps info panel failed to open (in-Unraid plugin errored while ca.unraid.net listing worked) - ASCII-ified em dashes in seekify.xml/ca_profile.xml; the non-ASCII byte in an XML attribute broke the plugin's parser while the UTF-8 website tolerated it
 
 ## 2026-07-19
