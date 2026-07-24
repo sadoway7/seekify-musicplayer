@@ -11,7 +11,7 @@
   <Project>https://github.com/sadoway7/seekify-musicplayer</Project>
   <!-- Create a support thread at forums.unraid.net, then uncomment: -->
   <!-- <Support>https://forums.unraid.net/topic/YOUR_SUPPORT_TOPIC</Support> -->
-  <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/unraid/templates/seekify.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
   <Changes>Initial Community Apps submission.</Changes>

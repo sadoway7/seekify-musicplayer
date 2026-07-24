@@ -114,7 +114,7 @@ For frontend or handler changes: run the app and manually exercise the affected 
 
 Two CI pipelines publish the same Dockerfile:
 - `.gitlab-ci.yml` — builds `musicapp` image, deploys to an Unraid host on push to `main`.
-- `.github/workflows/docker-publish.yml` — pushes `seekify` image to GHCR (`unraid/templates/seekify.xml` pulls `ghcr.io/sadoway7/seekify:latest`).
+- `.github/workflows/docker-publish.yml` — pushes `seekify` image to GHCR (`templates/seekify.xml` pulls `ghcr.io/sadoway7/seekify:latest`).
 
 Docker image: `golang:1.26-alpine` build → `alpine` runtime with `python3`, `ffmpeg`, `pip install yt-dlp mutagen musicbrainzngs lyriq requests aioslsk`. Production mounts: `/app/data` (DB), `/music` (primary), `/media-music` (secondary). Exposed port `8081` (mapped to `8298` in GitLab CI).
 
