@@ -122,6 +122,10 @@ func parseByteRange(header string, fileSize int64) (start, end int64, ok bool) {
 
 func CoverHandler(w http.ResponseWriter, r *http.Request) {
 	albumID := strings.TrimPrefix(r.URL.Path, "/api/cover/")
+	if strings.ContainsAny(albumID, `/\`) || strings.Contains(albumID, "..") {
+		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
+		return
+	}
 
 	store.CoverMu.RLock()
 	data, exists := store.CoverCache[albumID]
@@ -165,6 +169,10 @@ func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {
 	artistName := strings.TrimPrefix(r.URL.Path, "/api/artist-art/")
 	if artistName == "" {
 		http.Error(w, "Artist name required", http.StatusBadRequest)
+		return
+	}
+	if strings.ContainsAny(artistName, `/\`) || strings.Contains(artistName, "..") {
+		http.Error(w, `{"error":"invalid artist name"}`, http.StatusBadRequest)
 		return
 	}
 

@@ -144,6 +144,10 @@ func FinderCoverHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"missing mbid"}`, http.StatusBadRequest)
 		return
 	}
+	if strings.ContainsAny(mbid, `/\`) || strings.Contains(mbid, "..") {
+		http.Error(w, `{"error":"invalid mbid"}`, http.StatusBadRequest)
+		return
+	}
 
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 

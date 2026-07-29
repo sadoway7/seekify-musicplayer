@@ -289,8 +289,8 @@ func main() {
 	mux.HandleFunc("/api/recent", auth.RequireUser(handlers.RecentHandler))
 	mux.HandleFunc("/api/recent/", auth.RequireUser(handlers.RecentAddHandler))
 	mux.HandleFunc("/admin", auth.RequireAdmin(handlers.AdminHandler))
-	mux.HandleFunc("/api/v2/resolve-url", handlers.ResolveURLHandler)
-	mux.HandleFunc("/api/v2/search", handlers.V2SearchHandler)
+	mux.HandleFunc("/api/v2/resolve-url", auth.RequireUser(handlers.ResolveURLHandler))
+	mux.HandleFunc("/api/v2/search", auth.RequireUser(handlers.V2SearchHandler))
 	mux.HandleFunc("/ripperv2", handlers.RipperV2Handler)
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		ytdlp := downloads.FindYtDlp()
@@ -333,7 +333,7 @@ func main() {
 	}))
 
 	mux.HandleFunc("/api/waveform/", handlers.WaveformHandler)
-	mux.HandleFunc("/api/track-duration/", handlers.TrackDurationHandler)
+	mux.HandleFunc("/api/track-duration/", auth.RequireUser(handlers.TrackDurationHandler))
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
 	})
@@ -344,8 +344,8 @@ func main() {
 	mux.HandleFunc("/api/finder/artist-track-progress", handlers.ArtistTrackProgressHandler)
 	mux.HandleFunc("/api/finder/release/", handlers.FinderReleaseTracksHandler)
 	mux.HandleFunc("/api/finder/cover/", handlers.FinderCoverHandler)
-	mux.HandleFunc("/api/finder/youtube", handlers.YoutubeSearchHandler)
-	mux.HandleFunc("/api/preview/", handlers.PreviewAudioHandler)
+	mux.HandleFunc("/api/finder/youtube", auth.RequireUser(handlers.YoutubeSearchHandler))
+	mux.HandleFunc("/api/preview/", auth.RequireUser(handlers.PreviewAudioHandler))
 	mux.HandleFunc("/api/download-job/", handlers.DownloadJobFileHandler)
 
 	mux.HandleFunc("/api/queue", auth.RequireUser(handlers.DownloadQueueHandler))
@@ -374,8 +374,8 @@ func main() {
 	mux.HandleFunc("/api/shared-queue/", handlers.SharedQueueGetHandler)
 
 	mux.HandleFunc("/api/playlist-import", auth.RequireUser(handlers.PlaylistImportHandler))
-	mux.HandleFunc("/api/watch/", handlers.WatchedPlaylistsHandler)
-	mux.HandleFunc("/api/watch", handlers.WatchedPlaylistsHandler)
+	mux.HandleFunc("/api/watch/", auth.RequireUser(handlers.WatchedPlaylistsHandler))
+	mux.HandleFunc("/api/watch", auth.RequireUser(handlers.WatchedPlaylistsHandler))
 
 	// Public display settings (waveform style, downloads flag) — admin-set globals
 	// every client needs to render the site. No auth; sensitive config + writes

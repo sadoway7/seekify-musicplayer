@@ -76,6 +76,12 @@ func AutoSortMusic() {
 	for _, job := range jobs {
 		os.MkdirAll(filepath.Dir(job.dst), 0755)
 
+		// Don't overwrite an existing file at the destination.
+		if _, err := os.Stat(job.dst); err == nil {
+			log.Printf("Skipping %s: destination %s already exists", job.src, job.dst)
+			continue
+		}
+
 		if err := os.Rename(job.src, job.dst); err != nil {
 			log.Printf("Failed to move %s -> %s: %v", job.src, job.dst, err)
 			continue
@@ -84,7 +90,11 @@ func AutoSortMusic() {
 		// Migrate track ID AFTER successful rename so a failed move
 		// doesn't orphan favorites/playlists/reviews.
 		if job.oldID != job.newID {
-			store.DbMigrateTrackID(job.oldID, job.newID, job.newRelPath)
+			if err := store.DbMigrateTrackID(job.oldID, job.newID, job.newRelPath); err != nil {
+				log.Printf("Failed to migrate track ID %s -> %s: %v; rolling back rename", job.oldID, job.newID, err)
+				os.Rename(job.dst, job.src) // rollback
+				continue
+			}
 		}
 
 		// Update in-memory map immediately so the old path isn't served

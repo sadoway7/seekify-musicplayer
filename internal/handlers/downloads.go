@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -533,7 +534,12 @@ func PreviewAudioHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command(ytdlpPath,
+	ytDlpSem <- struct{}{}
+	defer func() { <-ytDlpSem }()
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ytdlpPath,
 		append(downloads.YtCommonArgs(),
 			"-f", "bestaudio[protocol=https]/bestaudio/best",
 			"-g", "--no-warnings",

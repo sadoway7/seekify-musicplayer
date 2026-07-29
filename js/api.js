@@ -22,7 +22,8 @@ const Api = {
         try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
         throw new Error(msg);
       }
-      return res.json();
+      const text = await res.text();
+      return text ? JSON.parse(text) : null;
     } catch (e) {
       if (fallback !== undefined) return fallback;
       throw e;

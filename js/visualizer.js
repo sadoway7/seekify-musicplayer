@@ -186,7 +186,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     uScanAmt: 0.0, uScanSrc: 0, uScanFreq: 2.0, uScanTime: 8.0,
     uVigAmt: 0.0, uVigSrc: 0, uVigX: 3.0, uVigY: 1.8,
     uGrainAmt: 0.062, uGrainSrc: 0,
-    uMaxSteps: 148
+    uMaxSteps: 96
   },
 
   // All uniform names (static + dynamic) for location lookup.
@@ -612,13 +612,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   _resize() {
     // Canvas is position:fixed fullscreen → clientWidth/Height = viewport.
     // Non-square (fills the screen), higher scale than the old disc-constrained
-    // square crop. maxEdge caps 4K/high-DPI so the 148-step raymarch stays affordable.
+    // square crop. maxEdge caps 4K/high-DPI so the raymarch stays affordable.
     const mobile = (window.innerWidth || 9999) <= 768;
     const scale = mobile ? 0.6 : 0.85;
     const d = Math.min(window.devicePixelRatio || 1, 2.0) * scale;
     let w = Math.round((this.canvas.clientWidth || 300) * d);
     let h = Math.round((this.canvas.clientHeight || 300) * d);
-    const maxEdge = 1920;
+    const maxEdge = 1280; // ponytail: halved from 1920 — visualizer was starving main thread during audio playback (V1)
     const long = Math.max(w, h);
     if (long > maxEdge) { const k = maxEdge / long; w = Math.round(w * k); h = Math.round(h * k); }
     if (this.canvas.width !== w || this.canvas.height !== h) {

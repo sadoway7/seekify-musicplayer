@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 
 	"musicapp/internal/auth"
 	"musicapp/internal/store"
 )
+
+var setupMu sync.Mutex
 
 // SetupStatusHandler → {needsSetup: bool}. Public: lets the SPA show the
 // first-run admin setup screen when no users exist yet.
@@ -23,6 +26,8 @@ func SetupHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	setupMu.Lock()
+	defer setupMu.Unlock()
 	n, _ := auth.CountUsers()
 	if n > 0 {
 		writeJSONError(w, http.StatusGone, "setup already complete")
@@ -120,5 +125,7 @@ func ChangeOwnPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Invalidate all other sessions; the current one dies too — user re-logs in.
+	auth.DeleteSessionsForUser(u.ID)
 	writeJSON(w, map[string]interface{}{"ok": true})
 }

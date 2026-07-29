@@ -273,6 +273,11 @@ window.ShuffleDie = (() => {
     let lastY = 0;
     let spinning = false;
     let spinStart = 0;
+    // ponytail: smooth transitions — captured pose at interaction start/end
+    // lerps to idle/spin instead of snapping.
+    let blendFromX = 0, blendFromY = 0, blendFromZ = 0;
+    let blendStart = 0;
+    const BLEND_MS = 250;
     let visible = true;
     let disposed = false;
     let frame = 0;
@@ -291,16 +296,21 @@ window.ShuffleDie = (() => {
       }
     }
 
+    function currentPose(time) {
+      const idleTime = time * 2.2;
+      const idleX = reducedMotion ? 0
+        : Math.sin(idleTime * 0.00009) * 0.36 + Math.sin(idleTime * 0.000031 + 1.7) * 0.18;
+      const idleY = reducedMotion ? 0
+        : Math.sin(idleTime * 0.000075 + 2.2) * 0.58 + Math.sin(idleTime * 0.000023) * 0.25;
+      const idleZ = reducedMotion ? 0
+        : Math.sin(idleTime * 0.000064 + 0.7) * 0.22 + Math.sin(idleTime * 0.000019 + 2.8) * 0.10;
+      return { idleX, idleY, idleZ };
+    }
+
     function draw(time) {
       if (disposed) return;
       resize();
-      const idleTime = time * 2.2;
-      const idleX = reducedMotion || dragging ? 0
-        : Math.sin(idleTime * 0.00009) * 0.36 + Math.sin(idleTime * 0.000031 + 1.7) * 0.18;
-      const idleY = reducedMotion || dragging ? 0
-        : Math.sin(idleTime * 0.000075 + 2.2) * 0.58 + Math.sin(idleTime * 0.000023) * 0.25;
-      const idleZ = reducedMotion || dragging ? 0
-        : Math.sin(idleTime * 0.000064 + 0.7) * 0.22 + Math.sin(idleTime * 0.000019 + 2.8) * 0.10;
+      const { idleX, idleY, idleZ } = currentPose(time);
 
       let spinX = 0;
       let spinY = 0;
@@ -311,11 +321,27 @@ window.ShuffleDie = (() => {
         spinX = ramp * Math.PI * 2;
         spinY = ramp * Math.PI * 4;
         spinZ = ramp * Math.PI * 2;
-        if (progress >= 1) spinning = false;
+        if (progress >= 1) { spinning = false; blendStart = time; blendFromX = baseX + spinX; blendFromY = baseY + spinY; blendFromZ = baseZ + spinZ; }
+      }
+
+      let rx = baseX + (dragging ? 0 : idleX) + spinX;
+      let ry = baseY + (dragging ? 0 : idleY) + spinY;
+      let rz = baseZ + (dragging ? 0 : idleZ) + spinZ;
+
+      // Blend from captured pose (interaction start/end) to current target.
+      if (blendStart > 0 && !dragging && !spinning) {
+        const t = Math.min(1, (time - blendStart) / BLEND_MS);
+        const eased = t * t * (3 - 2 * t);
+        rx = blendFromX + (rx - blendFromX) * eased;
+        ry = blendFromY + (ry - blendFromY) * eased;
+        rz = blendFromZ + (rz - blendFromZ) * eased;
+        if (t >= 1) blendStart = 0;
+      } else if (dragging || spinning) {
+        blendStart = 0; // cancel blend when interacting
       }
 
       gl.uniform2f(resolution, canvas.width, canvas.height);
-      gl.uniform3f(rotation, baseX + idleX + spinX, baseY + idleY + spinY, baseZ + idleZ + spinZ);
+      gl.uniform3f(rotation, rx, ry, rz);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 6);

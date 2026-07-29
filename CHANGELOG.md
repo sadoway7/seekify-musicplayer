@@ -1,125 +1,100 @@
 # Changelog
 
-This project doesn't ship numbered releases. This is a running log of what
-changed, grouped by date. The `Looking at` block at the top holds what's on the
-radar but not started. Newest entries go at the top of their dated block.
+## 2026-07-28 — Security & Defect Fixes + Visualizer Perf
 
-## Looking at
+13 audit findings fixed (11 security, 4 defects, 1 frontend). Full report: `docs/audits/2026-07-28-seekify-audit.md`. All `go build/vet/test` green after each fix.
 
-Not promised, not scheduled — just on the radar.
+### Security
+- **S1** SpaHandler now whitelists static assets (was: served any CWD file unauthenticated) — `handlers.go:190` + `spa_test.go`
+- **S3** Path-traversal guards in Cover/ArtistArt/FinderCover handlers — `streaming.go:124,171`, `finder.go:142`
+- **S4** `/api/shared-queue` body cap 1MB + 500-track limit — `collections.go:121`
+- **S5/S6/S11** `auth.RequireUser` on `/api/watch`, `/api/v2/resolve-url`, `/api/v2/search`, `/api/track-duration/`, `/api/finder/youtube`, `/api/preview/` — `server.go` mux lines
+- **S9** PreviewAudioHandler took `ytDlpSem` + `CommandContext(30s)` — `downloads.go:536`
+- **S10** V2SearchHandler took `ytDlpSem` — `resolve.go:344`
 
-- more visualizer shader looks
-- smarter duplicate detection across albums and sources
-- lyrics sync in the now-playing view
-- stats-driven smart playlists (song-based, genre mixing, preferences, rules)
-- rotating mood mix on the home screen
-- on-the-fly opus transcode
-- Spotify import → finder/autodownloader
+### Defects
+- **D2** Password change now invalidates other sessions — `auth.go:122`
+- **D5** RingBuffer full-flag logic rewritten — `logbuf.go:31-47`
+- **D6** `DbMigrateTrackID` returns error; autosort rolls back rename on DB failure — `database.go:1206`, `autosort.go:87-91`
+- **D9** `ExtractYouTubePlaylistTracks` took `CommandContext(2min)` — `watched.go:121`
+- **D10** SetupHandler serialized with mutex — `auth.go`
+- **D11** AutoSort skips rename when destination exists — `autosort.go:79`
 
-## 2026-07-28
+### Frontend
+- **F10** `Api._req` handles empty-body 204 — `js/api.js:25`
+- **V1** Visualizer shader cost halved (`maxEdge` 1920→1280, `uMaxSteps` 148→96) — main-thread raymarch was starving audio playback when visualizer was on — `js/visualizer.js:621,189`
+- Dice-shuffle pose blend (250ms smoothstep) — pointer-drag transitions no longer snap — `js/shuffle-die.js`
 
-- unraid: refresh Community Apps listing - Overview now mentions Soulseek, downloads, waveforms, and auto-tagging; swapped to 4 tighter screenshots re-encoded as JPEG (13MB -> 0.9MB for faster panel loads); changelog kept minimal
+### Deferred (still open)
+S2 (cookies+CORS, needs extension flow), S7 (rate limit middleware), S8 (FinderCoverHandler body leak), D1/D3/D4 (product/schema decisions), C1/C5 (perf refactors), F1 (library DOM virtualization).
 
-## 2026-07-23
+---
 
-- fix: Unraid CA info panel wouldn't open (500) - the app template was in unraid/templates/, not the root-level templates/ CA scans during ingestion; moved to templates/seekify.xml and updated TemplateURL (root cause; earlier em-dash/Registry changes were not it)
-- fix: Unraid CA info panel - set <Registry> to the ghcr.io registry endpoint (was a github.com HTML package page the plugin couldn't use to locate the image); now matches the official CA starter template exactly
-- fix: Unraid Community Apps info panel failed to open (in-Unraid plugin errored while ca.unraid.net listing worked) - ASCII-ified em dashes in seekify.xml/ca_profile.xml; the non-ASCII byte in an XML attribute broke the plugin's parser while the UTF-8 website tolerated it
+## 2026-07-28 — Security & Defect Audit
 
-## 2026-07-19
+Full audit completed. Report: `docs/audits/2026-07-28-seekify-audit.md`.
 
-- unraid: restore original CA template/profile/README structure; add `<Date>2026-07-15</Date>`; keep new icon and screenshots (fixes Community Apps popup crash)
+### Critical (fix first)
+- **S1** `SpaHandler` serves any CWD file unauthenticated (`data/music.db`, `data/cookies.txt`, `.env`) — `internal/handlers/handlers.go:190-202`
+- **S2** Cookie endpoints unauthenticated + CORS `*` — `server.go:414-417`, `internal/handlers/cookies.go`
+- **S3** Path traversal in 3 cover/art handlers — `streaming.go:124-148,165-198`, `finder.go:142-191`
 
-## 2026-07-17
+### High (anonymous surface)
+- **S4** Unbounded `/api/shared-queue` DB insert — `collections.go:121-136`
+- **S5** `/api/watch*` unauthenticated (SSRF + disk-fill) — `settings.go:176-261`
+- **S6** `/api/v2/resolve-url`, `/api/preview/`, `/api/finder/youtube` unauthenticated subprocess spawn — `resolve.go`, `downloads.go:523-555`, `finder.go:212-286`
+- **S7** No rate limit on `/api/login`, `/api/register`, `/api/setup` — `auth.go:57-86`, `register.go:21-63`
 
-- fix: "Needs Review" playlist entry hidden when there are 0 flagged tracks
-- fix: artist tracklist filter search centered on desktop (was stretched full-width)
-- fix: queue drag item no longer shifts horizontally (removed will-change:transform from queue-panel and now-playing that broke position:fixed coordinates)
-- fix: finder type dropdown (Artists/Songs/Albums) replaces hidden mobile chips; gradient kept, dropdown sits above it
-- fix: sticky header locked to top on desktop (removed padding-top gap)
-- fix: finder tabs/search/results/downloads/bulk/tracklist capped and centered on desktop
-- fix: downloads admin buttons use icons (gear/pause/retry) with aria-labels; filter chip hover no longer white-on-green
-- fix: finder search history removed; empty state added for first-time use
-- fix: finder search tab now shows an empty state ("Find music to rip") instead of blank space when there's no query and no history
-- fix: search history stays visible while typing (was disappearing the moment you typed, requiring you to clear the input to re-run a previous search)
-- fix: Escape no longer bricks the app after opening the candidate picker — the invisible overlay was left in the DOM swallowing all clicks; now uses the same fade-out removal as the close button
-- fix: finder status poll no longer leaks a background timer after navigating away from the finder (was hitting /api/queue/counts every 5-15s forever)
-- fix: finder preview audio now stops when navigating away from the finder (was leaving YouTube audio playing in the background with no visible control)
-- fix: bulk import button no longer relabels itself to "Import" (losing its icon) after the first run — preserves its original markup
-- a11y: icon-only buttons in the finder (pick source, retry, delete, preview, candidate close) now have aria-labels for screen readers
-- a11y: touch targets on finder chips, history chips, queue action buttons, watched buttons, and preview button bumped to ≥32-44px
-- responsive: downloads admin action buttons now wrap on narrow screens instead of truncating labels; the primary "Retry All" goes full-width on top
+### Medium (lifecycle / leaks)
+- **S8** `FinderCoverHandler` leaks upstream response bodies on 404 — `finder.go:166-177`
+- **S9** `PreviewAudioHandler` no timeout/semaphore — `downloads.go:536-542`
+- **S10** `V2SearchHandler` no concurrency cap — `resolve.go:315-374`
+- **S11** `TrackDurationHandler` unauthenticated DB write — `admin.go:230-267`
 
-- fix: Soulseek candidate selection no longer always fails with "Selected candidate no longer available" — the handler was clearing CandidatesJSON before the selection goroutine read it
-- fix: when all download slots are busy, a Soulseek selection now returns to needs_selection with a retry message instead of silently dropping the user's pick (the generic queue would then re-search and auto-pick a different candidate)
-- fix: watched-playlist tracks no longer get stuck perpetually "queued" when a download job already exists for that artist+title (marked completed since the existing job covers it)
-- fix: /api/track-duration now reports updated:false honestly when the track doesn't exist or already has a duration (was always true)
-- fix: /api/v2/resolve-url returns a clear "yt-dlp returned no metadata" 502 on empty output instead of a generic 500 parse error
-- fix: "Play Next" no longer offered on the currently-playing track in the queue context menu (was a silent dead click)
-- fix: ripper v2 batch URL resolve now has a 20s per-URL timeout so one slow/hung source doesn't freeze the whole batch
-- fix: rescan "Find More" no longer collapses distinct releases (singles vs compilations vs remasters) that share the same title+artist; dedup now keys on albumId or title+artist+album
-- fix: now-playing swipe-down no longer gets stuck invisible if a second swipe interrupts the first transition (fallback timeout guarantees cleanup)
-- fix: context menu centers on-screen when triggered without a position element (keyboard path) instead of falling to the viewport bottom
-- fix: per-user favorites and recents no longer orphaned when AutoSort moves a file or dedup merges duplicates (user_favorites/user_recent were missing from the ID-cascade; legacy favorites/recent were migrated but the per-user tables weren't)
-- fix: track deletion and orphan cleanup now also clear user_favorites/user_recent (was leaving stale rows that grew the DB unbounded)
-- fix: scanner no longer holds the library lock during review inserts — library reads and streaming no longer stall during a scan merge
-- fix: cover cache no longer double-counts bytes on overwrite during a scan (was causing premature eviction and extra disk/MusicBrainz fetches)
-- fix: session expiry now surfaces a login screen instead of failing personal actions silently (auth-required event was dispatched but never listened for)
-- fix: background library poll no longer discards in-progress home search input on every version change
-- fix: home menu click listener no longer leaks on every home re-render
-- fix: change-password now shows the server's "current password incorrect" message instead of a generic "Failed to update"
-- fix: Escape now closes the review dropdown before the review overlay (was leaving the dropdown orphaned open)
-- cleanup: removed leftover [recent-debug] and [viz-color] console.log output
+### Defects (verified)
+- **D1** Self-service admin escalation (`default_role=admin` + `self_service`) — `register.go:39-42`, `ui-settings.js:241-245`
+- **D2** Password change doesn't invalidate sessions — `auth.go:101-124`
+- **D3** Case-variant duplicate usernames — `database.go:148`, `auth/users.go:96`
+- **D4** `DbDeleteUser` orphans data, sessions may persist — `auth/users.go:180`
+- **D5** Ring buffer off-by-one — `logbuf.go:31-48`
+- **D6** `DbMigrateTrackID` swallows `DB.Begin` error → orphaned favorites — `database.go:1209-1211`, `autosort.go:87`
+- **D7** Scanner swallows `tx.Commit` error → DB/memory divergence — `scanner.go:332-364`
+- **D8** `GenerateUUID` ignores `rand.Read` error — `models/ids.go:16-21`
+- **D9** `ExtractYouTubePlaylistTracks` no timeout → worker wedge — `watched.go:121-130`
+- **D10** `SetupHandler` TOCTOU → duplicate admin — `auth.go:26-44`
+- **D11** AutoSort overwrite of existing destination — `autosort.go:79`
+- **D12** `Content-Disposition` header injection via track title — `downloads.go:79-84`
 
-- Search: genre cards now pick varied cover art across the grid instead of all showing the same album (most-constrained genres claim first, multi-album genres prefer covers not already used), with a proper Fisher-Yates shuffle replacing the biased sort-based pick.
-- Genres: allow a track to have multiple canonical genres (comma-separated) so it appears in every matching genre list; MusicBrainz enrichment and manual edits both store up to three validated genres, and the Search browse grid and genre filter now split multi-genre tracks correctly.
-- Tasks: Settings worker "Last run" timestamps now reflect the last meaningful pass, not the last polling tick (scanner and review keep their previous run time when the cycle did no work), and the download-watchdog row no longer shows a disabled "Run Now" button.
-- Genres: preserve detailed subgenres while normalizing variants, enrich missing genres through cached, rate-limited MusicBrainz metadata (recording first, then artist fallback), let the edit-metadata modal and Rescan Meta action work on existing approved tracks without writing permanent "none" placeholders, refresh the Search page from live library data so genre cards appear after enrichment, and stop Rescan Meta from overwriting existing metadata/album covers.
-- Home: add a subtle diffused lime glow behind the 3D shuffle die without restoring a visible tile or container.
-- Home: supersample the 3D shuffle die canvas for smoother anti-aliased edges as it rotates.
-- Home: remove the shuffle die's remaining stepped shadow ramps and increase its passive rotation to 2.2× the original speed.
-- Home: increase the 3D shuffle die's passive rotation speed without changing its press tumble or drag controls.
-- Home: soften the 3D shuffle die's lighting and specular transitions and add subtle dithering, preserving its cartoon character without visible color banding.
-- Docker: package the Shuffle All fallback artwork so iPhone and other browsers without an active WebGL renderer never show a broken image.
-- Home: replace Shuffle All artwork with a larger, unframed, low-power cel-shaded 3D die that drifts slowly, has concave lime pips, tumbles immediately on press, supports drag rotation, and keeps a static fallback for browsers without WebGL.
+### Likely / Uncertain (one link unconfirmed)
+- **C1** `orphanReset` re-queues searching jobs → double-processing — `downloads.go:1979-2007`
+- **C2** `ALTER TABLE ADD COLUMN` without `IF NOT EXISTS` — `database.go:43,110,133-143,156,177`
+- **C3** No `SetMaxOpenConns(1)` — `database.go:29`
+- **C4** `GetSetting` can't distinguish empty from missing — `settings.go:66-73`
+- **C5** Review bulk ops hold `Mu` across N DB writes — `review.go:617-625,654-661,581-589`
+- **C6** Login username enumeration via timing — `auth.go`
+- **C7** Session cookie lacks `Secure` — `auth.go:146-152`
+- **C8** `enrichActive` read without lock — `review.go:1420`
+- **C9** Sessions table unbounded growth — `sessions.go:45-47`
+- **C10** Last-admin demote/delete race — `users.go:103-110,142-147`
 
-## 2026-07-16
+### Frontend
+- **F1** Library infinite scroll grows DOM monotonically — `ui-library.js:227-291`
+- **F10** `Api._req` throws on 204 empty body — `api.js:25`
 
-- Playback: keep iPhone lock-screen and background audio active when the visualizer routes music through Web Audio, using Safari's playback audio session where supported.
-- Visualizer: feed iPhone Safari from the real player audio again, preserving live frequency-band response across song changes and recovering interrupted audio contexts without recreating the player source.
+### Clean (verified, no action)
+- SQL injection: none found
+- bcrypt/session tokens: correct
+- `store.Mu` lock discipline: holds (hard invariant 6)
+- Range parsing: correct, tested
+- Shell injection: none (argv-vector everywhere)
+- Subprocess pipe draining: correct
+- MusicBrainz rate limiting: cross-process file lock, well-built
+- Workers registry: race regression-tested
+- Upload paths: dual validation, admin-gated
+- `handlers.RequireAdmin`: thin delegate, `ADMIN_PASSCODE` dead in code
 
-## 2026-07-15
+### Quick wins (≤5 lines, isolated)
+S1, S3, S4, S5, S6, S9, S10, S11, D2, D5, D6, D9, D10, D11, F10
 
-- Unraid: publish an explicit template release date and real interface screenshots so Community Applications can display accurate update and app-detail information.
-- Home discovery: keep the rotating Artist and Album showcases artwork-first by omitting entries without usable art; the complete library remains available through See all and Search.
-- Security: keep every custom download destination inside the music library (including symlink escapes), require admin access and correct methods for metadata tools, and honor per-track download restrictions.
-- Queue controls: Play Next now works from both queue history and upcoming tracks, and queue mutations immediately refresh Now Playing controls and playing-track highlights.
-- Finder, Ripper, and Review: only show successful queue additions, recover failed action buttons, prevent Review settings from changing worker state, and fix repeated filters, malformed pagination markup, and artist result counts.
-- Interface polish: keyboard playback shortcuts ignore buttons and links, Settings and Review layouts wrap cleanly on phones, and Settings → About links to the public GitHub project.
-- Inputs: replace the browser-blue search clear button with a neutral app-styled icon and hover state.
-- Metadata rescrape: rank likely original official albums and singles above compilations, live/remix releases, bootlegs, and Various Artists collections.
-- Now Playing: reduce the centered action tray and adjacent playlist toggle by 10% on both desktop and mobile.
-- Player state: removing the current or final queued track now loads the correct successor or fully clears stale playback UI; volume and mute persist and stay synchronized across every control surface.
-- Finder and metadata: stale searches can no longer replace newer results, changing result type always refetches, and metadata Save is protected from duplicate submissions.
-- File security: admin list, upload, delete, and create-folder operations now use path-aware library containment and cannot escape into similarly named sibling folders or delete the library root.
-- Streaming and sessions: support suffix byte ranges used by media clients, return correct invalid-range metadata, and reduce rolling-session SQLite writes from every request to at most once daily.
-- Visualizer: keep the main player on native audio output so enabling visuals cannot alter or stop background playback, and rebind audio analysis when songs change; unsupported capture browsers use decorative mode.
-- Downloads: prevent concurrent requests from bypassing limits or duplicate checks, make Resume immediate, and expose the admin Pause/Resume control.
-- Home and search: rotate Artists and Albums daily, add full-library links, label quick play, return Albums in search, and show clearer Library filter feedback.
-- Playback: keep unavailable-file detection active until audio truly starts, handle autoplay blocking without skipping tracks, and fix repeat-one Next state, shared track links, and cancelled touch seeks.
-- UI reliability: load failures now stay visible instead of becoming empty/default states; Settings waits for saved values before rendering workers, and Review bulk actions describe their full scope.
-- Library: detect renamed/replaced audio files even when the file count is unchanged, and keep clients updated after later downloads or filesystem changes.
-- Reliability: manual workers can no longer start twice or crash the server, and admin log capture is safe during concurrent writes.
-- Security: bulk and playlist imports now reject anonymous requests instead of risking a server panic.
-
-## 2026-07-10
-- Visualizer: reposition correctly when queue panel opens/closes on desktop at all breakpoints (direct invalidation on toggle + ResizeObserver fallback).
-- Admin setting: choose default Now Playing view (visualizer vs album art). Default is album art. Users can still toggle individually; admin default applies until they do.
-- Visualizer: throttle render loop to 30fps and cache per-frame layout/property reads — fixes audio stutter, speed drift, and pause hiccups caused by main-thread saturation.
-- README and repo polish for the public GitHub mirror.
-
-## 2026-07-09
-- first public push to GitHub (`seekify-musicplayer`).
-
-## 2026-06
-- early beta. Screenshots in the README are from this point.
+### Deferred (needs design or product call)
+S2 (extension flow), S7 (new middleware), S8 (subtle pattern), D1 (product), D3 (migration), D4 (tx design), C1 (state machine), C5 (perf refactor), F1 (virtualization)

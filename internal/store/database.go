@@ -1203,10 +1203,10 @@ func DbCleanupPlaylistTracks() {
 // DbMigrateTrackID updates a track's ID and file_path and cascades the new ID
 // to every referencing table. Used by AutoSort when moving files to preserve
 // user data (favorites, playlists, reviews) across path changes.
-func DbMigrateTrackID(oldID, newID, newPath string) {
+func DbMigrateTrackID(oldID, newID, newPath string) error {
 	tx, err := DB.Begin()
 	if err != nil {
-		return
+		return err
 	}
 	defer tx.Rollback()
 
@@ -1235,7 +1235,7 @@ func DbMigrateTrackID(oldID, newID, newPath string) {
 		tx.Exec(`UPDATE metadata_matches SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE track_reviews SET track_id=? WHERE track_id=?`, newID, oldID)
 	}
-	tx.Commit()
+	return tx.Commit()
 }
 
 // --- Download management ---

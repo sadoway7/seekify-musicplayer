@@ -14,9 +14,9 @@
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>Rolling release; see the project page for the latest changes.</Changes>
-  <Date>2026-07-10</Date>
-  <LastUpdate>1784944662</LastUpdate>
+  <Changes>2026-07-28: Security audit fixes — static-file whitelist for SPA catch-all, path-traversal guards on cover/art handlers, auth requirements on previously-open endpoints (shared-queue, watch, resolve-url, preview, finder, track-duration), subprocess timeouts for yt-dlp, password-change session invalidation, AutoSort safer (rollback on DB failure + skip-on-collision), visualizer shader cost halved to fix audio contention. See CHANGELOG.md.</Changes>
+  <Date>2026-07-28</Date>
+  <LastUpdate>1785303249</LastUpdate>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
   <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.jpg</Screenshot>

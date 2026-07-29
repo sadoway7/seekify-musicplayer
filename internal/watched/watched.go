@@ -2,6 +2,7 @@ package watched
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -118,7 +119,9 @@ func ExtractYouTubePlaylistTracks(playlistURL string) (string, []PlaylistTrackIn
 		return "", nil, fmt.Errorf("yt-dlp not found")
 	}
 
-	cmd := exec.Command(ytdlpPath,
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",

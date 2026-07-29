@@ -123,11 +123,16 @@ func SharedQueueCreateHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB cap
 	var body struct {
 		TrackIDs []string `json:"trackIds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.TrackIDs) == 0 {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(body.TrackIDs) > 500 {
+		http.Error(w, "Too many tracks", http.StatusBadRequest)
 		return
 	}
 	trackJSON, _ := json.Marshal(body.TrackIDs)

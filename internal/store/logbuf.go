@@ -34,15 +34,14 @@ func (rb *RingBuffer) Write(p []byte) (int, error) {
 
 	n := len(p)
 	for _, b := range p {
+		if rb.full {
+			rb.r = rb.w // drop oldest as we overwrite
+		}
 		rb.buf[rb.w] = b
 		rb.w = (rb.w + 1) % len(rb.buf)
 		if rb.w == rb.r {
 			rb.full = true
-			rb.r = (rb.r + 1) % len(rb.buf)
 		}
-	}
-	if rb.w != rb.r {
-		rb.full = false
 	}
 	return n, nil
 }

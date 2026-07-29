@@ -341,6 +341,9 @@ func V2SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ytDlpSem <- struct{}{}
+	defer func() { <-ytDlpSem }()
+
 	var cmd *exec.Cmd
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
