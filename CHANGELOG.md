@@ -5,6 +5,9 @@
 ### Frontend
 - Added console logging to `_onMediaError` / load-timeout / play-reject paths to identify which trigger fires when tracks skip (uncommitted investigation; revert once root cause is found)
 
+### Unraid
+- Community Apps `<Changes>` now shows a sanitized, dated changelog history (security specifics kept out of the public panel); added AGENTS.md note to always sanitize CA listing text
+
 ## 2026-07-28 — Security hardening, bug fixes, visualizer
 
 ### Security

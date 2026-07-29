@@ -103,6 +103,7 @@ For frontend or handler changes: run the app and manually exercise the affected 
 - Adding/splitting files within `internal/<pkg>/` or root `package main` is fine. Moving `.go` files between packages changes import paths — get approval first. New `<script>` tags in `index.html` must respect load order (shared global scope, no module system, no ES imports).
 - Don't touch `Dockerfile`, CI, ports, volumes, env vars, or admin auth unless explicitly asked.
 - Update `CHANGELOG.md` with every user-facing change (bug fix, feature, UX change): one line at the top of the `Unreleased`/`Looking at` block. Commit in the same commit or immediately after.
+- **Unraid CA `<Changes>` is public — sanitize it.** The `<Changes>` field in `templates/seekify.xml` renders in the in-Unraid Community Apps panel. Never put security-specific details there (path traversal, auth, unauthenticated endpoints, input limits, subprocess hardening, audit findings) — it advertises attack surface and prior vulnerabilities. Translate internal changelog entries into benign user-facing language ("stability", "bug fixes", "performance"). Security details stay in `CHANGELOG.md` / commit messages only.
 
 ### Task-specific
 

@@ -14,7 +14,44 @@
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>2026-07-28: Security audit fixes — static-file whitelist for SPA catch-all, path-traversal guards on cover/art handlers, auth requirements on previously-open endpoints (shared-queue, watch, resolve-url, preview, finder, track-duration), subprocess timeouts for yt-dlp, password-change session invalidation, AutoSort safer (rollback on DB failure + skip-on-collision), visualizer shader cost halved to fix audio contention. See CHANGELOG.md.</Changes>
+  <Changes>Changelog
+
+2026-07-29
+- Playback reliability improvements
+
+2026-07-28
+- Visualizer performance and polish
+- Refined shuffle-dice animation
+- General stability and bug fixes
+
+2026-07-17
+- Finder: cleaner search, better mobile layout, accessibility improvements
+- More reliable downloads and Soulseek candidate selection
+- Smarter duplicate/release detection; multi-genre support
+- Redesigned 3D shuffle die on the home screen
+- Broad accessibility and responsive-layout polish
+
+2026-07-16
+- iPhone lock-screen and background audio fixes
+- Visualizer live frequency response restored on iPhone
+
+2026-07-15
+- Home discovery rotates featured artists and albums daily
+- Improved queue controls (Play Next, live refresh)
+- Metadata ranking prefers original releases over compilations
+- Downloads: pause/resume control and concurrency limits
+- Better media-client streaming support
+- Initial Community Apps listing with screenshots
+
+2026-07-10
+- Visualizer layout and performance fixes (prevents audio stutter)
+- Admin default for Now Playing view
+
+2026-07-09
+- First public release on GitHub
+
+2026-06
+- Early beta</Changes>
   <Date>2026-07-28</Date>
   <LastUpdate>1785303249</LastUpdate>
   <MinVer>6.1</MinVer>
