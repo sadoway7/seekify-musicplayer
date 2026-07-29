@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-29 — Player skip diagnostics
+
+### Frontend
+- Added console logging to `_onMediaError` / load-timeout / play-reject paths to identify which trigger fires when tracks skip (uncommitted investigation; revert once root cause is found)
+
 ## 2026-07-28 — Security hardening, bug fixes, visualizer
 
 ### Security

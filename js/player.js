@@ -55,7 +55,18 @@ const Player = {
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
       if (this.onStateChange) this.onStateChange();
     });
-    this.audio.addEventListener('error', () => this._onMediaError());
+    this.audio.addEventListener('error', (e) => {
+      const a = this.audio;
+      console.warn('[player] audio error event', {
+        error: a.error,
+        code: a.error && a.error.code,
+        message: a.error && a.error.message,
+        src: a.src,
+        networkState: a.networkState,
+        readyState: a.readyState,
+      });
+      this._onMediaError('audio-error');
+    });
 
     // iOS only renders prev/next-track buttons (not ±10s skip) when Media Session
     // handlers are (re)registered at playback start; init-time registration does
@@ -160,9 +171,20 @@ const Player = {
         if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('Tap play to start listening');
         return;
       }
-      this._onMediaError();
+      console.warn('[player] play() promise rejected', { name: e && e.name, message: e && e.message, src: this.audio.src });
+      this._onMediaError('play-rejected');
     });
-    this._loadTimeout = setTimeout(() => this._onMediaError(), 10000);
+    this._loadTimeout = setTimeout(() => {
+      console.warn('[player] 10s load timeout', {
+        src: this.audio.src,
+        networkState: this.audio.networkState,
+        readyState: this.audio.readyState,
+        currentTime: this.audio.currentTime,
+        duration: this.audio.duration,
+        paused: this.audio.paused,
+      });
+      this._onMediaError('load-timeout');
+    }, 10000);
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
   },
@@ -174,11 +196,12 @@ const Player = {
     }
   },
 
-  _onMediaError() {
+  _onMediaError(reason) {
     if (this._errorHandledForCurrent) return;
     this._errorHandledForCurrent = true;
     this._clearLoadTimeout();
     this.playing = false;
+    console.warn('[player] _onMediaError', { reason, trackId: this.getCurrentTrack() && this.getCurrentTrack().id, consecutiveErrors: this._consecutiveErrors + 1, queueLen: this.queue.length });
 
     if (this.queue.length === 0) {
       if (this.onStateChange) this.onStateChange();
