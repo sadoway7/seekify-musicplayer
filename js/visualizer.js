@@ -806,11 +806,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (this._artSrc === img.src) return;
     this._artSrc = img.src;
     try {
-      if (!this._samp) this._samp = document.createElement('canvas');
+      if (!this._samp) {
+        this._samp = document.createElement('canvas');
+        this._sampCtx = this._samp.getContext('2d', { willReadFrequently: true });
+      }
       this._samp.width = this._samp.height = 8;
-      const ctx = this._samp.getContext('2d');
-      ctx.drawImage(img, 0, 0, 8, 8);
-      const d = ctx.getImageData(0, 0, 8, 8).data;
+      this._sampCtx.drawImage(img, 0, 0, 8, 8);
+      const d = this._sampCtx.getImageData(0, 0, 8, 8).data;
       let r = 0, g = 0, b = 0, n = 0;
       for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
       this.setColor(r / (n * 255), g / (n * 255), b / (n * 255));
