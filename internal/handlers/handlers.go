@@ -188,8 +188,11 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ponytail: static-asset whitelist — blocks /data/, /.env, /vendor/, etc.
+	// Root-level PNGs (icon.png, favicon-*.png, apple-touch-icon.png, icon-192.png)
+	// are allowed; nested PNGs under /data/ etc. are not (no "/" in path).
+	isRootPng := strings.HasSuffix(path, ".png") && !strings.Contains(strings.TrimPrefix(path, "/"), "/")
 	allowed := path == "/index.html" || path == "/admin.html" || path == "/ripperv2.html" ||
-		path == "/favicon.ico" || path == "/manifest.webmanifest" ||
+		path == "/favicon.ico" || path == "/manifest.webmanifest" || isRootPng ||
 		strings.HasPrefix(path, "/css/") || strings.HasPrefix(path, "/js/") ||
 		strings.HasPrefix(path, "/img/") || strings.HasPrefix(path, "/assets/") ||
 		strings.HasPrefix(path, "/extension/")

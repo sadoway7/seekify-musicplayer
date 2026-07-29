@@ -25,6 +25,13 @@ func TestSpaHandlerWhitelist(t *testing.T) {
 		{"/index.html", http.StatusMovedPermanently}, // ServeMux canonicalizes to /
 		{"/admin.html", http.StatusOK},
 		{"/favicon.ico", http.StatusOK},
+		{"/icon.png", http.StatusOK},
+		{"/icon-192.png", http.StatusOK},
+		{"/favicon-32.png", http.StatusOK},
+		{"/favicon-16.png", http.StatusOK},
+		{"/apple-touch-icon.png", http.StatusOK},
+		{"/manifest.webmanifest", http.StatusOK},
+		{"/data/icon.png", http.StatusNotFound},  // nested PNG blocked
 		{"/img/cover.jpg", http.StatusOK},
 		{"/extension/musicapp-cookies.zip", http.StatusOK},
 		{"/nonexistent-page", http.StatusNotFound}, // no file, no fallback hit in test env
