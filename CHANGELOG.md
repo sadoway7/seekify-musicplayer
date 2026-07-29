@@ -16,6 +16,10 @@ Not promised, not scheduled — just on the radar.
 - on-the-fly opus transcode
 - Spotify import → finder/autodownloader
 
+## 2026-07-28
+
+- unraid: refresh Community Apps listing - Overview now mentions Soulseek, downloads, waveforms, and auto-tagging; swapped to 4 tighter screenshots re-encoded as JPEG (13MB -> 0.9MB for faster panel loads); changelog kept minimal
+
 ## 2026-07-23
 
 - fix: Unraid CA info panel wouldn't open (500) - the app template was in unraid/templates/, not the root-level templates/ CA scans during ingestion; moved to templates/seekify.xml and updated TemplateURL (root cause; earlier em-dash/Registry changes were not it)

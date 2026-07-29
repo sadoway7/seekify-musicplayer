@@ -7,22 +7,22 @@
   <Privileged>false</Privileged>
   <Icon>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/icon-rounded.png</Icon>
   <WebUI>http://[IP]:[PORT:8081]</WebUI>
-  <Overview>Self-hosted music server. Scans local libraries, streams audio, fetches MusicBrainz metadata/cover art, and downloads via yt-dlp. Single Go binary + vanilla JS SPA.</Overview>
+  <Overview>Self-hosted music server. Scans local libraries, streams audio, and pulls metadata/cover art from MusicBrainz. Download from YouTube (yt-dlp) and Soulseek (aioslsk), generate waveforms, and auto-tag your library. Single Go binary + vanilla JS SPA; mobile-friendly.</Overview>
   <Project>https://github.com/sadoway7/seekify-musicplayer</Project>
   <!-- Create a support thread at forums.unraid.net, then uncomment: -->
   <!-- <Support>https://forums.unraid.net/topic/YOUR_SUPPORT_TOPIC</Support> -->
   <TemplateURL>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/templates/seekify.xml</TemplateURL>
   <ReadMe>https://github.com/sadoway7/seekify-musicplayer/blob/main/README.md</ReadMe>
   <Category>MediaApp:Music</Category>
-  <Changes>Initial Community Apps submission.</Changes>
+  <Changes>Rolling release; see the project page for the latest changes.</Changes>
   <Date>2026-07-10</Date>
   <LastUpdate>1784944662</LastUpdate>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
-  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.png</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/03-now-playing-history.png</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/05-downloads-all.png</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/mobile-01.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/02-now-playing-menu.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/mobile-02.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/mobile-07.jpg</Screenshot>
 
   <Config Name="WebUI" Target="8081" Default="8081" Mode="tcp" Description="HTTP port for the WebUI." Type="Port" Display="always" Required="true" Mask="false"/>
   <Config Name="Appdata" Target="/app/data" Default="/mnt/user/appdata/seekify/data" Mode="rw" Description="SQLite database, cover/waveform cache, download jobs." Type="Path" Display="always" Required="true" Mask="false"/>
