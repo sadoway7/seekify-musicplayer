@@ -66,3 +66,13 @@ func DeleteSessionsForUser(userID string) error {
 	_, err := store.DB.Exec(`DELETE FROM sessions WHERE user_id=?`, userID)
 	return err
 }
+
+// DeleteSessionsForUserExcept drops all sessions for the user except the one
+// matching keepToken. Used by the self-service password-change flow so the
+// current device stays logged in while other sessions (e.g. a leaked token on
+// another machine) are invalidated.
+func DeleteSessionsForUserExcept(userID, keepToken string) error {
+	_, err := store.DB.Exec(
+		`DELETE FROM sessions WHERE user_id=? AND token<>?`, userID, keepToken)
+	return err
+}

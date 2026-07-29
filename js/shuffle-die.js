@@ -297,11 +297,10 @@ window.ShuffleDie = (() => {
     }
 
     function currentPose(time) {
+      // Idle wobble: z-axis only (user request — in-plane spin, no tumbling).
       const idleTime = time * 2.2;
-      const idleX = reducedMotion ? 0
-        : Math.sin(idleTime * 0.00009) * 0.36 + Math.sin(idleTime * 0.000031 + 1.7) * 0.18;
-      const idleY = reducedMotion ? 0
-        : Math.sin(idleTime * 0.000075 + 2.2) * 0.58 + Math.sin(idleTime * 0.000023) * 0.25;
+      const idleX = 0;
+      const idleY = 0;
       const idleZ = reducedMotion ? 0
         : Math.sin(idleTime * 0.000064 + 0.7) * 0.22 + Math.sin(idleTime * 0.000019 + 2.8) * 0.10;
       return { idleX, idleY, idleZ };
@@ -318,9 +317,9 @@ window.ShuffleDie = (() => {
       if (spinning) {
         const progress = Math.min(1, (time - spinStart) / 900);
         const ramp = progress * progress * (3 - 2 * progress);
-        spinX = ramp * Math.PI * 2;
-        spinY = ramp * Math.PI * 4;
-        spinZ = ramp * Math.PI * 2;
+        spinX = 0;
+        spinY = 0;
+        spinZ = ramp * Math.PI * 4; // z-axis only; 2 full turns over 900ms
         if (progress >= 1) { spinning = false; blendStart = time; blendFromX = baseX + spinX; blendFromY = baseY + spinY; blendFromZ = baseZ + spinZ; }
       }
 

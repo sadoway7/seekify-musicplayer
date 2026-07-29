@@ -125,7 +125,12 @@ func ChangeOwnPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// Invalidate all other sessions; the current one dies too — user re-logs in.
-	auth.DeleteSessionsForUser(u.ID)
+	// Invalidate all other sessions; keep the current one so this device
+	// stays logged in. The cookie on this request is the survivor.
+	if c, _ := r.Cookie(auth.SessionCookieName); c != nil {
+		auth.DeleteSessionsForUserExcept(u.ID, c.Value)
+	} else {
+		auth.DeleteSessionsForUser(u.ID)
+	}
 	writeJSON(w, map[string]interface{}{"ok": true})
 }

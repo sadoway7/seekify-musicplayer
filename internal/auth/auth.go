@@ -19,7 +19,7 @@ const (
 	StatusActive  = "active"
 	StatusPending = "pending"
 
-	sessionCookieName = "music_session"
+	SessionCookieName = "music_session"
 	sessionTTL        = 30 * 24 * time.Hour
 )
 
@@ -133,7 +133,7 @@ func RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 // Wrap the top-level mux so CurrentUser works on every route.
 func SessionLoad(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+		if c, err := r.Cookie(SessionCookieName); err == nil && c.Value != "" {
 			if u := lookupSession(c.Value); u != nil {
 				next.ServeHTTP(w, withUser(r, u))
 				return
@@ -145,7 +145,7 @@ func SessionLoad(next http.Handler) http.Handler {
 
 func SetSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookieName, Value: token,
+		Name: SessionCookieName, Value: token,
 		Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
 		MaxAge: int(sessionTTL.Seconds()),
 	})
@@ -153,7 +153,7 @@ func SetSessionCookie(w http.ResponseWriter, token string) {
 
 func ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookieName, Value: "", Path: "/",
+		Name: SessionCookieName, Value: "", Path: "/",
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1,
 	})
 }
