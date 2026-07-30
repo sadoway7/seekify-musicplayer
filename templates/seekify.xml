@@ -17,6 +17,7 @@
   <Changes>Changelog
 
 2026-07-30
+- Tell search engines not to index the app (deep links keep working)
 - Experimental optional audio loudness leveling (toggle in Settings → Playback)
 - Download queue reliability fix and clearer download-source labels
 - Admin settings reorganized with a section dropdown
