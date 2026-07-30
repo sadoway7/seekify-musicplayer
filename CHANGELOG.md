@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Audio normalization: tracks are analyzed (EBU R128 via ffmpeg, lazy on first play) and replayed at a configurable target loudness (default −14 LUFS) using a shared Web Audio gain node. Per-track gain is cached in the DB and served via `/api/normalize/<id>`; the player applies it before playback. Enabled by default; toggle in Settings → Playback. The visualizer now taps the player's audio graph (post-gain) instead of building its own, so bars reflect the normalized signal.
+- Fix: deleting a track no longer blocks re-downloading it from Finder — the download-queue dedup check now ignores completed jobs (previously any non-failed history row counted).
+- Downloads: split the old "Soulseek only" mode into **Soulseek only (no YouTube fallback)** and **Soulseek preferred (falls back to YouTube)**. The old "Soulseek only" silently fell back to YouTube on any Soulseek failure; the new strict mode honors the label, and users who want the previous behavior pick "Soulseek preferred".
+- Settings UI: download-source dropdown now reads consistently in fallback order — "Auto — YouTube, then Soulseek", "Auto — Soulseek, then YouTube", "YouTube only", "Soulseek only" (replacing the previous mix of dashes, commas, "preferred", and "(no YouTube fallback)" styles).
+- Settings UI (admin): replaced the six-button tab bar with a centered section dropdown (Playback/Downloads/Library/Tasks/Users/About). Non-admin Account/About tabs are unchanged.
+
 ## 2026-07-29 — Player skip diagnostics
 
 ### Frontend
