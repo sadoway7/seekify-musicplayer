@@ -16,6 +16,11 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-07-30
+- Experimental optional audio loudness leveling (toggle in Settings → Playback)
+- Download queue reliability fix and clearer download-source labels
+- Admin settings reorganized with a section dropdown
+
 2026-07-29
 - Playback reliability improvements
 
