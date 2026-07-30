@@ -138,6 +138,7 @@ func InitDB(path string) {
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN genre_canonical TEXT NOT NULL DEFAULT ''`)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN genre_source TEXT NOT NULL DEFAULT ''`)
 	DB.Exec(`ALTER TABLE tracks ADD COLUMN genre_checked_at INTEGER NOT NULL DEFAULT 0`)
+	DB.Exec(`ALTER TABLE tracks ADD COLUMN gain_db REAL`)
 
 	// Add added_at to favorites for ordering (newest first)
 	DB.Exec(`ALTER TABLE favorites ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0`)

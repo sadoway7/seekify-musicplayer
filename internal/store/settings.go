@@ -25,6 +25,8 @@ func InitSettingsTable() {
 	MigrateSetting("artist_art_fetch_enabled", "true")
 	MigrateSetting("waveform_style", "rounded")
 	MigrateSetting("default_now_playing_view", "album_art")
+	MigrateSetting("audio_normalization", "true")
+	MigrateSetting("audio_normalization_target_lufs", "-14")
 	MigrateSetting("review_enabled", "true")
 	MigrateSetting("review_recheck_hours", "24")
 	MigrateSetting("review_flag_missing_title", "true")
