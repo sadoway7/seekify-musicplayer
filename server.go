@@ -333,6 +333,7 @@ func main() {
 	}))
 
 	mux.HandleFunc("/api/waveform/", handlers.WaveformHandler)
+	mux.HandleFunc("/api/normalize/", auth.RequireUser(handlers.NormalizeHandler))
 	mux.HandleFunc("/api/track-duration/", auth.RequireUser(handlers.TrackDurationHandler))
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
