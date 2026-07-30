@@ -29,14 +29,15 @@ Object.assign(UI, {
     let html = '<div class="page-header">'
       + '<span class="page-header-title" style="font-size:var(--fs-screen);font-weight:700;letter-spacing:var(--ls-tight)">Settings</span></div>';
 
-    html += '<div class="lib-tabs" id="settings-tabs">'
-      + '<button class="lib-tab active" data-settings-tab="playback">Playback</button>'
-      + '<button class="lib-tab" data-settings-tab="downloads">Downloads</button>'
-      + '<button class="lib-tab" data-settings-tab="library">Library</button>'
-      + '<button class="lib-tab" data-settings-tab="tasks">Tasks</button>'
-      + '<button class="lib-tab" data-settings-tab="users">Users</button>'
-      + '<button class="lib-tab" data-settings-tab="about">About</button>'
-      + '</div>';
+    html += '<div class="lib-tabs" id="settings-tabs" style="display:flex;justify-content:center">'
+      + '<select id="settings-section-select" class="settings-select" style="min-width:200px">'
+      + '<option value="playback" selected>Playback</option>'
+      + '<option value="downloads">Downloads</option>'
+      + '<option value="library">Library</option>'
+      + '<option value="tasks">Tasks</option>'
+      + '<option value="users">Users</option>'
+      + '<option value="about">About</option>'
+      + '</select></div>';
 
     html += '<div class="settings-tab-content" id="settings-tab-content">';
 
@@ -64,6 +65,8 @@ Object.assign(UI, {
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-save-default-np-view">' + Icons.check() + '<span>Save</span></button>'
       + '</div>'
+      + '<div class="settings-subsection-label" style="margin-top:20px">Audio Normalization</div>'
+      + st('setting-audio-normalization', 'Enable audio normalization', '')
       + '</div>';
 
     // --- Tab: Downloads (logical flow: sources → auth → quality → org → permissions → import) ---
@@ -73,6 +76,7 @@ Object.assign(UI, {
       + '<div class="settings-field"><label>Where to download from</label>'
       + '<select id="setting-download-source" class="settings-select">'
       + '<option value="auto">Auto — YouTube, then Soulseek</option>'
+      + '<option value="soulseek_preferred">Auto — Soulseek, then YouTube</option>'
       + '<option value="youtube">YouTube only</option>'
       + '<option value="soulseek">Soulseek only</option>'
       + '</select></div>'
@@ -295,19 +299,17 @@ Object.assign(UI, {
 
     this.els.content.innerHTML = html;
 
-    // --- Tab switching ---
-    this.els.content.querySelectorAll('[data-settings-tab]').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const target = tab.dataset.settingsTab;
-        this.els.content.querySelectorAll('[data-settings-tab]').forEach(t => t.classList.remove('active'));
+    // --- Section dropdown switching (admin) ---
+    const settingsSectionSelect = this.els.content.querySelector('#settings-section-select');
+    if (settingsSectionSelect) {
+      settingsSectionSelect.addEventListener('change', () => {
+        const target = settingsSectionSelect.value;
         this.els.content.querySelectorAll('.settings-tab-panel').forEach(p => p.classList.remove('active'));
-        tab.classList.add('active');
         const panel = this.els.content.querySelector('[data-panel="' + target + '"]');
         if (panel) panel.classList.add('active');
-        // Paint waveform preview when switching to playback tab
         if (target === 'playback') this._paintWaveformPreview();
       });
-    });
+    }
 
     this._loadMetadataStatus();
 
@@ -377,6 +379,12 @@ Object.assign(UI, {
     const npViewSaveBtn = document.getElementById('btn-save-default-np-view');
     if (npViewSaveBtn) {
       npViewSaveBtn.addEventListener('click', () => this._saveDefaultNowPlayingView());
+    }
+
+    const anToggle = document.getElementById('setting-audio-normalization');
+    if (anToggle) {
+      this._stoggleOn('setting-audio-normalization', Store.audioNormalizationEnabled !== false);
+      anToggle.addEventListener('click', () => this._saveAudioNormalizationToggle());
     }
 
     // Users tab (admin only): load registration settings + user list, bind actions.
@@ -836,6 +844,17 @@ Object.assign(UI, {
     }
   },
 
+  async _saveAudioNormalizationToggle() {
+    const on = this._stoggleVal('setting-audio-normalization');
+    try {
+      await Api.saveSettings({ audio_normalization: String(on) });
+      Store.audioNormalizationEnabled = on;
+      this._showToast('Saved');
+    } catch (e) {
+      this._showToast('Failed to save');
+    }
+  },
+
   async _saveFinderSettings() {
     const fmt = document.getElementById('setting-download-format');
     const mp3 = document.getElementById('setting-mp3-bitrate');
@@ -963,7 +982,10 @@ Object.assign(UI, {
 
     const srcFields = '<div class="settings-field"><label>Download Source</label>'
       + '<select id="setting-download-source" class="settings-select">'
-      + '<option value="auto">Auto — YouTube, then Soulseek</option><option value="youtube">YouTube only</option><option value="soulseek">Soulseek only</option>'
+      + '<option value="auto">Auto — YouTube, then Soulseek</option>'
+      + '<option value="soulseek_preferred">Auto — Soulseek, then YouTube</option>'
+      + '<option value="youtube">YouTube only</option>'
+      + '<option value="soulseek">Soulseek only</option>'
       + '</select></div>'
       + '<div class="settings-field" style="max-width:120px"><label>Concurrent Downloads (1-10)</label>'
       + '<input type="text" id="setting-download-concurrency" class="settings-input" placeholder="3" value="3"></div>';

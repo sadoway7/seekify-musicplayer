@@ -705,11 +705,12 @@ func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, tr
 		store.Mu.RUnlock()
 	}
 
-	// Dedup: reject if there's already a non-failed job for the same track.
+	// Dedup: reject if there's already an in-flight job for the same track.
+	// Completed/failed jobs are history, not queue; users can re-download after deleting.
 	if artist != "" && title != "" {
 		key := strings.ToLower(artist + "|" + title)
 		var count int
-		store.DB.QueryRow(`SELECT COUNT(*) FROM download_jobs WHERE LOWER(artist)||'|'||LOWER(title) = ? AND status != 'failed'`, key).Scan(&count)
+		store.DB.QueryRow(`SELECT COUNT(*) FROM download_jobs WHERE LOWER(artist)||'|'||LOWER(title) = ? AND status IN ('queued','searching','downloading','needs_selection')`, key).Scan(&count)
 		if count > 0 {
 			return nil, fmt.Errorf("already in download queue")
 		}
@@ -856,10 +857,11 @@ func ProcessDownloadQueue() {
 }
 
 // getDownloadSource returns the configured global source mode: "youtube",
-// "soulseek", or "auto" (YouTube with Soulseek fallback on failure).
+// "soulseek" (strict), "soulseek_preferred" (Soulseek first, YT fallback),
+// or "auto" (YouTube with Soulseek fallback on failure).
 func getDownloadSource() string {
 	switch s := store.GetSetting("download_source", "auto"); s {
-	case "youtube", "soulseek", "auto":
+	case "youtube", "soulseek", "soulseek_preferred", "auto":
 		return s
 	default:
 		return "auto"
@@ -1085,10 +1087,15 @@ func ProcessSingleDownload(job *DownloadJob) {
 		return
 	}
 	if source == "soulseek" {
+		// Strict Soulseek: never touch YouTube.
+		downloadFromSoulseek(job)
+		return
+	}
+	if source == "soulseek_preferred" {
 		downloadFromSoulseek(job)
 		// Soulseek-preferred mode: if Soulseek failed (no results, all peers
 		// unreachable, search timeout after retry), fall back to YouTube so
-		// soulseek-only mode doesn't hard-fail tracks YT could supply.
+		// soulseek-preferred mode doesn't hard-fail tracks YT could supply.
 		// Quality-conscious: we only reach here on genuine soulseek failure,
 		// so FLAC-via-soulseek is still preferred on every successful path.
 		// needs_selection/completed are non-failed → we return above-this-check.
