@@ -8,6 +8,7 @@ import (
 	"musicapp/internal/store"
 	"musicapp/internal/watched"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,9 +26,11 @@ func SettingsGetHandler(w http.ResponseWriter, r *http.Request) {
 // the admin-only /api/settings, and writes stay admin-only.
 func PublicSettingsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{
-		"waveform_style":           store.GetSetting("waveform_style", "rounded"),
-		"downloads_enabled":        store.GetSetting("downloads_enabled", "true"),
-		"default_now_playing_view": store.GetSetting("default_now_playing_view", "album_art"),
+		"waveform_style":                  store.GetSetting("waveform_style", "rounded"),
+		"downloads_enabled":               store.GetSetting("downloads_enabled", "true"),
+		"default_now_playing_view":        store.GetSetting("default_now_playing_view", "album_art"),
+		"audio_normalization":             store.GetSetting("audio_normalization", "true"),
+		"audio_normalization_target_lufs": store.GetSetting("audio_normalization_target_lufs", "-14"),
 	})
 }
 
@@ -44,6 +47,13 @@ func SettingsSetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for k, v := range settings {
+		if k == "audio_normalization_target_lufs" {
+			f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			if err != nil || f < -60 || f > 0 {
+				writeJSONError(w, http.StatusBadRequest, "audio_normalization_target_lufs must be a number in [-60, 0]")
+				return
+			}
+		}
 		store.SetSetting(k, v)
 	}
 
