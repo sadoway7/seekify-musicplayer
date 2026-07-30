@@ -418,76 +418,47 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     let actx = null;
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      const capture = Player.audio.captureStream || Player.audio.mozCaptureStream;
       if (!Ctx) {
         this._audioMode = 'decorative';
         this._audioReady = true;
         return;
       }
-      if (!capture) {
-        if (!userGesture) return;
-        actx = this._actx || new Ctx();
-        const src = actx.createMediaElementSource(Player.audio);
-        let an = null;
-        try {
-          an = actx.createAnalyser();
-          an.fftSize = 1024;
-          an.smoothingTimeConstant = 0.4;
-          src.connect(an);
-          an.connect(actx.destination);
-        } catch (e) {
-          // Once createMediaElementSource succeeds, Player.audio belongs to
-          // this context for the rest of the page. Preserve audible playback
-          // even if analyser setup unexpectedly fails.
-          try { src.connect(actx.destination); } catch (connectError) {}
-          this._actx = actx;
-          this._audioSource = src;
-          this._audioMode = 'element-bypass';
-          this._audioReady = true;
-          this._resumeAudioContext(true);
-          console.warn('[viz] Safari analyser unavailable; preserving audio without reactivity:', e);
-          return;
-        }
-        this._actx = actx;
-        this._audioSource = src;
-        this._analyser = an;
-        this._freq = new Uint8Array(an.frequencyBinCount);
-        this._wave = new Uint8Array(an.fftSize);
-        this._audioMode = 'element';
+      if (!userGesture) return;
+      // Player's shared Web Audio graph is the single owner of the audio path
+      // (createMediaElementSource is one-way per element). Tap its gain node
+      // post-gain so bars reflect what the listener actually hears.
+      const graph = (typeof Player !== 'undefined' && Player.ensureAudioGraph) ? Player.ensureAudioGraph() : null;
+      if (!graph) {
+        this._audioMode = 'decorative';
         this._audioReady = true;
-        this._resumeAudioContext(true);
         return;
       }
-
-      const stream = capture.call(Player.audio);
-      if (!stream.getAudioTracks || stream.getAudioTracks().length === 0) {
-        // The visualizer can initialize before a selected track has started.
-        // Retry later rather than locking this browser into decorative mode.
-        this._audioRetryAt = Date.now() + 1000;
-        return;
-      }
-
-      actx = this._actx || new Ctx();
-      const src = actx.createMediaStreamSource(stream);
-      const an = this._analyser || actx.createAnalyser();
-      const silent = this._silentGain || actx.createGain();
-      if (!this._analyser) {
+      actx = graph.actx;
+      const src = graph.src;
+      let an = null;
+      try {
+        an = actx.createAnalyser();
         an.fftSize = 1024;
         an.smoothingTimeConstant = 0.4;
-        silent.gain.value = 0;
-        an.connect(silent);
-        silent.connect(actx.destination);
+        graph.gain.connect(an);
+      } catch (e) {
+        // Player's graph already drives audio; nothing more needed for sound.
+        this._actx = actx;
+        this._audioSource = src;
+        this._audioMode = 'element-bypass';
+        this._audioReady = true;
+        this._resumeAudioContext(true);
+        console.warn('[viz] analyser unavailable; player graph drives audio:', e);
+        return;
       }
-      src.connect(an);
       this._actx = actx;
-      this._captureStream = stream;
       this._audioSource = src;
-      this._silentGain = silent;
       this._analyser = an;
       this._freq = new Uint8Array(an.frequencyBinCount);
       this._wave = new Uint8Array(an.fftSize);
-      this._audioMode = 'capture';
+      this._audioMode = 'element';
       this._audioReady = true;
+      this._resumeAudioContext(true);
     } catch (e) {
       this._audioMode = 'decorative';
       this._audioReady = true;

@@ -102,6 +102,7 @@ const App = {
       if (track) {
         Player.queue = [track];
         Player.currentIndex = 0;
+        if (typeof Player._applyNormalization === 'function') Player._applyNormalization(track);
         Player.audio.src = Api.streamUrl(track.id);
         Player.playing = false;
         if (Player.onTrackChange) Player.onTrackChange(track);
