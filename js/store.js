@@ -86,6 +86,7 @@ const Store = {
         this.downloadsEnabled = ps.downloads_enabled !== 'false';
         this.waveformStyle = ps.waveform_style || 'rounded';
         this.defaultNowPlayingView = ps.default_now_playing_view || 'album_art';
+        this.audioNormalizationEnabled = ps.audio_normalization !== 'false';
       } catch(e) {}
       if (!this.isGuest) {
         try { this.reviewCounts = await Api.getReviewCounts(); } catch(e) {}
