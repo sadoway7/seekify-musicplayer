@@ -49,6 +49,34 @@ Object.assign(UI, {
       if (playingChanged) this._popIcon(this.els.miniPlayBtn);
     }
 
+    if (this.els.miniShuffleBtn) {
+      const shuffleChanged = this._miniWasShuffle !== undefined && this._miniWasShuffle !== Player.shuffle;
+      this._miniWasShuffle = Player.shuffle;
+      if (shuffleChanged || !this.els.miniShuffleBtn.innerHTML) {
+        this.els.miniShuffleBtn.innerHTML = Icons.shuffle();
+      }
+      this.els.miniShuffleBtn.classList.toggle('active', Player.shuffle);
+    }
+    if (this.els.miniRepeatBtn) {
+      const repeatChanged = this._miniWasRepeat !== undefined && this._miniWasRepeat !== Player.repeat;
+      this._miniWasRepeat = Player.repeat;
+      if (repeatChanged || !this.els.miniRepeatBtn.innerHTML) {
+        this.els.miniRepeatBtn.innerHTML = Player.repeat === 'one' ? Icons.repeatOne() : Icons.repeat();
+      }
+      this.els.miniRepeatBtn.classList.toggle('active', Player.repeat !== 'off');
+    }
+
+    if (this.els.miniLikeBtn) {
+      const track = Player.getCurrentTrack();
+      const isFav = track && Store.isFavorite(track.id);
+      const favChanged = this._miniWasFav !== undefined && this._miniWasFav !== isFav;
+      this._miniWasFav = isFav;
+      if (favChanged || !this.els.miniLikeBtn.innerHTML) {
+        this.els.miniLikeBtn.innerHTML = isFav ? Icons.heartFilled() : Icons.heart();
+      }
+      this.els.miniLikeBtn.classList.toggle('active', !!isFav);
+    }
+
     const progress = Player.getProgress();
     if (!this.miniSeeking) this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
     this._applyMiniPlayerColor();
@@ -248,7 +276,6 @@ Object.assign(UI, {
     if (Player.getCurrentTrack()) {
       this.els.miniPlayer.classList.remove('hidden');
     }
-    this.els.queuePanel.classList.add('hidden');
     document.querySelectorAll('.tab-item').forEach(t => {
       t.classList.toggle('active', t.dataset.tab === Store.currentTab);
     });
@@ -474,6 +501,7 @@ Object.assign(UI, {
     const vibL = Math.min(65, Math.max(45, l + 10));
     const playedColor = 'hsl(' + h + ',' + vibS + '%,' + vibL + '%)';
     this.els.miniProgress.style.setProperty('--mini-progress-color', playedColor);
+    this.els.miniPlayer.style.setProperty('--mini-progress-color', playedColor);
     this.els.miniPlayer.style.background = 'linear-gradient(135deg, hsl(' + h + ',' + Math.round(vibS * 0.4) + '%,' + Math.max(12, vibL * 0.18) + '%), hsl(' + h + ',' + Math.round(vibS * 0.2) + '%,' + Math.max(8, vibL * 0.1) + '%))';
     this.els.miniPlayer.style.setProperty('--mini-art-glow', playedColor);
   },

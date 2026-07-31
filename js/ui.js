@@ -197,6 +197,8 @@ const UI = {
       miniArtist: document.querySelector('.mini-artist'),
       miniPlayBtn: document.querySelector('.mini-play-btn'),
       miniProgress: document.querySelector('.mini-progress'),
+      miniShuffleBtn: document.querySelector('.mini-shuffle-btn'),
+      miniRepeatBtn: document.querySelector('.mini-repeat-btn'),
       nowPlaying: document.getElementById('now-playing'),
       npArt: document.getElementById('np-art'),
       npArtBg: document.getElementById('np-art-bg'),
@@ -285,7 +287,47 @@ const UI = {
         Player.prev();
       } else if (e.target.closest('.mini-next-btn')) {
         Player.next();
-      } else if (!e.target.closest('.mini-btn') && !e.target.closest('.mini-volume-wrap')) {
+      } else if (e.target.closest('.mini-shuffle-btn')) {
+        Player.toggleShuffle();
+        this.updateMiniPlayer();
+      } else if (e.target.closest('.mini-repeat-btn')) {
+        Player.cycleRepeat();
+        this.updateMiniPlayer();
+      } else if (e.target.closest('.mini-like-btn')) {
+        const track = Player.getCurrentTrack();
+        if (track) {
+          Api.toggleFavorite(track.id).then(() => {
+            Store.refreshFavorites().then(() => {
+              this.updateMiniPlayer();
+              this.showToast(Store.isFavorite(track.id) ? 'Added to favorites' : 'Removed from favorites');
+            });
+          }).catch(() => this.showToast('Failed to update favorites'));
+        }
+      } else if (e.target.closest('.mini-share-btn')) {
+        const track = Player.getCurrentTrack();
+        if (track) {
+          const shareUrl = window.location.origin + '/?play=' + track.id;
+          if (navigator.share) {
+            navigator.share({ url: shareUrl }).catch(() => {});
+          } else {
+            navigator.clipboard.writeText(shareUrl).then(() => this.showToast('Link copied')).catch(() => this.showToast('Share not supported'));
+          }
+        }
+      } else if (e.target.closest('.mini-download-btn')) {
+        const track = Player.getCurrentTrack();
+        if (track) {
+          const ext = track.filePath ? '.' + track.filePath.split('.').pop() : '';
+          const a = document.createElement('a');
+          a.href = Api.downloadUrl(track.id);
+          a.download = (track.artist ? track.artist + ' - ' : '') + (track.title || 'track') + ext;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      } else if (e.target.closest('.mini-more-btn')) {
+        const track = Player.getCurrentTrack();
+        if (track) this._showTrackContextMenu(track.id, e.target.closest('.mini-more-btn'));
+      } else if (!e.target.closest('.mini-btn') && !e.target.closest('.mini-volume-wrap') && !e.target.closest('.mini-progress')) {
         this.showNowPlaying();
       }
     });
@@ -547,6 +589,7 @@ const UI = {
 
     const onStart = (e) => {
       this.miniSeeking = true;
+      bar.classList.add('seeking');
       const f = getFraction(e);
       bar.style.setProperty('--progress', (f * 100) + '%');
     };
@@ -562,6 +605,7 @@ const UI = {
       const rect = bar.getBoundingClientRect();
       const f = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       bar.style.setProperty('--progress', (f * 100) + '%');
+      bar.classList.remove('seeking');
       Player.seek(f);
     };
 
@@ -618,12 +662,22 @@ const UI = {
       '<div class="mini-volume-wrap">'
       + '<button class="mini-volume-btn" aria-label="Volume">' + Icons.volume() + '</button>'
       + '<div class="mini-volume-bar"><div class="mini-volume-fill"></div></div>'
+      + '</div>'
+      + '<div class="mini-actions">'
+      + '<button class="mini-btn mini-action-btn mini-like-btn" aria-label="Like"></button>'
+      + '<button class="mini-btn mini-action-btn mini-share-btn" aria-label="Share">' + Icons.share() + '</button>'
+      + '<button class="mini-btn mini-action-btn mini-download-btn" aria-label="Download">' + Icons.download() + '</button>'
+      + '<button class="mini-btn mini-action-btn mini-more-btn" aria-label="More">' + Icons.more() + '</button>'
       + '</div>';
 
     const wrap = miniRight.querySelector('.mini-volume-wrap');
     this.els.miniVolumeBtn = wrap.querySelector('.mini-volume-btn');
     this.els.miniVolumeBar = wrap.querySelector('.mini-volume-bar');
     this.els.miniVolumeFill = wrap.querySelector('.mini-volume-fill');
+    this.els.miniLikeBtn = miniRight.querySelector('.mini-like-btn');
+    this.els.miniShareBtn = miniRight.querySelector('.mini-share-btn');
+    this.els.miniDownloadBtn = miniRight.querySelector('.mini-download-btn');
+    this.els.miniMoreBtn = miniRight.querySelector('.mini-more-btn');
 
     // Toggle mute
     this.els.miniVolumeBtn.addEventListener('click', () => {
@@ -722,6 +776,13 @@ const UI = {
       if (!this.els.queuePanel.classList.contains('hidden')) {
         this._renderQueue();
       }
+      // Re-render home if visible (breakpoint-dependent card count)
+      clearTimeout(this._homeResizeTimer);
+      this._homeResizeTimer = setTimeout(() => {
+        if (Store.currentView === 'home' && !document.querySelector('#home-search-bar .search-input')?.value) {
+          this.renderPage();
+        }
+      }, 200);
     });
   },
 

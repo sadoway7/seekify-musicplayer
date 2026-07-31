@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Desktop mini-player: the bottom progress bar now expands when the cursor approaches it and is click/drag-seekable (scrub/jump within a track without opening the full now-playing screen). Mobile is unchanged.
+- Desktop mini-player: progress bar expands on hover (desktop ≥768px only) and is click/drag-seekable — scrub or jump within a track without opening the full now-playing screen. Mobile is unchanged.
+- Desktop mini-player: added shuffle, repeat, like, share, download, and more (track context menu) buttons. Active states use the album-derived accent color.
+- Desktop mini-player: closing the now-playing overlay no longer force-hides the playlist/queue panel — it stays in whatever state it was in.
+- Home (desktop): "Listen Again" grid now uses available width — removed the 1100px max-width cap, added a 7-column layout at ≥1440px, and re-renders on resize so the card count matches the column count (2 rows at every breakpoint).
+- UI: context menu options now show a pointer cursor on hover (previously showed a text I-beam).
 - Reliability: scanner now checks the DB commit error and skips the in-memory library update on failure — previously a failed commit left the UI showing tracks the DB never persisted, diverging from what a restart would load.
 - Reliability: playlist UUID generation uses `google/uuid` instead of swallowing `crypto/rand` read errors (OS entropy failure previously yielded a zero-byte UUID and a PK violation).
 - Security: `FinderCoverHandler` now closes upstream response bodies on 404/fallback paths — previously each non-200 MusicBrainz lookup leaked an HTTP connection until process exit.

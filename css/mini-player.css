@@ -145,6 +145,15 @@
   color: var(--bg);
 }
 
+.mini-shuffle-btn,
+.mini-repeat-btn {
+  display: none;
+}
+
+.mini-actions {
+  display: none;
+}
+
 .mini-play-btn:active {
   transform: scale(0.93);
 }

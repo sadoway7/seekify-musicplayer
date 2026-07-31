@@ -163,8 +163,8 @@ Object.assign(UI, {
       + '</div></div>'
       + '</div>';
 
-    const cols = window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
-    const maxRecent = window.innerWidth >= 768 ? 12 : 7;
+    const cols = window.innerWidth >= 1440 ? 7 : window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
+    const maxRecent = cols * 2 - 2; // 2 rows minus shuffle-all and recently-added cards
     let addedRecent = 0;
     recentCards.forEach(c => {
       if (addedRecent >= maxRecent) return;

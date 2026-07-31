@@ -17,6 +17,10 @@
   <Changes>Changelog
 
 2026-07-30
+- Desktop mini-player: seekable progress bar, shuffle/repeat/like/share/download controls
+- Desktop mini-player no longer closes the playlist when closing the now-playing screen
+- Home page uses more of the screen on large displays
+- Context menu cursor fix
 - Tell search engines not to index the app (deep links keep working)
 - Experimental optional audio loudness leveling (toggle in Settings → Playback)
 - Download queue reliability fix and clearer download-source labels
