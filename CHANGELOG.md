@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Reliability: scanner now checks the DB commit error and skips the in-memory library update on failure — previously a failed commit left the UI showing tracks the DB never persisted, diverging from what a restart would load.
+- Reliability: playlist UUID generation uses `google/uuid` instead of swallowing `crypto/rand` read errors (OS entropy failure previously yielded a zero-byte UUID and a PK violation).
+- Security: `FinderCoverHandler` now closes upstream response bodies on 404/fallback paths — previously each non-200 MusicBrainz lookup leaked an HTTP connection until process exit.
+- Security: `Content-Disposition` filename in download responses strips CR/LF/quotes — track titles can originate from remote YouTube metadata; this prevents response-splitting/header-injection toward anyone who downloads a track.
+- Concurrency: the review-enrich active flag is now mutex-guarded — the unlocked read in `ReviewProgressHandler` raced the enrich goroutine's writes (benign data race, visible under `-race`).
 - Privacy: `noindex, nofollow` meta tag in `index.html` plus a `/robots.txt` (`Disallow: /`) tell search engines not to index the app or follow its links. Deep links (`?play=`, `?album=`, `?playlist=`, `?artist=`) are unaffected — they're query-string based and handled client-side.
 - Audio normalization (**experimental**): tracks are analyzed (EBU R128 via ffmpeg, lazy on first play) and replayed at a configurable target loudness (default −14 LUFS) using a shared Web Audio gain node. Per-track gain is cached in the DB and served via `/api/normalize/<id>`; the player applies it before playback. Enabled by default; toggle in Settings → Playback. The visualizer now taps the player's audio graph (post-gain) instead of building its own, so bars reflect the normalized signal. Marked experimental pending browser-matrix verification of the shared Web Audio graph across Safari/Chrome/Firefox.
 - Fix: deleting a track no longer blocks re-downloading it from Finder — the download-queue dedup check now ignores completed jobs (previously any non-failed history row counted).

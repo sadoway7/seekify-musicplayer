@@ -329,6 +329,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	store.Mu.Lock()
 	oldTrackCount := len(store.Tracks)
 
+	commitOK := false
 	tx, err := store.DB.Begin()
 	if err != nil {
 		log.Printf("[scan] ERROR: DB.Begin failed: %v", err)
@@ -360,7 +361,11 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		for _, a := range newAlbums {
 			store.DbUpsertAlbumTx(tx, a)
 		}
-		tx.Commit()
+		if err := tx.Commit(); err != nil {
+			log.Printf("[scan] ERROR: DB commit failed, in-memory maps NOT updated: %v", err)
+		} else {
+			commitOK = true
+		}
 	}
 
 	// Review callbacks touch only the local newTracks map and their own DB
@@ -369,6 +374,24 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	// /api/cover handler takes Mu.RLock) during the review insert phase.
 	pendingReviews := newTracks
 	needsWake := len(newTracks) > 0
+
+	if !commitOK {
+		// DB commit failed: leave in-memory maps as-is so UI matches the
+		// (stale) DB. Next restart re-reads the DB and resolves.
+		log.Printf("[scan] WARNING: skipping in-memory map update due to commit failure")
+		store.Mu.Unlock()
+		if pendingReviews != nil && InsertUncheckedReviews != nil {
+			InsertUncheckedReviews(pendingReviews)
+		}
+		if needsWake && WakeReviewWorker != nil {
+			WakeReviewWorker()
+		}
+		for id, data := range newCovers {
+			store.CacheCover(id, data)
+		}
+		stats.Added = len(newTracks)
+		return stats
+	}
 
 	if prefix == "" {
 		for oldID, oldTrack := range store.Tracks {

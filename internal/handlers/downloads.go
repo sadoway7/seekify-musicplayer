@@ -79,6 +79,9 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	if track.Artist != "" && track.Title != "" {
 		filename = scanner.SanitizePath(track.Artist) + " - " + scanner.SanitizePath(track.Title) + ext
 	}
+	// ponytail: belt-and-braces header-injection guard — titles can come
+	// from remote YouTube metadata. SanitizePath may not strip all of these.
+	filename = strings.NewReplacer("\r", "", "\n", "", `"`, "'").Replace(filename)
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))

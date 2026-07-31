@@ -26,6 +26,11 @@ var (
 	ReviewWake   = make(chan struct{}, 1)
 )
 
+var (
+	enrichMu     sync.Mutex
+	enrichActive bool // guard: enrichMu
+)
+
 var LibraryVersionAdd func(delta int64)
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
@@ -50,7 +55,6 @@ type ReviewLogInfo struct {
 var (
 	ReviewProgressData ReviewProgressInfo
 	ReviewLogData      ReviewLogInfo
-	enrichActive    bool   // guard: prevent overlapping enrich runs only
 	enrichLastError string
 	enrichProgress  struct {
 		sync.RWMutex
@@ -1417,7 +1421,10 @@ func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
 func ReviewProgressHandler(w http.ResponseWriter, r *http.Request) {
 	// If enrich is running, report its dedicated progress (not the periodic
 	// worker's ReviewProgressData, which races and clobbers it).
-	if enrichActive {
+	enrichMu.Lock()
+	active := enrichActive
+	enrichMu.Unlock()
+	if active {
 		enrichProgress.RLock()
 		resp := map[string]interface{}{
 			"active":       true,
@@ -1476,15 +1483,20 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 				log.Printf("[review-enrich] panic: %v\n%s", rec, debug.Stack())
 				enrichLastError = fmt.Sprintf("panic: %v", rec)
 			}
+			enrichMu.Lock()
 			enrichActive = false
+			enrichMu.Unlock()
 		}()
 
 		// Guard: prevent overlapping enrich runs only (not periodic worker).
+		enrichMu.Lock()
 		if enrichActive {
+			enrichMu.Unlock()
 			log.Printf("[review-enrich] already running, aborting")
 			return
 		}
 		enrichActive = true
+		enrichMu.Unlock()
 		enrichLastError = ""
 
 		if len(ids) == 0 {

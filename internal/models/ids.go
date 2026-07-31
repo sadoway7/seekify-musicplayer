@@ -1,11 +1,11 @@
 package models
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 func GenerateID(input string) string {
@@ -14,10 +14,7 @@ func GenerateID(input string) string {
 }
 
 func GenerateUUID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+	return uuid.New().String()
 }
 
 func GenerateAlbumID(artist, album string) string {

@@ -169,11 +169,19 @@ func FinderCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := musicbrainz.MbClient.Do(req)
 	if err != nil || resp.StatusCode != 200 {
+		if resp != nil {
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+		}
 		coverURL = fmt.Sprintf("%s/release/%s/front-250", musicbrainz.CoverArtBaseURL, mbid)
 		req, _ = http.NewRequest("GET", coverURL, nil)
 		req.Header.Set("User-Agent", "MusicApp/1.0 (personal music library)")
 		resp, err = musicbrainz.MbClient.Do(req)
 		if err != nil || resp.StatusCode != 200 {
+			if resp != nil {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
