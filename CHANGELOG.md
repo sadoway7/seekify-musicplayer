@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Desktop mini-player: the bottom progress bar now expands when the cursor approaches it and is click/drag-seekable (scrub/jump within a track without opening the full now-playing screen). Mobile is unchanged.
 - Reliability: scanner now checks the DB commit error and skips the in-memory library update on failure — previously a failed commit left the UI showing tracks the DB never persisted, diverging from what a restart would load.
 - Reliability: playlist UUID generation uses `google/uuid` instead of swallowing `crypto/rand` read errors (OS entropy failure previously yielded a zero-byte UUID and a PK violation).
 - Security: `FinderCoverHandler` now closes upstream response bodies on 404/fallback paths — previously each non-200 MusicBrainz lookup leaked an HTTP connection until process exit.

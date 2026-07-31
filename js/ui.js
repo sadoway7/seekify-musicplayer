@@ -21,6 +21,7 @@ const UI = {
     this._cacheDom();
     this._bindTabBar();
     this._bindMiniPlayer();
+    this._bindMiniProgressSeek();
     this._bindNowPlaying();
     this._bindNowPlayingSwipe();
     this._bindSeekBar();
@@ -535,6 +536,38 @@ const UI = {
     bar.addEventListener('touchstart', onStart, { passive: true });
     document.addEventListener('touchmove', onMove, { passive: true });
     document.addEventListener('touchend', onEnd);
+  },
+
+  _bindMiniProgressSeek() {
+    const bar = this.els.miniProgress;
+    if (!bar) return;
+    if (window.innerWidth < 768) return;
+
+    const getFraction = (e) => this._barFraction(bar, e);
+
+    const onStart = (e) => {
+      this.miniSeeking = true;
+      const f = getFraction(e);
+      bar.style.setProperty('--progress', (f * 100) + '%');
+    };
+    const onMove = (e) => {
+      if (!this.miniSeeking) return;
+      if (e.cancelable) e.preventDefault();
+      const f = getFraction(e);
+      bar.style.setProperty('--progress', (f * 100) + '%');
+    };
+    const onEnd = (e) => {
+      if (!this.miniSeeking) return;
+      this.miniSeeking = false;
+      const rect = bar.getBoundingClientRect();
+      const f = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      bar.style.setProperty('--progress', (f * 100) + '%');
+      Player.seek(f);
+    };
+
+    bar.addEventListener('mousedown', onStart);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
   },
 
   _bindVolumeBar() {

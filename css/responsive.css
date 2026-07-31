@@ -135,6 +135,27 @@
     opacity: 0.6;
   }
 
+  /* hover-expand + seek hit-zone (desktop only) */
+  .mini-progress {
+    pointer-events: auto;
+    overflow: visible;
+  }
+  .mini-progress::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 100%;
+    height: 16px;
+  }
+  .mini-progress::after {
+    transition: width var(--t-med) linear, height 0.15s ease, top 0.15s ease, opacity 0.15s ease;
+  }
+  .mini-progress:hover::after {
+    height: 12px;
+    top: -9px;
+    opacity: 1;
+  }
+
   .mini-player-inner {
     display: flex;
     flex-direction: row;

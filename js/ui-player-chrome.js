@@ -50,7 +50,7 @@ Object.assign(UI, {
     }
 
     const progress = Player.getProgress();
-    this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
+    if (!this.miniSeeking) this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
     this._applyMiniPlayerColor();
   },
 
@@ -193,7 +193,7 @@ Object.assign(UI, {
     this.els.npTimeCurrent.textContent = this._formatTime(progress.current);
     this.els.npTimeTotal.textContent = this._formatTime(progress.duration);
     const pct = (fraction * 100) + '%';
-    this.els.miniProgress.style.setProperty('--progress', pct);
+    if (!this.miniSeeking) this.els.miniProgress.style.setProperty('--progress', pct);
   },
 
   showNowPlaying() {
