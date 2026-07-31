@@ -248,7 +248,7 @@ Object.assign(UI, {
     const newTracks = sortedNew.slice(0, newLimit);
     if (newTracks.length === 0) return '';
     let html = '<div class="mega-title"><span>New Songs</span></div>';
-    html += this.renderTrackList(newTracks, { showArt: true });
+    html += '<div class="home-track-grid">' + this.renderTrackList(newTracks, { showArt: true }) + '</div>';
     if (sortedNew.length > newLimit) {
       html += '<button class="btn-text show-more-btn" data-action="show-more-new">Show more</button>';
     }
@@ -258,7 +258,8 @@ Object.assign(UI, {
   _homePlaylists() {
     if (Store.playlists.length === 0) return '';
     let html = '<div class="mega-title"><span>Playlists</span></div>';
-    Store.playlists.slice(0, 4).forEach(p => {
+    html += '<div class="home-playlist-grid">';
+    Store.playlists.slice(0, 6).forEach(p => {
       const pTracks = p.trackIds.map(tid => Store.getTrack(tid)).filter(Boolean);
       const firstTrack = pTracks[0];
       const artStyle = firstTrack && firstTrack.albumID
@@ -272,6 +273,7 @@ Object.assign(UI, {
         + '<div class="list-item-subtitle">' + pTracks.length + ' tracks</div>'
         + '</div></div>';
     });
+    html += '</div>';
     return html;
   },
 

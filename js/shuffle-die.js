@@ -297,12 +297,14 @@ window.ShuffleDie = (() => {
     }
 
     function currentPose(time) {
-      // Idle wobble: z-axis only (user request — in-plane spin, no tumbling).
-      const idleTime = time * 2.2;
-      const idleX = 0;
-      const idleY = 0;
+      // Ambient rotation: slow continuous tumble on all axes.
+      const t = time * 0.001;
+      const idleX = reducedMotion ? 0
+        : Math.sin(t * 0.3 + 1.3) * 0.35;
+      const idleY = reducedMotion ? 0
+        : Math.sin(t * 0.23 + 4.1) * 0.30;
       const idleZ = reducedMotion ? 0
-        : Math.sin(idleTime * 0.000064 + 0.7) * 0.22 + Math.sin(idleTime * 0.000019 + 2.8) * 0.10;
+        : Math.sin(t * 0.18 + 0.7) * 0.22 + Math.sin(t * 0.07 + 2.8) * 0.10;
       return { idleX, idleY, idleZ };
     }
 

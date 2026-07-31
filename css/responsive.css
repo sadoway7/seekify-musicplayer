@@ -36,6 +36,13 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .home-track-grid .track-list,
+  .home-playlist-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-3);
+  }
+
   .search-container {
     max-width: 400px;
   }
@@ -731,6 +738,10 @@
   @media (min-width: 1440px) {
     .quick-play-grid {
       grid-template-columns: repeat(7, 1fr);
+    }
+    .home-track-grid .track-list,
+    .home-playlist-grid {
+      grid-template-columns: repeat(3, 1fr);
     }
   }
 

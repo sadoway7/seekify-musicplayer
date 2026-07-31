@@ -17,6 +17,7 @@
   <Changes>Changelog
 
 2026-07-30
+- Home page improvements: multi-column grids on large screens, refreshed section styling, ambient dice animation
 - Desktop mini-player: seekable progress bar, shuffle/repeat/like/share/download controls
 - Desktop mini-player no longer closes the playlist when closing the now-playing screen
 - Home page uses more of the screen on large displays

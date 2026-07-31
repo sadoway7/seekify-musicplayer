@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Home (desktop): "New Songs" and "Playlists" sections now use multi-column grids (2 columns at ≥768px, 3 at ≥1440px).
+- Home: section titles now have a subtle gradient fade and slightly brighter text.
+- Home: shuffle dice has ambient rotation again (slow continuous tumble on all axes).
 - Desktop mini-player: progress bar expands on hover (desktop ≥768px only) and is click/drag-seekable — scrub or jump within a track without opening the full now-playing screen. Mobile is unchanged.
 - Desktop mini-player: added shuffle, repeat, like, share, download, and more (track context menu) buttons. Active states use the album-derived accent color.
 - Desktop mini-player: closing the now-playing overlay no longer force-hides the playlist/queue panel — it stays in whatever state it was in.
