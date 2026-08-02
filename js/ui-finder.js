@@ -487,10 +487,10 @@ Object.assign(UI, {
         retryAllBtn.addEventListener('click', async () => {
           retryAllBtn.disabled = true;
           retryAllBtn.textContent = 'Retrying...';
-          const failed = jobs.filter(j => j.status === 'failed');
-          for (const j of failed) {
-            await Api.retryJob(j.id);
-            await new Promise(r => setTimeout(r, 200));
+          try {
+            await Api.retryAllFailed();
+          } catch (e) {
+            this._showToast('Failed to retry all');
           }
           this._loadDownloads();
         });

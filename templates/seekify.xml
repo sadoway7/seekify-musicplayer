@@ -16,6 +16,13 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-08-02
+- Detects audio files that fail to play and surfaces them for review
+- New "Scan for Corrupt Audio" admin tool to find broken files across the library
+- New downloads are checked more thoroughly before being added to the library
+- "Retry All" for failed downloads now reliably retries every failed job
+- General reliability and bug fixes
+
 2026-07-30
 - Home page improvements: multi-column grids on large screens, refreshed section styling, ambient dice animation
 - Desktop mini-player: seekable progress bar, shuffle/repeat/like/share/download controls
@@ -63,7 +70,7 @@
 
 2026-06
 - Early beta</Changes>
-  <Date>2026-07-28</Date>
+  <Date>2026-08-02</Date>
   <LastUpdate>1785303249</LastUpdate>
   <MinVer>6.1</MinVer>
   <License>MIT</License>

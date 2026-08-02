@@ -335,6 +335,7 @@ func main() {
 	mux.HandleFunc("/api/waveform/", handlers.WaveformHandler)
 	mux.HandleFunc("/api/normalize/", auth.RequireUser(handlers.NormalizeHandler))
 	mux.HandleFunc("/api/track-duration/", auth.RequireUser(handlers.TrackDurationHandler))
+	mux.HandleFunc("/api/playback-error/", auth.RequireUser(handlers.TrackPlaybackErrorHandler))
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
 	})
@@ -354,6 +355,7 @@ func main() {
 	mux.HandleFunc("/api/queue/add-batch", auth.RequireUser(handlers.DownloadQueueAddBatchHandler))
 	mux.HandleFunc("/api/queue/counts", auth.RequireUser(handlers.QueueCountsHandler))
 	mux.HandleFunc("/api/queue/clear-completed", auth.RequireUser(handlers.QueueClearCompletedHandler))
+	mux.HandleFunc("/api/queue/retry-all-failed", auth.RequireUser(handlers.DownloadRetryAllFailedHandler))
 	mux.HandleFunc("/api/queue/toggle-pause", auth.RequireAdmin(handlers.DownloadTogglePauseHandler))
 	mux.HandleFunc("/api/soulseek/connect", auth.RequireAdmin(handlers.SoulseekConnectHandler))
 	mux.HandleFunc("/api/queue/", auth.RequireUser(func(w http.ResponseWriter, r *http.Request) {
@@ -430,6 +432,7 @@ func main() {
 	mux.HandleFunc("/api/review/bulk-approve", auth.RequireAdmin(review.ReviewBulkApproveHandler))
 	mux.HandleFunc("/api/review/recheck-all", auth.RequireAdmin(review.ReviewRecheckAllHandler))
 	mux.HandleFunc("/api/review/enrich", auth.RequireAdmin(review.ReviewEnrichHandler))
+	mux.HandleFunc("/api/review/scan-integrity", auth.RequireAdmin(review.IntegrityScanHandler))
 	mux.HandleFunc("/api/review/progress", auth.RequireAdmin(review.ReviewProgressHandler))
 	mux.HandleFunc("/api/review/log", auth.RequireAdmin(review.ReviewLogHandler))
 

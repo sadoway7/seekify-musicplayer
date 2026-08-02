@@ -111,6 +111,12 @@ const Api = {
   queueAddBatch(tracks, overrideDir) { return this._req('/api/queue/add-batch', { method: 'POST', body: { tracks, overrideDir }, errMsg: 'Failed to add batch to queue' }); },
   selectVideo(jobId, videoId) { return this._req('/api/queue/' + jobId + '/select', { method: 'POST', body: { videoId }, errMsg: 'Failed to select video' }); },
   retryJob(id) { return this._req('/api/queue/' + id + '/retry', { method: 'POST', errMsg: 'Failed to retry job' }); },
+  retryAllFailed() {
+    let url = '/api/queue/retry-all-failed';
+    if (typeof Store !== 'undefined' && Store.user && Store.user.role === 'admin') url += '?all=1';
+    return this._req(url, { method: 'POST', errMsg: 'Failed to retry jobs' });
+  },
+  reportPlaybackError(trackId, code) { return this._req('/api/playback-error/' + trackId, { method: 'POST', body: { code }, errMsg: 'Failed to report playback error', fallback: null }); },
   deleteJob(id) { return this._req('/api/queue/' + id + '/delete', { method: 'POST', errMsg: 'Failed to delete job' }); },
   clearCompletedJobs() { return this._req('/api/queue/clear-completed', { method: 'POST', errMsg: 'Failed to clear jobs' }); },
   toggleDownloadPause() { return this._req('/api/queue/toggle-pause', { method: 'POST', errMsg: 'Failed to toggle pause' }); },
@@ -130,6 +136,7 @@ const Api = {
   reviewBulkApprove(flags = []) { return this._req('/api/review/bulk-approve', { method: 'POST', body: { flags }, errMsg: 'Failed to approve' }); },
   reviewEnrich() { return this._req('/api/review/enrich', { method: 'POST', errMsg: 'Failed to start enrich' }); },
   reviewRecheckAll() { return this._req('/api/review/recheck-all', { method: 'POST', errMsg: 'Failed to recheck' }); },
+  reviewScanIntegrity() { return this._req('/api/review/scan-integrity', { method: 'POST', errMsg: 'Failed to start scan' }); },
   clearCookies() { return this._req('/api/cookies/clear', { method: 'POST', errMsg: 'Failed' }); },
 
   // POST that extracts server error (errMsg default, j.error preferred)

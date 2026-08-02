@@ -107,6 +107,19 @@ const Player = {
         networkState: a.networkState,
         readyState: a.readyState,
       });
+      // Report genuinely unplayable files (decode=3 / unsupported=4) so they
+      // surface in Needs Review as playback_error. Network errors (code 2) are
+      // transient and ignored by the server. Dedup per track per page load so a
+      // stuck queue doesn't spam the endpoint; the backend upsert is idempotent.
+      const code = a.error && a.error.code;
+      const cur = this.getCurrentTrack();
+      if (cur && (code === 3 || code === 4)) {
+        if (!this._reportedPlaybackErrors) this._reportedPlaybackErrors = new Set();
+        if (!this._reportedPlaybackErrors.has(cur.id)) {
+          this._reportedPlaybackErrors.add(cur.id);
+          if (typeof Api !== 'undefined' && Api.reportPlaybackError) Api.reportPlaybackError(cur.id, code);
+        }
+      }
       this._onMediaError('audio-error');
     });
 

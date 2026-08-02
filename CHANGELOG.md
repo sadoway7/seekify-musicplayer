@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Library: new "Scan for Corrupt Audio" admin action (Settings → Library/Tasks) decode-checks every file and surfaces corrupt ones in Needs Review under a "Corrupt Audio" flag — finds bad files nobody has played yet, complementing the playback-failure detector. Runs in the background with live progress; non-destructive (flags only).
+- Downloads: newly downloaded files are now decode-validated (ffmpeg decodes the whole stream to null) before being accepted into the library, catching mid-stream corruption that passes the existing ffprobe header check. A file with intact headers but broken audio frames previously entered the library and only failed when played; it's now rejected at download time. (End-truncation was already caught by the duration-ratio check.)
+- Bad-file detection: tracks that fail to play in-browser (decode error or unsupported codec) are now reported to the server and surface in Needs Review under a new "Playback Failed" flag. Previously the player logged the failure to the browser console and skipped — the most reliable "this file is broken" signal was discarded, so corrupt/truncated downloads stayed hidden. Network errors are ignored (transient); the periodic review worker now preserves this externally-set flag instead of wiping it on recheck.
+- Fix: "Retry All" on the downloads/failed tab now retries every failed job in a single request instead of firing one HTTP call per job. The old per-job loop aborted on the first transient error (DB write contention, a 4xx, a network blip), leaving most of a large failed batch un-retried.
 - Home (desktop): "New Songs" and "Playlists" sections now use multi-column grids (2 columns at ≥768px, 3 at ≥1440px).
 - Home: section titles now have a subtle gradient fade and slightly brighter text.
 - Home: shuffle dice has ambient rotation again (slow continuous tumble on all axes).

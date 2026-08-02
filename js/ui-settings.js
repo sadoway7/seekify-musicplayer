@@ -219,6 +219,7 @@ Object.assign(UI, {
       + '</div>'
       + '<div class="settings-actions" style="margin-top:12px">'
       + '<button class="settings-btn settings-btn-primary" id="btn-review-recheck">' + Icons.refresh() + '<span>Recheck All Tracks</span></button>'
+      + '<button class="settings-btn" id="btn-review-scan-integrity">' + Icons.refresh() + '<span>Scan for Corrupt Audio</span></button>'
       + '<button class="settings-btn" id="btn-review-copy-log">' + Icons.share() + '<span>Copy Log</span></button>'
       + '</div>'
       + '</div>';
@@ -682,6 +683,22 @@ Object.assign(UI, {
         }
       });
 
+      const scanBtn = document.getElementById('btn-review-scan-integrity');
+      if (scanBtn) scanBtn.addEventListener('click', async () => {
+        if (!confirm('Decode-check every audio file for corruption? This runs in the background and may take a while on large libraries. Corrupt files will appear in Needs Review.')) return;
+        scanBtn.disabled = true;
+        scanBtn.querySelector('span').textContent = 'Scanning...';
+        try {
+          await Api.reviewScanIntegrity();
+          this._showToast('Integrity scan started');
+          this._startReviewProgressPoll();
+        } catch (e) {
+          this._showToast((e && e.message) || 'Failed to start scan');
+          scanBtn.disabled = false;
+          scanBtn.querySelector('span').textContent = 'Scan for Corrupt Audio';
+        }
+      });
+
       const copyLogBtn = document.getElementById('btn-review-copy-log');
       if (copyLogBtn) copyLogBtn.addEventListener('click', async () => {
         try {
@@ -769,7 +786,8 @@ Object.assign(UI, {
 
       if (p.active && p.total > 0) {
         const pct = Math.round((p.checked / p.total) * 100);
-        textEl.textContent = 'Checking: ' + (p.currentTrack || '...') + ' (' + p.checked + '/' + p.total + ')';
+        const corruptSuffix = (p.corrupt && p.corrupt > 0) ? ' — ' + p.corrupt + ' corrupt found' : '';
+        textEl.textContent = 'Checking: ' + (p.currentTrack || '...') + ' (' + p.checked + '/' + p.total + ')' + corruptSuffix;
         if (barEl) {
           barEl.style.width = pct + '%';
           barEl.style.background = '#ff6b6b';
@@ -798,6 +816,8 @@ Object.assign(UI, {
         if (barEl) barEl.style.width = pct + '%';
         const recheckBtn = document.getElementById('btn-review-recheck');
         if (recheckBtn) { recheckBtn.disabled = false; recheckBtn.querySelector('span').textContent = 'Recheck All Tracks'; }
+        const scanBtn = document.getElementById('btn-review-scan-integrity');
+        if (scanBtn) { scanBtn.disabled = false; scanBtn.querySelector('span').textContent = 'Scan for Corrupt Audio'; }
         const statusEl = document.querySelector('.review-settings-status');
         if (statusEl) {
           statusEl.innerHTML = '<span style="color:rgba(255,255,255,.4)">Unchecked: <strong style="color:#fff">' + (counts.unchecked || 0) + '</strong></span>'

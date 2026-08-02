@@ -107,7 +107,9 @@ const ReviewUI = {
       very_long_title: 'Title exceeds 200 characters',
       short_duration: 'Track is under 30 seconds',
       long_duration: 'Track exceeds 9 minutes (with other flags)',
-      potential_duplicate: 'Similar title found from same artist'
+      potential_duplicate: 'Similar title found from same artist',
+      playback_error: 'Failed to play in-browser (corrupt or unsupported format)',
+      corrupt_audio: 'Audio frames failed to decode (corrupt or truncated file)'
     };
     let html = '<div class="np-review-flags-title">Flagged for review:</div>';
     flags.forEach(f => {
@@ -375,7 +377,9 @@ const ReviewUI = {
       short_duration: 'Short Duration',
       no_duration: 'No Duration',
       long_duration: 'Long Duration',
-      potential_duplicate: 'Possible Duplicate'
+      potential_duplicate: 'Possible Duplicate',
+      playback_error: 'Playback Failed',
+      corrupt_audio: 'Corrupt Audio'
     };
     return labels[flag] || flag;
   }

@@ -12,7 +12,7 @@ import (
 )
 
 const limitsSchema = `
-CREATE TABLE download_jobs (id TEXT PRIMARY KEY, status TEXT NOT NULL, user_id TEXT NOT NULL DEFAULT '');
+CREATE TABLE download_jobs (id TEXT PRIMARY KEY, status TEXT NOT NULL, user_id TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', progress_stage TEXT NOT NULL DEFAULT '', completed_at TEXT NOT NULL DEFAULT '');
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');
 `
 
@@ -89,5 +89,50 @@ func mustSetStatus(t *testing.T, id, status string) {
 	t.Helper()
 	if _, err := store.DB.Exec(`UPDATE download_jobs SET status=? WHERE id=?`, status, id); err != nil {
 		t.Fatalf("set status: %v", err)
+	}
+}
+
+func mustBeStatus(t *testing.T, id, want string) {
+	t.Helper()
+	var got string
+	if err := store.DB.QueryRow(`SELECT status FROM download_jobs WHERE id=?`, id).Scan(&got); err != nil {
+		t.Fatalf("query status for %s: %v", id, err)
+	}
+	if got != want {
+		t.Fatalf("job %s status = %q, want %q", id, got, want)
+	}
+}
+
+func TestDbRetryAllFailed(t *testing.T) {
+	setupLimitsTestDB(t)
+
+	insertJob(t, "f1", "u1", "failed")
+	insertJob(t, "f2", "u1", "failed")
+	insertJob(t, "f3", "u2", "failed")
+	insertJob(t, "c1", "u1", "completed")
+	insertJob(t, "q1", "u1", "queued")
+
+	// Scoped retry: only u1's failed jobs reset; other users untouched,
+	// and non-failed statuses (completed/queued) are left alone.
+	n := DbRetryAllFailed("u1")
+	if n != 2 {
+		t.Fatalf("u1 retry count = %d, want 2", n)
+	}
+	mustBeStatus(t, "f1", "queued")
+	mustBeStatus(t, "f2", "queued")
+	mustBeStatus(t, "f3", "failed")
+	mustBeStatus(t, "c1", "completed")
+	mustBeStatus(t, "q1", "queued")
+
+	// Admin retry (blank userID): every remaining failed job across users.
+	n = DbRetryAllFailed("")
+	if n != 1 { // only f3 was still failed
+		t.Fatalf("admin retry count = %d, want 1", n)
+	}
+	mustBeStatus(t, "f3", "queued")
+
+	// Nothing failed left → 0 reset, no error.
+	if n := DbRetryAllFailed(""); n != 0 {
+		t.Fatalf("empty retry count = %d, want 0", n)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"musicapp/internal/downloads"
 	"musicapp/internal/models"
 	"musicapp/internal/musicbrainz"
 	"musicapp/internal/store"
@@ -30,6 +31,11 @@ var (
 	enrichMu     sync.Mutex
 	enrichActive bool // guard: enrichMu
 )
+
+// externalFlags are set outside the periodic worker (runtime playback failure,
+// confirmed decode corruption) and are not recomputed by its checks. RunReviewBatch
+// preserves them across stale rechecks so they aren't wiped to reviewed_ok.
+var externalFlags = map[string]bool{"playback_error": true, "corrupt_audio": true}
 
 var LibraryVersionAdd func(delta int64)
 
@@ -61,6 +67,21 @@ var (
 		Checked      int
 		Total        int
 		CurrentTrack string
+	}
+)
+
+// Integrity-scan state. Mirrors the enrich pattern: a dedicated mutex + active
+// flag + progress struct, reported via ReviewProgressHandler when active. Used
+// by the on-demand "scan for corrupt audio" admin action.
+var (
+	integrityMu     sync.Mutex
+	integrityActive bool // guard: integrityMu
+	integrityProgress struct {
+		sync.RWMutex
+		Checked      int
+		Total        int
+		CurrentTrack string
+		Corrupt      int
 	}
 )
 
@@ -1219,6 +1240,21 @@ func RunReviewBatch() bool {
 
 		allFlags = UniqueFlags(allFlags)
 
+		// Preserve externally-set flags (playback failure, confirmed decode
+		// corruption) that the periodic checks don't recompute. Without this,
+		// a stale recheck of a needs_review track would wipe a real
+		// playback_error flag and flip it back to reviewed_ok. Cleared
+		// automatically once an upstream step (manual approve, integrity scan)
+		// drops the flag — preserve only re-adds flags still present.
+		if _, existing := DbGetReviewForTrack(t.ID); len(existing) > 0 {
+			for _, f := range existing {
+				if externalFlags[f] {
+					allFlags = append(allFlags, f)
+				}
+			}
+			allFlags = UniqueFlags(allFlags)
+		}
+
 		if len(allFlags) > 0 {
 			flagsJSON, _ := json.Marshal(allFlags)
 			DbSetReviewStatus(t.ID, "needs_review", string(flagsJSON), "worker")
@@ -1419,6 +1455,25 @@ func ReviewRecheckAllHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ReviewProgressHandler(w http.ResponseWriter, r *http.Request) {
+	// Integrity scan is the most recent admin action — report it first.
+	integrityMu.Lock()
+	iActive := integrityActive
+	integrityMu.Unlock()
+	if iActive {
+		integrityProgress.RLock()
+		resp := map[string]interface{}{
+			"active":       true,
+			"currentTrack": integrityProgress.CurrentTrack,
+			"currentID":    "",
+			"checked":      integrityProgress.Checked,
+			"total":        integrityProgress.Total,
+			"corrupt":      integrityProgress.Corrupt,
+			"lastError":    "",
+		}
+		integrityProgress.RUnlock()
+		writeJSON(w, resp)
+		return
+	}
 	// If enrich is running, report its dedicated progress (not the periodic
 	// worker's ReviewProgressData, which races and clobbers it).
 	enrichMu.Lock()
@@ -1672,4 +1727,124 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[review-enrich] marked %d needs_review tracks for re-eval", len(trackIDs))
 	})
+}
+
+// IntegrityScanHandler kicks off a one-time, decode-based integrity scan over the
+// whole library. Tracks whose audio frames fail to decode (corrupt_audio) are
+// flagged in Needs Review. Non-destructive — it only adds flags, never deletes.
+// Skips tracks already flagged corrupt_audio. This is the proactive detector for
+// bad files nobody has played yet (playback-error reporting, by contrast, only
+// catches files a user actually tried to play). Progress is reported via
+// ReviewProgressHandler. Mirrors the enrich handler's guard/progress pattern.
+//
+// ponytail: sequential decode — ffmpeg -f null is fast (decode-only, no encode),
+// but a very large library can take a while. Bound it with a semaphore if needed.
+func IntegrityScanHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	if downloads.FindFfmpeg() == "" {
+		http.Error(w, `{"error":"ffmpeg not installed"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	// Guard: only one integrity scan at a time.
+	integrityMu.Lock()
+	if integrityActive {
+		integrityMu.Unlock()
+		http.Error(w, `{"error":"scan already running"}`, http.StatusConflict)
+		return
+	}
+	integrityActive = true
+	integrityMu.Unlock()
+
+	writeJSON(w, map[string]bool{"started": true})
+
+	store.SafeGo("review-integrity", func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("[review-integrity] panic: %v\n%s", rec, debug.Stack())
+			}
+			integrityMu.Lock()
+			integrityActive = false
+			integrityMu.Unlock()
+		}()
+
+		// Snapshot IDs + display info + resolved paths outside the lock.
+		store.Mu.RLock()
+		type item struct{ id, title, artist, path string }
+		items := make([]item, 0, len(store.Tracks))
+		for id, t := range store.Tracks {
+			items = append(items, item{id, t.Title, t.Artist, ResolveTrackFilePath(t)})
+		}
+		store.Mu.RUnlock()
+
+		integrityProgress.Lock()
+		integrityProgress.Checked = 0
+		integrityProgress.Total = len(items)
+		integrityProgress.CurrentTrack = "Starting..."
+		integrityProgress.Corrupt = 0
+		integrityProgress.Unlock()
+
+		corrupt := 0
+		skipped := 0
+		for i, it := range items {
+			integrityProgress.Lock()
+			integrityProgress.Checked = i
+			integrityProgress.CurrentTrack = it.artist + " — " + it.title
+			integrityProgress.Unlock()
+
+			// Skip files that no longer exist (PruneMissingTracks reconciles those).
+			if _, err := os.Stat(it.path); err != nil {
+				skipped++
+				continue
+			}
+			// Idempotent: don't re-decode tracks already known corrupt.
+			if _, flags := DbGetReviewForTrack(it.id); hasFlag(flags, "corrupt_audio") {
+				skipped++
+				continue
+			}
+			if n, _ := downloads.DecodeCheckAudio(it.path); n >= downloads.CorruptDecodeErrorThreshold {
+				flagTrack(it.id, "corrupt_audio", "integrity-scan")
+				corrupt++
+			}
+		}
+
+		integrityProgress.Lock()
+		integrityProgress.Checked = integrityProgress.Total
+		integrityProgress.CurrentTrack = ""
+		integrityProgress.Corrupt = corrupt
+		integrityProgress.Unlock()
+
+		log.Printf("[review-integrity] done: %d/%d flagged corrupt, %d skipped", corrupt, len(items), skipped)
+	})
+}
+
+// flagTrack merges a flag into a track's existing review flags and marks it
+// needs_review, without clobbering other flags or down-grading richer context.
+// Shared by the integrity scan (corrupt_audio) — playback-error flagging lives
+// in the handler package with the same merge shape.
+func flagTrack(trackID, flag, reviewer string) {
+	_, flags := DbGetReviewForTrack(trackID)
+	if !hasFlag(flags, flag) {
+		flags = append(flags, flag)
+	}
+	flagsJSON, _ := json.Marshal(flags)
+	DbSetReviewStatus(trackID, "needs_review", string(flagsJSON), reviewer)
+	store.Mu.Lock()
+	if t, ok := store.Tracks[trackID]; ok {
+		t.ReviewStatus = "needs_review"
+		t.ReviewFlags = flags
+	}
+	store.Mu.Unlock()
+}
+
+func hasFlag(flags []string, flag string) bool {
+	for _, f := range flags {
+		if f == flag {
+			return true
+		}
+	}
+	return false
 }

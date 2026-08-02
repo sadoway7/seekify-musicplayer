@@ -358,6 +358,27 @@ func DownloadJobRetryHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, job)
 }
 
+// DownloadRetryAllFailedHandler bulk-retries every failed job in one request.
+// Admins with ?all=1 retry every user's jobs; everyone else retries only their
+// own. One UPDATE + one queue kick — replaces the fragile N-request frontend loop.
+func DownloadRetryAllFailedHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	u := auth.CurrentUser(r)
+	all := u != nil && u.Role == auth.RoleAdmin && r.URL.Query().Get("all") == "1"
+	userID := ""
+	if !all && u != nil {
+		userID = u.ID
+	}
+	n := downloads.DbRetryAllFailed(userID)
+	if n > 0 {
+		store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
+	}
+	writeJSON(w, map[string]int{"retried": n})
+}
+
 func DownloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" && r.Method != "DELETE" {
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)

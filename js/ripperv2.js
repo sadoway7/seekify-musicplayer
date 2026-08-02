@@ -481,7 +481,7 @@ const RipperV2 = {
     const retry = el.querySelector('#v2-retry-all');
     if (retry) retry.addEventListener('click', async () => {
       retry.disabled = true;
-      for (const j of this._downloadJobs.filter(j => j.status === 'failed')) { await Api.retryJob(j.id); await new Promise(r => setTimeout(r, 200)); }
+      try { await Api.retryAllFailed(); } catch (e) { this._showToast('Failed to retry all'); }
       this._loadQueue();
     });
     const clear = el.querySelector('#v2-clear');

@@ -562,6 +562,26 @@ func DbGetJobCounts() map[string]int {
 	return counts
 }
 
+// DbRetryAllFailed resets every failed job back to queued in a single statement.
+// A blank userID retries all jobs (admin); otherwise only that user's jobs.
+// Replaces the old per-job HTTP loop from the frontend, which aborted on the
+// first transient error and left the bulk of a large failed batch un-retried.
+func DbRetryAllFailed(userID string) int {
+	var res sql.Result
+	var err error
+	if userID == "" {
+		res, err = store.DB.Exec(`UPDATE download_jobs SET status='queued', error='', progress_stage='', completed_at='' WHERE status='failed'`)
+	} else {
+		res, err = store.DB.Exec(`UPDATE download_jobs SET status='queued', error='', progress_stage='', completed_at='' WHERE status='failed' AND user_id=?`, userID)
+	}
+	if err != nil {
+		log.Printf("[download] DbRetryAllFailed error: %v", err)
+		return 0
+	}
+	n, _ := res.RowsAffected()
+	return int(n)
+}
+
 // DbGetJobCountsForUser returns job-status counts scoped to one user.
 func DbGetJobCountsForUser(userID string) map[string]int {
 	counts := map[string]int{"queued": 0, "searching": 0, "downloading": 0, "tagging": 0, "completed": 0, "failed": 0, "needs_selection": 0}
@@ -1813,6 +1833,45 @@ func FindDownloadedFile(dir, expectedTitle string) string {
 	return newestMatch
 }
 
+// CorruptDecodeErrorThreshold is the ffmpeg error-line count at/above which a
+// file is deemed corrupt. Run with `ffmpeg -v error`, which prints one line per
+// decode error and nothing else — so a clean file emits zero lines. Kept modest:
+// fresh downloads (yt-dlp/Soulseek) produce clean standard containers (0 errors),
+// while mid-stream corruption emits many. End-truncation is caught separately by
+// the duration-ratio check in finalizeDownload, so this targets broken frames.
+// ponytail: const for now; expose as a setting if false rejections appear.
+const CorruptDecodeErrorThreshold = 5
+
+// DecodeCheckAudio decodes the file to /dev/null and counts ffmpeg decode
+// errors. This is the only reliable signal for mid-stream corruption: ffprobe
+// (used by ValidateAudioIntegrity) reads container headers, which can report a
+// valid duration even when the audio frames are broken. firstErr holds the first
+// error line for logs/UI. Returns (0,"") when ffmpeg is absent (graceful
+// degradation) or the file is clean. Exported so the review integrity scan can
+// reuse the exact same check the download pipeline uses.
+func DecodeCheckAudio(filePath string) (errorCount int, firstErr string) {
+	ffmpegPath := FindFfmpeg()
+	if ffmpegPath == "" {
+		return 0, ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	// -f null - decodes every frame and discards it; stderr holds errors only.
+	// Exit code is unreliable for decode errors (ffmpeg often exits 0 with
+	// stderr errors), so we inspect stderr instead.
+	out, _ := exec.CommandContext(ctx, ffmpegPath, "-v", "error", "-i", filePath, "-f", "null", "-").CombinedOutput()
+	s := strings.TrimSpace(string(out))
+	if s == "" {
+		return 0, ""
+	}
+	lines := strings.Count(s, "\n") + 1
+	first := s
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		first = s[:i]
+	}
+	return lines, first
+}
+
 func ValidateAudioIntegrity(filePath string) (bool, string, float64) {
 	ffprobePath, _ := exec.LookPath("ffprobe")
 	if ffprobePath == "" {
@@ -1864,6 +1923,14 @@ func ValidateAudioIntegrity(filePath string) (bool, string, float64) {
 	}
 	if dur < 10 {
 		return false, fmt.Sprintf("duration too short: %.0fs (likely truncated)", dur), 0
+	}
+
+	// Decode pass: the ffprobe checks above only inspected container headers.
+	// A file with intact headers but broken audio frames (mid-stream corruption
+	// from a bad peer/transfer) passes ffprobe yet won't actually decode. This
+	// is the gap that let corrupt downloads enter the library.
+	if n, first := DecodeCheckAudio(filePath); n >= CorruptDecodeErrorThreshold {
+		return false, fmt.Sprintf("audio decode errors (%d): %s", n, first), 0
 	}
 
 	return true, "", dur

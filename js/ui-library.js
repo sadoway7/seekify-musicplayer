@@ -575,7 +575,7 @@ Object.assign(UI, {
       'missing_genre', 'no_cover', 'suspicious_title', 'suspicious_video',
       'suspicious_cover', 'filename_derived', 'artist_equals_title',
       'very_short_title', 'very_long_title', 'no_duration', 'short_duration', 'long_duration',
-      'potential_duplicate'
+      'potential_duplicate', 'playback_error', 'corrupt_audio'
     ];
     let html = '<div class="review-filter-chips">';
     const allActive = active.length === 0;
