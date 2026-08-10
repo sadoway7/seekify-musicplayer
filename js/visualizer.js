@@ -415,6 +415,42 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._audioSource = null;
     this._audioMode = null;
     this._audioReady = false;
+    this._loadBands(track);
+  },
+
+  // Precomputed frequency-band timeline (Safari/iOS path): fetch the per-track
+  // band data and store it for _frame to read synced to currentTime. Only
+  // browsers without captureStream need this; capture browsers analyze live.
+  _loadBands(track) {
+    if (!track || !track.id) return;
+    if (typeof Player === 'undefined' || !Player.audio) return;
+    if (Player.audio.captureStream || Player.audio.mozCaptureStream) return;
+    this._bandTrackId = track.id;
+    this._bandTimeline = null;  // clear; viz renders ambient until loaded
+    if (typeof Api === 'undefined' || !Api.getBands) return;
+    const tid = track.id;
+    Api.getBands(tid).then(data => {
+      if (this._bandTrackId !== tid) return;  // stale: a different track loaded
+      if (data && data.bands && data.bands.length) {
+        this._bandTimeline = data.bands;
+        this._bandRate = data.rate || 20;
+      }
+    }).catch(() => {});
+  },
+
+  // Read the [bass, midLow, midHigh, treble] bands at playback fraction f ([0,1]),
+  // linearly interpolating between timeline buckets for smoothness.
+  _bandsAt(f) {
+    const t = this._bandTimeline;
+    if (!t || !t.length) return [0, 0, 0, 0];
+    if (f <= 0) return t[0];
+    if (f >= 1) return t[t.length - 1];
+    const idx = f * (t.length - 1);
+    const i0 = Math.floor(idx);
+    const i1 = Math.min(t.length - 1, i0 + 1);
+    const fr = idx - i0;
+    const a = t[i0], b = t[i1];
+    return [a[0] + (b[0] - a[0]) * fr, a[1] + (b[1] - a[1]) * fr, a[2] + (b[2] - a[2]) * fr, a[3] + (b[3] - a[3]) * fr];
   },
 
   // --- GL lifecycle ---
@@ -492,23 +528,18 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         return;
       }
       if (!capture) {
-        // Safari/iOS has no HTMLMediaElement.captureStream(), so the only way to
-        // get frequency data is createMediaElementSource — and iOS Safari does
-        // NOT let a Web Audio graph that taps a media element coexist with
-        // AirPlay. Tested across every routing variant; all break AirPlay the
-        // moment a media element enters a running AudioContext:
-        //   - MES on PRIMARY -> analyser -> actx.destination  (9051caf, the
-        //     pre-regression "working" state: reactive, but AirPlay was dead)
-        //   - MES on SECONDARY -> gain(0) -> actx.destination  (b8b88c6, 077c6ff)
-        //   - MES on SECONDARY -> analyser -> MediaStreamDestinationNode  (e22a5d3)
-        // The culprit is the AudioContext + createMediaElementSource itself, NOT
-        // where the graph outputs (speaker vs silent gain vs MediaStream). So on
-        // Safari we run decorative: album-derived colors + ambient motion, no
-        // frequency input, primary element stays on its native AirPlay-capable
-        // path. The only theoretical reactive+AirPlay path is JS-side decoding
-        // with NO AudioContext (WebCodecs/WASM) — a separate major project.
-        // Chrome/Firefox/Android keep full reactivity via captureStream below.
-        this._audioMode = 'decorative';
+        // Safari/iOS has no HTMLMediaElement.captureStream(), and
+        // createMediaElementSource (any routing variant) kills AirPlay on iOS
+        // (tested: primary->speaker, secondary->speaker, secondary->MediaStream;
+        // see CHANGELOG). So we don't tap live audio at all here. Instead the
+        // visualizer is driven by a PRECOMPUTED frequency-band timeline fetched
+        // from /api/bands/<id> and indexed by Player.audio.currentTime (see
+        // _bandsAt + the precomputed branch in _frame). No AudioContext =>
+        // AirPlay stays on the primary element's native path. Until the timeline
+        // loads (first play of a track), bands stay 0 and the viz renders ambient
+        // (album colors + motion), then pulses once the data arrives.
+        // Chrome/Firefox/Android keep full live reactivity via captureStream below.
+        this._audioMode = 'precomputed';
         this._audioReady = true;
         return;
       }
@@ -731,6 +762,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       b /= 13 * 255; ml /= 27 * 255; mh /= 33 * 255; tr /= 111 * 255;
       b = Math.max(0, Math.min(1, b * 1.0 - 0.01)); ml = Math.max(0, Math.min(1, ml * 0.9 - 0.01)); mh = Math.max(0, Math.min(1, mh * 0.9 - 0.01)); tr = Math.max(0, Math.min(1, tr * 1.4 - 0.01));
       b = this._bandDyn(0, b, dt); ml = this._bandDyn(1, ml, dt); mh = this._bandDyn(2, mh, dt); tr = this._bandDyn(3, tr, dt);
+    } else if (this._audioMode === 'precomputed' && this._bandTimeline) {
+      // No live audio tap (Safari/iOS): read from the precomputed band timeline
+      // synced to playback position. Values are already 0-1 (peak-normalized
+      // server-side), so skip _bandDyn; the follow() envelope below smooths them.
+      const p = (typeof Player !== 'undefined' && Player.getProgress) ? Player.getProgress() : null;
+      const v = this._bandsAt(p ? p.fraction : 0);
+      b = v[0]; ml = v[1]; mh = v[2]; tr = v[3];
     }
     const follow = (cur, prev, atk, rel) => {
       if (cur > prev) return prev + (cur - prev) * atk;

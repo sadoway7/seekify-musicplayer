@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./visualizer.js', import.meta.url), 'utf8')
   .replace('const Visualizer = {', 'globalThis.Visualizer = {');
 
-function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
+function loadVisualizer({ captureStream = null, analyserError = false, api = null } = {}) {
   const connections = [];
   const contexts = [];
 
@@ -82,6 +82,7 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
     console,
     isFinite,
     Player: { audio: primary },
+    Api: api,
     window: { AudioContext: FakeAudioContext },
     document: {},
     performance: { now: () => 0 },
@@ -94,30 +95,71 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
   return { Visualizer: context.Visualizer, primary, contexts, connections };
 }
 
-test('Safari (no captureStream) runs decorative and never reroutes the media element', () => {
-  // Regression guard: createMediaElementSource(Player.audio) permanently
-  // reroutes the element through Web Audio and breaks AirPlay/Chromecast for
-  // the page lifetime. Safari has no captureStream, so it must fall back to
-  // decorative mode (no frequency data) to keep remote playback working.
+test('Safari (no captureStream) uses precomputed mode, never reroutes the media element', () => {
+  // AirPlay safety: createMediaElementSource kills AirPlay on iOS, so Safari
+  // uses NO live audio tap. The visualizer is driven by a precomputed band
+  // timeline instead (no AudioContext at all).
   const { Visualizer, contexts } = loadVisualizer();
 
   Visualizer._ensureAudio(true);
 
-  assert.equal(Visualizer._audioMode, 'decorative');
+  assert.equal(Visualizer._audioMode, 'precomputed');
   assert.ok(!Visualizer._analyser);
   assert.equal(contexts.length, 0); // no AudioContext => no createMediaElementSource
 });
 
-test('Safari decorative initializes without a user gesture', () => {
-  // No AudioContext is created, so no gesture is required. The visualizer can
-  // start rendering (album colors + ambient motion) immediately on Safari.
+test('Safari precomputed initializes without a user gesture', () => {
+  // No AudioContext is created, so no gesture is required. The visualizer
+  // renders ambient until the band timeline loads, then pulses.
   const { Visualizer, contexts } = loadVisualizer();
 
   Visualizer._ensureAudio(false);
 
-  assert.equal(Visualizer._audioMode, 'decorative');
+  assert.equal(Visualizer._audioMode, 'precomputed');
   assert.equal(Visualizer._audioReady, true);
   assert.equal(contexts.length, 0);
+});
+
+test('_bandsAt reads and interpolates the precomputed timeline', () => {
+  const { Visualizer } = loadVisualizer();
+  Visualizer._bandTimeline = [[0, 0, 0, 0], [1, 0.5, 0.25, 0], [0, 0, 0, 1]];
+  const at0 = Visualizer._bandsAt(0);
+  assert.equal(at0[0], 0); assert.equal(at0[3], 0);
+  const at1 = Visualizer._bandsAt(1);
+  assert.equal(at1[0], 0); assert.equal(at1[3], 1);
+  // f=0.25 -> idx 0.5 between buckets 0 and 1
+  const mid = Visualizer._bandsAt(0.25);
+  assert.equal(mid[0], 0.5);
+  assert.equal(mid[1], 0.25);
+  assert.equal(mid[2], 0.125);
+  assert.equal(mid[3], 0);
+});
+
+test('_bandsAt returns silence when no timeline is loaded', () => {
+  const { Visualizer } = loadVisualizer();
+  const v = Visualizer._bandsAt(0.5);
+  assert.equal(v[0], 0); assert.equal(v[1], 0); assert.equal(v[2], 0); assert.equal(v[3], 0);
+});
+
+test('_loadBands clears the prior timeline on a new track (pending until loaded)', () => {
+  const api = { getBands: () => new Promise(() => {}) };  // never resolves
+  const { Visualizer } = loadVisualizer({ api });
+  Visualizer._bandTimeline = [[1, 2, 3, 4]];  // pretend prior track's data
+  Visualizer._loadBands({ id: 'track-b' });
+  assert.equal(Visualizer._bandTrackId, 'track-b');
+  assert.equal(Visualizer._bandTimeline, null, 'prior timeline cleared on new track');
+});
+
+test('_loadBands stores the timeline once the fetch resolves', async () => {
+  const api = { getBands: () => Promise.resolve({ bands: [[0.1, 0.2, 0.3, 0.4], [0.5, 0.5, 0.5, 0.5]], rate: 20 }) };
+  const { Visualizer } = loadVisualizer({ api });
+  Visualizer._loadBands({ id: 'track-c' });
+  await new Promise(r => r());  // flush microtask queue
+  await new Promise(r => r());
+  assert.equal(Visualizer._bandTrackId, 'track-c');
+  assert.ok(Visualizer._bandTimeline && Visualizer._bandTimeline.length === 2, 'timeline stored');
+  const at1 = Visualizer._bandsAt(1);
+  assert.equal(at1[0], 0.5); assert.equal(at1[1], 0.5); assert.equal(at1[2], 0.5); assert.equal(at1[3], 0.5);
 });
 
 test('captureStream browsers keep native playback outside Web Audio', () => {

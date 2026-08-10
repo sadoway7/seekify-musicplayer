@@ -202,6 +202,22 @@ const Api = {
     } catch { return null; }
   },
 
+  // Precomputed per-track frequency-band timeline (bass/midLow/midHigh/treble
+  // over time). Drives the visualizer on browsers without a live audio tap
+  // (iOS Safari) so AirPlay stays intact. Mirrors getWaveform's pending/poll.
+  async getBands(trackId, retries = 3) {
+    try {
+      const res = await fetch('/api/bands/' + trackId);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.pending && retries > 0) {
+        await new Promise(r => setTimeout(r, 1500));
+        return this.getBands(trackId, retries - 1);
+      }
+      return data;
+    } catch { return null; }
+  },
+
   async getReviewLog() {
     try {
       const res = await fetch('/api/review/log');

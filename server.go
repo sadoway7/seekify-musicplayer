@@ -345,6 +345,7 @@ func main() {
 	}))
 
 	mux.HandleFunc("/api/waveform/", handlers.WaveformHandler)
+	mux.HandleFunc("/api/bands/", handlers.BandsHandler)
 	mux.HandleFunc("/api/normalize/", auth.RequireUser(handlers.NormalizeHandler))
 	mux.HandleFunc("/api/track-duration/", auth.RequireUser(handlers.TrackDurationHandler))
 	mux.HandleFunc("/api/playback-error/", auth.RequireUser(handlers.TrackPlaybackErrorHandler))

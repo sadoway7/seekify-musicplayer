@@ -5,6 +5,7 @@ import (
 	"io"
 	"musicapp/internal/auth"
 	"musicapp/internal/store"
+	"musicapp/internal/bands"
 	"musicapp/internal/waveform"
 	"net/http"
 	"os"
@@ -284,4 +285,26 @@ func WaveformHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "no-cache")
 	writeJSON(w, map[string]interface{}{"peaks": []float64{}, "pending": true})
+}
+
+// BandsHandler serves the precomputed per-track frequency-band timeline used by
+// the client visualizer on browsers that can't tap live audio without breaking
+// AirPlay (iOS Safari). Same lazy-compute/poll pattern as WaveformHandler.
+func BandsHandler(w http.ResponseWriter, r *http.Request) {
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/bands/")
+	if trackID == "" {
+		http.Error(w, `{"error":"missing track id"}`, http.StatusBadRequest)
+		return
+	}
+
+	if res, ok, _ := bands.GetCached(trackID); ok && res != nil {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		writeJSON(w, res)
+		return
+	}
+
+	bands.GenerateAsync(trackID)
+
+	w.Header().Set("Cache-Control", "no-cache")
+	writeJSON(w, map[string]interface{}{"bands": []interface{}{}, "rate": 20, "pending": true})
 }
