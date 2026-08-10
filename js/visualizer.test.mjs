@@ -169,6 +169,49 @@ test('Safari falls back to decorative when the secondary element cannot be set u
   assert.ok(!Visualizer._vizAudio);
 });
 
+test('AirPlay active disables the visualizer and tears down the secondary element', () => {
+  const { Visualizer, primary } = loadVisualizer();
+  Visualizer.state = 0;
+  Visualizer._ensureAudio(true);
+  Visualizer._applyVisualState = () => {};  // isolate from DOM
+  Visualizer._persist = () => {};
+  assert.ok(Visualizer._vizAudio, 'secondary element running before AirPlay');
+
+  primary.webkitCurrentPlaybackTargetIsWireless = true;
+  Visualizer._onAirPlayChange();
+
+  assert.equal(Visualizer._airplayDisabled, true);
+  assert.equal(Visualizer._wasOnBeforeAirPlay, true);
+  assert.equal(Visualizer.state, -1, 'viz turned off during AirPlay');
+  assert.equal(Visualizer._vizAudio, null, 'secondary torn down (no wasted fetch)');
+});
+
+test('AirPlay disconnect restores the visualizer if it was on before', () => {
+  const { Visualizer, primary } = loadVisualizer();
+  Visualizer.state = 0;
+  Visualizer._ensureAudio(true);
+  Visualizer._applyVisualState = () => {};
+  Visualizer._persist = () => {};
+  primary.webkitCurrentPlaybackTargetIsWireless = true;
+  Visualizer._onAirPlayChange();
+  assert.equal(Visualizer.state, -1);
+
+  primary.webkitCurrentPlaybackTargetIsWireless = false;
+  Visualizer._onAirPlayChange();
+
+  assert.equal(Visualizer._airplayDisabled, false);
+  assert.equal(Visualizer.state, 0, 'viz restored to on');
+  assert.ok(Visualizer._analyser, 'analysis path rebuilt');
+});
+
+test('cycle() is blocked while AirPlay is active', () => {
+  const { Visualizer } = loadVisualizer();
+  Visualizer._airplayDisabled = true;
+  Visualizer.state = -1;
+  Visualizer.cycle();  // no UI in harness → guard returns early, no state change
+  assert.equal(Visualizer.state, -1, 'did not enable viz during AirPlay');
+});
+
 test('captureStream browsers keep native playback outside Web Audio', () => {
   const stream = { getAudioTracks: () => [{}] };
   const { Visualizer, contexts } = loadVisualizer({ captureStream: () => stream });
