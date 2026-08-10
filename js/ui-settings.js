@@ -66,7 +66,9 @@ Object.assign(UI, {
       + '<button class="settings-btn settings-btn-primary" id="btn-save-default-np-view">' + Icons.check() + '<span>Save</span></button>'
       + '</div>'
       + '<div class="settings-subsection-label" style="margin-top:20px">Audio Normalization</div>'
-      + st('setting-audio-normalization', 'Enable audio normalization', '')
+      + '<div class="settings-toggle-row"><div><div class="settings-toggle-label">Enable audio normalization</div>'
+      + '<div class="settings-toggle-hint">Temporarily disabled — client-side gain routing conflicted with Chromecast/AirPlay. Returning as server-side processing.</div>'
+      + '</div><div class="stoggle" data-disabled="1"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div></div>'
       + '</div>';
 
     // --- Tab: Downloads (logical flow: sources → auth → quality → org → permissions → import) ---
@@ -315,6 +317,7 @@ Object.assign(UI, {
     this._loadMetadataStatus();
 
     this.els.content.querySelectorAll('.stoggle').forEach(el => {
+      if (el.dataset.disabled) return;
       el.addEventListener('click', () => el.classList.toggle('active'));
     });
 
@@ -380,12 +383,6 @@ Object.assign(UI, {
     const npViewSaveBtn = document.getElementById('btn-save-default-np-view');
     if (npViewSaveBtn) {
       npViewSaveBtn.addEventListener('click', () => this._saveDefaultNowPlayingView());
-    }
-
-    const anToggle = document.getElementById('setting-audio-normalization');
-    if (anToggle) {
-      this._stoggleOn('setting-audio-normalization', Store.audioNormalizationEnabled !== false);
-      anToggle.addEventListener('click', () => this._saveAudioNormalizationToggle());
     }
 
     // Users tab (admin only): load registration settings + user list, bind actions.
@@ -858,17 +855,6 @@ Object.assign(UI, {
     try {
       await Api.saveSettings({ downloads_enabled: String(on) });
       Store.downloadsEnabled = on;
-      this._showToast('Saved');
-    } catch (e) {
-      this._showToast('Failed to save');
-    }
-  },
-
-  async _saveAudioNormalizationToggle() {
-    const on = this._stoggleVal('setting-audio-normalization');
-    try {
-      await Api.saveSettings({ audio_normalization: String(on) });
-      Store.audioNormalizationEnabled = on;
       this._showToast('Saved');
     } catch (e) {
       this._showToast('Failed to save');

@@ -17,7 +17,6 @@ const Player = {
   _consecutiveErrors: 0,
   _errorHandledForCurrent: false,
   _loadTimeout: null,
-  audioGraph: null,
   _unsupportedExts: null,
 
   // Probe once: which audio formats can this browser stream? iOS/macOS Safari
@@ -49,47 +48,6 @@ const Player = {
     if (this._needsTranscode(track) && typeof Api !== 'undefined' && Api.prewarmTranscode) {
       Api.prewarmTranscode(track.id);
     }
-  },
-
-  ensureAudioGraph() {
-    if (this.audioGraph) return this.audioGraph;
-    if (!this.audio) return null;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return null;
-    try {
-      const actx = new Ctx();
-      const src = actx.createMediaElementSource(this.audio);
-      const gain = actx.createGain();
-      gain.gain.value = 1.0;
-      src.connect(gain);
-      gain.connect(actx.destination);
-      this.audioGraph = { actx, src, gain };
-      return this.audioGraph;
-    } catch (e) {
-      console.warn('[player] audio graph unavailable:', e);
-      return null;
-    }
-  },
-
-  setGainDb(db) {
-    const g = this.ensureAudioGraph();
-    if (!g) return;
-    const v = db == null ? 1.0 : Math.pow(10, db / 20);
-    g.gain.gain.value = v;
-    if (g.actx.state === 'suspended') g.actx.resume().catch(() => {});
-  },
-
-  _applyNormalization(track) {
-    const enabled = (typeof Store !== 'undefined') && Store.audioNormalizationEnabled !== false;
-    if (!enabled) { this.setGainDb(0); return; }
-    fetch('/api/normalize/' + track.id)
-      .then(r => r.json())
-      .then(d => {
-        if (!d || d.enabled === false) { this.setGainDb(0); return; }
-        if (d.ready && d.gain_db != null) this.setGainDb(d.gain_db);
-        else this.setGainDb(0);
-      })
-      .catch(() => this.setGainDb(0));
   },
 
   init() {
@@ -250,7 +208,6 @@ const Player = {
   _loadAndPlay(track) {
     this._clearLoadTimeout();
     this._errorHandledForCurrent = false;
-    this._applyNormalization(track);
     this.audio.src = Api.streamUrl(track.id, this._needsTranscode(track));
     this.audio.play().then(() => {
       this.playing = true;

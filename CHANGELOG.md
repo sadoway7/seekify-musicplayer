@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix (casting): restored Chromecast/AirPlay support by removing the shared Web Audio gain graph from the player. Routing the primary `<audio>` element through `createMediaElementSource` (added by the audio-normalization feature) silently disabled remote playback — Chrome drops Cast and Safari drops AirPlay for any media element tapped by Web Audio. The graph was created on first track load regardless of whether normalization was enabled, so casting broke for everyone. The visualizer is restored to its pre-graph design: Chrome/Firefox/Android analyze a silent `captureStream()` copy (primary element stays native → Cast/AirPlay keep working); Safari/iOS falls back to `createMediaElementSource` only when the user explicitly enables the visualizer, since Safari has no `captureStream` (same viz-or-cast tradeoff as before the regression).
+- Audio normalization: client-side replay-gain is temporarily disabled — it required the Web Audio graph that broke casting. The Settings toggle is shown greyed-out with an explanatory note; the backend (per-track `gain_db`, `/api/normalize/<id>`, EBU R128 analysis) remains in place dormant and will return as server-side gain baked into the transcode path, which doesn't conflict with remote playback.
 - Fix: JS cache-busters bumped for all files changed this release (api, player, store, visualizer, app) — returning visitors were running old JS against the new backend, which caused slow/broken first loads after deploy.
 - Settings: "missing genre" review flag is now off by default for new installs (existing installs keep their saved setting).
 - UI: CSS cache-buster bumped so the cursor fix (arrow instead of I-beam on clickable elements) actually loads for returning visitors.

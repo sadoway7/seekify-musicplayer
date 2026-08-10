@@ -16,6 +16,11 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-08-10
+- Restored Chromecast and AirPlay support. An experimental audio-leveling feature had inadvertently broken remote playback on all browsers
+- The audio loudness leveling toggle in Settings is temporarily disabled (shown greyed-out with a note); it will return as server-side processing that doesn't conflict with casting
+- Visualizer continues to work alongside casting
+
 2026-08-09
 - Corrupt or incomplete downloads are now caught and rejected at download time, and downloads automatically try another source when one fails
 - Files that fail to play or seek are surfaced for review so they can be re-downloaded
@@ -80,8 +85,8 @@
 
 2026-06
 - Early beta</Changes>
-  <Date>2026-08-02</Date>
-  <LastUpdate>1785303249</LastUpdate>
+  <Date>2026-08-10</Date>
+  <LastUpdate>1786382528</LastUpdate>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
   <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.jpg</Screenshot>

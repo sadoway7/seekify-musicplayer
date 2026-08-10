@@ -6,11 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./visualizer.js', import.meta.url), 'utf8')
   .replace('const Visualizer = {', 'globalThis.Visualizer = {');
 
-// Shared window so the Player stub's ensureAudioGraph (module scope) and the
-// visualizer code (vm context scope) resolve the same AudioContext constructor.
-const sharedWindow = {};
-
-function loadVisualizer({ analyserError = false } = {}) {
+function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
   const connections = [];
   const contexts = [];
 
@@ -33,12 +29,18 @@ function loadVisualizer({ analyserError = false } = {}) {
       this.state = 'suspended';
       this.destination = new FakeNode();
       this.mediaElementSources = [];
+      this.mediaStreamSources = [];
       this.suspendCalls = 0;
       contexts.push(this);
     }
     createMediaElementSource(media) {
       const node = new FakeNode();
       this.mediaElementSources.push({ media, node });
+      return node;
+    }
+    createMediaStreamSource(stream) {
+      const node = new FakeNode();
+      this.mediaStreamSources.push({ stream, node });
       return node;
     }
     createAnalyser() {
@@ -71,31 +73,7 @@ function loadVisualizer({ analyserError = false } = {}) {
     playbackRate: 1,
     paused: false
   };
-
-  // Player owns the shared Web Audio graph (mirrors js/player.js ensureAudioGraph).
-  // The visualizer taps graph.gain post-gain instead of creating its own source.
-  const player = {
-    audio: primary,
-    audioGraph: null,
-    ensureAudioGraph() {
-      if (this.audioGraph) return this.audioGraph;
-      if (!this.audio) return null;
-      const Ctx = sharedWindow.AudioContext || sharedWindow.webkitAudioContext;
-      if (!Ctx) return null;
-      try {
-        const actx = new Ctx();
-        const src = actx.createMediaElementSource(this.audio);
-        const gain = actx.createGain();
-        gain.gain.value = 1.0;
-        src.connect(gain);
-        gain.connect(actx.destination);
-        this.audioGraph = { actx, src, gain };
-        return this.audioGraph;
-      } catch (e) {
-        return null;
-      }
-    }
-  };
+  if (captureStream) primary.captureStream = captureStream;
 
   const context = vm.createContext({
     Date,
@@ -103,8 +81,8 @@ function loadVisualizer({ analyserError = false } = {}) {
     Uint8Array,
     console,
     isFinite,
-    Player: player,
-    window: sharedWindow,
+    Player: { audio: primary },
+    window: { AudioContext: FakeAudioContext },
     document: {},
     performance: { now: () => 0 },
     requestAnimationFrame: () => 1,
@@ -113,31 +91,26 @@ function loadVisualizer({ analyserError = false } = {}) {
     setTimeout: () => 1
   });
   vm.runInContext(source, context);
-  sharedWindow.AudioContext = FakeAudioContext;
-  return { Visualizer: context.Visualizer, player, primary, contexts, connections };
+  return { Visualizer: context.Visualizer, primary, contexts, connections };
 }
 
-test('visualizer taps the player graph (MediaElementSource) for analysis', async () => {
-  const { Visualizer, player, primary, contexts, connections } = loadVisualizer();
+test('Safari fallback analyzes the real Player.audio element', async () => {
+  const { Visualizer, primary, contexts, connections } = loadVisualizer();
 
   Visualizer._ensureAudio(true);
   await Promise.resolve();
 
   const actx = contexts[0];
-  const graph = player.audioGraph;
+  const sourceNode = actx.mediaElementSources[0].node;
   assert.equal(Visualizer._audioMode, 'element');
   assert.equal(actx.mediaElementSources.length, 1);
   assert.equal(actx.mediaElementSources[0].media, primary);
-  assert.equal(Visualizer._audioSource, graph.src);
-  assert.equal(Visualizer._actx, actx);
-  // Player wires src -> gain -> destination; visualizer taps gain -> analyser.
-  assert.equal(connections.some(([from, to]) => from === graph.src && to === graph.gain), true);
-  assert.equal(connections.some(([from, to]) => from === graph.gain && to === actx.destination), true);
-  assert.equal(connections.some(([from, to]) => from === graph.gain && to === Visualizer._analyser), true);
+  assert.equal(connections.some(([from, to]) => from === sourceNode && to === Visualizer._analyser), true);
+  assert.equal(connections.some(([from, to]) => from === Visualizer._analyser && to === actx.destination), true);
   assert.equal(actx.state, 'running');
 });
 
-test('visualizer waits for a user gesture before tapping the player graph', () => {
+test('Safari waits for a user gesture before rerouting the player', () => {
   const { Visualizer, contexts } = loadVisualizer();
 
   Visualizer._ensureAudio(false);
@@ -146,14 +119,13 @@ test('visualizer waits for a user gesture before tapping the player graph', () =
   assert.notEqual(Visualizer._audioReady, true);
 });
 
-test('the player graph source is reused when Player.audio changes songs', async () => {
-  const { Visualizer, player, primary, contexts } = loadVisualizer();
+test('Safari source is reused when Player.audio changes songs', async () => {
+  const { Visualizer, primary, contexts } = loadVisualizer();
   Visualizer.state = 0;
   Visualizer._ensureAudio(true);
   await Promise.resolve();
   const actx = contexts[0];
   const sourceNode = Visualizer._audioSource;
-  const graph = player.audioGraph;
 
   primary.src = '/api/stream/track-two';
   primary.currentSrc = primary.src;
@@ -164,11 +136,10 @@ test('the player graph source is reused when Player.audio changes songs', async 
   assert.equal(contexts.length, 1);
   assert.equal(actx.mediaElementSources.length, 1);
   assert.equal(Visualizer._audioSource, sourceNode);
-  assert.equal(player.audioGraph, graph);
   assert.equal(sourceNode.disconnectCalls || 0, 0);
 });
 
-test('hiding now playing does not suspend the audible player graph', async () => {
+test('hiding now playing does not suspend the audible Safari graph', async () => {
   const { Visualizer, contexts } = loadVisualizer();
   Visualizer._ensureAudio(true);
   await Promise.resolve();
@@ -179,18 +150,16 @@ test('hiding now playing does not suspend the audible player graph', async () =>
   assert.equal(contexts[0].suspendCalls, 0);
 });
 
-test('analyser setup failure preserves player-graph audio across track changes', async () => {
-  const { Visualizer, player, contexts, connections } = loadVisualizer({ analyserError: true });
+test('analyser setup failure preserves Safari audio across track changes', async () => {
+  const { Visualizer, contexts, connections } = loadVisualizer({ analyserError: true });
   Visualizer.state = 0;
   Visualizer._ensureAudio(true);
   await Promise.resolve();
   const actx = contexts[0];
   const sourceNode = Visualizer._audioSource;
-  const graph = player.audioGraph;
 
   assert.equal(Visualizer._audioMode, 'element-bypass');
-  assert.equal(connections.some(([from, to]) => from === graph.src && to === graph.gain), true);
-  assert.equal(connections.some(([from, to]) => from === graph.gain && to === actx.destination), true);
+  assert.equal(connections.some(([from, to]) => from === sourceNode && to === actx.destination), true);
   assert.equal(actx.state, 'running');
 
   Visualizer.onTrackChange({ id: 'track-two' });
@@ -236,4 +205,30 @@ test('a foreground resume still pending cannot block the next user gesture', asy
 
   assert.equal(actx.state, 'running');
   resolveForeground();
+});
+
+test('captureStream browsers keep native playback outside Web Audio', () => {
+  const stream = { getAudioTracks: () => [{}] };
+  const { Visualizer, contexts } = loadVisualizer({ captureStream: () => stream });
+
+  Visualizer._ensureAudio(true);
+
+  assert.equal(Visualizer._audioMode, 'capture');
+  assert.equal(contexts[0].mediaStreamSources.length, 1);
+  assert.equal(contexts[0].mediaStreamSources[0].stream, stream);
+  assert.equal(contexts[0].mediaElementSources.length, 0);
+  assert.equal(Visualizer._silentGain.gain.value, 0);
+});
+
+test('captureStream input is replaced when a song changes', () => {
+  const stream = { getAudioTracks: () => [{}] };
+  const { Visualizer } = loadVisualizer({ captureStream: () => stream });
+  Visualizer._ensureAudio(true);
+  const oldSource = Visualizer._audioSource;
+
+  Visualizer.onTrackChange({ id: 'track-two' });
+
+  assert.equal(oldSource.disconnectCalls, 1);
+  assert.equal(Visualizer._audioReady, false);
+  assert.equal(Visualizer._audioSource, null);
 });
