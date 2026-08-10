@@ -2,11 +2,13 @@
 // One shared stack; each entry in SHADERS is a distinct GLSL look.
 // Audio: on Chrome/Firefox/Android an AnalyserNode reads a silent captureStream
 // copy of Player.audio, so the primary element keeps its native output path
-// (Cast/AirPlay keep working). Safari/iOS has no captureStream, and the only
-// other tap (createMediaElementSource) irreversibly reroutes the element through
-// Web Audio — which kills AirPlay. So Safari runs decorative: shaders render
-// with album-derived colors and ambient motion, no frequency input. Album-derived
-// color drives the now-playing palette on every platform.
+// (Cast/AirPlay keep working). Safari/iOS has no captureStream, and tapping the
+// primary element directly (createMediaElementSource) would irreversibly reroute
+// it through Web Audio and kill AirPlay — so Safari instead plays a SECOND hidden
+// silent <audio> element of the same stream and routes THAT through Web Audio for
+// analysis only (cost: ~2x bandwidth on the stream while viz is on). If that
+// setup fails, Safari falls back to decorative mode (album colors + ambient
+// motion, no frequency input). Album-derived color drives the palette everywhere.
 const Visualizer = {
   // Each fragment shader MUST begin with `#version 300 es`.
   SHADERS: [
@@ -305,6 +307,8 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     if (this.state >= 0) {
       this._ensureAudio(true);
       this._resumeAudioContext(true);
+    } else {
+      this._teardownVizAudio();
     }
     setTimeout(() => {
       if (art) art.style.removeProperty('transition');
@@ -348,6 +352,9 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // only that captured input so the next frame attaches the new song while the
   // native audio element and reusable AudioContext remain uninterrupted.
   onTrackChange(track) {
+    // Secondary (Safari) MES is bound to a persistent element; the render loop
+    // retargets its src via _syncVizAudio. No teardown needed on track change.
+    if (this._audioMode === 'secondary') return;
     if (this._audioMode === 'capture' && this._audioSource) {
       try { this._audioSource.disconnect(); } catch (e) {}
     }
@@ -433,17 +440,18 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         return;
       }
       if (!capture) {
-        // Safari/iOS has no HTMLMediaElement.captureStream(). The only other
-        // way to tap frequency data is createMediaElementSource(Player.audio),
-        // which permanently reroutes the element through Web Audio and breaks
-        // AirPlay/Chromecast for the rest of the page (irreversible for the
-        // element's lifetime). We refuse that tradeoff: keep the primary
-        // element on its native output path so remote playback keeps working,
-        // and run the visualizer in decorative mode (album-derived colors +
-        // ambient motion, no frequency input). Chrome/Firefox/Android keep
-        // full audio reactivity via captureStream below.
-        this._audioMode = 'decorative';
+        // Safari/iOS has no HTMLMediaElement.captureStream(). Tapping the
+        // PRIMARY element (createMediaElementSource(Player.audio)) would
+        // irreversibly reroute it through Web Audio and break AirPlay. Instead,
+        // play a SECOND hidden silent <audio> of the same stream and route
+        // THAT through Web Audio for analysis only — the primary element keeps
+        // its native output path so AirPlay stays intact. Cost: ~2x bandwidth
+        // on the stream while viz is on (Safari only; Chrome/Firefox/Android
+        // use captureStream above at zero extra cost). Needs a user gesture.
+        if (!userGesture) return;
+        this._audioMode = this._initVizAudio() ? 'secondary' : 'decorative';
         this._audioReady = true;
+        this._resumeAudioContext(true);
         return;
       }
 
@@ -485,6 +493,86 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       if (actx && !this._actx) actx.close().catch(() => {});
       console.warn('[viz] audio analysis unavailable; using decorative mode:', e);
     }
+  },
+
+  // Build the Safari secondary analysis path: a hidden silent <audio> element
+  // routed through Web Audio purely for frequency data, leaving Player.audio on
+  // its native (AirPlay-capable) output. Returns true on success; false (caller
+  // falls back to decorative) if Web Audio or the element can't be set up.
+  _initVizAudio() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return false;
+      const actx = this._actx || new Ctx();
+      if (!this._vizAudio) this._vizAudio = new Audio();
+      const va = this._vizAudio;
+      va.crossOrigin = 'anonymous';
+      // createMediaElementSource is bound to the element for life — create it
+      // once, then retarget va.src on track changes (the source follows).
+      if (!this._vizSrc) {
+        this._vizSrc = actx.createMediaElementSource(va);
+        const an = actx.createAnalyser();
+        an.fftSize = 1024;
+        an.smoothingTimeConstant = 0.4;
+        const silent = actx.createGain();
+        silent.gain.value = 0;  // mute: analysis only, never double the audio
+        this._vizSrc.connect(an);
+        an.connect(silent);
+        silent.connect(actx.destination);
+        this._analyser = an;
+        this._freq = new Uint8Array(an.frequencyBinCount);
+        this._wave = new Uint8Array(an.fftSize);
+        this._vizSilent = silent;
+      }
+      this._actx = actx;
+      return true;
+    } catch (e) {
+      console.warn('[viz] secondary analysis element unavailable; decorative mode:', e);
+      this._teardownVizAudio();
+      return false;
+    }
+  },
+
+  // Keep the silent secondary element glued to the primary Player.audio: same
+  // source URL, same play/pause state, drift-corrected clock. Called every frame
+  // from _loop while the visualizer is visible.
+  _syncVizAudio() {
+    const va = this._vizAudio;
+    if (!va) return;
+    const p = Player.audio;
+    // Retarget on track change. currentSrc is the resolved absolute URL; both
+    // elements loading the same stream resolve identically.
+    if (p.currentSrc && p.currentSrc !== va.currentSrc) {
+      va.src = p.currentSrc;
+      try { va.currentTime = p.currentTime; } catch (e) {}
+    }
+    // Mirror play/pause. play() may reject outside a gesture (Safari autoplay
+    // policy); the loop retries each frame until a gesture unlocks it.
+    if (p.paused && !va.paused) {
+      va.pause();
+    } else if (!p.paused && va.paused) {
+      va.play().catch(() => {});
+    }
+    // Drift correction: if the silent copy falls >0.3s out of step (seek,
+    // stall, or autoplay that never unlocked), snap it back to the primary.
+    if (!va.paused && Math.abs(va.currentTime - p.currentTime) > 0.3) {
+      try { va.currentTime = p.currentTime; } catch (e) {}
+    }
+  },
+
+  // Release the silent secondary element (viz turned off, or setup failed).
+  // Halts the extra stream fetch so Safari stops paying 2x bandwidth.
+  _teardownVizAudio() {
+    if (this._vizAudio) {
+      try { this._vizAudio.pause(); } catch (e) {}
+      try { this._vizAudio.src = ''; } catch (e) {}
+      this._vizAudio = null;
+    }
+    if (this._vizSrc) { try { this._vizSrc.disconnect(); } catch (e) {} this._vizSrc = null; }
+    this._vizSilent = null;
+    this._analyser = null;
+    this._freq = null;
+    this._wave = null;
   },
 
   _resumeAudioContext(userGesture) {
@@ -601,6 +689,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
 
   _stop() {
     if (this._raf != null) { cancelAnimationFrame(this._raf); this._raf = null; }
+    // Pause the silent secondary element when the visualizer isn't visible so
+    // Safari stops fetching the extra stream while now-playing is hidden.
+    if (this._vizAudio && !this._vizAudio.paused) {
+      try { this._vizAudio.pause(); } catch (e) {}
+    }
   },
 
   _resize() {
@@ -640,10 +733,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   _frame() {
-    // Audio analysis uses a captured copy when supported. Safari/iOS uses the
-    // actual Player.audio element because it has no captureStream().
+    // Audio analysis: captureStream copy (Chrome/Firefox/Android) or a silent
+    // secondary element (Safari) — never the primary element directly.
     if (this.state >= 0) this._ensureAudio(false);
     if (this.state >= 0) this._resumeAudioContext();
+    if (this.state >= 0) this._syncVizAudio();
     if (this._t0 == null) this._t0 = performance.now() / 1000;
 
     // _bandDyn frame inputs: dt + seek-edge → mark all 8 slots for reset. Runs

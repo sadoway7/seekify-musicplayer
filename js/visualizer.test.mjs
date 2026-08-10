@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./visualizer.js', import.meta.url), 'utf8')
   .replace('const Visualizer = {', 'globalThis.Visualizer = {');
 
-function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
+function loadVisualizer({ captureStream = null, analyserError = false, secondaryFails = false } = {}) {
   const connections = [];
   const contexts = [];
 
@@ -34,6 +34,7 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
       contexts.push(this);
     }
     createMediaElementSource(media) {
+      if (secondaryFails) throw new Error('createMediaElementSource unavailable');
       const node = new FakeNode();
       this.mediaElementSources.push({ media, node });
       return node;
@@ -65,6 +66,22 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
     close() { this.state = 'closed'; return Promise.resolve(); }
   }
 
+  // Stand-in for a hidden <audio> element created via `new Audio()` (Safari's
+  // silent secondary analysis element).
+  class FakeAudioEl {
+    constructor() {
+      this._src = '';
+      this.currentSrc = '';
+      this.paused = true;
+      this.currentTime = 0;
+      this.crossOrigin = null;
+    }
+    get src() { return this._src; }
+    set src(v) { this._src = v; this.currentSrc = v; }
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
+  }
+
   const primary = {
     currentSrc: '/api/stream/track-one',
     src: '/api/stream/track-one',
@@ -81,6 +98,7 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
     Uint8Array,
     console,
     isFinite,
+    Audio: FakeAudioEl,
     Player: { audio: primary },
     window: { AudioContext: FakeAudioContext },
     document: {},
@@ -94,30 +112,61 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
   return { Visualizer: context.Visualizer, primary, contexts, connections };
 }
 
-test('Safari (no captureStream) runs decorative and never reroutes the media element', () => {
-  // Regression guard: createMediaElementSource(Player.audio) permanently
-  // reroutes the element through Web Audio and breaks AirPlay/Chromecast for
-  // the page lifetime. Safari has no captureStream, so it must fall back to
-  // decorative mode (no frequency data) to keep remote playback working.
-  const { Visualizer, contexts } = loadVisualizer();
+test('Safari (no captureStream) analyzes a silent secondary element, never the primary', () => {
+  // AirPlay safety contract: the PRIMARY Player.audio element must never be
+  // tapped by createMediaElementSource (that reroutes it through Web Audio and
+  // kills AirPlay). Safari plays a separate hidden silent <audio> instead.
+  const { Visualizer, primary, contexts } = loadVisualizer();
+
+  Visualizer._ensureAudio(true);
+
+  assert.equal(Visualizer._audioMode, 'secondary');
+  assert.ok(Visualizer._vizAudio, 'secondary <audio> element created');
+  assert.ok(Visualizer._analyser, 'analyser attached');
+  const actx = contexts[0];
+  assert.equal(actx.mediaElementSources.length, 1);
+  assert.equal(actx.mediaElementSources[0].media, Visualizer._vizAudio,
+    'MES bound to the secondary element, NOT Player.audio');
+  assert.notEqual(actx.mediaElementSources[0].media, primary);
+  // Secondary output is silenced (gain 0) so it never doubles the audio.
+  assert.equal(Visualizer._vizSilent.gain.value, 0);
+});
+
+test('secondary element retargets and mirrors the primary playback state', () => {
+  const { Visualizer, primary } = loadVisualizer();
+  Visualizer._ensureAudio(true);
+  const va = Visualizer._vizAudio;
+
+  // Primary switches track and starts playing.
+  primary.currentSrc = '/api/stream/track-two';
+  primary.src = primary.currentSrc;
+  primary.paused = false;
+  Visualizer._syncVizAudio();
+
+  assert.equal(va.currentSrc, '/api/stream/track-two', 'retargeted to new track');
+  assert.equal(va.paused, false, 'mirrored play state');
+});
+
+test('turning the visualizer off tears down the silent secondary element', () => {
+  const { Visualizer } = loadVisualizer();
+  Visualizer._ensureAudio(true);
+  Visualizer._syncVizAudio();
+  assert.ok(Visualizer._vizAudio);
+
+  Visualizer._teardownVizAudio();
+
+  assert.equal(Visualizer._vizAudio, null);
+  assert.equal(Visualizer._analyser, null);
+});
+
+test('Safari falls back to decorative when the secondary element cannot be set up', () => {
+  const { Visualizer } = loadVisualizer({ secondaryFails: true });
 
   Visualizer._ensureAudio(true);
 
   assert.equal(Visualizer._audioMode, 'decorative');
   assert.ok(!Visualizer._analyser);
-  assert.equal(contexts.length, 0); // no AudioContext => no createMediaElementSource
-});
-
-test('Safari decorative initializes without a user gesture', () => {
-  // No AudioContext is created, so no gesture is required. The visualizer can
-  // start rendering (album colors + ambient motion) immediately on Safari.
-  const { Visualizer, contexts } = loadVisualizer();
-
-  Visualizer._ensureAudio(false);
-
-  assert.equal(Visualizer._audioMode, 'decorative');
-  assert.equal(Visualizer._audioReady, true);
-  assert.equal(contexts.length, 0);
+  assert.ok(!Visualizer._vizAudio);
 });
 
 test('captureStream browsers keep native playback outside Web Audio', () => {
