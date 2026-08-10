@@ -52,6 +52,11 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
       gain.gain = { value: 1 };
       return gain;
     }
+    createMediaStreamDestination() {
+      const node = new FakeNode();
+      node.stream = {};
+      return node;
+    }
     resume() {
       this.resumeCalls = (this.resumeCalls || 0) + 1;
       this.state = 'running';
@@ -63,6 +68,22 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
       return Promise.resolve();
     }
     close() { this.state = 'closed'; return Promise.resolve(); }
+  }
+
+  // Stand-in for a hidden <audio> element created via `new Audio()` (Safari's
+  // silent secondary analysis element).
+  class FakeAudioEl {
+    constructor() {
+      this._src = '';
+      this.currentSrc = '';
+      this.paused = true;
+      this.currentTime = 0;
+      this.crossOrigin = null;
+    }
+    get src() { return this._src; }
+    set src(v) { this._src = v; this.currentSrc = v; }
+    play() { this.paused = false; return Promise.resolve(); }
+    pause() { this.paused = true; }
   }
 
   const primary = {
@@ -81,6 +102,7 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
     Uint8Array,
     console,
     isFinite,
+    Audio: FakeAudioEl,
     Player: { audio: primary },
     window: { AudioContext: FakeAudioContext },
     document: {},
@@ -94,29 +116,32 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
   return { Visualizer: context.Visualizer, primary, contexts, connections };
 }
 
-test('Safari (no captureStream) runs decorative and never reroutes the media element', () => {
-  // Regression guard: createMediaElementSource(Player.audio) permanently
-  // reroutes the element through Web Audio and breaks AirPlay/Chromecast for
-  // the page lifetime. Safari has no captureStream, so it must fall back to
-  // decorative mode (no frequency data) to keep remote playback working.
-  const { Visualizer, contexts } = loadVisualizer();
+test('Safari (no captureStream) routes a secondary element to a MediaStream destination, not the speaker', () => {
+  // AirPlay-safety contract: the PRIMARY Player.audio element must never be
+  // tapped by createMediaElementSource (that reroutes it and breaks AirPlay).
+  // The secondary element is routed to a MediaStreamAudioDestinationNode, NOT
+  // actx.destination (the speaker) — the hypothesis is iOS won't claim the
+  // audio session when nothing reaches the speaker output.
+  const { Visualizer, primary, contexts } = loadVisualizer();
 
   Visualizer._ensureAudio(true);
 
-  assert.equal(Visualizer._audioMode, 'decorative');
-  assert.ok(!Visualizer._analyser);
-  assert.equal(contexts.length, 0); // no AudioContext => no createMediaElementSource
+  assert.equal(Visualizer._audioMode, 'secondary');
+  assert.ok(Visualizer._vizAudio, 'secondary <audio> element created');
+  assert.ok(Visualizer._analyser, 'analyser attached');
+  const actx = contexts[0];
+  assert.equal(actx.mediaElementSources.length, 1);
+  assert.equal(actx.mediaElementSources[0].media, Visualizer._vizAudio, 'MES on the secondary, NOT Player.audio');
+  assert.notEqual(actx.mediaElementSources[0].media, primary);
+  assert.ok(Visualizer._vizStreamDest, 'routed to a MediaStream destination, not the speaker');
 });
 
-test('Safari decorative initializes without a user gesture', () => {
-  // No AudioContext is created, so no gesture is required. The visualizer can
-  // start rendering (album colors + ambient motion) immediately on Safari.
+test('Safari waits for a user gesture before setting up the secondary element', () => {
   const { Visualizer, contexts } = loadVisualizer();
 
   Visualizer._ensureAudio(false);
 
-  assert.equal(Visualizer._audioMode, 'decorative');
-  assert.equal(Visualizer._audioReady, true);
+  assert.notEqual(Visualizer._audioReady, true);
   assert.equal(contexts.length, 0);
 });
 
