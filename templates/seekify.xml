@@ -23,7 +23,6 @@
 - Visualizer performance improved (smoother playback while it runs)
 - UI cursor fixes and more accurate review flags
 - General stability and bug fixes
-
 2026-08-02
 - Mobile playback: songs start instantly on iPhone/iPad (transcoding added for formats mobile browsers can't stream; desktop unchanged)
 - Downloads no longer occasionally run twice or leave the queue appearing stuck

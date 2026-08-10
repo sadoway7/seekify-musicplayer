@@ -34,7 +34,7 @@ func InitSettingsTable() {
 	MigrateSetting("review_flag_missing_title", "true")
 	MigrateSetting("review_flag_missing_artist", "true")
 	MigrateSetting("review_flag_missing_album", "true")
-	MigrateSetting("review_flag_missing_genre", "true")
+	MigrateSetting("review_flag_missing_genre", "false")
 	MigrateSetting("review_flag_no_cover", "true")
 	MigrateSetting("review_flag_filename_derived", "true")
 	MigrateSetting("review_flag_suspicious", "true")

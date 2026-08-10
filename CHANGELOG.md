@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Settings: "missing genre" review flag is now off by default for new installs (existing installs keep their saved setting).
+- UI: CSS cache-buster bumped so the cursor fix (arrow instead of I-beam on clickable elements) actually loads for returning visitors.
 - Visualizer: shaders now compile lazily per-shader on first use instead of all 5 up front — the first frame previously took ~1.3s synchronously (Chrome flagged the safety-net interval at 1304ms), janking the main thread during playback. First frame is also deferred to requestAnimationFrame so a cold compile never runs inside a timer handler.
 - Downloads: a Soulseek file that transfers but fails validation (corrupt audio, truncated, low bitrate) now falls back to the next candidate instead of failing the whole job. Previously the multi-candidate list only covered unreachable peers — a corrupt download abandoned the remaining candidates. Up to 3 attempts.
 - Downloads: the corrupt-audio threshold is now 1 ffmpeg decode error (was 5). A localized corrupt region can emit as few as 3 error lines while still breaking playback/seeking — such files now get rejected at download time instead of entering the library.
