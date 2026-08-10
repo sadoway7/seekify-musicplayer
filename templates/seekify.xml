@@ -19,7 +19,8 @@
 2026-08-10
 - Restored Chromecast and AirPlay support. An experimental audio-leveling feature had inadvertently broken remote playback on all browsers
 - The audio loudness leveling toggle in Settings is temporarily disabled (shown greyed-out with a note); it will return as server-side processing that doesn't conflict with casting
-- Visualizer continues to work alongside casting
+- On iPhone/iPad the visualizer now runs in decorative mode (album colors and ambient motion) so AirPlay keeps working while it is on; previously enabling the visualizer broke AirPlay until the page was reloaded
+- Visualizer continues to work alongside casting on Chrome, Firefox, and Android
 
 2026-08-09
 - Corrupt or incomplete downloads are now caught and rejected at download time, and downloads automatically try another source when one fails

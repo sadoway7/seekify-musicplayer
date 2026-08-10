@@ -94,117 +94,30 @@ function loadVisualizer({ captureStream = null, analyserError = false } = {}) {
   return { Visualizer: context.Visualizer, primary, contexts, connections };
 }
 
-test('Safari fallback analyzes the real Player.audio element', async () => {
-  const { Visualizer, primary, contexts, connections } = loadVisualizer();
+test('Safari (no captureStream) runs decorative and never reroutes the media element', () => {
+  // Regression guard: createMediaElementSource(Player.audio) permanently
+  // reroutes the element through Web Audio and breaks AirPlay/Chromecast for
+  // the page lifetime. Safari has no captureStream, so it must fall back to
+  // decorative mode (no frequency data) to keep remote playback working.
+  const { Visualizer, contexts } = loadVisualizer();
 
   Visualizer._ensureAudio(true);
-  await Promise.resolve();
 
-  const actx = contexts[0];
-  const sourceNode = actx.mediaElementSources[0].node;
-  assert.equal(Visualizer._audioMode, 'element');
-  assert.equal(actx.mediaElementSources.length, 1);
-  assert.equal(actx.mediaElementSources[0].media, primary);
-  assert.equal(connections.some(([from, to]) => from === sourceNode && to === Visualizer._analyser), true);
-  assert.equal(connections.some(([from, to]) => from === Visualizer._analyser && to === actx.destination), true);
-  assert.equal(actx.state, 'running');
+  assert.equal(Visualizer._audioMode, 'decorative');
+  assert.ok(!Visualizer._analyser);
+  assert.equal(contexts.length, 0); // no AudioContext => no createMediaElementSource
 });
 
-test('Safari waits for a user gesture before rerouting the player', () => {
+test('Safari decorative initializes without a user gesture', () => {
+  // No AudioContext is created, so no gesture is required. The visualizer can
+  // start rendering (album colors + ambient motion) immediately on Safari.
   const { Visualizer, contexts } = loadVisualizer();
 
   Visualizer._ensureAudio(false);
 
+  assert.equal(Visualizer._audioMode, 'decorative');
+  assert.equal(Visualizer._audioReady, true);
   assert.equal(contexts.length, 0);
-  assert.notEqual(Visualizer._audioReady, true);
-});
-
-test('Safari source is reused when Player.audio changes songs', async () => {
-  const { Visualizer, primary, contexts } = loadVisualizer();
-  Visualizer.state = 0;
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-  const actx = contexts[0];
-  const sourceNode = Visualizer._audioSource;
-
-  primary.src = '/api/stream/track-two';
-  primary.currentSrc = primary.src;
-  primary.currentTime = 7;
-  Visualizer.onTrackChange({ id: 'track-two' });
-  Visualizer._ensureAudio(true);
-
-  assert.equal(contexts.length, 1);
-  assert.equal(actx.mediaElementSources.length, 1);
-  assert.equal(Visualizer._audioSource, sourceNode);
-  assert.equal(sourceNode.disconnectCalls || 0, 0);
-});
-
-test('hiding now playing does not suspend the audible Safari graph', async () => {
-  const { Visualizer, contexts } = loadVisualizer();
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-
-  Visualizer.onHideNowPlaying();
-
-  assert.equal(contexts[0].state, 'running');
-  assert.equal(contexts[0].suspendCalls, 0);
-});
-
-test('analyser setup failure preserves Safari audio across track changes', async () => {
-  const { Visualizer, contexts, connections } = loadVisualizer({ analyserError: true });
-  Visualizer.state = 0;
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-  const actx = contexts[0];
-  const sourceNode = Visualizer._audioSource;
-
-  assert.equal(Visualizer._audioMode, 'element-bypass');
-  assert.equal(connections.some(([from, to]) => from === sourceNode && to === actx.destination), true);
-  assert.equal(actx.state, 'running');
-
-  Visualizer.onTrackChange({ id: 'track-two' });
-  assert.equal(Visualizer._audioMode, 'element-bypass');
-  assert.equal(Visualizer._audioSource, sourceNode);
-});
-
-test('an interrupted Safari AudioContext is resumed without rebuilding it', async () => {
-  const { Visualizer, contexts } = loadVisualizer();
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-  await Promise.resolve();
-  const actx = contexts[0];
-  const sourceNode = Visualizer._audioSource;
-
-  actx.state = 'interrupted';
-  Visualizer._resumeAudioContext();
-  await Promise.resolve();
-
-  assert.equal(actx.state, 'running');
-  assert.equal(contexts.length, 1);
-  assert.equal(Visualizer._audioSource, sourceNode);
-});
-
-test('a foreground resume still pending cannot block the next user gesture', async () => {
-  const { Visualizer, contexts } = loadVisualizer();
-  Visualizer._ensureAudio(true);
-  await Promise.resolve();
-  await Promise.resolve();
-  const actx = contexts[0];
-  let resolveForeground;
-  actx.state = 'interrupted';
-  actx.resume = () => new Promise((resolve) => { resolveForeground = resolve; });
-  Visualizer._resumeAudioContext(false);
-  assert.equal(Visualizer._audioResumePending, true);
-
-  actx.resume = () => {
-    actx.state = 'running';
-    return Promise.resolve();
-  };
-  Visualizer._resumeAudioContext(true);
-  await Promise.resolve();
-
-  assert.equal(actx.state, 'running');
-  resolveForeground();
 });
 
 test('captureStream browsers keep native playback outside Web Audio', () => {

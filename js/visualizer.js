@@ -1,10 +1,12 @@
 // Visualizer — raw WebGL2 fullscreen fragment shaders, audio-reactive.
 // One shared stack; each entry in SHADERS is a distinct GLSL look.
-// Audio: where supported, an AnalyserNode reads a silent captureStream copy of
-// Player.audio. Safari uses a separate synchronized analyser-only media element
-// because it has no captureStream. The primary media element always stays on its
-// native output path so a suspended AudioContext cannot affect background
-// playback. Album-derived color drives the now-playing palette.
+// Audio: on Chrome/Firefox/Android an AnalyserNode reads a silent captureStream
+// copy of Player.audio, so the primary element keeps its native output path
+// (Cast/AirPlay keep working). Safari/iOS has no captureStream, and the only
+// other tap (createMediaElementSource) irreversibly reroutes the element through
+// Web Audio — which kills AirPlay. So Safari runs decorative: shaders render
+// with album-derived colors and ambient motion, no frequency input. Album-derived
+// color drives the now-playing palette on every platform.
 const Visualizer = {
   // Each fragment shader MUST begin with `#version 300 es`.
   SHADERS: [
@@ -266,10 +268,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       const npCol = document.querySelector('.np-player-col');
       if (npCol) new ResizeObserver(() => this._invalidateCenter()).observe(npCol);
     }
-    // Safari/iOS does not expose HTMLMediaElement.captureStream(). Resume its
-    // direct MediaElementSource analyser from user gestures and when returning
-    // to the foreground. The direct source is permanent: recreating one for
-    // the same media element throws, and suspending it would also mute music.
+    // Resume the captureStream analyser's AudioContext from user gestures and
+    // when returning to the foreground (captureStream browsers: Chrome/Firefox/
+    // Android). Safari/iOS runs decorative (no AudioContext), so these are
+    // harmless no-ops there.
     document.addEventListener('click', () => {
       if (this.state < 0) return;
       this._ensureAudio(true);
@@ -346,13 +348,6 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // only that captured input so the next frame attaches the new song while the
   // native audio element and reusable AudioContext remain uninterrupted.
   onTrackChange(track) {
-    // A MediaElementSource follows Player.audio when its src changes. Keep it
-    // connected for the lifetime of the page; replacing it is invalid and can
-    // leave Safari with a silent player.
-    if (this._audioMode === 'element' || this._audioMode === 'element-bypass') {
-      if (track && this.state >= 0) this._resumeAudioContext();
-      return;
-    }
     if (this._audioMode === 'capture' && this._audioSource) {
       try { this._audioSource.disconnect(); } catch (e) {}
     }
@@ -438,41 +433,17 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
         return;
       }
       if (!capture) {
-        // Safari/iOS: no captureStream. Falls back to routing Player.audio
-        // through a Web Audio graph, which is the ONLY way to get frequency
-        // data here — but it disables AirPlay/Chromecast for the element.
-        // Accept the tradeoff only on explicit user gesture (viz turned on).
-        if (!userGesture) return;
-        actx = this._actx || new Ctx();
-        const src = actx.createMediaElementSource(Player.audio);
-        let an = null;
-        try {
-          an = actx.createAnalyser();
-          an.fftSize = 1024;
-          an.smoothingTimeConstant = 0.4;
-          src.connect(an);
-          an.connect(actx.destination);
-        } catch (e) {
-          // Once createMediaElementSource succeeds, Player.audio belongs to
-          // this context for the rest of the page. Preserve audible playback
-          // even if analyser setup unexpectedly fails.
-          try { src.connect(actx.destination); } catch (connectError) {}
-          this._actx = actx;
-          this._audioSource = src;
-          this._audioMode = 'element-bypass';
-          this._audioReady = true;
-          this._resumeAudioContext(true);
-          console.warn('[viz] Safari analyser unavailable; preserving audio without reactivity:', e);
-          return;
-        }
-        this._actx = actx;
-        this._audioSource = src;
-        this._analyser = an;
-        this._freq = new Uint8Array(an.frequencyBinCount);
-        this._wave = new Uint8Array(an.fftSize);
-        this._audioMode = 'element';
+        // Safari/iOS has no HTMLMediaElement.captureStream(). The only other
+        // way to tap frequency data is createMediaElementSource(Player.audio),
+        // which permanently reroutes the element through Web Audio and breaks
+        // AirPlay/Chromecast for the rest of the page (irreversible for the
+        // element's lifetime). We refuse that tradeoff: keep the primary
+        // element on its native output path so remote playback keeps working,
+        // and run the visualizer in decorative mode (album-derived colors +
+        // ambient motion, no frequency input). Chrome/Firefox/Android keep
+        // full audio reactivity via captureStream below.
+        this._audioMode = 'decorative';
         this._audioReady = true;
-        this._resumeAudioContext(true);
         return;
       }
 
