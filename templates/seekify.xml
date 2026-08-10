@@ -19,9 +19,8 @@
 2026-08-10
 - Restored Chromecast and AirPlay support. An experimental audio-leveling feature had inadvertently broken remote playback on all browsers
 - The audio loudness leveling toggle in Settings is temporarily disabled (shown greyed-out with a note); it will return as server-side processing that doesn't conflict with casting
-- On iPhone/iPad the visualizer is now audio-reactive again AND keeps AirPlay working: it plays a silent second copy of the stream for analysis only, so the main player stays on its native AirPlay path (uses a little extra data while the visualizer is visible; falls back to a non-reactive mode if the browser blocks it)
-- The visualizer automatically turns off while audio plays to an AirPlay speaker (it cannot analyze a remote stream) and turns back on when AirPlay disconnects; the toggle is dimmed and explains why if tapped during AirPlay
-- Visualizer continues to work alongside casting on Chrome, Firefox, and Android
+- On iPhone/iPad the visualizer runs in a non-reactive mode (album colors and ambient motion, no pulse to the beat) so that AirPlay keeps working; Apple's browser does not allow audio-reactive visualizers and AirPlay at the same time, so the visualizer stays visible but non-reactive rather than breaking AirPlay
+- Visualizer remains fully audio-reactive on Chrome, Firefox, and Android
 
 2026-08-09
 - Corrupt or incomplete downloads are now caught and rejected at download time, and downloads automatically try another source when one fails
