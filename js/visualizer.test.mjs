@@ -145,3 +145,41 @@ test('captureStream input is replaced when a song changes', () => {
   assert.equal(Visualizer._audioReady, false);
   assert.equal(Visualizer._audioSource, null);
 });
+
+test('AirPlay active forces the visualizer off and marks the toggle disabled', () => {
+  const { Visualizer, primary } = loadVisualizer();
+  Visualizer.state = 0;                  // viz on (decorative)
+  Visualizer._applyVisualState = () => {};  // isolate from DOM
+  Visualizer._persist = () => {};
+
+  primary.webkitCurrentPlaybackTargetIsWireless = true;
+  Visualizer._onAirPlayChange();
+
+  assert.equal(Visualizer._airplayDisabled, true);
+  assert.equal(Visualizer._wasOnBeforeAirPlay, true);
+  assert.equal(Visualizer.state, -1, 'forced back to album art');
+});
+
+test('AirPlay disconnect restores the visualizer if it was on before', () => {
+  const { Visualizer, primary } = loadVisualizer();
+  Visualizer.state = 0;
+  Visualizer._applyVisualState = () => {};
+  Visualizer._persist = () => {};
+  primary.webkitCurrentPlaybackTargetIsWireless = true;
+  Visualizer._onAirPlayChange();
+  assert.equal(Visualizer.state, -1);
+
+  primary.webkitCurrentPlaybackTargetIsWireless = false;
+  Visualizer._onAirPlayChange();
+
+  assert.equal(Visualizer._airplayDisabled, false);
+  assert.equal(Visualizer.state, 0, 'viz restored on disconnect');
+});
+
+test('cycle() is blocked while AirPlay is active', () => {
+  const { Visualizer } = loadVisualizer();
+  Visualizer._airplayDisabled = true;
+  Visualizer.state = -1;
+  Visualizer.cycle();   // no UI in harness -> guard returns early, no state change
+  assert.equal(Visualizer.state, -1, 'did not enable viz during AirPlay');
+});

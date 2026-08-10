@@ -254,6 +254,22 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
       if (e.target.closest('.np-float-tray') || e.target.closest('.np-review-overlay')) return;
       this.cycle();
     });
+    // Auto-hide + disable the visualizer during AirPlay on iOS (see
+    // _onAirPlayChange): a decorative visualizer is non-reactive and looks
+    // pointless while casting, so switch to album art. Listen for the
+    // wireless-state event and check the initial state in case AirPlay is
+    // already active when the visualizer initializes.
+    const _airEl = Player.audio;
+    if (_airEl) {
+      try { _airEl.addEventListener('webkitcurrentplaybacktargetiswireless', () => this._onAirPlayChange()); } catch (e) {}
+      if (_airEl.remote) {
+        try {
+          _airEl.remote.addEventListener('connect', () => this._onAirPlayChange());
+          _airEl.remote.addEventListener('disconnect', () => this._onAirPlayChange());
+        } catch (e) {}
+      }
+      this._airplayDisabled = this._isAirPlayActive();
+    }
     this._applyVisualState();
     // Invalidate the cached disc-center on resize/scroll (getBoundingClientRect
     // is expensive and was called every frame, forcing layout reflow at 30fps).
@@ -294,6 +310,10 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   },
 
   cycle() {
+    if (this._airplayDisabled) {
+      if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('Visualizer is unavailable during AirPlay');
+      return;
+    }
     const art = document.getElementById('np-art');
     const bg = document.getElementById('np-art-bg');
     if (art) art.style.setProperty('transition', 'opacity 0.35s ease', 'important');
@@ -331,7 +351,45 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     const on = this.state >= 0;
     const np = document.getElementById('now-playing');
     if (np) np.classList.toggle('viz-on', on);
-    if (this.btn) this.btn.classList.toggle('active', on);
+    if (this.btn) {
+      this.btn.classList.toggle('active', on);
+      const dis = !!this._airplayDisabled;
+      this.btn.style.opacity = dis ? '0.4' : '';
+      this.btn.setAttribute('aria-disabled', dis ? 'true' : 'false');
+    }
+  },
+
+  // True when the primary Player.audio is routing to a remote device (AirPlay).
+  // Safari exposes this via webkitCurrentPlaybackTargetIsWireless; the standard
+  // RemotePlayback API (element.remote.state) is checked first where available.
+  _isAirPlayActive() {
+    const a = Player.audio;
+    if (!a) return false;
+    if (a.remote && a.remote.state === 'connected') return true;
+    if ('webkitCurrentPlaybackTargetIsWireless' in a) return !!a.webkitCurrentPlaybackTargetIsWireless;
+    return false;
+  },
+
+  // AirPlay started/stopped. While casting on iOS the visualizer is decorative
+  // (non-reactive) anyway, so hide it (album art) and disable the toggle rather
+  // than show a non-pulsing visualizer during a remote session. On disconnect,
+  // restore the visualizer if the user had it on.
+  _onAirPlayChange() {
+    const active = this._isAirPlayActive();
+    if (active === this._airplayDisabled) return;
+    this._airplayDisabled = active;
+    if (active) {
+      this._wasOnBeforeAirPlay = this.state >= 0;
+      if (this.state >= 0) {
+        this.state = -1;
+        this._persist();
+      }
+    } else if (this._wasOnBeforeAirPlay) {
+      this.state = 0;
+      this._persist();
+      this._wasOnBeforeAirPlay = false;
+    }
+    this._applyVisualState();
   },
 
   onShowNowPlaying() {
