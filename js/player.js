@@ -18,6 +18,38 @@ const Player = {
   _errorHandledForCurrent: false,
   _loadTimeout: null,
   audioGraph: null,
+  _unsupportedExts: null,
+
+  // Probe once: which audio formats can this browser stream? iOS/macOS Safari
+  // returns "" for FLAC/Opus/Ogg (it must download the whole file before
+  // playing), so tracks in those formats request ?fmt=aac and get a transcoded
+  // copy instead. Chrome/Firefox/Android stream FLAC natively — untouched.
+  _detectUnsupportedExts() {
+    const a = this.audio || new Audio();
+    if (typeof a.canPlayType !== 'function') return {};
+    const probe = (type) => {
+      try { return a.canPlayType(type); } catch (e) { return ''; }
+    };
+    const set = {};
+    if (!probe('audio/flac')) set['.flac'] = true;
+    if (!probe('audio/ogg; codecs="opus"') && !probe('audio/opus')) set['.opus'] = true;
+    if (!probe('audio/ogg; codecs="vorbis"')) set['.ogg'] = true;
+    if (!probe('audio/wav') && !probe('audio/wave')) set['.wav'] = true;
+    return set;
+  },
+
+  _needsTranscode(track) {
+    if (!track || !track.filePath || !this._unsupportedExts) return false;
+    const dot = track.filePath.lastIndexOf('.');
+    if (dot < 0) return false;
+    return !!this._unsupportedExts[track.filePath.slice(dot).toLowerCase()];
+  },
+
+  prewarmTranscode(track) {
+    if (this._needsTranscode(track) && typeof Api !== 'undefined' && Api.prewarmTranscode) {
+      Api.prewarmTranscode(track.id);
+    }
+  },
 
   ensureAudioGraph() {
     if (this.audioGraph) return this.audioGraph;
@@ -71,6 +103,7 @@ const Player = {
     } catch (e) { /* Experimental API: unsupported browsers safely ignore it. */ }
     this._restoreVolume();
     this.audio = new Audio();
+    this._unsupportedExts = this._detectUnsupportedExts();
     this.audio.volume = this.volume;
     this.audio.addEventListener('timeupdate', () => {
       if (this.onTimeUpdate) this.onTimeUpdate();
@@ -109,15 +142,21 @@ const Player = {
       });
       // Report genuinely unplayable files (decode=3 / unsupported=4) so they
       // surface in Needs Review as playback_error. Network errors (code 2) are
-      // transient and ignored by the server. Dedup per track per page load so a
-      // stuck queue doesn't spam the endpoint; the backend upsert is idempotent.
+      // transient and ignored by the server — EXCEPT when the message shows a
+      // demuxer/seek failure ("demuxer seek failed", PIPELINE_ERROR_READ), which
+      // means the file's audio frames are corrupt at the seek position (Chrome
+      // reports corrupt FLACs as code 2, not 3). Those are mapped to code 3 so
+      // the server flags the file. Dedup per track per page load so a stuck
+      // queue doesn't spam the endpoint; the backend upsert is idempotent.
       const code = a.error && a.error.code;
+      const msg = (a.error && a.error.message) || '';
+      const seekCorrupt = code === 2 && /demuxer|seek failed|PIPELINE_ERROR/i.test(msg);
       const cur = this.getCurrentTrack();
-      if (cur && (code === 3 || code === 4)) {
+      if (cur && (code === 3 || code === 4 || seekCorrupt)) {
         if (!this._reportedPlaybackErrors) this._reportedPlaybackErrors = new Set();
         if (!this._reportedPlaybackErrors.has(cur.id)) {
           this._reportedPlaybackErrors.add(cur.id);
-          if (typeof Api !== 'undefined' && Api.reportPlaybackError) Api.reportPlaybackError(cur.id, code);
+          if (typeof Api !== 'undefined' && Api.reportPlaybackError) Api.reportPlaybackError(cur.id, seekCorrupt ? 3 : code);
         }
       }
       this._onMediaError('audio-error');
@@ -212,7 +251,7 @@ const Player = {
     this._clearLoadTimeout();
     this._errorHandledForCurrent = false;
     this._applyNormalization(track);
-    this.audio.src = Api.streamUrl(track.id);
+    this.audio.src = Api.streamUrl(track.id, this._needsTranscode(track));
     this.audio.play().then(() => {
       this.playing = true;
       if (this.onStateChange) this.onStateChange();
@@ -243,6 +282,11 @@ const Player = {
     }, 10000);
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
+
+    // Prime the next track's transcode cache so auto-advance is instant on
+    // Safari clients (transcode runs in the background while this song plays).
+    const nextTrack = this.queue[this.currentIndex + 1];
+    if (nextTrack) this.prewarmTranscode(nextTrack);
   },
 
   _clearLoadTimeout() {

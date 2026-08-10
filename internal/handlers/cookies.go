@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"musicapp/internal/downloads"
 	"musicapp/internal/store"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -148,7 +148,7 @@ func ExtractCookiesHandler(w http.ResponseWriter, r *http.Request) {
 		"--no-warnings",
 		"https://www.youtube.com/watch?v=jNQXAC9IVRw",
 	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	downloads.ConfigureCmdProcessTree(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		os.Remove(tmpFile)

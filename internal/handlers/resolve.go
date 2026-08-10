@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -58,7 +57,7 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 		"--no-warnings",
 		req.URL,
 	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	downloads.ConfigureCmdProcessTree(cmd)
 	output, err := cmd.Output()
 	if err != nil {
 		cmd := exec.CommandContext(ctx, ytdlpPath,
@@ -68,7 +67,7 @@ func ResolveURLHandler(w http.ResponseWriter, r *http.Request) {
 				"--no-download",
 				req.URL,
 			)...)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		downloads.ConfigureCmdProcessTree(cmd)
 		output, err = cmd.Output()
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "yt-dlp failed: "+string(output))
@@ -359,7 +358,7 @@ func V2SearchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"raw or artist+title required"}`, http.StatusBadRequest)
 		return
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	downloads.ConfigureCmdProcessTree(cmd)
 
 	output, err := cmd.Output()
 	if err != nil {

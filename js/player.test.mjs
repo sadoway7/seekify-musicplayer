@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./player.js', import.meta.url), 'utf8')
   .replace('const Player = {', 'globalThis.Player = {');
 
-function loadPlayer(navigator, order = []) {
+function loadPlayer(navigator, order = [], canPlay = {}, api = null) {
   const createdAudio = [];
 
   class FakeAudio {
@@ -17,6 +17,7 @@ function loadPlayer(navigator, order = []) {
       createdAudio.push(this);
     }
     addEventListener(type, fn) { this.listeners.set(type, fn); }
+    canPlayType(type) { return canPlay[type] || ''; }
   }
 
   const context = vm.createContext({
@@ -28,7 +29,8 @@ function loadPlayer(navigator, order = []) {
     navigator,
     localStorage: { getItem: () => null, setItem: () => {} },
     setTimeout: () => 1,
-    clearTimeout: () => {}
+    clearTimeout: () => {},
+    Api: api || { reportPlaybackError: () => {} }
   });
   vm.runInContext(source, context);
   return { Player: context.Player, createdAudio };
@@ -66,4 +68,31 @@ test('a rejected AudioSession assignment cannot prevent playback setup', () => {
 
   assert.doesNotThrow(() => Player.init());
   assert.equal(createdAudio.length, 1);
+});
+
+test('player requests transcoded AAC when it cannot stream FLAC', () => {
+  const { Player } = loadPlayer({});
+  Player.init();
+
+  assert.equal(JSON.stringify(Player._unsupportedExts), JSON.stringify({ '.flac': true, '.opus': true, '.ogg': true, '.wav': true }));
+  assert.equal(Player._needsTranscode({ id: 'a', filePath: 'Album/01 - Song.flac' }), true);
+  assert.equal(Player._needsTranscode({ id: 'b', filePath: 'Album/02 - Song.mp3' }), false);
+  assert.equal(Player._needsTranscode({ id: 'c', filePath: 'Album/03 - Song.m4a' }), false);
+  assert.equal(Player._needsTranscode({ id: 'd', filePath: 'Album/04 - Song.OPUS' }), true);
+});
+
+test('player streams original FLAC when the browser supports it', () => {
+  const canPlay = {
+    'audio/flac': 'maybe',
+    'audio/ogg; codecs="opus"': 'probably',
+    'audio/ogg; codecs="vorbis"': 'probably',
+    'audio/wav': 'probably'
+  };
+  const { Player } = loadPlayer({}, [], canPlay);
+  Player.init();
+
+  assert.equal(JSON.stringify(Player._unsupportedExts), '{}');
+  assert.equal(Player._needsTranscode({ id: 'a', filePath: 'Album/01 - Song.flac' }), false);
+  assert.equal(Player._needsTranscode({ id: 'b', filePath: 'Album/02 - Song.opus' }), false);
+  assert.equal(Player._needsTranscode({ id: 'c', filePath: 'Album/03 - Song.ogg' }), false);
 });

@@ -15,6 +15,7 @@ import (
 	"musicapp/internal/review"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
+	"musicapp/internal/transcode"
 	"musicapp/internal/watched"
 	"net/http"
 	"os"
@@ -272,11 +273,22 @@ func main() {
 	go downloads.DownloadWatchdog()
 	go review.StartReviewScheduler()
 
+	// Transcode cache: purge stale/oversized entries every 30 minutes. The
+	// cache lives in data/transcode/ and is keyed by track ID + source mtime,
+	// so re-downloaded files invalidate their entry automatically.
+	go func() {
+		t := time.NewTicker(30 * time.Minute)
+		for range t.C {
+			transcode.PruneCache()
+		}
+	}()
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/library", handlers.LibraryHandler)
 	mux.HandleFunc("/api/stats", handlers.StatsHandler)
 	mux.HandleFunc("/api/stream/", handlers.StreamHandler)
+	mux.HandleFunc("/api/transcode-warm/", handlers.TranscodeWarmHandler)
 	mux.HandleFunc("/api/cover/", handlers.CoverHandler)
 	mux.HandleFunc("/api/artist-art/", handlers.ArtistArtHandler)
 	mux.HandleFunc("/api/artist-art-fetch/", handlers.ArtistArtFetchHandler)

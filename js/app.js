@@ -24,6 +24,7 @@ const App = {
           await Store.refreshRecent();
         } catch (err) {}
       }
+      if (track) Player.prewarmTranscode(track);
     };
 
     Player.onQueueChange = () => {
@@ -103,7 +104,7 @@ const App = {
         Player.queue = [track];
         Player.currentIndex = 0;
         if (typeof Player._applyNormalization === 'function') Player._applyNormalization(track);
-        Player.audio.src = Api.streamUrl(track.id);
+        Player.audio.src = Api.streamUrl(track.id, Player._needsTranscode(track));
         Player.playing = false;
         if (Player.onTrackChange) Player.onTrackChange(track);
         if (Player.onStateChange) Player.onStateChange();

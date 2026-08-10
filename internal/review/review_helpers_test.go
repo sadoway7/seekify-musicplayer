@@ -84,18 +84,23 @@ func TestIsFilenameDerived(t *testing.T) {
 	tests := []struct {
 		filePath string
 		title    string
+		tagged   bool
 		want     bool
 	}{
-		{"Artist/Album/Track Name.mp3", "Track Name", true},
-		{"Artist/Album/Real Title.mp3", "Different Title", false},
-		{"Artist/Album/Song Title.flac", "Song Title", true},
-		{"media:Artist/Album/Song.mp3", "Song", true},
+		{"Artist/Album/Track Name.mp3", "Track Name", false, true},
+		{"Artist/Album/Real Title.mp3", "Different Title", false, false},
+		{"Artist/Album/Song Title.flac", "Song Title", false, true},
+		{"media:Artist/Album/Song.mp3", "Song", false, true},
+		// Tagged tracks whose title matches their filename must NOT be flagged
+		// — the title came from a real tag, not a filename guess (yt-dlp/Soulseek).
+		{"Artist/Album/lovely.flac", "lovely", true, false},
+		{"Artist/Album/Song.mp3", "Song", true, false},
 	}
 	for _, tt := range tests {
-		track := &models.Track{Title: tt.title, FilePath: tt.filePath}
+		track := &models.Track{Title: tt.title, FilePath: tt.filePath, HasMetadata: tt.tagged}
 		got := IsFilenameDerived(track)
 		if got != tt.want {
-			t.Errorf("IsFilenameDerived(%q, %q) = %v, want %v", tt.filePath, tt.title, got, tt.want)
+			t.Errorf("IsFilenameDerived(%q, %q, tagged=%v) = %v, want %v", tt.filePath, tt.title, tt.tagged, got, tt.want)
 		}
 	}
 }

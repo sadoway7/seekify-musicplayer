@@ -326,27 +326,30 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 
 	log.Printf("[scan] Tag reading done, %d changed of %d total, writing to DB...", len(changedTracks), len(newTracks))
 
-	store.Mu.Lock()
+	// Build the primary-path dedup set under a short RLock, then run the DB
+	// commit WITHOUT store.Mu: a 50k-track scan commit previously held the
+	// write lock for its entire duration, freezing every /api/library,
+	// /api/stream and /api/cover reader for seconds. The DB is independent
+	// of the in-memory maps; only the final map swap below needs the lock.
+	store.Mu.RLock()
 	oldTrackCount := len(store.Tracks)
+	var primaryPaths map[string]bool
+	if prefix != "" {
+		prefixKey := prefix + ":"
+		primaryPaths = make(map[string]bool)
+		for _, t := range store.Tracks {
+			if !strings.HasPrefix(t.FilePath, prefixKey) && !strings.Contains(t.FilePath, ":") {
+				primaryPaths[t.FilePath] = true
+			}
+		}
+	}
+	store.Mu.RUnlock()
 
 	commitOK := false
 	tx, err := store.DB.Begin()
 	if err != nil {
 		log.Printf("[scan] ERROR: DB.Begin failed: %v", err)
 	} else {
-		// For media-dir scans: build primary path set so we can skip
-		// DB upserts for tracks that duplicate a primary-dir file.
-		// Without this, every media scan re-inserts cross-prefix
-		// duplicates that the startup dedup just cleaned.
-		primaryPaths := make(map[string]bool)
-		if prefix != "" {
-			prefixKey := prefix + ":"
-			for _, t := range store.Tracks {
-				if !strings.HasPrefix(t.FilePath, prefixKey) && !strings.Contains(t.FilePath, ":") {
-					primaryPaths[t.FilePath] = true
-				}
-			}
-		}
 		for _, t := range newTracks {
 			if _, changed := changedTracks[t.ID]; changed {
 				if prefix != "" {
@@ -379,7 +382,6 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		// DB commit failed: leave in-memory maps as-is so UI matches the
 		// (stale) DB. Next restart re-reads the DB and resolves.
 		log.Printf("[scan] WARNING: skipping in-memory map update due to commit failure")
-		store.Mu.Unlock()
 		if pendingReviews != nil && InsertUncheckedReviews != nil {
 			InsertUncheckedReviews(pendingReviews)
 		}
@@ -393,6 +395,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		return stats
 	}
 
+	store.Mu.Lock()
 	if prefix == "" {
 		for oldID, oldTrack := range store.Tracks {
 			if strings.Contains(oldTrack.FilePath, ":") {

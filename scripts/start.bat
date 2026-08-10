@@ -26,7 +26,12 @@ if %ERRORLEVEL% NEQ 0 (
 
 :build
 echo Building...
-go build -mod=vendor -o server.exe .
+REM -ldflags="-s -w" strips the symbol table and DWARF debug info. This roughly
+REM halves linker peak memory and binary size — important on Windows, where the
+REM Go linker otherwise OOMs (errno 1455 / page-file-too-small) on the data pass
+REM of the large modernc.org/libc dependency. Runtime panic stack traces are
+REM unaffected (Go keeps pclntab regardless); only debugger symbol info is dropped.
+go build -mod=vendor -ldflags="-s -w" -o server.exe .
 if %ERRORLEVEL% NEQ 0 (
   echo Build failed.
   pause

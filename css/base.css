@@ -127,6 +127,7 @@ body {
   height: 100%;
   touch-action: manipulation;
   text-rendering: optimizeLegibility;
+  cursor: default;
 }
 
 button {
@@ -145,7 +146,7 @@ textarea,
 [contenteditable] {
   -webkit-user-select: text;
   user-select: text;
-}
+  cursor: text;
   -webkit-appearance: none;
   appearance: none;
 }

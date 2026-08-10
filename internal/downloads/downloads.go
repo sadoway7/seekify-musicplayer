@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -132,11 +131,16 @@ var (
 )
 
 var (
-	DownloadMu     sync.Mutex
-	DownloadActive int
-	ActiveJobs     = make(map[string]*exec.Cmd)
-	ActiveJobTime  = make(map[string]time.Time)
-	createJobMu    sync.Mutex
+	DownloadMu      sync.Mutex
+	DownloadActive  int
+	ActiveJobs      = make(map[string]*exec.Cmd)
+	ActiveJobTime   = make(map[string]time.Time)
+	createJobMu     sync.Mutex
+	// orphanFirstSeen records when the watchdog first observed each job in an
+	// active status (searching/downloading/tagging) WITHOUT a running command.
+	// Guarded by DownloadMu. Used to give in-progress search-phase jobs a grace
+	// period before resetting them — see orphanReset.
+	orphanFirstSeen = make(map[string]time.Time)
 )
 
 // MaxConcurrentDownloads returns the configured concurrency limit (default 3).
@@ -330,7 +334,7 @@ func runDownloadCmd(jobID, ytdlpPath string, args []string) (output string, err 
 	// Put yt-dlp in its own process group so we can kill the whole tree
 	// (ffmpeg/aria2c children). Without this, killing yt-dlp orphans its
 	// children which hold the stdout pipe open and block CombinedOutput forever.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	ConfigureCmdProcessTree(cmd)
 	DownloadMu.Lock()
 	ActiveJobs[jobID] = cmd
 	ActiveJobTime[jobID] = time.Now()
@@ -357,11 +361,7 @@ func runDownloadCmd(jobID, ytdlpPath string, args []string) (output string, err 
 	case <-done:
 		return string(out), err, false
 	case <-time.After(DownloadTimeout):
-		if cmd.Process != nil {
-			// Kill the entire process group (negative pid) so yt-dlp's
-			// children (ffmpeg/aria2c) die with it instead of orphaning.
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		}
+		KillProcessTree(cmd)
 		<-done
 		return string(out), err, true
 	}
@@ -1491,18 +1491,48 @@ func downloadFromSoulseek(job *DownloadJob) {
 	job.ProgressStage = "Downloading from " + displayName
 	DbUpdateJob(job)
 
-	audioFile, peer, err := runSlskDownloadMulti(job, string(candListJSON), displayName)
-	if err != nil {
-		job.Status = "failed"
-		job.Error = err.Error()
-		job.CompletedAt = time.Now().Format(time.RFC3339)
+	// Try candidates until one validates. The python script already loops the
+	// list for TRANSFER failures (unreachable peers), but a file that transfers
+	// and then fails validation (corrupt/truncated/bitrate) previously failed
+	// the whole job — the remaining candidates were abandoned. Drop the failed
+	// file and retry the next candidate, up to 3 attempts.
+	// ponytail: 3 attempts bounds cost; each attempt is a full download.
+	for attempt := 0; attempt < 3; attempt++ {
+		audioFile, peer, err := runSlskDownloadMulti(job, string(candListJSON), displayName)
+		if err != nil {
+			job.Status = "failed"
+			job.Error = err.Error()
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			log.Printf("[download] soulseek download failed for %q: %v", job.SearchQuery, err)
+			return
+		}
+		expected := expectedDurByFile[peer.Filename]
+		if finalizeDownload(job, audioFile, expected) {
+			if peer.Username != "" {
+				recordSlskSpeed(peer.Username, peer.BytesPerSec)
+			}
+			return
+		}
+		// Validation failed — finalizeDownload already marked the job failed
+		// and deleted the corrupt file. Remove it from the list and retry.
+		log.Printf("[download] %q rejected candidate %s; trying next (%d left)", job.SearchQuery, peer.Filename, len(topCands)-1)
+		remaining := topCands[:0]
+		for _, c := range topCands {
+			if c.Filename != peer.Filename {
+				remaining = append(remaining, c)
+			}
+		}
+		topCands = remaining
+		if len(topCands) == 0 {
+			return // job already failed by finalizeDownload
+		}
+		candListJSON, _ = json.Marshal(topCands)
+		job.Status = "downloading"
+		job.Error = ""
+		job.CompletedAt = ""
+		job.ProgressStage = "Trying next candidate"
 		DbUpdateJob(job)
-		log.Printf("[download] soulseek download failed for %q: %v", job.SearchQuery, err)
-		return
-	}
-	expected := expectedDurByFile[peer.Filename]
-	if finalizeDownload(job, audioFile, expected) && peer.Username != "" {
-		recordSlskSpeed(peer.Username, peer.BytesPerSec)
 	}
 }
 
@@ -1835,12 +1865,13 @@ func FindDownloadedFile(dir, expectedTitle string) string {
 
 // CorruptDecodeErrorThreshold is the ffmpeg error-line count at/above which a
 // file is deemed corrupt. Run with `ffmpeg -v error`, which prints one line per
-// decode error and nothing else — so a clean file emits zero lines. Kept modest:
-// fresh downloads (yt-dlp/Soulseek) produce clean standard containers (0 errors),
-// while mid-stream corruption emits many. End-truncation is caught separately by
-// the duration-ratio check in finalizeDownload, so this targets broken frames.
+// decode error and nothing else — so a clean file emits zero lines. ANY error
+// line is a real decode failure: a localized corrupt region (e.g. a bad seek
+// point) can emit as few as 3 lines while still breaking playback, so the
+// threshold is 1. End-truncation is caught separately by the duration-ratio
+// check in finalizeDownload.
 // ponytail: const for now; expose as a setting if false rejections appear.
-const CorruptDecodeErrorThreshold = 5
+const CorruptDecodeErrorThreshold = 1
 
 // DecodeCheckAudio decodes the file to /dev/null and counts ffmpeg decode
 // errors. This is the only reliable signal for mid-stream corruption: ffprobe
@@ -2047,15 +2078,31 @@ func ExtractBitrateFromQuality(quality string) int {
 	return 0
 }
 
-// orphanReset resets jobs stuck in active states that have no running command.
-// Called from the watchdog (every 2 min) to recover jobs orphaned by panics,
-// crashes, or process kills that left the status without updating it.
+// orphanReset resets jobs stuck in active states that have no running command
+// AND have been in that state longer than orphanGrace. Called from the watchdog
+// (every 2 min) to recover jobs orphaned by panics, crashes, or process kills.
+//
+// The grace period is the critical part: during the SEARCH phase a job has
+// status searching/downloading but NO entry in ActiveJobs (only the download
+// subprocess is registered there, not the search). Resetting such a job
+// immediately would re-queue it while the original search goroutine is still
+// running, causing duplicate downloads, status flapping, and slot exhaustion.
+// 45 min comfortably exceeds the longest legitimate no-cmd window: a YouTube
+// search (≤2m) or a Soulseek search blocked behind slskLoginMu (which serializes
+// behind up to MaxConcurrentDownloads × DownloadTimeout ≈ 30m of downloads).
+// Truly-orphaned jobs (goroutine exited without setting a terminal status —
+// rare, since the panic recover sets status=failed) are recovered within the
+// grace window; restart-time orphans are handled separately by
+// RecoverStalledDownloads at boot.
 func orphanReset() {
+	const orphanGrace = 45 * time.Minute
+
 	DownloadMu.Lock()
 	activeIDs := make(map[string]bool, len(ActiveJobs))
 	for id := range ActiveJobs {
 		activeIDs[id] = true
 	}
+	now := time.Now()
 	DownloadMu.Unlock()
 
 	stuck := []string{"searching", "downloading", "tagging"}
@@ -2064,20 +2111,68 @@ func orphanReset() {
 		if err != nil {
 			continue
 		}
-		var orphans []string
+		var candidates []string
 		for rows.Next() {
 			var id string
 			rows.Scan(&id)
-			if !activeIDs[id] {
-				orphans = append(orphans, id)
+			if activeIDs[id] {
+				// Has a running command — genuinely active. Clear any stale
+				// first-seen entry so a later genuine orphan starts a fresh
+				// grace window.
+				DownloadMu.Lock()
+				delete(orphanFirstSeen, id)
+				DownloadMu.Unlock()
+				continue
 			}
+			candidates = append(candidates, id)
 		}
 		rows.Close()
-		for _, id := range orphans {
+
+		for _, id := range candidates {
+			DownloadMu.Lock()
+			first, seen := orphanFirstSeen[id]
+			if !seen {
+				// First tick we've noticed this job orphaned — start the clock
+				// and leave it alone (it's almost certainly mid-search).
+				orphanFirstSeen[id] = now
+				DownloadMu.Unlock()
+				continue
+			}
+			age := now.Sub(first)
+			DownloadMu.Unlock()
+			if age < orphanGrace {
+				continue
+			}
+			DownloadMu.Lock()
+			delete(orphanFirstSeen, id)
+			DownloadMu.Unlock()
 			store.DB.Exec("UPDATE download_jobs SET status='queued', progress_stage='' WHERE id=?", id)
-			log.Printf("[download-watchdog] Reset orphaned job %s from %s to queued", id, status)
+			log.Printf("[download-watchdog] Reset orphaned job %s from %s to queued (no active command for %v)", id, status, age)
 		}
 	}
+
+	// Drop first-seen entries for jobs that are no longer in an active status
+	// (completed/failed/queued/deleted) so the map can't grow unbounded.
+	live := make(map[string]bool)
+	for _, status := range stuck {
+		rows, err := store.DB.Query("SELECT id FROM download_jobs WHERE status = ?", status)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id string
+			rows.Scan(&id)
+			live[id] = true
+		}
+		rows.Close()
+	}
+	DownloadMu.Lock()
+	for id := range orphanFirstSeen {
+		if !live[id] {
+			delete(orphanFirstSeen, id)
+		}
+	}
+	DownloadMu.Unlock()
 }
 
 func RecoverStalledDownloads() {

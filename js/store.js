@@ -10,7 +10,7 @@ const Store = {
   viewData: {},
   loading: false,
   downloadsEnabled: true,
-  waveformStyle: 'rounded',
+  waveformStyle: 'squiggle',
   defaultNowPlayingView: 'album_art',
   reviewCounts: { unchecked: 0, needs_review: 0, reviewed_ok: 0 },
   user: null,
@@ -84,7 +84,7 @@ const Store = {
       try {
         const ps = await Api.getPublicSettings();
         this.downloadsEnabled = ps.downloads_enabled !== 'false';
-        this.waveformStyle = ps.waveform_style || 'rounded';
+        this.waveformStyle = ps.waveform_style || 'squiggle';
         this.defaultNowPlayingView = ps.default_now_playing_view || 'album_art';
         this.audioNormalizationEnabled = ps.audio_normalization !== 'false';
       } catch(e) {}

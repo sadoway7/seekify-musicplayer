@@ -1080,6 +1080,14 @@ func IsGenericName(s string, extras []string) bool {
 }
 
 func IsFilenameDerived(t *models.Track) bool {
+	// Only flag when the track has NO embedded tags — the scanner's
+	// TitleFromFilename fallback only runs on untagged files, so a matching
+	// title on a tagged track (HasMetadata) means the file was simply named
+	// after the song (common for yt-dlp/Soulseek downloads), not that the
+	// title was guessed from the filename.
+	if t.HasMetadata {
+		return false
+	}
 	fileName := filepath.Base(t.FilePath)
 	if strings.Contains(fileName, ":") {
 		parts := strings.SplitN(fileName, ":", 2)
@@ -1096,6 +1104,15 @@ func IsFilenameDerived(t *models.Track) bool {
 // --- Review worker ---
 
 func StartReviewScheduler() {
+	// Delay the first batch: the startup scan wakes the scheduler immediately,
+	// but cover extraction (scanner.ExtractEmbeddedCovers) and the cover/artist
+	// fetch workers run AFTER the scan in server.go. A batch running before
+	// those complete flags tracks no_cover/missing_album spuriously — flags
+	// the periodic recheck then preserves forever. 90s clears the boot window
+	// (scan + cover extraction + first fetch pass); subsequent batches are
+	// unchanged.
+	time.Sleep(90 * time.Second)
+
 	for {
 		if !store.GetSettingBool("review_enabled", true) {
 			time.Sleep(5 * time.Minute)

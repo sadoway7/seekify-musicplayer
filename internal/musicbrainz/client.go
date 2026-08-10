@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -123,10 +122,10 @@ func reserveMusicBrainzSlot(path string, interval time.Duration) (time.Time, err
 		return time.Time{}, err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockRateFileExclusive(f); err != nil {
 		return time.Time{}, err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer unlockRateFile(f)
 
 	data, _ := io.ReadAll(f)
 	if next, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil {

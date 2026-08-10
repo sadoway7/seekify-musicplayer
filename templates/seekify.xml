@@ -16,7 +16,18 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-08-09
+- Corrupt or incomplete downloads are now caught and rejected at download time, and downloads automatically try another source when one fails
+- Files that fail to play or seek are surfaced for review so they can be re-downloaded
+- App no longer freezes during library scans; faster startup (no duplicate scan on boot)
+- Visualizer performance improved (smoother playback while it runs)
+- UI cursor fixes and more accurate review flags
+- General stability and bug fixes
+
 2026-08-02
+- Mobile playback: songs start instantly on iPhone/iPad (transcoding added for formats mobile browsers can't stream; desktop unchanged)
+- Downloads no longer occasionally run twice or leave the queue appearing stuck
+- Playlist track order and favorite/download toggles stay correct under rapid or concurrent use
 - Detects audio files that fail to play and surfaces them for review
 - New "Scan for Corrupt Audio" admin tool to find broken files across the library
 - New downloads are checked more thoroughly before being added to the library

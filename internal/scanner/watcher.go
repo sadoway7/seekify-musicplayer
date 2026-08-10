@@ -81,6 +81,16 @@ func snapshotAudioFilesSkipping(dir, skipDir string) audioSnapshot {
 // The interval is configurable via the "watcher_interval" setting (default 30s).
 // It can be disabled entirely via the "watcher_enabled" setting.
 func StartWatcher() {
+	// The startup scan runs in its own goroutine (server.go). Wait for it to
+	// finish before taking the baseline snapshot — otherwise the first watcher
+	// tick sees a different tree than the snapshot taken mid-boot-scan and
+	// triggers a guaranteed redundant full rescan of a library that was just
+	// scanned. Timeboxed: a huge library that outlasts 30s falls back to the
+	// old behavior (one redundant rescan) instead of never watching.
+	for i := 0; i < 300 && scanning.Load(); i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	// Record initial counts after startup scan
 	watcherMu.Lock()
 	lastFileSnapshot[store.MusicDir] = snapshotAudioFiles(store.MusicDir)

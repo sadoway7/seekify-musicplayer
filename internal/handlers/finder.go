@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -245,7 +244,7 @@ func YoutubeSearchHandler(w http.ResponseWriter, r *http.Request) {
 		"--no-warnings",
 		fmt.Sprintf("ytsearch10:%s", q),
 	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	downloads.ConfigureCmdProcessTree(cmd)
 	output, err := cmd.Output()
 	if err != nil {
 		writeJSON(w, []interface{}{})

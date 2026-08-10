@@ -347,6 +347,15 @@ func DownloadJobRetryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only failed jobs can be retried. Re-queueing a job that's still
+	// searching/downloading would spawn a second processing goroutine while the
+	// first is still running (duplicate download, status flap, slot waste). The
+	// UI only surfaces Retry on failed jobs; this guards the API directly.
+	if job.Status != "failed" {
+		writeJSONError(w, http.StatusConflict, "only failed jobs can be retried")
+		return
+	}
+
 	job.Status = "queued"
 	job.Error = ""
 	job.ProgressStage = ""

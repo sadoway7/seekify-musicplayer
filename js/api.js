@@ -31,7 +31,7 @@ const Api = {
   },
 
   // ── URL builders ──
-  streamUrl(id) { return '/api/stream/' + id; },
+  streamUrl(id, transcode) { return '/api/stream/' + id + (transcode ? '?fmt=aac' : ''); },
   downloadUrl(id) { return '/api/download/' + id; },
   coverUrl(albumId) {
     const v = (this._coverVer && this._coverVer[albumId]) || this._libVersion;
@@ -117,6 +117,7 @@ const Api = {
     return this._req(url, { method: 'POST', errMsg: 'Failed to retry jobs' });
   },
   reportPlaybackError(trackId, code) { return this._req('/api/playback-error/' + trackId, { method: 'POST', body: { code }, errMsg: 'Failed to report playback error', fallback: null }); },
+  prewarmTranscode(id) { return fetch('/api/transcode-warm/' + id, { method: 'POST' }).catch(() => {}); },
   deleteJob(id) { return this._req('/api/queue/' + id + '/delete', { method: 'POST', errMsg: 'Failed to delete job' }); },
   clearCompletedJobs() { return this._req('/api/queue/clear-completed', { method: 'POST', errMsg: 'Failed to clear jobs' }); },
   toggleDownloadPause() { return this._req('/api/queue/toggle-pause', { method: 'POST', errMsg: 'Failed to toggle pause' }); },

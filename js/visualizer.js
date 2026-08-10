@@ -380,26 +380,39 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this.gl = gl;
     const vs = this._compile(gl.VERTEX_SHADER, this.VERT);
     if (!vs) return false;
-    this._programs = this.SHADERS.map(s => {
-      const fs = this._compile(gl.FRAGMENT_SHADER, s.fragment);
-      if (!fs) return null;
-      const prog = gl.createProgram();
-      gl.attachShader(prog, vs);
-      gl.attachShader(prog, fs);
-      gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('[viz] link fail:', gl.getProgramInfoLog(prog)); return null; }
-      const entry = { prog, loc: { aPos: gl.getAttribLocation(prog, 'aPos') } };
-      for (const n of this.UNIFORM_NAMES) entry.loc[n] = gl.getUniformLocation(prog, n);
-      // Static uniforms are set once here (program must be active to set them).
-      gl.useProgram(prog);
-      this._setStaticUniforms(gl, entry);
-      return entry;
-    });
+    this._vs = vs;
+    // Fragment shaders compile lazily per-shader on first use (see
+    // _ensureProgram): compiling all 5 raymarchers up front took ~1.3s
+    // synchronously on the first frame, janking the main thread (Chrome
+    // flagged the safety-net setInterval handler at 1304ms).
+    this._programs = new Array(this.SHADERS.length).fill(null);
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     this._vbuf = buf;
     return true;
+  },
+
+  // Compile + link one shader program on demand and cache it. The first frame
+  // pays ~260ms for the active shader; the rest compile when the user cycles.
+  _ensureProgram(sIdx) {
+    if (this._programs[sIdx]) return this._programs[sIdx];
+    const gl = this.gl;
+    const s = this.SHADERS[sIdx];
+    const fs = this._compile(gl.FRAGMENT_SHADER, s.fragment);
+    if (!fs) return null;
+    const prog = gl.createProgram();
+    gl.attachShader(prog, this._vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('[viz] link fail:', gl.getProgramInfoLog(prog)); return null; }
+    const entry = { prog, loc: { aPos: gl.getAttribLocation(prog, 'aPos') } };
+    for (const n of this.UNIFORM_NAMES) entry.loc[n] = gl.getUniformLocation(prog, n);
+    // Static uniforms are set once here (program must be active to set them).
+    gl.useProgram(prog);
+    this._setStaticUniforms(gl, entry);
+    this._programs[sIdx] = entry;
+    return entry;
   },
 
   // Apply STATIC_UNIFORMS once per program. uMaxSteps is the only int; rest are float.
@@ -572,8 +585,11 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
   // Kick the render loop only. The loop self-heals GL/audio/canvas-size each
   // frame (the old eager init here bailed permanently on a transient first-open
   // hiccup, leaving a blank canvas until the user toggled off→on).
+  // First frame is deferred to rAF so a cold shader compile (~260ms) never
+  // runs synchronously inside a setInterval handler (Chrome flagged it at
+  // 1304ms when all 5 shaders compiled up front).
   _start() {
-    if (this._raf == null) this._loop();
+    if (this._raf == null) this._raf = requestAnimationFrame(() => this._loop());
   },
 
   _stop() {
@@ -668,12 +684,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
 
     if (this.state >= 0) {
       const sIdx = this.state;
-      if (!this._ensureGL() || !this._programs || !this._programs[sIdx]) { this._lastRender = performance.now(); return; }
+      if (!this._ensureGL()) { this._lastRender = performance.now(); return; }
       const gl = this.gl;
       const wrap = this.canvas.parentElement;
       if (!wrap || wrap.clientWidth < 2) { this._lastRender = performance.now(); return; }
       this._resize();
-      const p = this._programs[sIdx];
+      const p = this._ensureProgram(sIdx);
+      if (!p) { this._lastRender = performance.now(); return; }
       gl.useProgram(p.prog);
       gl.bindBuffer(gl.ARRAY_BUFFER, this._vbuf);
       gl.enableVertexAttribArray(p.loc.aPos);

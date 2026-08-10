@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"musicapp/internal/scanner"
@@ -596,7 +595,7 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 	// H8: password via env, not argv.
 	cmd.Env = append(os.Environ(), "SLSK_PASSWORD="+pass)
 	// C2: process-group so timeout kills aioslsk's children too.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	ConfigureCmdProcessTree(cmd)
 
 	// Register the cmd so watchdog/cancel can see it (mirrors runDownloadCmd).
 	DownloadMu.Lock()
@@ -691,9 +690,7 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 	case stdoutBytes = <-stdoutCh:
 	case <-time.After(5 * time.Second):
 		// Orphaned child still holds the pipe open. Force kill and read.
-		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		}
+		KillProcessTree(cmd)
 		stdoutBytes = <-stdoutCh
 	}
 

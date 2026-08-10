@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -203,9 +204,13 @@ func firstAdminID() string {
 }
 
 // DedupTracks runs all dedup passes and reloads store.Tracks from the clean DB.
-// Safe to call periodically.
+// Safe to call periodically. The reload is skipped when no duplicates were
+// found — the maps already match the DB, and reloading them under Mu.Lock()
+// (full SELECT + map rebuild) froze every library/stream reader every 5 min.
 func DedupTracks() {
-	dedupTracksByFilePath()
+	if !dedupTracksByFilePath() {
+		return
+	}
 	// Sync in-memory state with the freshly-cleaned DB so the UI doesn't
 	// show stale duplicates between dedup runs.
 	Mu.Lock()
@@ -221,7 +226,10 @@ func DedupTracks() {
 // keeping the one with the most metadata. References in all related tables
 // are migrated to the survivor before deleting the losers.
 // Also deduplicates across media: prefix (same file in primary + media dirs).
-func dedupTracksByFilePath() {
+// Returns true if any track was removed.
+func dedupTracksByFilePath() bool {
+	removedAny := false
+
 	// Pass 1: exact file_path duplicates
 	rows, err := DB.Query(`SELECT file_path, COUNT(*) as cnt FROM tracks GROUP BY file_path HAVING cnt > 1`)
 	if err == nil {
@@ -236,7 +244,9 @@ func dedupTracksByFilePath() {
 		if len(dupPaths) > 0 {
 			log.Printf("[db] Found %d exact duplicate file_paths, deduplicating...", len(dupPaths))
 			for _, path := range dupPaths {
-				dedupByFilePath(path)
+				if dedupByFilePath(path) {
+					removedAny = true
+				}
 			}
 		}
 	}
@@ -253,44 +263,45 @@ func dedupTracksByFilePath() {
 			pairs = append(pairs, crossPair{normPath: p})
 		}
 		rows.Close()
-		if len(pairs) > 0 {
-			log.Printf("[db] Found %d cross-prefix duplicate paths, deduplicating...", len(pairs))
-			for _, pair := range pairs {
-				// Find all tracks whose normalized path matches
-				r, err := DB.Query(`SELECT id, file_path, has_metadata, mod_time FROM tracks WHERE file_path = ? OR file_path = ? ORDER BY has_metadata DESC, mod_time DESC`,
-					pair.normPath, "media:"+pair.normPath)
-				if err != nil {
-					continue
+			if len(pairs) > 0 {
+				log.Printf("[db] Found %d cross-prefix duplicate paths, deduplicating...", len(pairs))
+				for _, pair := range pairs {
+					// Find all tracks whose normalized path matches
+					r, err := DB.Query(`SELECT id, file_path, has_metadata, mod_time FROM tracks WHERE file_path = ? OR file_path = ? ORDER BY has_metadata DESC, mod_time DESC`,
+						pair.normPath, "media:"+pair.normPath)
+					if err != nil {
+						continue
+					}
+					var ids []string
+					for r.Next() {
+						var id, fp string
+						var hm int
+						var mt int64
+						r.Scan(&id, &fp, &hm, &mt)
+						ids = append(ids, id)
+					}
+					r.Close()
+					if len(ids) <= 1 {
+						continue
+					}
+					keepID := ids[0]
+					tx, _ := DB.Begin()
+				for _, dupID := range ids[1:] {
+					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
 				}
-				var ids []string
-				for r.Next() {
-					var id, fp string
-					var hm int
-					var mt int64
-					r.Scan(&id, &fp, &hm, &mt)
-					ids = append(ids, id)
+				tx.Commit()
+				removedAny = true
+				log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
 				}
-				r.Close()
-				if len(ids) <= 1 {
-					continue
-				}
-				keepID := ids[0]
-				tx, _ := DB.Begin()
-			for _, dupID := range ids[1:] {
-				tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`UPDATE OR IGNORE metadata_matches SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`UPDATE OR IGNORE track_reviews SET track_id = ? WHERE track_id = ?`, keepID, dupID)
-				tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
 			}
-			tx.Commit()
-			log.Printf("[db] Cross-prefix deduped %s: kept %s, removed %d", pair.normPath, keepID, len(ids)-1)
-			}
-		}
 
 		// Pass 3: same song (artist+title) at different file paths with same
 		// duration — likely a download + AutoSort move that left a stale entry.
@@ -341,6 +352,7 @@ func dedupTracksByFilePath() {
 					tx.Exec(`DELETE FROM tracks WHERE id = ?`, dupID)
 				}
 				tx.Commit()
+				removedAny = true
 				log.Printf("[db] Song deduped %s - %s (%ds): kept %s, removed %d", dk.artist, dk.title, dk.duration, keepID, len(ids)-1)
 				}
 			}
@@ -454,18 +466,21 @@ func dedupTracksByFilePath() {
 						log.Printf("[db] Name deduped %s - %s: kept %s, removed %d duplicates", nk.artist, nk.title, keepID, removed)
 					}
 				}
-				if deduped > 0 {
-					log.Printf("[db] Pass 4: removed %d incomplete duplicates", deduped)
-				}
+			if deduped > 0 {
+				removedAny = true
+				log.Printf("[db] Pass 4: removed %d incomplete duplicates", deduped)
+			}
 			}
 		}
 	}
+
+	return removedAny
 }
 
-func dedupByFilePath(path string) {
+func dedupByFilePath(path string) bool {
 	rows, err := DB.Query(`SELECT id FROM tracks WHERE file_path = ? ORDER BY has_metadata DESC, mod_time DESC`, path)
 	if err != nil {
-		return
+		return false
 	}
 	var ids []string
 	for rows.Next() {
@@ -475,7 +490,7 @@ func dedupByFilePath(path string) {
 	}
 	rows.Close()
 	if len(ids) <= 1 {
-		return
+		return false
 	}
 	keepID := ids[0]
 	tx, _ := DB.Begin()
@@ -492,6 +507,7 @@ func dedupByFilePath(path string) {
 	}
 	tx.Commit()
 	log.Printf("[db] Deduped %s: kept %s, removed %d", path, keepID, len(ids)-1)
+	return true
 }
 
 func MigrateFromJSON() {
@@ -577,11 +593,36 @@ func DbGetRecent() []string {
 	return dbQueryTrackIDs("SELECT track_id FROM recent ORDER BY position ASC")
 }
 
-func DbAddRecent(trackID string) {
-	DB.Exec("DELETE FROM recent WHERE track_id = ?", trackID)
-	DB.Exec("UPDATE recent SET position = position + 1")
-	DB.Exec("INSERT INTO recent (track_id, position) VALUES (?, 0)", trackID)
-	DB.Exec("DELETE FROM recent WHERE rowid NOT IN (SELECT rowid FROM recent ORDER BY position ASC LIMIT 50)")
+// withImmediateTx runs fn inside a BEGIN IMMEDIATE transaction pinned to a single
+// pooled connection. Taking the write lock up front (rather than a deferred BEGIN)
+// forces concurrent callers to serialize, eliminating the lost-update where two
+// callers both read a stale value before either writes. Used by the
+// read-modify-write helpers (playlist-position, toggles) that the
+// multi-connection pool would otherwise let interleave at statement granularity.
+//
+// ponytail: pinned *sql.Conn (not *sql.Tx) because database/sql exposes no way
+// to start a transaction in IMMEDIATE mode; issuing BEGIN IMMEDIATE manually on a
+// checked-out connection is the driver-agnostic equivalent. busy_timeout (set on
+// every pool connection via the DSN) makes concurrent waiters block instead of
+// returning SQLITE_BUSY.
+func withImmediateTx(fn func(conn *sql.Conn) error) (err error) {
+	conn, err := DB.Conn(context.Background())
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err = conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			conn.ExecContext(context.Background(), "ROLLBACK")
+		} else {
+			_, e := conn.ExecContext(context.Background(), "COMMIT")
+			err = e
+		}
+	}()
+	return fn(conn)
 }
 
 // --- per-user favorites / recent (multi-user) ---
@@ -606,19 +647,33 @@ func DbGetUserFavorites(userID string) []string {
 	return out
 }
 
-// DbToggleUserFavorite returns true if the track is now a favorite.
+// DbToggleUserFavorite returns true if the track is now a favorite. The
+// exists-check + insert/delete run inside a BEGIN IMMEDIATE transaction so two
+// concurrent toggles (double-tap, two tabs) can't both read the same state and
+// lose an update.
 func DbToggleUserFavorite(userID, trackID string) bool {
-	var exists int
-	err := DB.QueryRow("SELECT 1 FROM user_favorites WHERE user_id = ? AND track_id = ?", userID, trackID).Scan(&exists)
-	if err != nil && err != sql.ErrNoRows {
-		return false
-	}
-	if exists == 1 {
-		DB.Exec("DELETE FROM user_favorites WHERE user_id = ? AND track_id = ?", userID, trackID)
-		return false
-	}
-	DB.Exec("INSERT OR IGNORE INTO user_favorites (user_id, track_id, added_at) VALUES (?, ?, ?)", userID, trackID, time.Now().Unix())
-	return true
+	now := time.Now().Unix()
+	on := false
+	_ = withImmediateTx(func(conn *sql.Conn) error {
+		var exists int
+		err := conn.QueryRowContext(context.Background(), "SELECT 1 FROM user_favorites WHERE user_id = ? AND track_id = ?", userID, trackID).Scan(&exists)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if exists == 1 {
+			if _, e := conn.ExecContext(context.Background(), "DELETE FROM user_favorites WHERE user_id = ? AND track_id = ?", userID, trackID); e != nil {
+				return e
+			}
+			on = false
+			return nil
+		}
+		if _, e := conn.ExecContext(context.Background(), "INSERT OR IGNORE INTO user_favorites (user_id, track_id, added_at) VALUES (?, ?, ?)", userID, trackID, now); e != nil {
+			return e
+		}
+		on = true
+		return nil
+	})
+	return on
 }
 
 func DbGetUserRecent(userID string) []string {
@@ -727,11 +782,19 @@ func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) {
 	}
 }
 
+// DbAddTrackToPlaylist appends a track at the next position. The MAX(position)
+// read + insert run inside a BEGIN IMMEDIATE transaction so concurrent adds
+// (several downloads finishing into the same playlist, watched-playlist sync +
+// manual add) can't both read the same maxPos and create duplicate positions.
 func DbAddTrackToPlaylist(playlistID, trackID string) {
-	var maxPos int
-	row := DB.QueryRow("SELECT COALESCE(MAX(position),-1) FROM playlist_tracks WHERE playlist_id = ?", playlistID)
-	row.Scan(&maxPos)
-	DB.Exec("INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)", playlistID, trackID, maxPos+1)
+	_ = withImmediateTx(func(conn *sql.Conn) error {
+		var maxPos int
+		if err := conn.QueryRowContext(context.Background(), "SELECT COALESCE(MAX(position),-1) FROM playlist_tracks WHERE playlist_id = ?", playlistID).Scan(&maxPos); err != nil {
+			return err
+		}
+		_, err := conn.ExecContext(context.Background(), "INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)", playlistID, trackID, maxPos+1)
+		return err
+	})
 }
 
 func dbFindPlaylist(where, val string) *models.Playlist {
@@ -1241,19 +1304,35 @@ func DbMigrateTrackID(oldID, newID, newPath string) error {
 
 // --- Download management ---
 
+// DbToggleDownload flips a track's download-enabled flag, creating the row on
+// first toggle. The read + write run inside a BEGIN IMMEDIATE transaction so
+// concurrent toggles can't both read the same state and lose an update.
 func DbToggleDownload(trackID string) bool {
-	var disabled int
-	err := DB.QueryRow("SELECT disabled FROM downloads WHERE track_id = ?", trackID).Scan(&disabled)
-	if err != nil {
-		DB.Exec("INSERT INTO downloads (track_id, disabled) VALUES (?, 1)", trackID)
-		return false
-	}
-	if disabled == 1 {
-		DB.Exec("UPDATE downloads SET disabled = 0 WHERE track_id = ?", trackID)
-		return true
-	}
-	DB.Exec("UPDATE downloads SET disabled = 1 WHERE track_id = ?", trackID)
-	return false
+	enabled := false
+	_ = withImmediateTx(func(conn *sql.Conn) error {
+		var disabled int
+		err := conn.QueryRowContext(context.Background(), "SELECT disabled FROM downloads WHERE track_id = ?", trackID).Scan(&disabled)
+		if err != nil {
+			if _, e := conn.ExecContext(context.Background(), "INSERT INTO downloads (track_id, disabled) VALUES (?, 1)", trackID); e != nil {
+				return e
+			}
+			enabled = false
+			return nil
+		}
+		if disabled == 1 {
+			if _, e := conn.ExecContext(context.Background(), "UPDATE downloads SET disabled = 0 WHERE track_id = ?", trackID); e != nil {
+				return e
+			}
+			enabled = true
+			return nil
+		}
+		if _, e := conn.ExecContext(context.Background(), "UPDATE downloads SET disabled = 1 WHERE track_id = ?", trackID); e != nil {
+			return e
+		}
+		enabled = false
+		return nil
+	})
+	return enabled
 }
 
 func DbSaveSharedQueue(trackIDs string) string {

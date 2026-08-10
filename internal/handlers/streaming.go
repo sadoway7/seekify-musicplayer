@@ -6,6 +6,7 @@ import (
 	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
+	"musicapp/internal/transcode"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,7 +29,37 @@ func StreamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fullPath := scanner.ResolveFilePath(track.FilePath)
-	file, err := os.Open(fullPath)
+
+	ext := strings.ToLower(filepath.Ext(fullPath))
+	contentType := store.AudioExtensions[ext]
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	servePath := fullPath
+	serveType := contentType
+
+	// fmt=aac: clients that can't stream FLAC/Opus/Ogg/WAV (iOS/macOS Safari)
+	// request a transcoded copy. Cached .m4a is served Range-seekable exactly
+	// like a raw file; on any transcode failure we fall back to the original
+	// (graceful degradation — same behavior as before the feature).
+	if r.URL.Query().Get("fmt") == "aac" &&
+		store.GetSettingBool("transcode_enabled", true) &&
+		needsTranscode(ext) {
+		if cp, err := transcode.Ensure(id, fullPath); err == nil {
+			servePath = cp
+			serveType = "audio/mp4"
+		}
+	}
+
+	serveRangeable(w, r, servePath, serveType)
+}
+
+// serveRangeable streams a file with HTTP Range support, serving either a
+// partial or full response. Shared by raw-file and transcoded-cache paths so
+// both behave identically for audio clients.
+func serveRangeable(w http.ResponseWriter, r *http.Request, path, contentType string) {
+	file, err := os.Open(path)
 	if err != nil {
 		http.Error(w, "File not found", http.StatusNotFound)
 		return
@@ -42,11 +73,6 @@ func StreamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileSize := stat.Size()
-	ext := strings.ToLower(filepath.Ext(fullPath))
-	contentType := store.AudioExtensions[ext]
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
 
 	rangeHeader := r.Header.Get("Range")
 	if rangeHeader != "" {
