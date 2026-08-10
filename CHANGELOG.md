@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix: JS cache-busters bumped for all files changed this release (api, player, store, visualizer, app) — returning visitors were running old JS against the new backend, which caused slow/broken first loads after deploy.
 - Settings: "missing genre" review flag is now off by default for new installs (existing installs keep their saved setting).
 - UI: CSS cache-buster bumped so the cursor fix (arrow instead of I-beam on clickable elements) actually loads for returning visitors.
 - Visualizer: shaders now compile lazily per-shader on first use instead of all 5 up front — the first frame previously took ~1.3s synchronously (Chrome flagged the safety-net interval at 1304ms), janking the main thread during playback. First frame is also deferred to requestAnimationFrame so a cold compile never runs inside a timer handler.
