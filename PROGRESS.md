@@ -4,10 +4,30 @@ Goal: make music playback and navigation feel as fluid and dependable as Spotify
 
 ## Current status
 
-**[Wave 0 — playback reliability] Fixing the regression before any polish.**
-Mobile songs were slow / not loading. Root cause (confirmed by code+flow analysis, not guessing): the precomputed-band feature (`/api/bands/`) ran a full-track ffmpeg decode + in-process FFT on every iOS track change, competing with the synchronous playback transcode for CPU and blowing the 10s load timeout → skip → cascade. **Fix shipped:** bands auto-generation disabled; handler still serves cached data. This returns the app to the pre-bands fast-load baseline. **Awaiting your device verification that mobile songs load fast again.**
+**[Wave 0 — playback reliability + system coupling] Fixing the root cause, not the symptom.**
 
-Once playback is confirmed dependable, Wave 1 begins.
+The ricocheting regressions (bands broke playback → disabling bands broke the visualizer → …) all share one root cause: **the server has no playback-first policy across its shared CPU.** The sync playback transcode (`StreamHandler` blocks on ffmpeg), background analysis (bands/waveform/normalize), and the boot path all grab CPU independently with no priority/coordination, so any change to one ricochets into the others.
+
+**The couplings:**
+- Playback (iOS) ← sync transcode ↔ background analysis (bands/waveform) — shared CPU, no coordinator.
+- Visualizer (iOS) ← bands data ← that same CPU — so bands-on = stall, bands-off = dead viz. A false either/or.
+- Web Audio viz ↔ AirPlay — orthogonal iOS limit, already routed around via precomputed bands.
+- Boot ← sync dedup + background goroutines ↔ first `/api/library` — slow startup.
+
+**Plan, in dependency order (each device-verified before the next):**
+1. **KEYSTONE — playback-first ffmpeg policy.** Background analysis (bands + waveform + normalize) runs **niced (lowest priority)** under a shared low cap; playback transcode stays foreground. → re-enable bands → reactive visualizer AND fast playback coexist (the either/or disappears).
+2. **Startup** — dedup off the sync boot path; post-listen quiet period; cache `/api/library` by `LibraryVersion`; parallelize the client's ~6 sequential boot fetches; `defer` the 18 render-blocking scripts.
+3. Polish waves (see roadmap).
+
+**Interim → now shipped:** the keystone (playback-first ffmpeg policy) is live. All background analysis (bands + waveform + normalize) runs niced (lowest CPU priority); the playback transcode stays foreground. bands re-enabled → reactive visualizer. Verified by a harsh critic agent reading the actual diff (MEDIUM-HIGH confidence; one gap it found — normalize wasn't niced — fixed).
+
+**Verification gate (yours):** confirm on device — visualizer pulses AND songs load fast. If yes → step 2 (startup). If somehow still contended → fallbacks already designed (tighter shared background cap, bands-gated-on-transcode-ready).
+
+---
+
+## Wave log
+
+- **Keystone — playback-first ffmpeg policy:** shipped. Background analysis (bands/waveform/normalize) niced via `downloads.NicedFfmpegCommandContext`; bands re-enabled; critic-reviewed. Awaiting device confirmation.
 
 ---
 

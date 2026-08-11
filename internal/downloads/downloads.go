@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sort"
 	"strconv"
@@ -296,6 +297,24 @@ func FindFfmpeg() string {
 		"/usr/local/bin/ffmpeg",
 		"/usr/bin/ffmpeg",
 	)
+}
+
+// NicedFfmpegCommandContext builds an ffmpeg command that runs at the lowest OS
+// CPU scheduling priority on Unix (via `nice -n 19`). This is the playback-first
+// policy: background audio analysis (waveform/bands/normalize) always yields CPU
+// to the foreground playback transcode, which blocks StreamHandler and must stay
+// fast. On Windows `nice` is unavailable, so ffmpeg runs at normal priority
+// (background work is still bounded by each pipeline's own semaphore). Returns
+// nil if ffmpeg is missing.
+func NicedFfmpegCommandContext(ctx context.Context, args ...string) *exec.Cmd {
+	ffmpeg := FindFfmpeg()
+	if ffmpeg == "" {
+		return nil
+	}
+	if runtime.GOOS == "windows" {
+		return exec.CommandContext(ctx, ffmpeg, args...)
+	}
+	return exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpeg}, args...)...)
 }
 
 // YtCommonArgs returns yt-dlp flags shared by every stream-resolving command:

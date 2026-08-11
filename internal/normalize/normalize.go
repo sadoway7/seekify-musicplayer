@@ -1,17 +1,18 @@
 package normalize
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math"
 	"musicapp/internal/downloads"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // normSem bounds concurrent ffmpeg ebur128 analyses (mirrors waveSem in
@@ -134,16 +135,18 @@ func ComputeAsync(trackID string) {
 
 // analyzeOnce runs ffmpeg ebur128 on a file and returns computed gain_db.
 func analyzeOnce(fullPath string) (float64, error) {
-	ffmpeg := downloads.FindFfmpeg()
-	if ffmpeg == "" {
-		return 0, fmt.Errorf("ffmpeg not found")
-	}
-	cmd := exec.Command(ffmpeg,
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	// Niced: background analysis yields CPU to the foreground playback transcode.
+	cmd := downloads.NicedFfmpegCommandContext(ctx,
 		"-hide_banner", "-nostats",
 		"-i", fullPath,
 		"-af", "ebur128",
 		"-f", "null", "-",
 	)
+	if cmd == nil {
+		return 0, fmt.Errorf("ffmpeg not found")
+	}
 	out, _ := cmd.CombinedOutput()
 	i, err := parseIntegratedLufs(string(out))
 	if err != nil {

@@ -10,7 +10,6 @@ import (
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -139,14 +138,12 @@ func bandFor(hz float64) int {
 }
 
 // decodePCM shells out to ffmpeg for mono 22050 Hz signed-16-bit-LE PCM.
+// Runs niced (lowest CPU priority) so this background analysis always yields to
+// the foreground playback transcode — the playback-first policy.
 func decodePCM(filePath string) ([]float64, error) {
-	ffmpeg := downloads.FindFfmpeg()
-	if ffmpeg == "" {
-		return nil, nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, ffmpeg,
+	cmd := downloads.NicedFfmpegCommandContext(ctx,
 		"-i", filePath,
 		"-ac", "1",
 		"-ar", strconv.Itoa(sampleRate),
@@ -154,6 +151,9 @@ func decodePCM(filePath string) ([]float64, error) {
 		"-acodec", "pcm_s16le",
 		"-",
 	)
+	if cmd == nil {
+		return nil, nil
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err

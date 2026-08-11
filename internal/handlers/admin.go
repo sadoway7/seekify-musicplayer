@@ -289,15 +289,14 @@ func WaveformHandler(w http.ResponseWriter, r *http.Request) {
 
 // BandsHandler serves the precomputed per-track frequency-band timeline used by
 // the client visualizer on browsers that can't tap live audio without breaking
-// AirPlay (iOS Safari).
+// AirPlay (iOS Safari). Lazy compute + poll, mirroring WaveformHandler.
 //
-// NOTE: on-demand generation is intentionally DISABLED. Generating bands runs a
-// full-track ffmpeg decode + an in-process Go FFT, which competed with the
-// synchronous playback transcode (StreamHandler blocks on ffmpeg) for CPU and
-// stalled mobile load past the 10s timeout (confirmed regression). The handler
-// still serves already-cached timelines; generation will be re-enabled once it's
-// reworked to run as a niced/idle-throttled job that can't starve playback
-// (tracked in PROGRESS.md). The visualizer renders ambient on iOS until then.
+// Playback-first: bands generation shells out to a NICED ffmpeg (lowest CPU
+// priority) via downloads.NicedFfmpegCommandContext, so this background analysis
+// always yields CPU to the synchronous playback transcode in StreamHandler.
+// Combined with bandSem (cap 1) and the client-side "only fetch when the
+// visualizer is on" gate, bands can run on-demand (reactive visualizer) without
+// stalling mobile playback (fast transcode). See PROGRESS.md keystone.
 func BandsHandler(w http.ResponseWriter, r *http.Request) {
 	trackID := strings.TrimPrefix(r.URL.Path, "/api/bands/")
 	if trackID == "" {
@@ -311,7 +310,8 @@ func BandsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// bands.GenerateAsync(trackID) -- disabled: see note above.
+	bands.GenerateAsync(trackID)
+
 	w.Header().Set("Cache-Control", "no-cache")
 	writeJSON(w, map[string]interface{}{"bands": []interface{}{}, "rate": 20, "pending": true})
 }

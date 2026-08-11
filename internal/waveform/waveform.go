@@ -10,7 +10,6 @@ import (
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -28,14 +27,10 @@ var (
 )
 
 func GenerateWaveformPeaks(filePath string) ([]float64, error) {
-	ffmpeg := downloads.FindFfmpeg()
-	if ffmpeg == "" {
-		return nil, nil
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, ffmpeg,
+	// Niced: background analysis yields CPU to the foreground playback transcode.
+	cmd := downloads.NicedFfmpegCommandContext(ctx,
 		"-i", filePath,
 		"-ac", "1",
 		"-ar", "8000",
@@ -43,6 +38,9 @@ func GenerateWaveformPeaks(filePath string) ([]float64, error) {
 		"-acodec", "pcm_s16le",
 		"-",
 	)
+	if cmd == nil {
+		return nil, nil
+	}
 	cmd.Stderr = nil
 
 	stdout, err := cmd.StdoutPipe()
