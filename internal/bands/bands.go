@@ -217,7 +217,7 @@ func fft(re, im []float64) {
 // --- caching (mirrors waveform, but with source-mtime invalidation) ---
 
 var (
-	bandSem = make(chan struct{}, 2) // cap 2 concurrent ffmpeg, like waveform
+	bandSem = make(chan struct{}, 1) // cap 1: bands is background work; never compete with playback/transcode
 	pendMu  sync.Mutex
 	pending = make(map[string]bool)
 )

@@ -415,7 +415,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     this._audioSource = null;
     this._audioMode = null;
     this._audioReady = false;
-    this._loadBands(track);
+    this._currentTrack = track;  // _frame lazy-loads bands only when viz is on
   },
 
   // Precomputed frequency-band timeline (Safari/iOS path): fetch the per-track
@@ -741,6 +741,13 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`,
     // actual Player.audio element because it has no captureStream().
     if (this.state >= 0) this._ensureAudio(false);
     if (this.state >= 0) this._resumeAudioContext();
+    // Lazy-load the precomputed band timeline ONLY while the visualizer is on
+    // (state>=0) and rendering. Generating bands is heavy server-side (full
+    // ffmpeg decode), so we never trigger it for users who haven't enabled the
+    // visualizer — that was saturating the server and stalling mobile playback.
+    if (this.state >= 0 && this._audioMode === 'precomputed' && this._currentTrack && this._bandTrackId !== this._currentTrack.id) {
+      this._loadBands(this._currentTrack);
+    }
     if (this._t0 == null) this._t0 = performance.now() / 1000;
 
     // _bandDyn frame inputs: dt + seek-edge → mark all 8 slots for reset. Runs
