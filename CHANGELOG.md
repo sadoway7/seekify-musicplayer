@@ -18,7 +18,7 @@
 
 - Fix (duplicates): duplicate detection between the primary and secondary library no longer flips repeatedly (delete/re-add churn every 5 minutes with a brief library lock each cycle). The primary-library copy now consistently wins, matching scanner policy.
 
-- Downloads (YouTube): auto-selection now reliably prefers the real music version over video uploads. Titles marked "Official Video", "Music Video", "MV", "Video Oficial" etc. are penalized (unless you searched for a video), closing the gap where a music-video upload could beat the studio audio — especially when YouTube Music search is unavailable and only regular YouTube results are in the candidate pool.
+- Downloads (YouTube): auto-selection now prefers the real music version over video uploads. Titles marked "Official Video", "Music Video", "MV", "Video Oficial" etc. are penalized (unless you searched for a video), closing the gap where a music-video upload could beat the studio audio — especially when YouTube Music search is unavailable and only regular YouTube results are in the candidate pool.
 
 - Reliability (playback): a wedged ffmpeg transcode can no longer permanently break AAC streaming for Safari-family clients. Every encode now runs with a hard time limit, so a stalled process (pathological input, stalled disk) releases its slot and the next play attempt starts fresh instead of every subsequent request blocking forever. Cache pruning also no longer deletes the in-progress encode's temporary file mid-write, which could fail an otherwise healthy transcode.
 

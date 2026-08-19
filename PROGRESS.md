@@ -4,30 +4,27 @@ Goal: make music playback and navigation feel as fluid and dependable as Spotify
 
 ## Current status
 
-**[Wave 0 — playback reliability + system coupling] Fixing the root cause, not the symptom.**
+**[Wave 1 — reliability + data integrity] Batches pre-step/B/scorer/A/C shipped. Stopping here for device verification.**
 
-The ricocheting regressions (bands broke playback → disabling bands broke the visualizer → …) all share one root cause: **the server has no playback-first policy across its shared CPU.** The sync playback transcode (`StreamHandler` blocks on ffmpeg), background analysis (bands/waveform/normalize), and the boot path all grab CPU independently with no priority/coordination, so any change to one ricochets into the others.
+Full-system audit (6 parallel sub-agents: store, HTTP/auth, background jobs, business logic, audio+frontend, over-engineering) → grilling session locked scope → 5 committed batches. Root causes fixed, not symptoms.
 
-**The couplings:**
-- Playback (iOS) ← sync transcode ↔ background analysis (bands/waveform) — shared CPU, no coordinator.
-- Visualizer (iOS) ← bands data ← that same CPU — so bands-on = stall, bands-off = dead viz. A false either/or.
-- Web Audio viz ↔ AirPlay — orthogonal iOS limit, already routed around via precomputed bands.
-- Boot ← sync dedup + background goroutines ↔ first `/api/library` — slow startup.
+**Shipped this wave (commits 340058f → 70da050):**
+- Diagnostics: weekly playback-failure log (data/playback-failures-*.jsonl, /api/admin/playback-failures) — the instrument for "does it still skip?"
+- Playback: prewarm niced; 30s transcode load timeout; ffmpeg encodes hard-timed (a wedge could permanently kill AAC streaming); prune no longer deletes in-flight encodes; pause clears the load timeout (was force-skipping + auto-playing next)
+- Downloads: video-version YouTube titles penalized (music-video uploads were beating studio audio)
+- Data integrity: boot DB snapshot (data/backups/, 7d); review-worker hot-loop (timestamp-format mismatch → 2s churn all day) fixed; slsk failure cleanup no longer deletes sibling jobs' completed files; failed upserts no longer vanish tracks after restart; playlist rewrite atomic; shared playlists survive restarts; dedup churn between primary/media: libraries ended (primary wins, matching scanner policy)
+- Jobs: art fetchers daily (not startup-only); cleanup survives watcher-off; transcode-prune in Workers panel; bare goroutines wrapped
 
-**Plan, in dependency order (each device-verified before the next):**
-1. **KEYSTONE — playback-first ffmpeg policy.** Background analysis (bands + waveform + normalize) runs **niced (lowest priority)** under a shared low cap; playback transcode stays foreground. → re-enable bands → reactive visualizer AND fast playback coexist (the either/or disappears).
-2. **Startup** — dedup off the sync boot path; post-listen quiet period; cache `/api/library` by `LibraryVersion`; parallelize the client's ~6 sequential boot fetches; `defer` the 18 render-blocking scripts.
-3. Polish waves (see roadmap).
+**Verification gate (yours):** test on localhost (or push to GitLab → device). Watch: Safari cold-play, pause-during-load, playlist reorder, restart persistence, Workers panel frequencies, data/backups/ appearing.
 
-**Interim → now shipped:** the keystone (playback-first ffmpeg policy) is live. All background analysis (bands + waveform + normalize) runs niced (lowest CPU priority); the playback transcode stays foreground. bands re-enabled → reactive visualizer. Verified by a harsh critic agent reading the actual diff (MEDIUM-HIGH confidence; one gap it found — normalize wasn't niced — fixed).
-
-**Verification gate (yours):** confirm on device — visualizer pulses AND songs load fast. If yes → step 2 (startup). If somehow still contended → fallbacks already designed (tighter shared background cap, bands-gated-on-transcode-ready).
+**Next (scoped in ROADMAP.md, no code yet):** Batch E security (route wraps, cookies-upload token for the extension, method checks, YouTube-only URL allowlist, guest UI hides) → Batch D UX (view-guards, no force-navigation, badge poll).
 
 ---
 
 ## Wave log
 
 - **Keystone — playback-first ffmpeg policy:** shipped. Background analysis (bands/waveform/normalize) niced via `downloads.NicedFfmpegCommandContext`; bands re-enabled; critic-reviewed. Awaiting device confirmation.
+- **Wave 1 — reliability + data integrity:** shipped 2026-08-19 (pre-step, B, scorer, A, C). Audit-driven, sub-agent-partitioned by file ownership, every diff hand-reviewed before commit. Full suite green (13 packages); live-verified: snapshot on boot, dedup stability with media: fixture, truthful Workers panel, cold transcode 13.5s → cached 28ms.
 
 ---
 
