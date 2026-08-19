@@ -104,3 +104,33 @@ func TestExtractBitrateFromQuality(t *testing.T) {
 		}
 	}
 }
+
+func TestScoreSearchResult_prefersAudioOverVideoVersion(t *testing.T) {
+	audio := ScoreSearchResult("Artist - Title (Official Audio)", "Artist - Topic", "Artist", "Title", 200)
+	video := ScoreSearchResult("Artist - Title (Official Music Video)", "Artist", "Artist", "Title", 240)
+	if audio <= video {
+		t.Fatalf("audio version must outrank video version: audio=%.0f video=%.0f", audio, video)
+	}
+}
+
+func TestScoreSearchResult_videoPenalty(t *testing.T) {
+	normal := ScoreSearchResult("Artist - Title", "Artist", "Artist", "Title", 200)
+	video := ScoreSearchResult("Artist - Title (Official Music Video)", "Artist", "Artist", "Title", 200)
+	if video >= normal {
+		t.Fatalf("video version must score below plain title: video=%.0f normal=%.0f", video, normal)
+	}
+	// Even a Vevo channel (music-video uploader) must not outrank the plain upload.
+	vevoVideo := ScoreSearchResult("Artist - Title (Official Video)", "ArtistVEVO", "Artist", "Title", 200)
+	if vevoVideo >= normal {
+		t.Fatalf("vevo video must score below plain title: vevo=%.0f normal=%.0f", vevoVideo, normal)
+	}
+}
+
+func TestScoreSearchResult_videoTitleWantedNotPenalized(t *testing.T) {
+	// User explicitly asked for a video (title contains "video") — no penalty.
+	video := ScoreSearchResult("Artist - Title Video", "Artist", "Artist", "Title Video", 200)
+	plain := ScoreSearchResult("Artist - Title", "Artist", "Artist", "Title Video", 200)
+	if video < plain {
+		t.Fatalf("expected-title containing 'video' must not be penalized: %.0f vs %.0f", video, plain)
+	}
+}

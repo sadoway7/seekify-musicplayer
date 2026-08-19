@@ -1742,6 +1742,25 @@ func ScoreSearchResult(title, channel, expectedArtist, expectedTitle string, dur
 		score -= 10
 	}
 
+	// Video-version penalty: "Music Video"/"Official Video"/MV uploads are
+	// usually the wrong grab for a music library (intro/outro skits, crowd
+	// noise, video edits) — the user asked for the song, not its video. Only
+	// applied when the expected title itself doesn't reference a video.
+	if !strings.Contains(strings.ToLower(expectedTitle), "video") {
+		videoPhrases := []string{
+			"official video", "music video", "videoclip", "video clip",
+			"video oficial", "official mv", "video lyrics", "lyrics video",
+		}
+		for _, w := range videoPhrases {
+			if strings.Contains(t, w) {
+				score -= 35
+			}
+		}
+		if strings.Contains(t, "(mv)") || strings.Contains(t, "[mv]") || strings.Contains(t, " mv ") {
+			score -= 35
+		}
+	}
+
 	upperWords := []string{"official", "audio", "lyric"}
 	for _, w := range upperWords {
 		if strings.Contains(t, w) {
