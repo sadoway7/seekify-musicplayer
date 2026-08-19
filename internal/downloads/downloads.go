@@ -1842,14 +1842,16 @@ func cleanupFailedDownload(dir, safeTitle string) {
 		}
 		name := e.Name()
 		lower := strings.ToLower(name)
-		// H7: only delete files whose stem EXACTLY matches safeTitle (not prefix)
-		// plus known partial-file suffixes.
-		fileStem := strings.TrimSuffix(lower, filepath.Ext(lower))
-		if fileStem == stem ||
-			strings.HasSuffix(lower, ".part") ||
-			strings.HasSuffix(lower, ".tmp") ||
-			strings.HasSuffix(lower, ".incomplete") ||
-			strings.HasSuffix(lower, ".ytdl") {
+		// H7: only delete files whose stem EXACTLY matches safeTitle (not prefix),
+		// including partial-file variants (stem.part, stem.mp3.part, stem.ytdl, ...).
+		// Bulk rips share destDir across jobs — a bare suffix match would delete
+		// sibling jobs' files.
+		base := lower
+		for _, s := range []string{".part", ".tmp", ".incomplete", ".ytdl"} {
+			base = strings.TrimSuffix(base, s)
+		}
+		base = strings.TrimSuffix(base, filepath.Ext(base))
+		if base == stem {
 			os.Remove(filepath.Join(dir, name))
 		}
 	}

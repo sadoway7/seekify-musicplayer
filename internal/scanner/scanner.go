@@ -346,6 +346,12 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	store.Mu.RUnlock()
 
 	commitOK := false
+	// Tracks/albums whose upsert failed: a failed statement doesn't poison
+	// the tx (still committed), but these IDs must stay OUT of the in-memory
+	// merge below or the maps would hold rows the DB doesn't (vanish on
+	// restart).
+	failedTracks := map[string]bool{}
+	failedAlbums := map[string]bool{}
 	tx, err := store.DB.Begin()
 	if err != nil {
 		log.Printf("[scan] ERROR: DB.Begin failed: %v", err)
@@ -358,11 +364,17 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 						continue // primary-dir copy wins, skip DB insert
 					}
 				}
-				store.DbUpsertTrackTx(tx, t)
+				if err := store.DbUpsertTrackTx(tx, t); err != nil {
+					failedTracks[t.ID] = true
+					log.Printf("[scan] ERROR: upsert track %s (%s): %v", t.ID, t.FilePath, err)
+				}
 			}
 		}
 		for _, a := range newAlbums {
-			store.DbUpsertAlbumTx(tx, a)
+			if err := store.DbUpsertAlbumTx(tx, a); err != nil {
+				failedAlbums[a.ID] = true
+				log.Printf("[scan] ERROR: upsert album %s (%s): %v", a.ID, a.Name, err)
+			}
 		}
 		if err := tx.Commit(); err != nil {
 			log.Printf("[scan] ERROR: DB commit failed, in-memory maps NOT updated: %v", err)
@@ -418,9 +430,15 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		}
 		// Then merge new primary tracks in
 		for id, t := range newTracks {
+			if failedTracks[id] {
+				continue // not persisted — keep memory matched to the DB
+			}
 			store.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
+			if failedAlbums[id] {
+				continue
+			}
 			store.Albums[id] = a
 		}
 		// Clean up orphaned albums (no tracks reference them)
@@ -451,9 +469,15 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			if primaryPaths[relPath] {
 				continue // primary-dir copy wins
 			}
+			if failedTracks[id] {
+				continue // not persisted — keep memory matched to the DB
+			}
 			store.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
+			if failedAlbums[id] {
+				continue
+			}
 			store.Albums[id] = a
 		}
 		// Prune media-dir tracks whose files disappeared since the last scan.
@@ -858,6 +882,14 @@ func ScanSingleFile(filePath string) {
 		}
 	}
 
+	// Persist before mutating memory: if the insert fails, memory must not
+	// gain an entry the DB doesn't have (it would vanish on restart and
+	// desync the maps).
+	if err := store.DbUpsertTrack(track); err != nil {
+		log.Printf("[scan] ERROR: persist single file %s (%s): %v — not added to memory", trackID, relPath, err)
+		return
+	}
+
 	store.Mu.Lock()
 	store.Tracks[trackID] = track
 	if track.Album != "" {
@@ -876,7 +908,6 @@ func ScanSingleFile(filePath string) {
 	}
 	store.Mu.Unlock()
 
-	store.DbUpsertTrack(track)
 	if LibraryVersionAdd != nil {
 		LibraryVersionAdd(1)
 	}

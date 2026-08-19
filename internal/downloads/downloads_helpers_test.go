@@ -1,6 +1,10 @@
 package downloads
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestScoreSearchResult_channelMatch(t *testing.T) {
 	score := ScoreSearchResult("Artist - Title", "Artist Official", "Artist", "Title", 0)
@@ -132,5 +136,40 @@ func TestScoreSearchResult_videoTitleWantedNotPenalized(t *testing.T) {
 	plain := ScoreSearchResult("Artist - Title", "Artist", "Artist", "Title Video", 200)
 	if video < plain {
 		t.Fatalf("expected-title containing 'video' must not be penalized: %.0f vs %.0f", video, plain)
+	}
+}
+
+// TestCleanupFailedDownload_onlyDeletesMatchingStem is a regression test:
+// cleanupFailedDownload must only delete files whose stem matches THIS job's
+// safeTitle. Bulk album rips share destDir across jobs — the old bare
+// suffix matches (`.part`, `.tmp`, ...) deleted sibling jobs' partial and
+// completed files.
+func TestCleanupFailedDownload_onlyDeletesMatchingStem(t *testing.T) {
+	dir := t.TempDir()
+	stem := "artist - track"
+	cases := map[string]bool{ // filename -> should be deleted
+		"artist - track.part":             true,
+		"artist - track.tmp":              true,
+		"artist - track.incomplete":       true,
+		"artist - track.mp3.ytdl":         true,
+		"artist - track.flac":             true, // exact-stem audio (original intent)
+		"othertrack.part":                 false,
+		"othertrack.flac":                 false,
+		"other artist - other.incomplete": false,
+	}
+	for name := range cases {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0644); err != nil {
+			t.Fatalf("write %q: %v", name, err)
+		}
+	}
+
+	cleanupFailedDownload(dir, stem)
+
+	for name, wantGone := range cases {
+		_, err := os.Stat(filepath.Join(dir, name))
+		gone := os.IsNotExist(err)
+		if gone != wantGone {
+			t.Errorf("%q: deleted=%v, want deleted=%v", name, gone, wantGone)
+		}
 	}
 }

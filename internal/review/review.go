@@ -170,7 +170,7 @@ func DbGetTracksByReviewStatus(status string, limit int) []string {
 // tracks so stale flags clear once the triggering condition resolves (e.g.
 // duration populated after the original no_duration flag).
 func DbGetStaleReviewTracks(status string, age time.Duration, limit int) []string {
-	cutoff := time.Now().Add(-age).Format(time.RFC3339)
+	cutoff := time.Now().UTC().Add(-age).Format("2006-01-02 15:04:05")
 	rows, err := store.DB.Query(
 		"SELECT track_id FROM track_reviews WHERE status = ? AND (checked_at IS NULL OR checked_at < ?) ORDER BY checked_at ASC LIMIT ?",
 		status, cutoff, limit)

@@ -503,7 +503,9 @@ func RebuildAlbumsFromTracksLocked() {
 	}
 	store.Albums = newAlbums
 	for _, a := range store.Albums {
-		store.DbUpsertAlbum(a)
+		if err := store.DbUpsertAlbum(a); err != nil {
+			log.Printf("[musicbrainz] upsert album %s (%s): %v", a.ID, a.Name, err)
+		}
 	}
 }
 

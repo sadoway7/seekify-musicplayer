@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Reliability (database): the server now keeps a rolling 7-day safety backup of the library database (created at startup before anything touches it), so a failed upgrade or corruption never means total library loss. Restores are a file copy back.
+
+- Fix (review worker): resolved a background scheduling bug where the metadata-review worker could re-check the same tracks every 2 seconds all day (CPU/database churn, noisy logs) due to a timestamp-format mismatch. Rechecks now occur on their intended schedule.
+
+- Fix (Soulseek): a failed download in a bulk album rip no longer deletes files that earlier tracks in the same rip already downloaded and added to the library. Failure cleanup is now scoped to the files the failed transfer itself created.
+
+- Fix (library): tracks no longer silently vanish after a restart when a database write fails mid-scan — failed writes are logged, and memory now always matches what was actually persisted.
+
+- Fix (playlists): reordering a playlist can no longer wipe its contents if an error occurs mid-save — the rewrite is now a single atomic transaction.
+
+- Fix (playlists): shared playlists (e.g. from watched-playlist sync) stay visible to all users across server restarts — a startup migration could re-assign them to the admin only.
+
+- Fix (duplicates): duplicate detection between the primary and secondary library no longer flips repeatedly (delete/re-add churn every 5 minutes with a brief library lock each cycle). The primary-library copy now consistently wins, matching scanner policy.
+
 - Downloads (YouTube): auto-selection now reliably prefers the real music version over video uploads. Titles marked "Official Video", "Music Video", "MV", "Video Oficial" etc. are penalized (unless you searched for a video), closing the gap where a music-video upload could beat the studio audio — especially when YouTube Music search is unavailable and only regular YouTube results are in the candidate pool.
 
 - Reliability (playback): a wedged ffmpeg transcode can no longer permanently break AAC streaming for Safari-family clients. Every encode now runs with a hard time limit, so a stalled process (pathological input, stalled disk) releases its slot and the next play attempt starts fresh instead of every subsequent request blocking forever. Cache pruning also no longer deletes the in-progress encode's temporary file mid-write, which could fail an otherwise healthy transcode.

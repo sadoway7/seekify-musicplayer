@@ -3,10 +3,12 @@ package downloads
 import (
 	"database/sql"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"musicapp/internal/store"
 	_ "modernc.org/sqlite"
+	"musicapp/internal/store"
 )
 
 func intPtr(v int) *int { return &v }
@@ -381,9 +383,9 @@ func TestSlskSpeedEMA_RoundTrip(t *testing.T) {
 
 func TestSlskSpeed_IgnoresBadInput(t *testing.T) {
 	openTestDB(t)
-	recordSlskSpeed("", 1000)   // empty username
-	recordSlskSpeed("bob", 0)   // zero bps
-	recordSlskSpeed("bob", -5)  // negative bps
+	recordSlskSpeed("", 1000)  // empty username
+	recordSlskSpeed("bob", 0)  // zero bps
+	recordSlskSpeed("bob", -5) // negative bps
 	if slskPeerSpeed("bob") != 0 {
 		t.Errorf("bad inputs should not record, got %v", slskPeerSpeed("bob"))
 	}
@@ -416,5 +418,46 @@ func TestSlskCandidateUsernames_Dedup(t *testing.T) {
 	got := slskCandidateUsernames(cands)
 	if len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
 		t.Errorf("slskCandidateUsernames = %v, want [alice bob]", got)
+	}
+}
+
+// TestSlskCleanupIncomplete_preservesSnapshottedSiblingFiles is a regression
+// test for the stale-snapshot data-loss bug: bulk rips share destDir across
+// jobs, so the snapshot must be taken after acquiring slskLoginMu (i.e., it
+// must reflect every file a sibling job completed before this job's download
+// started). Files present in the snapshot survive cleanup; only files that
+// appeared after the snapshot are removed.
+//
+// Note: the lock ordering itself lives inside runSlskDownload and needs a real
+// python/aioslsk session, so it's not unit-testable; this test pins the
+// snapshot semantics that ordering relies on.
+func TestSlskCleanupIncomplete_preservesSnapshottedSiblingFiles(t *testing.T) {
+	dir := t.TempDir()
+	sibling := filepath.Join(dir, "othertrack.flac") // sibling job's completed file
+	if err := os.WriteFile(sibling, []byte("x"), 0644); err != nil {
+		t.Fatalf("write sibling file: %v", err)
+	}
+
+	snap := dirSnapshot(dir) // fresh snapshot: taken after the login lock
+
+	// Files appearing after the snapshot: this job's partial + new audio.
+	mine := filepath.Join(dir, "mytrack.part")
+	newAudio := filepath.Join(dir, "mytrack.flac")
+	for _, p := range []string{mine, newAudio} {
+		if err := os.WriteFile(p, []byte("x"), 0644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+	}
+
+	slskCleanupIncomplete(dir, snap)
+
+	if _, err := os.Stat(sibling); err != nil {
+		t.Errorf("sibling's snapshotted completed file must survive cleanup: %v", err)
+	}
+	if _, err := os.Stat(mine); !os.IsNotExist(err) {
+		t.Errorf("partial file created after snapshot should be removed, stat err = %v", err)
+	}
+	if _, err := os.Stat(newAudio); !os.IsNotExist(err) {
+		t.Errorf("audio file created after snapshot should be removed, stat err = %v", err)
 	}
 }

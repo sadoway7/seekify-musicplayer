@@ -609,12 +609,16 @@ func runSlskDownloadArgs(job *DownloadJob, dlUsername, dlFilename, candidatesJSO
 		DownloadMu.Unlock()
 	}()
 
-	// H2: snapshot destDir before download so we can clean new files on failure
-	preSnap := dirSnapshot(destDir)
-
 	// Serialize Soulseek logins — concurrent sessions from one IP get reset by the server.
 	slskLoginMu.Lock()
 	defer slskLoginMu.Unlock()
+
+	// H2: snapshot destDir before download so we can clean new files on failure.
+	// Must be taken AFTER acquiring slskLoginMu: in a bulk rip multiple jobs share
+	// destDir, and a snapshot taken while waiting for the lock goes stale — files
+	// a sibling job completed meanwhile would be treated as "new" and deleted by
+	// our failure cleanup.
+	preSnap := dirSnapshot(destDir)
 
 	// Use pipes instead of buffered Output() so we can parse live progress
 	// from stderr (PROGRESS:pct:done:total) and update the job in the DB.

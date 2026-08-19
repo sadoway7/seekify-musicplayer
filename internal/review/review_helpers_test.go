@@ -5,6 +5,7 @@ import (
 	"musicapp/internal/store"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNormalizeForCompare(t *testing.T) {
@@ -235,6 +236,42 @@ func TestDbUpdateTrackMetaAcceptsMultipleGenres(t *testing.T) {
 	}
 	if loaded.GenreSource != "manual" {
 		t.Fatalf("DbUpdateTrackMeta genre source = %q, want manual", loaded.GenreSource)
+	}
+}
+
+func TestDbGetStaleReviewTracks(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
+	InitReviewTables()
+	store.Mu.Lock()
+	store.Tracks = map[string]*models.Track{
+		"fresh": {ID: "fresh", Title: "Fresh", FilePath: "Fresh.mp3"},
+		"stale": {ID: "stale", Title: "Stale", FilePath: "Stale.mp3"},
+	}
+	store.Mu.Unlock()
+	t.Cleanup(func() {
+		store.Mu.Lock()
+		store.Tracks = nil
+		store.Mu.Unlock()
+	})
+
+	DbSetReviewStatus("fresh", "needs_review", "[]", "worker")
+	DbSetReviewStatus("stale", "needs_review", "[]", "worker")
+	store.DB.Exec(`UPDATE track_reviews SET checked_at = datetime('now','-2 hours') WHERE track_id = 'stale'`)
+
+	stale := DbGetStaleReviewTracks("needs_review", 1*time.Hour, 50)
+	for _, id := range stale {
+		if id == "fresh" {
+			t.Error("track checked now must not be stale for age=1h (format mismatch regression)")
+		}
+	}
+	found := false
+	for _, id := range stale {
+		if id == "stale" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("track checked 2h ago must be stale for age=1h")
 	}
 }
 

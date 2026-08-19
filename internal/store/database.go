@@ -21,6 +21,10 @@ func InitDB(path string) {
 	dir := filepath.Dir(path)
 	os.MkdirAll(dir, 0755)
 
+	// Safety copy of any existing DB (plus WAL) before we open it — a
+	// corrupt file then never means total library loss. Best-effort.
+	SnapshotDB(path)
+
 	var err error
 	// _pragma=busy_timeout(5000) applies the busy timeout to EVERY pooled
 	// connection. The PRAGMA Exec below only hit one connection, so writes on
@@ -267,8 +271,12 @@ func dedupTracksByFilePath() bool {
 				log.Printf("[db] Found %d cross-prefix duplicate paths, deduplicating...", len(pairs))
 				for _, pair := range pairs {
 					// Find all tracks whose normalized path matches
-					r, err := DB.Query(`SELECT id, file_path, has_metadata, mod_time FROM tracks WHERE file_path = ? OR file_path = ? ORDER BY has_metadata DESC, mod_time DESC`,
-						pair.normPath, "media:"+pair.normPath)
+				// Primary copy wins (LIKE 'media:%' is 0 for primary, 1 for
+				// media:) — matches the scanner's cross-prefix policy, so
+				// dedup deletes the media: row the scanner will never re-add
+				// instead of deleting the primary row every cycle.
+				r, err := DB.Query(`SELECT id, file_path, has_metadata, mod_time FROM tracks WHERE file_path = ? OR file_path = ? ORDER BY (file_path LIKE 'media:%') ASC, has_metadata DESC, mod_time DESC`,
+					pair.normPath, "media:"+pair.normPath)
 					if err != nil {
 						continue
 					}
@@ -285,7 +293,11 @@ func dedupTracksByFilePath() bool {
 						continue
 					}
 					keepID := ids[0]
-					tx, _ := DB.Begin()
+					tx, err := DB.Begin()
+					if err != nil {
+						log.Printf("[db] dedup begin tx: %v", err)
+						continue
+					}
 				for _, dupID := range ids[1:] {
 					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -339,7 +351,11 @@ func dedupTracksByFilePath() bool {
 						continue
 					}
 					keepID := ids[0]
-					tx, _ := DB.Begin()
+					tx, err := DB.Begin()
+					if err != nil {
+						log.Printf("[db] dedup begin tx: %v", err)
+						continue
+					}
 				for _, dupID := range ids[1:] {
 					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -403,9 +419,13 @@ func dedupTracksByFilePath() bool {
 					// When all durations are 0 (un-probed Soulseek downloads), still
 					// dedup — keep the one with best metadata / most recent mod_time.
 					keepID := ids[0]
-					removed := 0
-					var deletedFiles []string
-					tx, _ := DB.Begin()
+				removed := 0
+				var deletedFiles []string
+				tx, err := DB.Begin()
+				if err != nil {
+					log.Printf("[db] dedup begin tx: %v", err)
+					continue
+				}
 				for _, dupID := range ids[1:] {
 					// If both have non-zero but different durations, keep both
 					// (could be different versions/remixes).
@@ -493,7 +513,11 @@ func dedupByFilePath(path string) bool {
 		return false
 	}
 	keepID := ids[0]
-	tx, _ := DB.Begin()
+	tx, err := DB.Begin()
+	if err != nil {
+		log.Printf("[db] dedup begin tx: %v", err)
+		return false
+	}
 	for _, dupID := range ids[1:] {
 		tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -576,17 +600,6 @@ func dbQueryTrackIDs(query string) []string {
 
 func DbGetFavorites() []string {
 	return dbQueryTrackIDs("SELECT track_id FROM favorites ORDER BY added_at DESC")
-}
-
-func DbToggleFavorite(trackID string) bool {
-	var exists bool
-	DB.QueryRow("SELECT 1 FROM favorites WHERE track_id = ?", trackID).Scan(&exists)
-	if exists {
-		DB.Exec("DELETE FROM favorites WHERE track_id = ?", trackID)
-		return false
-	}
-	DB.Exec("INSERT INTO favorites (track_id, added_at) VALUES (?, ?)", trackID, time.Now().Unix())
-	return true
 }
 
 func DbGetRecent() []string {
@@ -765,21 +778,36 @@ func DbCreatePlaylist(userID, name string) models.Playlist {
 	return models.Playlist{ID: id, Name: name, CreatedAt: now, TrackIDs: []string{}}
 }
 
+// DbUpdatePlaylist renames and/or rewrites a playlist's tracks. The ownership
+// check, rename, delete and reinserts run in one BEGIN IMMEDIATE transaction —
+// an error mid-reinsert previously rolled back nothing, leaving the playlist
+// emptied (delete had already committed).
 func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) {
-	var owned int
-	DB.QueryRow("SELECT 1 FROM playlists WHERE id = ? AND user_id = ?", id, userID).Scan(&owned)
-	if owned != 1 {
-		return
-	}
-	if name != "" {
-		DB.Exec("UPDATE playlists SET name = ? WHERE id = ?", name, id)
-	}
-	if trackIDs != nil {
-		DB.Exec("DELETE FROM playlist_tracks WHERE playlist_id = ?", id)
-		for i, tid := range trackIDs {
-			DB.Exec("INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)", id, tid, i)
+	_ = withImmediateTx(func(conn *sql.Conn) error {
+		var owned int
+		if err := conn.QueryRowContext(context.Background(), "SELECT 1 FROM playlists WHERE id = ? AND user_id = ?", id, userID).Scan(&owned); err != nil && err != sql.ErrNoRows {
+			return err
 		}
-	}
+		if owned != 1 {
+			return nil
+		}
+		if name != "" {
+			if _, err := conn.ExecContext(context.Background(), "UPDATE playlists SET name = ? WHERE id = ?", name, id); err != nil {
+				return err
+			}
+		}
+		if trackIDs != nil {
+			if _, err := conn.ExecContext(context.Background(), "DELETE FROM playlist_tracks WHERE playlist_id = ?", id); err != nil {
+				return err
+			}
+			for i, tid := range trackIDs {
+				if _, err := conn.ExecContext(context.Background(), "INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)", id, tid, i); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // DbAddTrackToPlaylist appends a track at the next position. The MAX(position)
@@ -988,18 +1016,18 @@ type DbExecer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-func DbUpsertTrack(t *models.Track) {
-	DbUpsertTrackWith(DB, t)
+func DbUpsertTrack(t *models.Track) error {
+	return DbUpsertTrackWith(DB, t)
 }
 
-func DbUpsertTrackTx(tx *sql.Tx, t *models.Track) {
-	DbUpsertTrackWith(tx, t)
+func DbUpsertTrackTx(tx *sql.Tx, t *models.Track) error {
+	return DbUpsertTrackWith(tx, t)
 }
 
-func DbUpsertTrackWith(e DbExecer, t *models.Track) {
+func DbUpsertTrackWith(e DbExecer, t *models.Track) error {
 	// Ultimate backstop: never persist tracks from the Soulseek share folder.
 	if IsInSlskShareDir(t.FilePath) {
-		return
+		return nil
 	}
 	// Provenance: log new track insertions so we can trace duplicate origins.
 	var existed int
@@ -1013,7 +1041,7 @@ func DbUpsertTrackWith(e DbExecer, t *models.Track) {
 		}
 		log.Printf("[track-new] id=%s path=%s caller=%s", t.ID, t.FilePath, caller)
 	}
-	e.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, genre_canonical, genre_source, genre_checked_at, duration, file_path, has_cover, mod_time, has_metadata)
+	_, err := e.Exec(`INSERT INTO tracks (id, title, artist, album, album_artist, album_id, track_number, year, genre, genre_canonical, genre_source, genre_checked_at, duration, file_path, has_cover, mod_time, has_metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title=CASE WHEN tracks.has_metadata = 1 THEN tracks.title ELSE excluded.title END,
@@ -1047,6 +1075,7 @@ func DbUpsertTrackWith(e DbExecer, t *models.Track) {
 		t.TrackNumber, t.Year, t.Genre, t.GenreCanonical, t.GenreSource, t.GenreCheckedAt,
 		t.Duration, t.FilePath,
 		BoolToInt(t.HasCover), t.ModTime, BoolToInt(t.HasMetadata))
+	return err
 }
 
 func hydrateTrackGenre(t *models.Track) {
@@ -1062,21 +1091,22 @@ func hydrateTrackGenre(t *models.Track) {
 	}
 }
 
-func DbUpsertAlbum(a *models.Album) {
-	DbUpsertAlbumWith(DB, a)
+func DbUpsertAlbum(a *models.Album) error {
+	return DbUpsertAlbumWith(DB, a)
 }
 
-func DbUpsertAlbumTx(tx *sql.Tx, a *models.Album) {
-	DbUpsertAlbumWith(tx, a)
+func DbUpsertAlbumTx(tx *sql.Tx, a *models.Album) error {
+	return DbUpsertAlbumWith(tx, a)
 }
 
-func DbUpsertAlbumWith(e DbExecer, a *models.Album) {
-	e.Exec(`INSERT INTO albums (id, name, artist, track_count, year, has_cover)
+func DbUpsertAlbumWith(e DbExecer, a *models.Album) error {
+	_, err := e.Exec(`INSERT INTO albums (id, name, artist, track_count, year, has_cover)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name=excluded.name, artist=excluded.artist,
 			track_count=excluded.track_count, year=excluded.year, has_cover=excluded.has_cover`,
 		a.ID, a.Name, a.Artist, a.TrackCount, a.Year, BoolToInt(a.HasCover))
+	return err
 }
 
 func DbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
@@ -1232,8 +1262,14 @@ func DbCleanupRecent() {
 
 // MigrateLegacyDataTo re-owns pre-user global data to the first admin, run once
 // during first-run setup. Idempotent: INSERT OR IGNORE + backfill only empty
-// user_id values, so re-running is a no-op.
+// user_id values, so re-running is a no-op. Guarded by the legacy_data_migrated
+// settings key: without the guard every boot re-owned runtime-created shared
+// playlists (user_id='', from watched-playlist sync) to the first admin,
+// hiding them from every other user.
 func MigrateLegacyDataTo(userID string) error {
+	if GetSetting("legacy_data_migrated", "") == "1" {
+		return nil
+	}
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -1257,7 +1293,11 @@ func MigrateLegacyDataTo(userID string) error {
 	if _, err = tx.Exec(`UPDATE download_jobs SET user_id=? WHERE user_id=''`, userID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	SetSetting("legacy_data_migrated", "1")
+	return nil
 }
 
 func DbCleanupPlaylistTracks() {
