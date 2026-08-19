@@ -30,6 +30,12 @@ var (
 
 	// transSem bounds concurrent ffmpeg passes (mirrors normSem/waveSem).
 	transSem = make(chan struct{}, 2)
+
+	// Ceiling on a single encode. Without it a wedged ffmpeg (stalled NFS
+	// mount, pathological input) holds a sem slot forever; two wedges kill
+	// transcoding for the process lifetime and every Safari stream request
+	// blocks as a singleflight waiter. Var (not const) so tests can shrink it.
+	ensureTimeout = 10 * time.Minute
 )
 
 // cacheDir returns the on-disk transcode cache directory (data/transcode).
@@ -155,14 +161,16 @@ func ensure(trackID, sourcePath string, lowPriority bool) (string, error) {
 		"-f", "ipod",
 		tmp,
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), ensureTimeout)
+	defer cancel()
 	var cmd *exec.Cmd
 	if lowPriority {
-		cmd = downloads.NicedFfmpegCommandContext(context.Background(), args...)
+		cmd = downloads.NicedFfmpegCommandContext(ctx, args...)
 		if cmd == nil {
 			return "", fmt.Errorf("ffmpeg not found")
 		}
 	} else {
-		cmd = exec.Command(ff, args...)
+		cmd = exec.CommandContext(ctx, ff, args...)
 	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		os.Remove(tmp)
@@ -203,8 +211,13 @@ func PruneCache() {
 			continue
 		}
 		if filepath.Ext(e.Name()) == ".tmp" {
-			// leftover from a crashed transcode
-			os.Remove(filepath.Join(dir, e.Name()))
+			// Leftover from a crashed transcode — but the prune ticker can
+			// fire while an encode is mid-write (encode writes CachePath+".tmp"
+			// for its whole duration), so only remove tmps that predate any
+			// legitimate in-flight encode. ensureTimeout bounds legit runs.
+			if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > time.Hour {
+				os.Remove(filepath.Join(dir, e.Name()))
+			}
 			continue
 		}
 		info, err := e.Info()

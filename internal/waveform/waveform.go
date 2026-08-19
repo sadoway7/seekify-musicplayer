@@ -138,6 +138,20 @@ func EnsureWaveformDir() {
 }
 
 func GetCachedWaveform(trackID string) ([]float64, error) {
+	// Stale if the cache predates the source (re-tag/re-download) — same
+	// check bands and transcode use; without it a replaced file keeps its
+	// old waveform forever.
+	store.Mu.RLock()
+	track, exists := store.Tracks[trackID]
+	store.Mu.RUnlock()
+	if !exists {
+		return nil, nil
+	}
+	if srcInfo, err := os.Stat(scanner.ResolveFilePath(track.FilePath)); err == nil {
+		if cacheInfo, err := os.Stat(WaveformPath(trackID)); err == nil && cacheInfo.ModTime().Before(srcInfo.ModTime()) {
+			return nil, nil
+		}
+	}
 	path := WaveformPath(trackID)
 	data, err := os.ReadFile(path)
 	if err != nil {

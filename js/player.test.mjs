@@ -162,3 +162,27 @@ test('rejected play() reports a play-rejected failure', async () => {
   assert.equal(failures[0].info.reason, 'play-rejected');
   assert.equal(failures[0].info.transcode, false);
 });
+
+test('pause during a slow load clears the load timeout (no force-skip)', () => {
+  const failures = [];
+  const { Player, timeouts, createdAudio } = loadPlayer({}, [], {}, {
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    reportPlaybackError: () => {},
+    reportPlaybackFailure: (id, info) => failures.push({ id, info })
+  });
+  Player.init();
+  const skips = [];
+  Player.next = () => skips.push('called');
+
+  // Slow transcode load: 30s timer armed, 'playing' never fires.
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac' });
+  const loadTimer = timeouts.find(t => t.ms === 30000);
+  assert.ok(loadTimer, '30s transcode load timeout armed');
+
+  // User hits pause before any data flows, then the stale timer elapses.
+  createdAudio[0].listeners.get('pause')();
+  loadTimer.fn();
+
+  assert.equal(skips.length, 0, 'paused load must not skip to the next track');
+  assert.equal(failures.length, 0, 'paused load must not log a playback failure');
+});

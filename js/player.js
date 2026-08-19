@@ -85,6 +85,11 @@ const Player = {
     });
     this.audio.addEventListener('pause', () => {
       this.playing = false;
+      // A user pause during a slow load means "stop trying" — clear the
+      // pending load timeout or it would fire later, log a bogus
+      // load-timeout failure, and force-skip to (and auto-play) the next
+      // track the user explicitly paused away from.
+      this._clearLoadTimeout();
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
       if (this.onStateChange) this.onStateChange();
     });
@@ -231,7 +236,12 @@ const Player = {
     // The timeout only guards "server never delivers"; 30s for transcoded
     // loads, 10s for everything else.
     const timeoutMs = this._needsTranscode(track) ? 30000 : 10000;
+    let timerId;
     this._loadTimeout = setTimeout(() => {
+      // Stale-closure guard: pause, an error handler, or a new track load
+      // may have cleared/re-armed the timer after this closure was queued.
+      if (this._loadTimeout !== timerId) return;
+      this._loadTimeout = null;
       console.warn('[player] load timeout', {
         src: this.audio.src,
         networkState: this.audio.networkState,
@@ -242,6 +252,7 @@ const Player = {
       });
       this._onMediaError('load-timeout');
     }, timeoutMs);
+    timerId = this._loadTimeout;
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
 

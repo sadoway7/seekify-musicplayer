@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reliability (playback): a wedged ffmpeg transcode can no longer permanently break AAC streaming for Safari-family clients. Every encode now runs with a hard time limit, so a stalled process (pathological input, stalled disk) releases its slot and the next play attempt starts fresh instead of every subsequent request blocking forever. Cache pruning also no longer deletes the in-progress encode's temporary file mid-write, which could fail an otherwise healthy transcode.
+
+- Fix (player): pausing during a slow track load no longer force-skips to the next song. Previously the load timeout kept running after you hit pause; when it fired it reported a false playback failure, skipped the track, and auto-played the next one. The timer is now cleared on pause (and stale timer callbacks are ignored).
+
+- Fix (waveform): the waveform display now regenerates when a track's file changes on disk (re-download, re-tag). Previously the old waveform was served forever.
+
 - Settings: "no cover art" review flag is now off by default for new installs (existing installs keep their saved setting). Library scans are less noisy out of the box; an admin can re-enable it in Settings → Library and it works exactly as before.
 
 - Fix (rescrape): metadata rescrape now updates the album art in the UI immediately. Previously the server fetched the new art correctly, but the browser kept showing the stale image (same URL, no cache-bust) until a full page reload. The cover URL is now busted on every metadata update, and the update bumps the library version so other open tabs/devices refresh too.
