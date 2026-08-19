@@ -756,7 +756,7 @@ func CheckMetadataCompleteness(t *models.Track) []string {
 			flags = append(flags, "missing_genre")
 		}
 	}
-	if store.GetSettingBool("review_flag_no_cover", true) {
+	if store.GetSettingBool("review_flag_no_cover", false) {
 		if !trackHasEffectiveCover(t) {
 			flags = append(flags, "no_cover")
 		}
@@ -1213,8 +1213,8 @@ func RunReviewBatch() bool {
 		hasMetaFlag := store.GetSettingBool("review_flag_missing_title", true) ||
 			store.GetSettingBool("review_flag_missing_artist", true) ||
 			store.GetSettingBool("review_flag_missing_album", true) ||
-			store.GetSettingBool("review_flag_missing_genre", true) ||
-			store.GetSettingBool("review_flag_no_cover", true)
+			store.GetSettingBool("review_flag_missing_genre", false) ||
+			store.GetSettingBool("review_flag_no_cover", false)
 		if hasMetaFlag {
 			metaFlags := CheckMetadataCompleteness(t)
 			if len(metaFlags) > 0 {
@@ -1743,6 +1743,12 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		log.Printf("[review-enrich] marked %d needs_review tracks for re-eval", len(trackIDs))
+
+		// Signal open SPAs: genres/metadata/covers changed. One bump per run,
+		// not per track — the /api/stats poll refetches the library once.
+		if appliedMeta+appliedGenres+fetchedCovers > 0 && LibraryVersionAdd != nil {
+			LibraryVersionAdd(int64(len(trackIDs)))
+		}
 	})
 }
 

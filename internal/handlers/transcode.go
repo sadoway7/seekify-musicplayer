@@ -60,7 +60,9 @@ func TranscodeWarmHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store.SafeGo("transcode-warm", func() {
-		transcode.Ensure(trackID, fullPath)
+		// Background priority: a warm encode must yield CPU to any foreground
+		// play encode (playback-first policy, same as waveform/bands/normalize).
+		transcode.EnsureLow(trackID, fullPath)
 	})
 	writeJSON(w, map[string]bool{"ready": false})
 }

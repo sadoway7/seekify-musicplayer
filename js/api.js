@@ -117,6 +117,16 @@ const Api = {
     return this._req(url, { method: 'POST', errMsg: 'Failed to retry jobs' });
   },
   reportPlaybackError(trackId, code) { return this._req('/api/playback-error/' + trackId, { method: 'POST', body: { code }, errMsg: 'Failed to report playback error', fallback: null }); },
+  // Telemetry for the weekly server-side playback-failure log. keepalive so the
+  // report survives the page being closed/navigated mid-failure. Never throws.
+  reportPlaybackFailure(trackId, info) {
+    return fetch('/api/playback-error/' + trackId, {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info || {})
+    }).catch(() => {});
+  },
   prewarmTranscode(id) { return fetch('/api/transcode-warm/' + id, { method: 'POST' }).catch(() => {}); },
   deleteJob(id) { return this._req('/api/queue/' + id + '/delete', { method: 'POST', errMsg: 'Failed to delete job' }); },
   clearCompletedJobs() { return this._req('/api/queue/clear-completed', { method: 'POST', errMsg: 'Failed to clear jobs' }); },
@@ -156,7 +166,13 @@ const Api = {
   metadataClear() { return this._req('/api/metadata/clear', { method: 'POST', fallback: null }); },
   metadataRescanTrack(id) { return this._req('/api/metadata/rescan/' + id, { method: 'POST', fallback: null }); },
   metadataRescanSync(id) { return this._req('/api/metadata/rescan-sync/' + id, { method: 'POST', fallback: [] }); },
-  metadataUpdateTrack(id, data) { return this._req('/api/metadata/update-track/' + id, { method: 'POST', body: data, fallback: null }); },
+  metadataUpdateTrack(id, data) {
+    // Bust the cover URL cache: a rescrape can replace album art under the
+    // same albumID, and an identical ?v= would keep showing the stale image.
+    const track = Store.getTrack(id);
+    if (track && track.albumID) this.bustCover(track.albumID);
+    return this._req('/api/metadata/update-track/' + id, { method: 'POST', body: data, fallback: null });
+  },
   toggleDownload(id) { return this._req('/api/admin/download-toggle/' + id, { method: 'POST', fallback: null }); },
   reportDuration(id, duration) { return this._req('/api/track-duration/' + id, { method: 'POST', body: { duration }, fallback: null }); },
   uploadFiles(files, path) {

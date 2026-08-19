@@ -63,6 +63,7 @@ const Store = {
       try { this.registrationMode = ((await Api.getRegistrationMode()) || {}).mode || 'off'; } catch(e) {}
       const library = await Api.getLibrary();
       this.library = library;
+      this._libAt = Date.now();
       // Personal collections only when logged in; guests 401 on these.
       if (this.user && !this.user.guest) {
         const [playlists, favorites, recent] = await Promise.all([
@@ -106,6 +107,7 @@ const Store = {
   async refreshLibrary() {
     try {
       this.library = await Api.getLibrary();
+      this._libAt = Date.now();
       this._rebuildMaps();
     } catch (err) {
       UI.showToast('Failed to refresh library');

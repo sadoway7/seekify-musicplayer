@@ -45,7 +45,13 @@ Object.assign(UI, {
       }
     };
 
-    Store.refreshLibrary().then(scheduleHomeRender);
+    // Boot just fetched the library; re-download only if it's stale. The
+    // stats-poll path (app.js) refreshes on version bumps regardless.
+    if (!Store.library || Date.now() - (Store._libAt || 0) > 15000) {
+      Store.refreshLibrary().then(scheduleHomeRender);
+    } else {
+      scheduleHomeRender();
+    }
     if (!Store.isGuest) {
       Store.refreshRecent().then(scheduleHomeRender);
     }

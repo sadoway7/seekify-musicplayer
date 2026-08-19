@@ -552,7 +552,7 @@ Object.assign(UI, {
             var p = await Api.getReviewProgress();
             if (p && p.active) {
               if (p.total) {
-                recheckBtn.querySelector('span').textContent = 'Rechecking ' + (p.done || 0) + '/' + p.total + '...';
+                recheckBtn.querySelector('span').textContent = 'Rechecking ' + (p.checked || 0) + '/' + p.total + '...';
               }
               if (pollCount < 300) { setTimeout(poll, 1500); return; }
             }

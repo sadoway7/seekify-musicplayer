@@ -32,15 +32,21 @@ func TestGeneratePlaceholderSVG(t *testing.T) {
 	if !contains(svg, "<svg") {
 		t.Error("placeholder missing <svg tag")
 	}
-	if !contains(svg, "T") {
-		t.Error("placeholder missing initial letter T")
+	if !contains(svg, "<ellipse") {
+		t.Error("placeholder missing music-note icon")
+	}
+	if contains(svg, "<text") {
+		t.Error("placeholder must not render text glyphs")
 	}
 }
 
 func TestGeneratePlaceholderSVG_emptyName(t *testing.T) {
 	svg := scanner.GeneratePlaceholderSVG("", "abc123")
-	if !contains(svg, "?") {
-		t.Error("empty name should show ?")
+	if contains(svg, "<text") {
+		t.Error("empty name must not render text glyphs")
+	}
+	if !contains(svg, "<ellipse") {
+		t.Error("empty name should still show the music-note icon")
 	}
 }
 

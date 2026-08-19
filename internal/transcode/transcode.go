@@ -9,6 +9,7 @@
 package transcode
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"musicapp/internal/downloads"
 	"musicapp/internal/store"
 )
 
@@ -76,8 +78,21 @@ func IsReady(trackID, sourcePath string) bool {
 // on miss. Concurrent calls for the same track dedupe via singleflight: the
 // loser waits on the winner's done channel, then returns the cached path.
 // Returns ("", err) if ffmpeg is absent or the transcode fails — callers
-// fall back to serving the raw file.
+// fall back to serving the raw file. Runs at normal priority: callers on the
+// foreground playback path (StreamHandler blocks on it) need the CPU.
 func Ensure(trackID, sourcePath string) (string, error) {
+	return ensure(trackID, sourcePath, false)
+}
+
+// EnsureLow is Ensure at background CPU priority (nice -n 19). Used by the
+// next-track prewarm: a warm encode must never steal CPU from a foreground
+// play encode racing it — that race was the "sometimes songs don't play" on
+// Safari (foreground encode slowed past the client's load timeout).
+func EnsureLow(trackID, sourcePath string) (string, error) {
+	return ensure(trackID, sourcePath, true)
+}
+
+func ensure(trackID, sourcePath string, lowPriority bool) (string, error) {
 	if IsReady(trackID, sourcePath) {
 		return CachePath(trackID), nil
 	}
@@ -127,7 +142,7 @@ func Ensure(trackID, sourcePath string) (string, error) {
 	tmp := CachePath(trackID) + ".tmp"
 	os.Remove(tmp) // stale tmp from a crashed run
 
-	cmd := exec.Command(ff,
+	args := []string{
 		"-y",
 		"-hide_banner", "-loglevel", "error",
 		"-i", sourcePath,
@@ -139,7 +154,16 @@ func Ensure(trackID, sourcePath string) (string, error) {
 		// ffmpeg can't infer the container from it.
 		"-f", "ipod",
 		tmp,
-	)
+	}
+	var cmd *exec.Cmd
+	if lowPriority {
+		cmd = downloads.NicedFfmpegCommandContext(context.Background(), args...)
+		if cmd == nil {
+			return "", fmt.Errorf("ffmpeg not found")
+		}
+	} else {
+		cmd = exec.Command(ff, args...)
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		os.Remove(tmp)
 		log.Printf("[transcode] %s: %v: %s", trackID, err, string(out))

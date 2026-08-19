@@ -8,16 +8,22 @@ const source = readFileSync(new URL('./player.js', import.meta.url), 'utf8')
 
 function loadPlayer(navigator, order = [], canPlay = {}, api = null) {
   const createdAudio = [];
+  const timeouts = [];
 
   class FakeAudio {
     constructor() {
       this.volume = 1;
       this.listeners = new Map();
+      this.error = null;
+      this.networkState = 0;
+      this.readyState = 0;
       order.push('audio');
       createdAudio.push(this);
     }
     addEventListener(type, fn) { this.listeners.set(type, fn); }
     canPlayType(type) { return canPlay[type] || ''; }
+    play() { return Promise.resolve(); }
+    pause() {}
   }
 
   const context = vm.createContext({
@@ -28,12 +34,15 @@ function loadPlayer(navigator, order = [], canPlay = {}, api = null) {
     isFinite,
     navigator,
     localStorage: { getItem: () => null, setItem: () => {} },
-    setTimeout: () => 1,
+    setTimeout: (fn, ms) => { timeouts.push({ fn, ms }); return timeouts.length; },
     clearTimeout: () => {},
-    Api: api || { reportPlaybackError: () => {} }
+    Api: api || {
+      reportPlaybackError: () => {},
+      streamUrl: (id, transcode) => '/api/stream/' + id + (transcode ? '?fmt=aac' : '')
+    }
   });
   vm.runInContext(source, context);
-  return { Player: context.Player, createdAudio };
+  return { Player: context.Player, createdAudio, timeouts };
 }
 
 test('player declares long-form playback before creating Safari audio', () => {
@@ -95,4 +104,61 @@ test('player streams original FLAC when the browser supports it', () => {
   assert.equal(Player._needsTranscode({ id: 'a', filePath: 'Album/01 - Song.flac' }), false);
   assert.equal(Player._needsTranscode({ id: 'b', filePath: 'Album/02 - Song.opus' }), false);
   assert.equal(Player._needsTranscode({ id: 'c', filePath: 'Album/03 - Song.ogg' }), false);
+});
+
+test('transcoded loads arm an extended load timeout', () => {
+  const { Player, createdAudio, timeouts } = loadPlayer({});
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac' });
+
+  assert.ok(createdAudio[0].src.includes('fmt=aac'));
+  assert.ok(timeouts.some(t => t.ms === 30000));
+});
+
+test('native-format loads keep the 10s timeout', () => {
+  const { Player, createdAudio, timeouts } = loadPlayer({}, [], {
+    'audio/flac': 'maybe',
+    'audio/wav': 'probably'
+  });
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac' });
+
+  assert.ok(!createdAudio[0].src.includes('fmt=aac'));
+  assert.ok(timeouts.some(t => t.ms === 10000));
+});
+
+test('load timeout reports failure context to the server', async () => {
+  const failures = [];
+  const { Player, timeouts } = loadPlayer({}, [], {}, {
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    reportPlaybackFailure: (id, info) => failures.push({ id, info })
+  });
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac' });
+
+  const timeout = timeouts.find(t => t.ms === 30000);
+  timeout.fn();
+
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].id, 'a');
+  assert.equal(failures[0].info.reason, 'load-timeout');
+  assert.equal(failures[0].info.transcode, true);
+  assert.equal(failures[0].info.code, 0);
+});
+
+test('rejected play() reports a play-rejected failure', async () => {
+  const failures = [];
+  const { Player } = loadPlayer({}, [], {}, {
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    reportPlaybackFailure: (id, info) => failures.push({ id, info })
+  });
+  // Replace audio.play with a rejecting promise to simulate a generic failure.
+  Player.init();
+  Player.audio.play = () => Promise.reject(new Error('boom'));
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.mp3' });
+  await new Promise(r => setImmediate(r));
+
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].info.reason, 'play-rejected');
+  assert.equal(failures[0].info.transcode, false);
 });

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"hash/fnv"
 	"io"
 	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
@@ -146,6 +147,24 @@ func parseByteRange(header string, fileSize int64) (start, end int64, ok bool) {
 	return start, end, true
 }
 
+// serveCoverBytes writes cover bytes with revalidation: `no-cache` (every
+// visit re-checks) + an ETag over the content, so unchanged covers come back
+// as cheap 304s instead of full re-downloads, and changed art is picked up
+// immediately. Bumping the etag scheme invalidates old cached placeholders.
+func serveCoverBytes(w http.ResponseWriter, r *http.Request, data []byte, contentType string) {
+	h := fnv.New32a()
+	h.Write(data)
+	etag := fmt.Sprintf(`"c2-%x"`, h.Sum32())
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Write(data)
+}
+
 func CoverHandler(w http.ResponseWriter, r *http.Request) {
 	albumID := strings.TrimPrefix(r.URL.Path, "/api/cover/")
 	if strings.ContainsAny(albumID, `/\`) || strings.Contains(albumID, "..") {
@@ -162,18 +181,14 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(contentType, "application/") || strings.HasPrefix(contentType, "text/") {
 			contentType = "image/jpeg"
 		}
-		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(data)
+		serveCoverBytes(w, r, data, contentType)
 		return
 	}
 
 	coverPath := filepath.Join(store.MusicDir, "images", albumID+".jpg")
 	if diskData, err := os.ReadFile(coverPath); err == nil {
 		store.CacheCover(albumID, diskData)
-		w.Header().Set("Content-Type", "image/jpeg")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(diskData)
+		serveCoverBytes(w, r, diskData, "image/jpeg")
 		return
 	}
 
@@ -186,9 +201,7 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svg := scanner.GeneratePlaceholderSVG(albumName, albumID)
-	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Write([]byte(svg))
+	serveCoverBytes(w, r, []byte(svg), "image/svg+xml")
 }
 
 func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {

@@ -349,6 +349,9 @@ func main() {
 	mux.HandleFunc("/api/normalize/", auth.RequireUser(handlers.NormalizeHandler))
 	mux.HandleFunc("/api/track-duration/", auth.RequireUser(handlers.TrackDurationHandler))
 	mux.HandleFunc("/api/playback-error/", auth.RequireUser(handlers.TrackPlaybackErrorHandler))
+	// Weekly playback-failure log (client-reported playback failures + track/
+	// transcode context), one JSON object per line.
+	mux.HandleFunc("/api/admin/playback-failures", auth.RequireAdmin(handlers.PlaybackFailuresLogHandler))
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
 	})

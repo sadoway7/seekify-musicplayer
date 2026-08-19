@@ -193,6 +193,8 @@ func TestSaveGenreResultPersistsSourceAndTimestamp(t *testing.T) {
 
 func TestCheckMetadataCompletenessUsesCanonicalGenre(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
+	// The genre flag ships off by default; enable it to exercise the logic.
+	store.SetSetting("review_flag_missing_genre", "true")
 	track := &models.Track{
 		Title: "Song", Artist: "Artist", Album: "Album", HasCover: true,
 		Genre: "Upbeat", GenreCanonical: "Tech House",

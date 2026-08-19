@@ -226,8 +226,13 @@ const Player = {
       console.warn('[player] play() promise rejected', { name: e && e.name, message: e && e.message, src: this.audio.src });
       this._onMediaError('play-rejected');
     });
+    // Cold-cache transcodes (?fmt=aac on Safari) legitimately take longer than
+    // raw streams — a whole-file AAC encode of a long FLAC can run 10-30s.
+    // The timeout only guards "server never delivers"; 30s for transcoded
+    // loads, 10s for everything else.
+    const timeoutMs = this._needsTranscode(track) ? 30000 : 10000;
     this._loadTimeout = setTimeout(() => {
-      console.warn('[player] 10s load timeout', {
+      console.warn('[player] load timeout', {
         src: this.audio.src,
         networkState: this.audio.networkState,
         readyState: this.audio.readyState,
@@ -236,7 +241,7 @@ const Player = {
         paused: this.audio.paused,
       });
       this._onMediaError('load-timeout');
-    }, 10000);
+    }, timeoutMs);
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
 
@@ -253,12 +258,32 @@ const Player = {
     }
   },
 
+  // Report this failure (once per track load, via _onMediaError's guard) to
+  // the server's weekly playback-failure log: reason, media error code, player
+  // state, and whether the load was a transcode request. Never throws.
+  _reportFailure(reason) {
+    if (typeof Api === 'undefined' || !Api.reportPlaybackFailure) return;
+    const t = this.getCurrentTrack();
+    if (!t) return;
+    const a = this.audio;
+    const e = a && a.error;
+    Api.reportPlaybackFailure(t.id, {
+      code: e && e.code ? e.code : 0,
+      message: (e && e.message) || '',
+      reason: reason,
+      networkState: a ? a.networkState : -1,
+      readyState: a ? a.readyState : -1,
+      transcode: this._needsTranscode(t)
+    });
+  },
+
   _onMediaError(reason) {
     if (this._errorHandledForCurrent) return;
     this._errorHandledForCurrent = true;
     this._clearLoadTimeout();
     this.playing = false;
     console.warn('[player] _onMediaError', { reason, trackId: this.getCurrentTrack() && this.getCurrentTrack().id, consecutiveErrors: this._consecutiveErrors + 1, queueLen: this.queue.length });
+    this._reportFailure(reason);
 
     if (this.queue.length === 0) {
       if (this.onStateChange) this.onStateChange();

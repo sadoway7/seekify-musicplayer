@@ -475,6 +475,9 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
 		track.HasCover = false
 	}
+	// Regrouping changed track data; bump so open SPAs refresh (same contract
+	// as the scanner and custom-cover handlers).
+	LibraryVersion.Add(1)
 	musicbrainz.RebuildAlbumsFromTracksLocked()
 	store.Mu.Unlock()
 
