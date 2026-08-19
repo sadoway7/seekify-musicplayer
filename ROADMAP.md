@@ -40,6 +40,9 @@ Verification: curl matrix (401/403 on previously-open routes), SPA guest view
   `_clearPollTimers` (ui.js ~1318) or restart it in renderPage
 
 ### Parked (decided against for now)
+- Soulseek candidate selection could also use DurationMatchScore (the
+  post-download >125% rejection already covers both sources; only the
+  pre-download pick would improve)
 - /api/library server-side caching (only if a >20k-track deployment complains)
 - Service worker, JS minification (no build step per AGENTS.md)
 - Progressive/streaming transcode output (revisit if cold-start latency still
