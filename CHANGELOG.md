@@ -30,7 +30,7 @@
 
 - Fix (rescrape): metadata rescrape now updates the album art in the UI immediately. Previously the server fetched the new art correctly, but the browser kept showing the stale image (same URL, no cache-bust) until a full page reload. The cover URL is now busted on every metadata update, and the update bumps the library version so other open tabs/devices refresh too.
 
-- UI: the no-artwork placeholder is now a music-note icon on the album's signature gradient — no more letter/"?" text glyphs, which read as broken data. Applies to both album covers and artist art placeholders.
+- UI: the no-artwork placeholder is now a plain colored gradient (per album/artist) with no glyph or icon.
 
 - Fix (review): the "Recheck" progress counter showed "Rechecking undefined/N" — the poll read a field the server never sends. Now shows the real count.
 

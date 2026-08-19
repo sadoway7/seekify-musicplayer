@@ -32,21 +32,21 @@ func TestGeneratePlaceholderSVG(t *testing.T) {
 	if !contains(svg, "<svg") {
 		t.Error("placeholder missing <svg tag")
 	}
-	if !contains(svg, "<ellipse") {
-		t.Error("placeholder missing music-note icon")
+	if !contains(svg, "linearGradient") {
+		t.Error("placeholder missing gradient")
 	}
-	if contains(svg, "<text") {
-		t.Error("placeholder must not render text glyphs")
+	if contains(svg, "<text") || contains(svg, "<ellipse") {
+		t.Error("placeholder must be a plain gradient — no glyphs, no icon")
 	}
 }
 
 func TestGeneratePlaceholderSVG_emptyName(t *testing.T) {
 	svg := scanner.GeneratePlaceholderSVG("", "abc123")
-	if contains(svg, "<text") {
-		t.Error("empty name must not render text glyphs")
+	if !contains(svg, "linearGradient") {
+		t.Error("empty name should still render the gradient")
 	}
-	if !contains(svg, "<ellipse") {
-		t.Error("empty name should still show the music-note icon")
+	if contains(svg, "<text") || contains(svg, "<ellipse") {
+		t.Error("empty name must not render glyphs or icon")
 	}
 }
 

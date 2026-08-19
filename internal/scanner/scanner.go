@@ -647,9 +647,8 @@ func PruneMissingTracks() int {
 	return removed
 }
 
-// GeneratePlaceholderSVG renders the no-artwork placeholder: a per-ID
-// gradient with a beamed music-note icon. Deliberately no text — letter/?
-// glyphs read as broken data, an icon reads as "art not fetched yet".
+// GeneratePlaceholderSVG renders the no-artwork placeholder: a plain
+// per-ID gradient, nothing else.
 func GeneratePlaceholderSVG(name string, id string) string {
 	// Use ID (unique hash) for color so every album/artist gets a distinct color
 	seed := id
@@ -669,14 +668,7 @@ func GeneratePlaceholderSVG(name string, id string) string {
     </linearGradient>
   </defs>
   <rect width="300" height="300" fill="url(#bg)"/>
-  <g fill="hsl(%d, 55%%, 80%%)">
-    <ellipse cx="118" cy="210" rx="27" ry="20" transform="rotate(-15 118 210)"/>
-    <ellipse cx="198" cy="198" rx="27" ry="20" transform="rotate(-15 198 198)"/>
-    <rect x="139" y="108" width="9" height="103"/>
-    <rect x="219" y="96" width="9" height="103"/>
-    <path d="M139 108 L228 96 L228 124 L139 136 Z"/>
-  </g>
-</svg>`, hue, (hue+30)%360, hue)
+</svg>`, hue, (hue+30)%360)
 }
 
 func ExtractEmbeddedCovers() {
