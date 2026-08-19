@@ -1211,7 +1211,8 @@ Object.assign(UI, {
             album: title,
             albumMbid: data.mbid,
             trackNumber: t.position || (i + 1),
-            trackTotal: tracks.length
+            trackTotal: tracks.length,
+            lengthSec: t.length || 0
           }));
           Api.queueAddBatch(trackList).then(() => {
             this._showToast(tracks.length + ' tracks added to queue');

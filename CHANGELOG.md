@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Downloads (wrong-version protection): album/artist imports now know each track's real length (from MusicBrainz) and use it two ways — YouTube candidates whose duration closely matches the studio recording are strongly preferred (a "Live Version" upload of the same song runs 15-50% longer and previously won selection on title/channel bonuses alone), and a downloaded file substantially longer than the expected track is rejected automatically. When no length is known (single-track downloads, searches), behavior is unchanged. Verified against a real case: a live-version "I Am the Man" that previously shipped as the studio track now selects the correct studio recording.
+
 - Reliability (background jobs): album cover and artist art fetching now runs on a daily schedule in addition to startup — previously a network hiccup at boot left placeholders until the next restart or manual trigger. The library cleanup pass (prune + duplicate removal) now keeps its own 5-minute schedule even when the file watcher is disabled, and the transcode-cache purge is visible in the Workers panel. The Workers panel now shows every background job with its true frequency.
 
 - Reliability (database): the server now keeps a rolling 7-day safety backup of the library database (created at startup before anything touches it), so a failed upgrade or corruption never means total library loss. Restores are a file copy back.

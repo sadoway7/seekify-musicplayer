@@ -173,3 +173,73 @@ func TestCleanupFailedDownload_onlyDeletesMatchingStem(t *testing.T) {
 		}
 	}
 }
+
+func TestScoreSearchResult_liveTopicUploadBeatenByStudio(t *testing.T) {
+	// Real case: the auto-generated Topic upload of the LIVE album stacked
+	// channel+topic+music bonuses and outranked every studio upload; the
+	// downloaded "studio" track was actually a concert recording.
+	liveTopic := ScoreSearchResult("Cry (Live Version (Album Version))", "The Philosopher Kings - Topic", "The Philosopher Kings", "Cry", 264)
+	vevoVideo := ScoreSearchResult("The Philosopher Kings - Cry (Official Video)", "PhilosopherKingsVEVO", "The Philosopher Kings", "Cry", 199)
+	plain := ScoreSearchResult("Philosopher Kings - Cry", "Tauxedo", "The Philosopher Kings", "Cry", 184)
+	if liveTopic >= vevoVideo || liveTopic >= plain {
+		t.Fatalf("live Topic upload must not outrank studio uploads: live=%.0f vevo=%.0f plain=%.0f", liveTopic, vevoVideo, plain)
+	}
+}
+
+func TestScoreSearchResult_livePenaltyWordBoundary(t *testing.T) {
+	live := ScoreSearchResult("I Am The Man (Live Version (Album Version))", "The Philosopher Kings - Topic", "The Philosopher Kings", "I Am the Man", 336)
+	studio := ScoreSearchResult("I Am The Man", "The Philosopher Kings - Topic", "The Philosopher Kings", "I Am the Man", 336)
+	if live >= studio {
+		t.Fatalf("live marker must cost score vs identical studio upload: live=%.0f studio=%.0f", live, studio)
+	}
+	// Words merely containing "live" must NOT be penalized ("believer" has no
+	// "live" token; "Deliverance"/"Olive" DO contain the substring and would
+	// trip a naive guard — avoided here because the expected-title guard is
+	// itself a substring check).
+	ok := ScoreSearchResult("Believer", "Artist", "Artist", "Believer", 200)
+	flagged := ScoreSearchResult("Believer (live)", "Artist", "Artist", "Believer", 200)
+	if flagged >= ok {
+		t.Fatalf("word-boundary live check failed: %.0f vs %.0f", flagged, ok)
+	}
+}
+
+func TestScoreSearchResult_liveWantedNotPenalized(t *testing.T) {
+	wanted := ScoreSearchResult("Cry (Live at Massey Hall)", "The Philosopher Kings - Topic", "The Philosopher Kings", "Cry (Live)", 264)
+	if wanted < 0 {
+		t.Fatalf("user asked for live — must not be penalized into the floor, got %.0f", wanted)
+	}
+}
+
+func TestDurationMatchScore(t *testing.T) {
+	// Real case: studio "I Am The Man" 264s, live Topic upload 336s (127%).
+	if s := DurationMatchScore(336, 264); s >= 0 {
+		t.Fatalf("live-length candidate must be penalized, got %.0f", s)
+	}
+	if s := DurationMatchScore(264, 264); s != 60 {
+		t.Fatalf("exact match must score +60, got %.0f", s)
+	}
+	if s := DurationMatchScore(240, 264); s != 25 {
+		t.Fatalf("close upload variance should score +25, got %.0f", s)
+	}
+	if s := DurationMatchScore(264, 0); s != 0 {
+		t.Fatalf("unknown expected duration must be a no-op, got %.0f", s)
+	}
+	if s := DurationMatchScore(0, 264); s != 0 {
+		t.Fatalf("unknown candidate duration must be a no-op, got %.0f", s)
+	}
+	if s := DurationMatchScore(60, 264); s >= 0 {
+		t.Fatalf("clip-length candidate must be penalized, got %.0f", s)
+	}
+}
+
+func TestScoreSearchResult_durationBeatsTopicBonusStack(t *testing.T) {
+	// End-to-end: the exact case that shipped a live version as the studio
+	// track. Live Topic upload stacks channel+title+topic bonuses but is
+	// 336s vs the known 264s studio length; the plain Topic studio upload
+	// at the right duration must win.
+	live := ScoreSearchResult("I Am The Man (Live Version (Album Version))", "The Philosopher Kings - Topic", "The Philosopher Kings", "I Am the Man", 336) + DurationMatchScore(336, 264)
+	studio := ScoreSearchResult("I Am The Man", "The Philosopher Kings - Topic", "The Philosopher Kings", "I Am the Man", 264) + DurationMatchScore(264, 264)
+	if live >= studio {
+		t.Fatalf("duration signal must beat the Topic bonus stack: live=%.0f studio=%.0f", live, studio)
+	}
+}

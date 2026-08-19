@@ -93,7 +93,7 @@ func BulkImportHandler(w http.ResponseWriter, r *http.Request) {
 			title = strings.TrimSpace(line[idx+3:])
 		}
 
-		job, err := downloads.CreateDownloadJob(u.ID, "", artist, title, "", "", 0, 0, req.OverrideDir, "")
+		job, err := downloads.CreateDownloadJob(u.ID, "", artist, title, "", "", 0, 0, req.OverrideDir, "", 0)
 		if err != nil {
 			log.Printf("[bulk] Skipped %q: %v", line, err)
 			continue
@@ -164,7 +164,7 @@ func PlaylistImportHandler(w http.ResponseWriter, r *http.Request) {
 			wp.ID, videoID, artist, title, status)
 
 		if !inLib {
-			job, _ := downloads.CreateDownloadJob(u.ID, "", artist, title, "", "", 0, 0, "", videoID)
+			job, _ := downloads.CreateDownloadJob(u.ID, "", artist, title, "", "", 0, 0, "", videoID, 0)
 			if job != nil {
 				job.PlaylistID = libraryPlaylistID
 				store.DB.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)

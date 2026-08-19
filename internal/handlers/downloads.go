@@ -227,7 +227,7 @@ func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	job, err := downloads.CreateDownloadJob(
 		userID, req.Query, req.Artist, req.Title, req.Album,
-		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir, "",
+		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir, "", 0,
 	)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -269,6 +269,7 @@ func DownloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
 			AlbumMBID  string `json:"albumMbid"`
 			TrackNum   int    `json:"trackNumber"`
 			TrackTotal int    `json:"trackTotal"`
+			LengthSec  int    `json:"lengthSec"`
 		} `json:"tracks"`
 		OverrideDir string `json:"overrideDir"`
 	}
@@ -293,7 +294,7 @@ func DownloadQueueAddBatchHandler(w http.ResponseWriter, r *http.Request) {
 
 		job, err := downloads.CreateDownloadJob(
 			userID, query, t.Artist, t.Title, t.Album,
-			t.AlbumMBID, t.TrackNum, t.TrackTotal, req.OverrideDir, "",
+			t.AlbumMBID, t.TrackNum, t.TrackTotal, req.OverrideDir, "", t.LengthSec,
 		)
 		if err != nil {
 			log.Printf("[download] Failed to create job for %q: %v", query, err)

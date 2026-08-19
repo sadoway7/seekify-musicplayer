@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"musicapp/internal/models"
 	"musicapp/internal/musicbrainz"
@@ -124,6 +125,10 @@ type DownloadJob struct {
 	Year           string `json:"year,omitempty"`
 	CandidatesJSON string `json:"candidates,omitempty"`
 	UserID         string `json:"userId,omitempty"`
+	// ExpectedDuration is the MusicBrainz track length in seconds when the
+	// job came from a metadata-rich flow (album/artist import). 0 = unknown;
+	// every duration check treats 0 as "no signal, skip".
+	ExpectedDuration int `json:"expectedDuration,omitempty"`
 }
 
 var (
@@ -434,6 +439,7 @@ func InitDownloadTables() {
 		`ALTER TABLE download_jobs ADD COLUMN year TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE download_jobs ADD COLUMN candidates TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE download_jobs ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE download_jobs ADD COLUMN expected_duration INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, m := range migrations {
 		store.DB.Exec(m)
@@ -473,7 +479,7 @@ func DbGetJob(id string) (*DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
-		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id, expected_duration
 		FROM download_jobs WHERE id = ?`, id)
 	return ScanJob(row)
 }
@@ -502,7 +508,7 @@ func dbGetJobs(userID string, limit int, status string) ([]DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
-		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id, expected_duration
 		FROM download_jobs `
 	var args []interface{}
 	whereUser := ""
@@ -555,7 +561,7 @@ func DbGetQueuedJobs() ([]DownloadJob, error) {
 		id, query, artist, title, album, album_mbid, track_number, track_total,
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
-		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id
+		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id, expected_duration
 		FROM download_jobs WHERE status = 'queued' ORDER BY created_at DESC LIMIT 1`)
 	if err != nil {
 		return nil, err
@@ -674,7 +680,7 @@ func ScanJob(row *sql.Row) (*DownloadJob, error) {
 		&j.FilePath, &fileDeleted, &j.ProgressStage,
 		&j.OverrideDir, &j.SearchQuery, &convertFlac,
 		&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt,
-		&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON, &j.UserID)
+		&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON, &j.UserID, &j.ExpectedDuration)
 	if err != nil {
 		return nil, err
 	}
@@ -694,7 +700,7 @@ func ScanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 			&j.FilePath, &fileDeleted, &j.ProgressStage,
 			&j.OverrideDir, &j.SearchQuery, &convertFlac,
 			&j.PlaylistID, &j.VideoID, &j.CreatedAt, &j.CompletedAt,
-			&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON, &j.UserID)
+			&j.Pipeline, &j.RecordingID, &j.ReleaseID, &j.ArtistID, &j.Genre, &j.Year, &j.CandidatesJSON, &j.UserID, &j.ExpectedDuration)
 		if err != nil {
 			continue
 		}
@@ -705,7 +711,7 @@ func ScanJobs(rows *sql.Rows) ([]DownloadJob, error) {
 	return jobs, nil
 }
 
-func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, trackNum, trackTotal int, overrideDir, videoID string) (*DownloadJob, error) {
+func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, trackNum, trackTotal int, overrideDir, videoID string, expectedDurationSec int) (*DownloadJob, error) {
 	var err error
 	overrideDir, err = constrainOverrideDir(overrideDir)
 	if err != nil {
@@ -769,6 +775,7 @@ func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, tr
 		SearchQuery:    searchQuery,
 		ConvertToFlac:  true,
 		VideoID:        videoID,
+		ExpectedDuration: expectedDurationSec,
 		CreatedAt:      time.Now().Format(time.RFC3339),
 		UserID:         userID,
 	}
@@ -989,6 +996,20 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 			log.Printf("[download] Rejected truncated %q: %.0fs < 0.8×%ds", job.SearchQuery, probedDur, expectedDuration)
 			return false
 		}
+		// Wrong-version check: the album import knows the real track length
+		// (MusicBrainz). A live version of the same song runs 15-50% longer —
+		// a 127%-length "I Am The Man" (Live Version) passed every title/
+		// channel heuristic and got tagged as the studio track. 0 = duration
+		// unknown → skip, never blocks.
+		if job.ExpectedDuration > 0 && probedDur > float64(job.ExpectedDuration)*1.25 {
+			os.Remove(audioFile)
+			job.Status = "failed"
+			job.Error = fmt.Sprintf("Wrong version: %.0fs vs %ds expected — likely a live/extended recording", probedDur, job.ExpectedDuration)
+			job.CompletedAt = time.Now().Format(time.RFC3339)
+			DbUpdateJob(job)
+			log.Printf("[download] Rejected wrong version %q: %.0fs > 1.25×%ds", job.SearchQuery, probedDur, job.ExpectedDuration)
+			return false
+		}
 	}
 
 	minBr := store.GetSettingInt("download_min_bitrate", 0)
@@ -1201,7 +1222,7 @@ func downloadFromYouTube(job *DownloadJob) bool {
 		videoID = job.VideoID
 		log.Printf("[download] Using direct video ID %s for %q", videoID, job.SearchQuery)
 	} else {
-		candidates, serr := SearchYouTubeWithTimeout(job.SearchQuery, job.Artist, job.Title, SearchTimeout)
+		candidates, serr := SearchYouTubeWithTimeout(job.SearchQuery, job.Artist, job.Title, SearchTimeout, job.ExpectedDuration)
 		if serr != nil {
 			job.Status = "failed"
 			job.Error = fmt.Sprintf("Search failed: %v", serr)
@@ -1555,10 +1576,10 @@ func downloadFromSoulseek(job *DownloadJob) {
 	}
 }
 
-func SearchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration) ([]YTSearchCandidate, error) {
+func SearchYouTubeWithTimeout(query, expectedArtist, expectedTitle string, timeout time.Duration, expectedDurationSec int) ([]YTSearchCandidate, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	candidates, err := SearchYouTubeScored(ctx, query, expectedArtist, expectedTitle)
+	candidates, err := SearchYouTubeScored(ctx, query, expectedArtist, expectedTitle, expectedDurationSec)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("search timed out after %v", timeout)
@@ -1576,7 +1597,7 @@ type YTSearchCandidate struct {
 	Score    float64 `json:"score"`
 }
 
-func SearchYouTubeScored(ctx context.Context, query, expectedArtist, expectedTitle string) ([]YTSearchCandidate, error) {
+func SearchYouTubeScored(ctx context.Context, query, expectedArtist, expectedTitle string, expectedDurationSec int) ([]YTSearchCandidate, error) {
 	ytdlpPath := FindYtDlp()
 	if ytdlpPath == "" {
 		return nil, fmt.Errorf("yt-dlp not found")
@@ -1670,6 +1691,7 @@ func SearchYouTubeScored(ctx context.Context, query, expectedArtist, expectedTit
 		if r.Extractor == "youtube:music" {
 			s += 25
 		}
+		s += DurationMatchScore(r.Duration, float64(expectedDurationSec))
 		candidates = append(candidates, YTSearchCandidate{
 			VideoID:  r.ID,
 			Title:    r.Title,
@@ -1683,6 +1705,32 @@ func SearchYouTubeScored(ctx context.Context, query, expectedArtist, expectedTit
 	})
 
 	return candidates, nil
+}
+
+// DurationMatchScore scores a candidate's duration against the expected
+// track length (MusicBrainz, seconds). It is the strongest identity signal
+// available: a "Live Version" Topic upload of the same song runs 15-50%
+// longer than the studio recording, and title/channel heuristics can't
+// tell them apart — the clock can. expected == 0 means "unknown" and the
+// function is a no-op (never blocks or penalizes on missing data).
+func DurationMatchScore(candidate, expected float64) float64 {
+	if expected <= 0 || candidate <= 0 {
+		return 0
+	}
+	diff := candidate - expected
+	abs := math.Abs(diff)
+	switch {
+	case abs <= 10: // exact-enough (uploads vary a few seconds of silence)
+		return 60
+	case abs <= expected*0.12: // close — plausible upload variance
+		return 25
+	case diff > expected*0.2: // clearly longer — live/extended/mix
+		return -80
+	case diff < -expected*0.2: // clearly shorter — clip/edit/preview
+		return -80
+	default:
+		return 0 // ambiguous middle band: no opinion
+	}
 }
 
 func ScoreSearchResult(title, channel, expectedArtist, expectedTitle string, duration float64) float64 {
@@ -1735,8 +1783,28 @@ func ScoreSearchResult(title, channel, expectedArtist, expectedTitle string, dur
 	if strings.Contains(t, "remix") && !strings.Contains(strings.ToLower(expectedTitle), "remix") {
 		score -= 40
 	}
-	if strings.Contains(t, "live") && !strings.Contains(strings.ToLower(expectedTitle), "live") {
-		score -= 30
+	// Live-version penalty (unless the user asked for a live track). Must be
+	// strong: auto-generated "- Topic" uploads of LIVE albums stack
+	// channel+topic+music bonuses (+45) on a "Live Version" title and
+	// otherwise outrank the studio recording — e.g. "Cry (Live Version
+	// (Album Version))" beat every studio upload. The audio is a concert
+	// performance even though the tags then get stamped as the studio album.
+	if !strings.Contains(strings.ToLower(expectedTitle), "live") {
+		isLive := false
+		for _, f := range strings.Fields(t) {
+			// Trim punctuation so "(live)" and "live," match as the word
+			// "live"; substring matching would false-positive on "deliver".
+			if strings.Trim(f, "()[]{}.,!?:-\"'") == "live" {
+				isLive = true
+				break
+			}
+		}
+		if !isLive && (strings.Contains(t, "unplugged") || strings.Contains(t, "in concert")) {
+			isLive = true
+		}
+		if isLive {
+			score -= 75
+		}
 	}
 	if strings.Contains(t, "feat.") && !strings.Contains(strings.ToLower(expectedTitle), "feat") {
 		score -= 10

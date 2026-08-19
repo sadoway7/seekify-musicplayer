@@ -47,7 +47,7 @@ func TestCreateDownloadJobEnforcesLimitConcurrently(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			_, err := CreateDownloadJob("user", "", "Artist", fmt.Sprintf("Track %d", i), "", "", 0, 0, "", "")
+			_, err := CreateDownloadJob("user", "", "Artist", fmt.Sprintf("Track %d", i), "", "", 0, 0, "", "", 0)
 			switch {
 			case err == nil:
 				successes.Add(1)
@@ -74,7 +74,7 @@ func TestDbGetQueuedJobsReturnsOnlyNextJob(t *testing.T) {
 	store.SetSetting("download_limit_global", "0")
 
 	for i := 0; i < 3; i++ {
-		if _, err := CreateDownloadJob("user", "", "Artist", fmt.Sprintf("Track %d", i), "", "", 0, 0, "", ""); err != nil {
+		if _, err := CreateDownloadJob("user", "", "Artist", fmt.Sprintf("Track %d", i), "", "", 0, 0, "", "", 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -105,7 +105,7 @@ func TestCreateDownloadJobConstrainsOverrideDir(t *testing.T) {
 	t.Cleanup(func() { store.MusicDir = previousMusicDir })
 
 	t.Run("blank remains blank", func(t *testing.T) {
-		job, err := CreateDownloadJob("user", "", "Artist", "Blank", "", "", 0, 0, "", "")
+		job, err := CreateDownloadJob("user", "", "Artist", "Blank", "", "", 0, 0, "", "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func TestCreateDownloadJobConstrainsOverrideDir(t *testing.T) {
 	})
 
 	t.Run("relative descendant is normalized", func(t *testing.T) {
-		job, err := CreateDownloadJob("user", "", "Artist", "Relative", "", "", 0, 0, filepath.Join("Artist", "Album"), "")
+		job, err := CreateDownloadJob("user", "", "Artist", "Relative", "", "", 0, 0, filepath.Join("Artist", "Album"), "", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +133,7 @@ func TestCreateDownloadJobConstrainsOverrideDir(t *testing.T) {
 		{name: "absolute sibling", dir: outside},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := CreateDownloadJob("user", "", "Artist", "Rejected "+tc.name, "", "", 0, 0, tc.dir, "")
+			_, err := CreateDownloadJob("user", "", "Artist", "Rejected "+tc.name, "", "", 0, 0, tc.dir, "", 0)
 			if !errors.Is(err, ErrInvalidOverrideDir) {
 				t.Fatalf("error = %v, want ErrInvalidOverrideDir", err)
 			}
@@ -145,7 +145,7 @@ func TestCreateDownloadJobConstrainsOverrideDir(t *testing.T) {
 		if err := os.Symlink(outside, link); err != nil {
 			t.Skipf("symlink unavailable: %v", err)
 		}
-		_, err := CreateDownloadJob("user", "", "Artist", "Rejected symlink", "", "", 0, 0, filepath.Join(link, "new-album"), "")
+		_, err := CreateDownloadJob("user", "", "Artist", "Rejected symlink", "", "", 0, 0, filepath.Join(link, "new-album"), "", 0)
 		if !errors.Is(err, ErrInvalidOverrideDir) {
 			t.Fatalf("error = %v, want ErrInvalidOverrideDir", err)
 		}
