@@ -16,7 +16,6 @@ import (
 var (
 	watcherMu        sync.Mutex
 	lastFileSnapshot map[string]audioSnapshot
-	lastPrune        time.Time
 )
 
 type audioSnapshot struct {
@@ -26,7 +25,6 @@ type audioSnapshot struct {
 
 func init() {
 	lastFileSnapshot = make(map[string]audioSnapshot)
-	lastPrune = time.Now()
 }
 
 // CountAudioFiles counts audio files in a directory tree, excluding the
@@ -251,19 +249,6 @@ func CheckAndRescan() {
 		}
 		didWork = true
 	}
-
-	watcherMu.Lock()
-	runPrune := time.Since(lastPrune) > 5*time.Minute
-	if runPrune {
-		lastPrune = time.Now()
-	}
-	watcherMu.Unlock()
-	if runPrune {
-		store.WorkerStart("cleanup")
-		PruneMissingTracks()
-		PruneSharedDirTracks()
-		PruneTruncatedTracks()
-		store.DedupTracks()
-		store.WorkerDone("cleanup", nil)
-	}
+	// Cleanup (prune/dedup) runs on its own 5-minute ticker in server.go —
+	// no longer piggybacked here, so it keeps running with the watcher off.
 }

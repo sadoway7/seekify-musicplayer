@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reliability (background jobs): album cover and artist art fetching now runs on a daily schedule in addition to startup — previously a network hiccup at boot left placeholders until the next restart or manual trigger. The library cleanup pass (prune + duplicate removal) now keeps its own 5-minute schedule even when the file watcher is disabled, and the transcode-cache purge is visible in the Workers panel. The Workers panel now shows every background job with its true frequency.
+
 - Reliability (database): the server now keeps a rolling 7-day safety backup of the library database (created at startup before anything touches it), so a failed upgrade or corruption never means total library loss. Restores are a file copy back.
 
 - Fix (review worker): resolved a background scheduling bug where the metadata-review worker could re-check the same tracks every 2 seconds all day (CPU/database churn, noisy logs) due to a timestamp-format mismatch. Rechecks now occur on their intended schedule.

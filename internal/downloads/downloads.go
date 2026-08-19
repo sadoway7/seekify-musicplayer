@@ -1044,7 +1044,7 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 	}
 	store.Mu.Unlock()
 	if enrichedTrack != nil && enrichedTrack.GenreCanonical == "" && enrichedTrack.GenreSource != "manual" {
-		go enrichDownloadGenre(enrichedTrack.ID, job)
+		store.SafeGo("enrich-download-genre", func() { enrichDownloadGenre(enrichedTrack.ID, job) })
 	}
 
 	// Persist the ffprobe-probed duration immediately. The scanner inserts

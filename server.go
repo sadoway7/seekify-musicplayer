@@ -251,27 +251,61 @@ func main() {
 	store.RegisterWorker("watched-playlists", "Syncs YouTube watched playlists to library", "Every 1 hour", func() {
 		store.SafeGo("watched-refresh-all", func() { watched.RefreshAllWatchedPlaylists() })
 	})
-	store.RegisterWorker("cover-fetch", "Fetches missing album covers from MusicBrainz", "Startup only", func() {
+	store.RegisterWorker("cover-fetch", "Fetches missing album covers from MusicBrainz", "Startup + every 24h", func() {
 		musicbrainz.FetchMissingCovers()
 	})
-	store.RegisterWorker("artist-art-fetch", "Fetches missing artist art from Deezer", "Startup only", func() {
+	store.RegisterWorker("artist-art-fetch", "Fetches missing artist art from Deezer", "Startup + every 24h", func() {
 		musicbrainz.FetchMissingArtistArt()
+	})
+	store.RegisterWorker("transcode-prune", "Purges stale/oversized transcode cache entries", "Every 30 min", func() {
+		transcode.PruneCache()
 	})
 
-	store.SafeGo("fetch-covers", func() {
-		store.WorkerStart("cover-fetch")
-		musicbrainz.FetchMissingCovers()
-		store.WorkerDone("cover-fetch", nil)
-	})
-	store.SafeGo("fetch-artist-art", func() {
-		store.WorkerStart("artist-art-fetch")
-		musicbrainz.FetchMissingArtistArt()
-		store.WorkerDone("artist-art-fetch", nil)
-	})
+	runWorker := func(name string, body func()) {
+		store.SafeGo(name, func() {
+			store.WorkerStart(name)
+			defer store.WorkerDone(name, nil)
+			body()
+		})
+	}
+	runWorker("cover-fetch", func() { musicbrainz.FetchMissingCovers() })
+	runWorker("artist-art-fetch", func() { musicbrainz.FetchMissingArtistArt() })
 	go scanner.StartWatcher()
 	go watched.StartWatchScheduler()
 	go downloads.DownloadWatchdog()
 	go review.StartReviewScheduler()
+
+	// Daily art refresh: the startup fetch is one-shot, and a transient
+	// failure at boot (or art enabled later) previously left placeholders
+	// until the next restart or manual trigger. Both fetchers have their own
+	// overlap guards, so an early run just coalesces.
+	go func() {
+		t := time.NewTicker(24 * time.Hour)
+		for range t.C {
+			if store.GetSettingBool("cover_fetch_enabled", true) {
+				runWorker("cover-fetch", func() { musicbrainz.FetchMissingCovers() })
+			}
+			if store.GetSettingBool("artist_art_fetch_enabled", true) {
+				runWorker("artist-art-fetch", func() { musicbrainz.FetchMissingArtistArt() })
+			}
+		}
+	}()
+
+	// Cleanup owns its schedule — it previously piggybacked on the watcher
+	// tick, so disabling the watcher silently stopped cleanup too.
+	go func() {
+		t := time.NewTicker(5 * time.Minute)
+		for range t.C {
+			store.SafeGo("cleanup-tick", func() {
+				store.WorkerStart("cleanup")
+				defer store.WorkerDone("cleanup", nil)
+				scanner.PruneMissingTracks()
+				scanner.PruneSharedDirTracks()
+				scanner.PruneTruncatedTracks()
+				store.DedupTracks()
+			})
+		}
+	}()
 
 	// Transcode cache: purge stale/oversized entries every 30 minutes. The
 	// cache lives in data/transcode/ and is keyed by track ID + source mtime,
@@ -279,7 +313,7 @@ func main() {
 	go func() {
 		t := time.NewTicker(30 * time.Minute)
 		for range t.C {
-			transcode.PruneCache()
+			store.SafeGo("transcode-prune", func() { transcode.PruneCache() })
 		}
 	}()
 
