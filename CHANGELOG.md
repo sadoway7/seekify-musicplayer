@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- UI (Needs Review): "Rescan Meta, Art & Genres" now processes only the tracks flagged for review shown on that page — previously it scanned the whole library for any track missing a canonical genre, making the run far longer than the page implied.
+
 - Fix (downloads): a rare database hiccup during heavy library scans could crash an in-flight download job with an internal error instead of retrying; download job bookkeeping now tolerates transient database failures.
 
 - UI (Needs Review): filter chips for review categories with zero matching tracks are now hidden — only categories that actually have flagged tracks appear.

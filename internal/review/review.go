@@ -1556,21 +1556,12 @@ func ReviewLogHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(logText))
 }
 
-// ReviewEnrichHandler batch-fetches cover art and metadata for tracks missing
-// canonical genres or flagged for review. Per track: MB metadata search
+// ReviewEnrichHandler batch-fetches cover art and metadata for tracks flagged
+// for review (the Needs Review page's set). Per track: MB metadata search
 // (auto-apply if score >= 0.7), then genre lookup, then cover art.
 func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
-	store.Mu.RLock()
-	var ids []string
-	seen := make(map[string]bool)
-	for _, t := range store.Tracks {
-		if t.GenreCanonical == "" && t.GenreSource != "manual" && !seen[t.ID] {
-			ids = append(ids, t.ID)
-			seen[t.ID] = true
-		}
-	}
-	store.Mu.RUnlock()
-	log.Printf("[review-enrich] handler called, found %d tracks missing canonical genre", len(ids))
+	ids := DbGetTracksByReviewStatus("needs_review", 0)
+	log.Printf("[review-enrich] handler called, found %d tracks needing review", len(ids))
 
 	writeJSON(w, map[string]interface{}{"status": "started", "found": len(ids)})
 
@@ -1597,7 +1588,7 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 		enrichLastError = ""
 
 		if len(ids) == 0 {
-			log.Printf("[review-enrich] no tracks missing canonical genre, aborting")
+			log.Printf("[review-enrich] no tracks need review, aborting")
 			return
 		}
 
