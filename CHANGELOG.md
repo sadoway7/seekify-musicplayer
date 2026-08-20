@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- UI: dragging across the app no longer highlights UI text (cards, rows, buttons behave like a native app). Text fields, download details, and log viewers remain selectable for copying.
+
 - UI (stability): navigating away from the Needs Review page mid-load no longer overwrites the destination view, and review rows loaded late can no longer leak into another view's play queue. Background rescans/rechecks that finish while you're elsewhere now show a completion notice instead of yanking you back to the review page. The downloads badge keeps updating on every screen while downloads run (it previously froze after leaving the finder tab).
 
 - Settings (admin): new Logs tab — view, copy, or download the server log, track log, weekly playback-failure log, and review log without shell access to the container.

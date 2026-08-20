@@ -128,6 +128,11 @@ body {
   touch-action: manipulation;
   text-rendering: optimizeLegibility;
   cursor: default;
+  /* App-like feel: dragging across cards/rows can't highlight UI text.
+     Copyable spots (inputs, job errors/paths, log viewer) opt back in
+     with explicit user-select: text. */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 button {
