@@ -24,6 +24,11 @@
 - Fixes for playlist issues: contents could be lost if an error occurred mid-save, and shared playlists could become hidden from other users after a restart
 - YouTube downloads should more often pick the real music version instead of a music video
 - Faster app start: the app avoids re-downloading the library and cover images it just fetched
+- New Logs tab in admin Settings — view, copy, or download server and review logs without shell access to the container
+- Download reliability: failed sources now fall back correctly on retry, tracks credited to multiple artists ("A, B & C") now match on Soulseek, and the Save File button no longer fails on the first attempt
+- Album imports now check each track's expected length, so live or extended versions are far less likely to replace the studio recording
+- Smoother navigation: background loads finishing while you're elsewhere no longer jump the view around, and dragging in the app no longer highlights text
+- Updated bundled components for performance and stability
 - Friendlier placeholder artwork and general stability, performance, and bug fixes
 
 2026-08-10
