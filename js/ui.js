@@ -1315,7 +1315,10 @@ const UI = {
   _clearPollTimers() {
     if (this._downloadPollTimer) { clearInterval(this._downloadPollTimer); this._downloadPollTimer = null; }
     if (this._reviewPollTimer) { clearInterval(this._reviewPollTimer); this._reviewPollTimer = null; }
-    if (this._downloadPollInterval) { clearInterval(this._downloadPollInterval); this._downloadPollInterval = null; }
+    // NOTE: _downloadPollInterval is deliberately NOT cleared here. It
+    // self-stops when the queue drains (active === 0) and must survive
+    // navigation — killing it on every render left the downloads badge
+    // frozen until the user revisited the finder.
     if (this._reviewScrollObserver) { this._reviewScrollObserver.disconnect(); this._reviewScrollObserver = null; }
     if (this._finderStatusPoll) { clearTimeout(this._finderStatusPoll); this._finderStatusPoll = null; }
     // Bump the generation so any in-flight finder-status poll self-cancels

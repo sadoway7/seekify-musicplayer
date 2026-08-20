@@ -469,6 +469,9 @@ Object.assign(UI, {
       if (retry) retry.addEventListener('click', () => this.renderNeedsReview());
       return;
     }
+    // Late-render guard: if the user navigated away while the queue was
+    // loading, the current view owns the content now — don't clobber it.
+    if (Store.currentView !== 'needs-review') return;
     const tracks = data.tracks || [];
     this._reviewTotal = data.total || 0;
     this._reviewOffset = tracks.length;
@@ -526,7 +529,9 @@ Object.assign(UI, {
             }
           } catch (e) {}
           self._showToast('Rescan complete — refreshing genres and metadata');
-          self.navigateTo('needs-review');
+          // Only re-render the review page if the user is still on it; the
+          // library-version bump already refreshes data everywhere else.
+          if (Store.currentView === 'needs-review') self.navigateTo('needs-review');
           enrichBtn.disabled = false;
           enrichBtn.querySelector('span').textContent = 'Rescan Meta, Art & Genres';
         };
@@ -557,7 +562,11 @@ Object.assign(UI, {
               if (pollCount < 300) { setTimeout(poll, 1500); return; }
             }
           } catch (e) {}
-          self.navigateTo('needs-review');
+          if (Store.currentView === 'needs-review') {
+            self.navigateTo('needs-review');
+          } else {
+            self._showToast('Recheck complete');
+          }
         };
         setTimeout(poll, 1000);
       } catch (e) {
@@ -637,6 +646,10 @@ Object.assign(UI, {
     this._reviewTotal = data.total || this._reviewTotal;
 
     if (more.length > 0) {
+      // Late-load guard: a fetch that resolves after navigation would append
+      // review rows into detached DOM (harmless) AND concat them into the
+      // current view's _viewTrackList — polluting its play-all queue.
+      if (Store.currentView !== 'needs-review') return;
       const container = document.getElementById('review-track-list-container');
       const listEl = container ? container.querySelector('.track-list') : null;
       if (listEl) {
