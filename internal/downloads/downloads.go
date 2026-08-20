@@ -1140,9 +1140,16 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 func ProcessSingleDownload(job *DownloadJob) {
 	source := getDownloadSource()
 
-	// A job already marked Soulseek (e.g. resumed after selection) stays on
-	// the Soulseek path regardless of the global mode.
-	if job.Source == "soulseek" {
+	// A job already marked Soulseek stays on the Soulseek path when it's
+	// resuming a user-acted flow (candidates picked / explicit retry after
+	// selection). A merely-failed search must NOT pin the job: in
+	// soulseek_preferred mode that skipped the YouTube fallback on every
+	// retry, hard-failing tracks YT could supply.
+	if job.Source == "soulseek" && (job.CandidatesJSON != "" || job.VideoID != "") {
+		downloadFromSoulseek(job)
+		return
+	}
+	if job.Source == "soulseek" && source == "soulseek" {
 		downloadFromSoulseek(job)
 		return
 	}

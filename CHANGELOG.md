@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Settings (admin): new Logs tab — view, copy, or download the server log, track log, weekly playback-failure log, and review log without shell access to the container.
+
+- Fix (Soulseek, auto-fallback): in "Auto — Soulseek, then YouTube" mode, a failed Soulseek attempt pinned the job to Soulseek, so retries (and most queued tracks) failed permanently instead of falling back to YouTube. Only jobs with a user-picked Soulseek candidate stay on the Soulseek path now.
+
+- Fix (Soulseek, matching): searches for tracks credited to multiple artists ("A, B & C") never matched — remote files usually credit only the primary artist. Matching now requires the primary artist and ignores extra credited collaborators.
+
+- Fix (user downloads): the Save File / download button served library files with a mismatched length header, which browsers read as a truncated transfer — downloads failed on first attempt and only limped through after pressing resume. File downloads are now served uncompressed with an exact length, matching audio streaming.
+
+- Fix (background): YouTube playlist watching no longer runs automatically. The playlist importer UI is not exposed, but previously saved watched playlists kept triggering hourly YouTube searches and downloads with no way to see or stop them. The feature can be re-enabled with the `watched_enabled` setting; the watch API itself is unchanged.
+
 - Downloads (wrong-version protection): album/artist imports now know each track's real length (from MusicBrainz) and use it two ways — YouTube candidates whose duration closely matches the studio recording are strongly preferred (a "Live Version" upload of the same song runs 15-50% longer and previously won selection on title/channel bonuses alone), and a downloaded file substantially longer than the expected track is rejected automatically. When no length is known (single-track downloads, searches), behavior is unchanged. Verified against a real case: a live-version "I Am the Man" that previously shipped as the studio track now selects the correct studio recording.
 
 - Reliability (background jobs): album cover and artist art fetching now runs on a daily schedule in addition to startup — previously a network hiccup at boot left placeholders until the next restart or manual trigger. The library cleanup pass (prune + duplicate removal) now keeps its own 5-minute schedule even when the file watcher is disabled, and the transcode-cache purge is visible in the Workers panel. The Workers panel now shows every background job with its true frequency.

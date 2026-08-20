@@ -357,13 +357,26 @@ func slskNormalize(s string) string {
 // artist and title. The title is matched on word boundaries so that a short
 // title like "It" does not match inside the word "Hit" in some filename.
 // Used to decide auto-download vs surfacing the picker.
+// slskArtistSegments splits a credited artist string ("Gnarls Barkley, CeeLo
+// Green, & Danger Mouse" / "A & B feat. C") into individual artist names.
+func slskArtistSegments(artist string) []string {
+	var segs []string
+	for _, seg := range strings.FieldsFunc(artist, func(r rune) bool {
+		return r == ',' || r == '&' || r == '/' || r == ';'
+	}) {
+		seg = strings.TrimSpace(seg)
+		seg = strings.TrimPrefix(strings.ToLower(seg), "feat. ")
+		seg = strings.TrimPrefix(strings.ToLower(seg), "ft. ")
+		if seg != "" {
+			segs = append(segs, seg)
+		}
+	}
+	return segs
+}
+
 func slskStrongMatch(cand slskRawCandidate, artist, title string) bool {
 	nf := slskNormalize(cand.Filename)
-	na := slskNormalize(artist)
 	nt := slskNormalize(title)
-	if na != "" && !strings.Contains(nf, na) {
-		return false
-	}
 	if nt != "" {
 		// ponytail: regexp.MatchString recompiles per call; fine here since
 		// strong-match runs over a small candidate list, not a hot path. Upgrade
@@ -372,6 +385,26 @@ func slskStrongMatch(cand slskRawCandidate, artist, title string) bool {
 		if ok, _ := regexp.MatchString(pattern, nf); !ok {
 			return false
 		}
+	}
+	// Artist: remote filenames usually credit only the PRIMARY artist, not
+	// every featured collaborator ("A, B & C - Song" rarely exists remotely
+	// as anything but "A - Song"). Requiring the full credit string made
+	// multi-artist queries strong-match nothing — "Found 18 results" →
+	// "No matching". The primary (first) artist must match; extra credited
+	// artists are allowed to be absent.
+	segs := slskArtistSegments(artist)
+	primary := ""
+	if len(segs) > 0 {
+		primary = slskNormalize(segs[0])
+	}
+	// Cut featured collaborators inside an unsplit segment ("A feat. B").
+	for _, mark := range []string{" feat ", " ft ", " featuring ", " with "} {
+		if i := strings.Index(primary, mark); i > 0 {
+			primary = strings.TrimSpace(primary[:i])
+		}
+	}
+	if primary != "" && !strings.Contains(nf, primary) {
+		return false
 	}
 	return true
 }

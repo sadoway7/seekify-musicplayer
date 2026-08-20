@@ -242,6 +242,14 @@ func StartWatchScheduler() {
 	go func() {
 		for {
 			time.Sleep(1 * time.Hour)
+			// Disabled by default: with the importer UI hidden there is no way
+			// to manage watched playlists, yet legacy rows kept triggering
+			// hourly yt-dlp searches + downloads. watched_enabled re-enables
+			// the whole feature; the /api/watch endpoints stay functional
+			// either way.
+			if !store.GetSettingBool("watched_enabled", false) {
+				continue
+			}
 			func() {
 				defer func() {
 					if r := recover(); r != nil {

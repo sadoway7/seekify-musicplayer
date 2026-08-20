@@ -646,3 +646,21 @@
   .worker-freq { display: none; }
   .worker-last { min-width: 70px; font-size: 12px; }
 }
+
+/* Logs tab viewer */
+.log-viewer {
+  margin-top: 12px;
+  padding: 12px;
+  max-height: 420px;
+  overflow: auto;
+  background: var(--bg2, #161616);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+  color: var(--text2, #ccc);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}

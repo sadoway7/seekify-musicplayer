@@ -248,7 +248,10 @@ func main() {
 	store.RegisterWorker("review", "Flags tracks with missing metadata, duplicates, anomalies", "Every 24h (configurable)", func() {
 		review.WakeReviewWorker()
 	})
-	store.RegisterWorker("watched-playlists", "Syncs YouTube watched playlists to library", "Every 1 hour", func() {
+	store.RegisterWorker("watched-playlists", "Syncs YouTube watched playlists to library", "Every 1 hour (off unless watched_enabled=true)", func() {
+		if !store.GetSettingBool("watched_enabled", false) {
+			return
+		}
 		store.SafeGo("watched-refresh-all", func() { watched.RefreshAllWatchedPlaylists() })
 	})
 	store.RegisterWorker("cover-fetch", "Fetches missing album covers from MusicBrainz", "Startup + every 24h", func() {
@@ -603,7 +606,10 @@ func gzipMiddleware(next http.Handler) http.Handler {
 		gzipable := strings.HasPrefix(p, "/api/") &&
 			!strings.HasPrefix(p, "/api/stream/") &&
 			!strings.HasPrefix(p, "/api/cover/") &&
-			!strings.HasPrefix(p, "/api/artist-art/")
+			!strings.HasPrefix(p, "/api/artist-art/") &&
+			!strings.HasPrefix(p, "/api/download/") &&
+			!strings.HasPrefix(p, "/api/download-job/") &&
+			!strings.HasPrefix(p, "/api/preview/")
 		if !gzipable || !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
 			return

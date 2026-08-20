@@ -116,6 +116,36 @@ func TestSlskStrongMatch(t *testing.T) {
 			title:    "",
 			want:     true,
 		},
+		{
+			// Real production failure: full credit string never appears in
+			// remote filenames — only the primary artist does.
+			name:     "multi-artist credit matches on primary artist",
+			filename: "Gnarls Barkley - Transformer.mp3",
+			artist:   "Gnarls Barkley, CeeLo Green, Danger Mouse",
+			title:    "Transformer",
+			want:     true,
+		},
+		{
+			name:     "feat collaborators are not required",
+			filename: "Groove Armada - Song For Mutya.flac",
+			artist:   "Groove Armada & Mutya Buena",
+			title:    "Song For Mutya",
+			want:     true,
+		},
+		{
+			name:     "feat inside single segment is stripped for primary",
+			filename: "Massive Attack - Teardrop.flac",
+			artist:   "Massive Attack feat. Elizabeth Fraser",
+			title:    "Teardrop",
+			want:     true,
+		},
+		{
+			name:     "wrong primary artist still does not match",
+			filename: "CeeLo Green - Transformer.mp3",
+			artist:   "Gnarls Barkley, CeeLo Green, Danger Mouse",
+			title:    "Transformer",
+			want:     false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

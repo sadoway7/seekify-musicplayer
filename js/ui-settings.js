@@ -36,6 +36,7 @@ Object.assign(UI, {
       + '<option value="library">Library</option>'
       + '<option value="tasks">Tasks</option>'
       + '<option value="users">Users</option>'
+      + '<option value="logs">Logs</option>'
       + '<option value="about">About</option>'
       + '</select></div>';
 
@@ -288,6 +289,23 @@ Object.assign(UI, {
       + '<div id="admin-users-list" class="settings-status">Loading users...</div>'
       + '</div>';
 
+    // --- Tab: Logs ---
+    html += '<div class="settings-tab-panel" data-panel="logs">'
+      + '<div class="settings-section-desc">Server-side logs for troubleshooting. Select one to load it, then copy or download.</div>'
+      + '<div class="settings-actions" style="flex-wrap:wrap;gap:8px">'
+      + '<button class="settings-btn" data-log-source="/api/admin/logs" data-log-name="seekify-server">Server Log</button>'
+      + '<button class="settings-btn" data-log-source="/api/admin/logs?tracks=1" data-log-name="seekify-track-log">Track Log</button>'
+      + '<button class="settings-btn" data-log-source="/api/admin/playback-failures" data-log-name="seekify-playback-failures">Playback Failures</button>'
+      + '<button class="settings-btn" data-log-source="/api/review/log" data-log-name="seekify-review-log">Review Log</button>'
+      + '</div>'
+      + '<div class="settings-actions" style="margin-top:12px;gap:8px">'
+      + '<button class="settings-btn settings-btn-primary" id="btn-copy-log" disabled>' + Icons.check() + '<span>Copy</span></button>'
+      + '<button class="settings-btn settings-btn-primary" id="btn-download-log" disabled>' + Icons.download() + '<span>Download</span></button>'
+      + '<span id="log-viewer-status" class="settings-status"></span>'
+      + '</div>'
+      + '<pre id="log-viewer" class="log-viewer" tabindex="0">Select a log above to view it here.</pre>'
+      + '</div>';
+
     // --- Tab: About ---
     html += '<div class="settings-tab-panel" data-panel="about">'
       + '<div class="settings-about">'
@@ -311,7 +329,13 @@ Object.assign(UI, {
         const panel = this.els.content.querySelector('[data-panel="' + target + '"]');
         if (panel) panel.classList.add('active');
         if (target === 'playback') this._paintWaveformPreview();
+        if (target === 'logs') this._initLogViewer();
       });
+    }
+
+    // Logs tab lazy-inits on first visit.
+    if (this.els.content.querySelector('[data-panel="logs"]').classList.contains('active')) {
+      this._initLogViewer();
     }
 
     this._loadMetadataStatus();
@@ -1313,6 +1337,66 @@ Object.assign(UI, {
     } catch (err) {
       statusEl.innerHTML = '<div class="settings-stat">Could not load status</div>';
     }
+  },
+
+  _initLogViewer() {
+    const viewer = document.getElementById('log-viewer');
+    const copyBtn = document.getElementById('btn-copy-log');
+    const dlBtn = document.getElementById('btn-download-log');
+    const statusEl = document.getElementById('log-viewer-status');
+    if (!viewer || viewer._init) return;
+    viewer._init = true;
+
+    let currentName = '';
+    let currentText = '';
+
+    const refresh = async (btn) => {
+      const source = btn.getAttribute('data-log-source');
+      currentName = btn.getAttribute('data-log-name') || 'log';
+      statusEl.textContent = 'Loading…';
+      try {
+        const res = await fetch(source);
+        if (!res.ok) throw new Error(res.status);
+        currentText = await res.text();
+        viewer.textContent = currentText || '(empty log)';
+        viewer.scrollTop = 0;
+        copyBtn.disabled = !currentText;
+        dlBtn.disabled = !currentText;
+        statusEl.textContent = currentText ? currentText.split('\n').length + ' lines' : '';
+      } catch (e) {
+        currentText = '';
+        viewer.textContent = 'Failed to load log (' + e.message + ')';
+        copyBtn.disabled = true;
+        dlBtn.disabled = true;
+        statusEl.textContent = '';
+      }
+    };
+
+    viewer.closest('.settings-tab-panel').querySelectorAll('[data-log-source]').forEach(btn => {
+      btn.addEventListener('click', () => refresh(btn));
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      if (!currentText) return;
+      try {
+        await navigator.clipboard.writeText(currentText);
+        statusEl.textContent = 'Copied';
+      } catch (e) {
+        viewer.focus();
+        document.execCommand('selectAll');
+        statusEl.textContent = 'Select + copy manually';
+      }
+    });
+
+    dlBtn.addEventListener('click', () => {
+      if (!currentText) return;
+      const blob = new Blob([currentText], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = currentName + '.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
   },
 
   async _startMetadataScan() {
