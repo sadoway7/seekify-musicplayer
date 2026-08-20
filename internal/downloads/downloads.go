@@ -872,7 +872,11 @@ func ProcessDownloadQueue() {
 		}
 
 		job := &jobs[0]
-		res, _ := store.DB.Exec(`UPDATE download_jobs SET status='searching' WHERE id=? AND status='queued'`, job.ID)
+		res, err := store.DB.Exec(`UPDATE download_jobs SET status='searching' WHERE id=? AND status='queued'`, job.ID)
+		if err != nil {
+			releaseSlot()
+			return
+		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			// Someone else claimed it — release slot and loop to try next.
 			releaseSlot()
@@ -2312,9 +2316,11 @@ func RecoverStalledDownloads() {
 				log.Printf("[download] Recovered stalled job %s as completed (file exists on disk)", id)
 			}
 		}
-		result, _ := store.DB.Exec("UPDATE download_jobs SET status = 'queued', progress_stage = '', error = '' WHERE status = ?", status)
-		if affected, _ := result.RowsAffected(); affected > 0 {
-			log.Printf("[download] Recovered %d stalled %s jobs back to queued", affected, status)
+		result, err := store.DB.Exec("UPDATE download_jobs SET status = 'queued', progress_stage = '', error = '' WHERE status = ?", status)
+		if err == nil {
+			if affected, _ := result.RowsAffected(); affected > 0 {
+				log.Printf("[download] Recovered %d stalled %s jobs back to queued", affected, status)
+			}
 		}
 	}
 	go ProcessDownloadQueue()

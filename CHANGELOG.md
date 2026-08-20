@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix (downloads): a rare database hiccup during heavy library scans could crash an in-flight download job with an internal error instead of retrying; download job bookkeeping now tolerates transient database failures.
+
+- UI (Needs Review): filter chips for review categories with zero matching tracks are now hidden — only categories that actually have flagged tracks appear.
+
 - Internal (dependencies): updated the embedded SQLite engine (modernc.org/sqlite v1.51.0 → v1.57.0) and crypto libraries (golang.org/x/crypto v0.53.0 → v0.55.0). Brings upstream SQLite correctness and performance fixes; no API, schema, or behavior changes.
 
 - UI: dragging across the app no longer highlights UI text (cards, rows, buttons behave like a native app). Text fields, download details, and log viewers remain selectable for copying.

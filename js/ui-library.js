@@ -472,6 +472,7 @@ Object.assign(UI, {
     // Late-render guard: if the user navigated away while the queue was
     // loading, the current view owns the content now — don't clobber it.
     if (Store.currentView !== 'needs-review') return;
+    try { Store.reviewCounts = await Api.getReviewCounts(); } catch(e) {}
     const tracks = data.tracks || [];
     this._reviewTotal = data.total || 0;
     this._reviewOffset = tracks.length;
@@ -586,10 +587,12 @@ Object.assign(UI, {
       'very_short_title', 'very_long_title', 'no_duration', 'short_duration', 'long_duration',
       'potential_duplicate', 'playback_error', 'corrupt_audio'
     ];
+    const flagCounts = (Store.reviewCounts && Store.reviewCounts.flags) || null;
+    const visible = flagCounts ? flags.filter(f => flagCounts[f] > 0 || active.indexOf(f) !== -1) : flags;
     let html = '<div class="review-filter-chips">';
     const allActive = active.length === 0;
     html += '<button class="review-filter-chip' + (allActive ? ' active' : '') + '" data-flag="">All</button>';
-    for (const f of flags) {
+    for (const f of visible) {
       const isOn = active.indexOf(f) !== -1;
       html += '<button class="review-filter-chip' + (isOn ? ' active' : '') + '" data-flag="' + f + '">' + ReviewUI.flagLabel(f) + '</button>';
     }

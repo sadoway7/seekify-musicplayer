@@ -239,6 +239,26 @@ func TestDbUpdateTrackMetaAcceptsMultipleGenres(t *testing.T) {
 	}
 }
 
+func TestDbGetReviewFlagCounts(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
+	InitReviewTables()
+
+	DbSetReviewStatus("a", "needs_review", `["missing_title","no_cover"]`, "worker")
+	DbSetReviewStatus("b", "needs_review", `["missing_title"]`, "worker")
+	DbSetReviewStatus("c", "reviewed_ok", `["missing_title"]`, "worker") // must not count
+
+	counts := DbGetReviewFlagCounts()
+	if counts["missing_title"] != 2 {
+		t.Errorf("missing_title = %d, want 2", counts["missing_title"])
+	}
+	if counts["no_cover"] != 1 {
+		t.Errorf("no_cover = %d, want 1", counts["no_cover"])
+	}
+	if counts["suspicious_video"] != 0 {
+		t.Errorf("unflagged flag = %d, want 0", counts["suspicious_video"])
+	}
+}
+
 func TestDbGetStaleReviewTracks(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
 	InitReviewTables()

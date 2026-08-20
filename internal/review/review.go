@@ -1343,8 +1343,33 @@ func ReviewTracksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ReviewCountsHandler(w http.ResponseWriter, r *http.Request) {
-	counts := DbGetReviewCounts()
-	writeJSON(w, counts)
+	resp := map[string]interface{}{"flags": DbGetReviewFlagCounts()}
+	for k, v := range DbGetReviewCounts() {
+		resp[k] = v
+	}
+	writeJSON(w, resp)
+}
+
+// DbGetReviewFlagCounts tallies per-flag counts across needs_review tracks.
+func DbGetReviewFlagCounts() map[string]int {
+	counts := map[string]int{}
+	rows, err := store.DB.Query("SELECT flags FROM track_reviews WHERE status = 'needs_review'")
+	if err != nil {
+		return counts
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var flagsJSON string
+		if rows.Scan(&flagsJSON) != nil {
+			continue
+		}
+		var flags []string
+		json.Unmarshal([]byte(flagsJSON), &flags)
+		for _, f := range flags {
+			counts[f]++
+		}
+	}
+	return counts
 }
 
 func ReviewMarkOkHandler(w http.ResponseWriter, r *http.Request) {

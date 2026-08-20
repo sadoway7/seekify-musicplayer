@@ -83,7 +83,10 @@ func recordSlskSpeed(username string, bps float64) {
 		avg = avg + slskSpeedEMA*(bps-avg)
 	}
 	samples++
-	res, _ := tx.Exec(`UPDATE slsk_peer_speed SET avg_bps=?, samples=?, last_seen=? WHERE username=?`, avg, samples, now, username)
+	res, err := tx.Exec(`UPDATE slsk_peer_speed SET avg_bps=?, samples=?, last_seen=? WHERE username=?`, avg, samples, now, username)
+	if err != nil {
+		return
+	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		if _, err := tx.Exec(`INSERT INTO slsk_peer_speed (username, avg_bps, samples, last_seen) VALUES (?, ?, ?, ?)`, username, avg, samples, now); err != nil {
 			return
