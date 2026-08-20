@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Internal (dependencies): updated the embedded SQLite engine (modernc.org/sqlite v1.51.0 → v1.57.0) and crypto libraries (golang.org/x/crypto v0.53.0 → v0.55.0). Brings upstream SQLite correctness and performance fixes; no API, schema, or behavior changes.
+
 - UI: dragging across the app no longer highlights UI text (cards, rows, buttons behave like a native app). Text fields, download details, and log viewers remain selectable for copying.
 
 - UI (stability): navigating away from the Needs Review page mid-load no longer overwrites the destination view, and review rows loaded late can no longer leak into another view's play queue. Background rescans/rechecks that finish while you're elsewhere now show a completion notice instead of yanking you back to the review page. The downloads badge keeps updating on every screen while downloads run (it previously froze after leaving the finder tab).
