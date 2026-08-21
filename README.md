@@ -9,13 +9,24 @@ Seekify is a music player you run yourself. Point it at your music and listen
 in any browser. It can also find and download tracks you don't have yet, tag
 them, and keep your library tidy.
 
-<br>
+</div>
 
-<details>
-<summary><h2>see it on a phone</h2></summary>
+---
 
-The whole thing works on a phone too. Open it in the browser, or install it as
-an app for a full-screen player.
+<sub>Screenshots are a snapshot, not a promise. The interface keeps moving.</sub>
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/01-home-library.png" width="420" alt="home library"><br><sub>home</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/02-now-playing-menu.png" width="420" alt="now playing + menu"><br><sub>now playing</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/05-downloads-all.png" width="420" alt="downloads queue"><br><sub>live download queue</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/07-artist-albums.png" width="420" alt="artist albums"><br><sub>artist / albums</sub></td>
+  </tr>
+</table>
+
+**on a phone**
 
 <table>
   <tr>
@@ -24,6 +35,30 @@ an app for a full-screen player.
     <td width="25%" align="center"><img src="docs/screenshots/mobile-03.png" width="180" alt="mobile UI"></td>
     <td width="25%" align="center"><img src="docs/screenshots/mobile-04.png" width="180" alt="mobile UI"></td>
   </tr>
+</table>
+
+Install it as an app on a phone for a full-screen player with lock-screen and
+media-key controls.
+
+<details>
+<summary>More screenshots</summary>
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/03-now-playing-history.png" width="420" alt="now playing + history"><br><sub>history</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/04-downloads-done.png" width="420" alt="downloads done"><br><sub>done</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/06-bulk-import.png" width="420" alt="bulk import"><br><sub>bulk import</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/08-artist-tracks.png" width="420" alt="artist tracks"><br><sub>artist / tracks</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/09-home-artists.png" width="420" alt="home artists + favorites"><br><sub>favorites + new</sub></td>
+    <td width="50%" align="center"></td>
+  </tr>
+</table>
+
+<table>
   <tr>
     <td width="25%" align="center"><img src="docs/screenshots/mobile-05.png" width="180" alt="mobile UI"></td>
     <td width="25%" align="center"><img src="docs/screenshots/mobile-06.png" width="180" alt="mobile UI"></td>
@@ -40,169 +75,98 @@ an app for a full-screen player.
 
 </details>
 
-<br>
+## What It Does
 
-<details>
-<summary><h2>see it on a computer</h2></summary>
+- browse albums, artists, playlists and favorites, with a play history, a
+  waveform seekbar, shuffle and repeat
+- plays any format in any browser: if the browser can't handle it (FLAC on
+  iPhone, ALAC in Chrome), the server converts it on the fly
+- a full-screen audio-reactive visualizer, written in raw WebGL2 shaders and
+  tinted to the current album cover
+- browse an artist's whole catalogue, see which tracks you already have, and
+  rip the rest with one tap; Rip More jumps there straight from now-playing
+- search for a track or a whole album, paste a YouTube, SoundCloud or
+  Bandcamp link, or paste a list of songs and bulk-rip them all; downloads
+  come from Soulseek or YouTube, whichever you prefer, and every job shows
+  its progress live
+- when a download fails or arrives corrupt, the next candidate takes over,
+  and live or wrong versions of a song get rejected in favor of the studio
+  recording
+- downloads are tagged and sorted into artist and album folders for you; a
+  needs-attention view flags missing info, messy names, duplicates and bad
+  artwork; fix problems inline, and a track you approve stays approved
+- tags, artwork and lyrics are written into the audio files themselves, so
+  anything you rip stays fully tagged if it ever leaves Seekify
+- send someone a playlist link and they can play it in their browser; upload
+  your own cover art when the official one is wrong
+- first run sets up an admin account; each user you add gets their own
+  playlists, favorites and history, and visitors can still listen
+- a rolling 7-day backup of your library database
+- an admin log viewer for seeing what the server has been up to
 
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/01-home-library.png" width="420" alt="home library"><br><sub>home</sub></td>
-    <td width="50%" align="center"><img src="docs/screenshots/02-now-playing-menu.png" width="420" alt="now playing + menu"><br><sub>now playing</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/05-downloads-all.png" width="420" alt="downloads all"><br><sub>live queue</sub></td>
-    <td width="50%" align="center"><img src="docs/screenshots/06-bulk-import.png" width="420" alt="bulk import"><br><sub>bulk import</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/04-downloads-done.png" width="420" alt="downloads done"><br><sub>done</sub></td>
-    <td width="50%" align="center"><img src="docs/screenshots/07-artist-albums.png" width="420" alt="artist albums"><br><sub>artist / albums</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/08-artist-tracks.png" width="420" alt="artist tracks"><br><sub>artist / tracks</sub></td>
-    <td width="50%" align="center"><img src="docs/screenshots/09-home-artists.png" width="420" alt="home artists + favorites"><br><sub>favorites + new</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/03-now-playing-history.png" width="420" alt="now playing + history"><br><sub>history</sub></td>
-    <td width="50%" align="center"></td>
-  </tr>
-</table>
+## Getting Started
 
-</details>
+The quickest start, from a clone of this repo:
 
-<br>
+```sh
+./scripts/start.sh        # installs helpers if missing, builds, and runs
+```
 
-<sub>Screenshots are from an early beta, June 2026. The interface keeps moving, so what's here is a snapshot, not a promise.</sub>
+Then:
 
-</div>
+1. Seekify opens at **http://localhost:8081**. Create the admin account on
+   first run.
+2. Put music in the folder it's watching (`./music` next to the app, or
+   whatever `MUSIC_DIR` points at). Anything you already have works: it
+   reads the tags, finds cover art, and builds the library on its own.
+3. Press play.
+4. Missing something? Search for it and rip it. Downloads arrive tagged,
+   sorted, and ready to play.
 
----
+To stop it later: `./scripts/stop.sh` (Mac/Linux), `stop.bat` (Windows), or
+just close it. Windows users can double-click `start.bat`; the `scripts/`
+folder also has a Mac double-click starter.
 
-## the player
-- browse albums, artists, playlists, and favorites, with a history of what you've played
-- now-playing screen with a waveform, queue, shuffle, and repeat
-- floating mini-player; lock-screen and media-key controls when you install it as an app
-- per-track menu to queue, add to a playlist, fix the tags, jump to the album or artist, or favorite
-
-## the visualizer
-- a full-screen, audio-reactive visualizer written in raw WebGL2 fragment shaders
-- it reads the live audio through an `AnalyserNode` tapped off the player, so what you see is what you hear
-- the palette tints to the current album cover, so the visualizer matches the rest of the now-playing screen
-- more shader looks can be dropped in; each one is a self-contained GLSL program
-
-## the ripper
-- search for a single track or a whole album and download it
-- pull from Soulseek or YouTube, and you choose which to prefer
-- bulk import: paste a list of songs and download them all at once
-- watch each job live, from searching to downloading to tagging to done
-
-## guided scraping
-- point Seekify at a YouTube playlist and it watches it for you: every new video is fetched, tagged, and filed into your library automatically
-- watched playlists sync on a schedule, so a playlist you follow keeps feeding your library new tracks as they appear
-- the ripper's job queue shows every step of the pipeline, so you see search, download, tag, and sort as they happen
-- you stay in control: pause a playlist, drop one you've stopped following, or re-point one at any time
-
-## housekeeping
-- downloaded music is tagged and sorted into artist and album folders for you
-- a needs-attention view flags the rough stuff: missing info, messy names, duplicates, missing artwork
-- fix problems inline, fetch new artwork, or re-look-up the details
-- approve a track once and it stays approved
-
-## how to use it
-1. put your music files in your music folder
-2. open Seekify in a browser and your library shows up on its own
-3. press play; search for and download anything you're missing
-4. keep the needs-attention list tidy and your library stays clean
-
-## runs anywhere
-Seekify runs as one program and works on its own. Optional helpers add more,
-and it runs fine without them: yt-dlp for YouTube, ffmpeg for converting and
-waveforms, and python for Soulseek. Everything else, like download format, sources,
-Soulseek login, and what the needs-attention checker looks for, you set inside
-the app.
+Once running, Seekify runs as one program and works on its own; yt-dlp for
+YouTube, ffmpeg for converting and waveforms, and python for Soulseek are
+optional helpers, and it runs fine without them. Everything else (download
+format, sources, Soulseek login, what the needs-attention checker looks for)
+you set inside the app. There's also an example GitLab pipeline that builds a
+Docker image for an Unraid-style server. Reaching it from the internet and
+starting it on boot are yours to set up.
 
 > **Soulseek account**: you need a Soulseek account before you can use the
-> Soulseek download source. Seekify logs in with one you already have — it does
-> not register one for you. Create an account in a regular Soulseek client first
-> (such as [Nicotine+](https://nicotine-plus.org) or the official Soulseek
-> client), then enter those credentials in Seekify's settings. You can uninstall
-> the client afterward. (Seekify may one day create the account for you; it
-> can't yet.)
+> Soulseek download source. Seekify can register one for you in Settings, or
+> you can log in with an account you already have.
 
-## scripts
-The scripts folder has simple start and stop scripts: a version for Mac and
-Linux (start.sh / stop.sh), one for Windows (start.bat / stop.bat), and a
-double-click starter for Mac. They install anything Seekify needs, build it,
-and run it, or stop it.
+<details>
+<summary>The .env file</summary>
 
-## the .env file
-`.env` is a plain-text settings file that sits next to the app. It's a short, optional
-list of preferences, one per line, written as `NAME=value`. Open it in any text
-editor, change a value, and save. You don't need it to run; it's there for the
-few things you might want to set before starting.
-
-If you ever lose it or mess it up, here's the whole file to copy back in:
+`.env` is an optional plain-text settings file (`NAME=value`, one per line)
+that sits next to the app. Real environment variables override it.
 
 ```
-# Copy to .env and edit. Real environment variables override this file.
-
-# A passcode that locks the settings screen (download options, Soulseek login,
-# and the like). It does not lock the player or your music; those stay open.
-# No effect unless you switch ADMIN_AUTH_ENABLED on below.
-ADMIN_PASSCODE=
-
-# Switch this to true to ask for the passcode before opening settings.
-# Off (the default) means settings are open, just like the rest of Seekify.
+ADMIN_PASSCODE=          # locks the settings screen only (with ADMIN_AUTH_ENABLED=true)
 ADMIN_AUTH_ENABLED=false
-
-# Primary music library directory.
-MUSIC_DIR=./music
-
-# Optional secondary read-only library (mounted with a "media:" prefix).
-# MEDIA_MUSIC_DIR=
-
-# HTTP listen port.
+MUSIC_DIR=./music        # primary music library
+# MEDIA_MUSIC_DIR=       # optional secondary read-only library
 PORT=8081
 ```
 
-Everything else, like download format, sources, Soulseek login, and the
-needs-attention checker, lives in the app's own settings screen. That screen is
-the only thing a passcode guards; your music and the player stay open either way.
-And if you set the same thing as a real environment variable on your system, that
-takes priority.
+The passcode guards the settings screen only, never the player or your music.
 
-## running it
-Once it's running, Seekify lives at **http://localhost:8081** on the machine you
-started it on. It's local access for you and anything else on that machine.
+</details>
 
-There's an example GitLab pipeline (the `.gitlab-ci.yml` file) that builds a
-Docker image and drops it on an Unraid-style server. It's just an example. Use
-it, adapt it, or ignore it.
+## Roadmap & Changelog
 
-A couple of things are on you, and a little beyond what Seekify covers:
+Seekify moves fast; what's in `main` is the app. Things being looked at live
+in [ROADMAP.md](ROADMAP.md); what changed lives in
+[CHANGELOG.md](CHANGELOG.md).
 
-- **reaching it from the internet**: opening it up to the outside world means
-  setting up port forwarding on your router. That's between you and your network.
-- **starting it automatically**: Seekify runs while you start it. Making it
-  launch on boot is something you set up with your own operating system.
+## Credits
 
-## roadmap
-Seekify moves fast and changes often. There's no version number to chase; what's
-in `main` is the app. Things being looked at (not promised, not scheduled) are
-listed in [ROADMAP.md](ROADMAP.md). If a thing lands, it lands; if it doesn't,
-the roadmap said so up front.
-
-## changelog
-This project doesn't ship numbered releases. Instead there's a running
-[CHANGELOG.md](CHANGELOG.md) of what changed, grouped by date. There's always an
-`Unreleased` block at the top for whatever's in flight, and dated entries below
-for what's already out. It's a log, not a version stamp.
-
-## credits
 Written in Go, with a vanilla JavaScript and CSS front end, plus a little
-Python and shell.
-
-Powered by:
+Python and shell. It's powered by:
 
 - [aioslsk](https://pypi.org/project/aioslsk/): Soulseek downloads
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp): YouTube downloads

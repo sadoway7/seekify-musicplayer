@@ -16,6 +16,15 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-08-20
+- Faster app open: startup requests run in parallel, app assets are cached between releases, and opening the app with an unchanged library skips the full library re-download — most of the wait before the app was usable is gone
+- The installed app and PWA open with the app's dark background instead of a white flash, and the browser tint matches the app theme on every screen
+- Apple Lossless (.m4a ALAC) tracks now play in Chrome and other browsers — the server detects them and serves a browser-playable copy automatically
+- The Server Log and Track Log in admin Settings no longer come up empty after the app has been running for a while
+- The Needs Review filter counts stay accurate after files are removed from the library
+- Installed app launches reliably reuse the running app instead of occasionally opening a duplicate tab
+- General stability and bug fixes
+
 2026-08-19
 - Playback dependability work: hardened the audio streaming pipeline against stalled encoders, extended load timeouts for slower connections, and fixed pausing during a slow load jumping to the next song
 - Album art fetching now retries on a daily schedule instead of only at startup, so a network hiccup at boot should no longer leave placeholder covers until the next restart

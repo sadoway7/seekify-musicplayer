@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- UI (navbar): the Home / Ripper / Library tab icons were replaced with a new custom "scan glitch" icon set — the active tab's icon gets a short glitch/scanline select animation and a settled glitched resting look.
+
+- UI (mobile): the browser address-bar/app tint now matches the app's dark background exactly on all screens (a slightly lighter shade was used in two places).
+
+- UI (PWA): installed-app identity is now pinned in the app manifest, so home-screen launches reliably open the installed app instead of occasionally spawning a duplicate browser tab.
+
+- UI (Needs Review): per-category filter counts no longer include entries for tracks that are no longer in the library — the chips and their badge counts can't disagree after files are removed.
+
+- Fix (stability): a transient database hiccup during startup or while deleting a playlist could crash the affected operation with an internal error instead of recovering cleanly. Both paths now tolerate the failure and continue.
+
+- Performance (app open): the app now opens noticeably faster. Startup requests run in parallel instead of sequentially, and app assets (JS/CSS) are cached between releases instead of re-downloading on every open — only a deploy changes them. The ripper page's assets are now versioned per release too, so they can never go stale. Opening the app with an unchanged library now skips the full library re-download entirely (a tiny revalidation check replaces a multi-megabyte transfer), and review changes (approvals, flags) refresh the library for open tabs immediately.
+
+- UI (PWA): the installed app opens with the app's dark background instead of a white flash.
+
+- Fix (logs): the Server Log and Track Log in Settings → Logs showed empty or near-empty output once the server had been running for a while — the in-memory log buffer discarded its entire contents instead of the oldest lines when full. Logs now keep the most recent content as intended.
+
+- Fix (playback): Apple Lossless (ALAC) .m4a tracks failed to play in Chrome and some other browsers (format error) because the browser claimed support for the container while unable to decode the codec. The server now detects ALAC files and transparently serves a browser-playable AAC copy.
+
 - UI (Needs Review): "Rescan Meta, Art & Genres" now processes only the tracks flagged for review shown on that page — previously it scanned the whole library for any track missing a canonical genre, making the run far longer than the page implied.
 
 - Fix (downloads): a rare database hiccup during heavy library scans could crash an in-flight download job with an internal error instead of retrying; download job bookkeeping now tolerates transient database failures.
