@@ -17,6 +17,9 @@
   <Changes>Changelog
 
 2026-08-20
+- Fresh new tab bar: custom icon set with a glitch/scanline accent on the active tab
+- Search and artist pages show content-shaped loading placeholders instead of a lone spinner, so the layout no longer jumps when results arrive
+- Signed-out visitors see a playable sample of the library on the home screen instead of an empty page
 - Faster app open: startup requests run in parallel, app assets are cached between releases, and opening the app with an unchanged library skips the full library re-download — most of the wait before the app was usable is gone
 - The installed app and PWA open with the app's dark background instead of a white flash, and the browser tint matches the app theme on every screen
 - Apple Lossless (.m4a ALAC) tracks now play in Chrome and other browsers — the server detects them and serves a browser-playable copy automatically

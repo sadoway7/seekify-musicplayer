@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- UI (Ripper): search results and the artist tracklist now show content-shaped skeleton rows while loading instead of a lone spinner — the layout no longer jumps when results arrive.
+
+- UI (home): signed-out visitors now see a playable sample strip (shuffle card plus random tracks with cover art) below the welcome banner instead of an empty page.
+
+- UI (navbar): the Ripper tab's download-count badge keeps its own colors when the tab is active — the active-label color no longer bleeds into the count.
+
 - UI (navbar): the Home / Ripper / Library tab icons were replaced with a new custom "scan glitch" icon set — the active tab's icon gets a short glitch/scanline select animation and a settled glitched resting look.
 
 - UI (mobile): the browser address-bar/app tint now matches the app's dark background exactly on all screens (a slightly lighter shade was used in two places).

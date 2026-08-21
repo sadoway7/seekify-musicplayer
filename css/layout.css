@@ -153,6 +153,13 @@ body.mini-player-visible #app-content {
   color: var(--accent);
 }
 
+/* The badge keeps its own colors even when the tab is active — the label
+   rule above must not restyle the count. */
+.tab-item .tab-badge,
+.tab-item.active .tab-badge {
+  color: #0a0b0a;
+}
+
 .tab-item.active svg {
   transform: scale(1.08);
 }

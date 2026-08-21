@@ -141,6 +141,32 @@ Object.assign(UI, {
         cta += '<button id="home-cta-register" style="padding:11px 26px;border:none;border-radius:999px;background:transparent;color:var(--text-primary);font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer">Create account</button>';
       }
       cta += '</div></div></div>';
+      // Guests still get a playable strip below the banner so the page
+      // doesn't feel empty — random picks each load, with cover art.
+      const withArt = Store.library.tracks.filter(t => t.artist && t.artist !== 'Unknown' && t.albumID && Store.getAlbum(t.albumID) && Store.getAlbum(t.albumID).hasCover);
+      if (withArt.length > 0) {
+        const pool = withArt.slice();
+        const max = Math.min(pool.length, 7);
+        const picks = [];
+        while (picks.length < max) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        let sample = '<div class="mega-title" style="margin-top:24px"><span>Recently Played</span></div>';
+        sample += '<div class="quick-play-grid" style="margin-top:24px">';
+        sample += '<div class="quick-play-card quick-play-card-shuffle" data-action="shuffle-all" aria-label="Shuffle all">'
+          + '<div class="quick-play-art">'
+          + '<div class="shuffle-die-stage">'
+          + '<img class="shuffle-die-fallback" src="/assets/shuffle-die.png" alt="" aria-hidden="true">'
+          + '<canvas class="shuffle-die-canvas" aria-hidden="true"></canvas>'
+          + '</div></div>'
+          + '</div>';
+        picks.forEach(t => {
+          sample += '<div class="quick-play-card quick-play-card-recent" data-track-id="' + t.id + '" data-album-id="' + (t.albumID || t.id) + '">'
+            + '<div class="quick-play-art"><img src="' + Api.coverUrl(t.albumID) + '" alt=""></div>'
+            + '<div class="quick-play-title">' + this._esc(this._trackTitle(t)) + '</div>'
+            + '</div>';
+        });
+        sample += '</div>';
+        cta += sample;
+      }
       return cta;
     }
     const recentTracks = Store.recent.map(id => Store.getTrack(id)).filter(Boolean);

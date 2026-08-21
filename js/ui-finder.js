@@ -714,7 +714,29 @@ Object.assign(UI, {
       return;
     }
 
-    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+    // Skeleton rows shaped like real results (art + title + subtitle) so the
+    // layout doesn't jump when the response lands. Art and trailing element
+    // match the result type (artists: circle art + badge block; songs: square
+    // art + download pill).
+    const isArtistType = type === 'artist';
+    const artClass = isArtistType ? 'finder-item-art round' : 'finder-item-art';
+    const artRadius = isArtistType ? 'border-radius:50%;' : 'border-radius:10px;';
+    const tail = isArtistType
+      ? '<div style="display:flex;gap:6px;flex-shrink:0"><div class="skeleton" style="width:58px;height:20px;border-radius:999px"></div><div class="skeleton" style="width:34px;height:20px;border-radius:999px"></div></div>'
+      : '<div class="skeleton" style="width:76px;height:28px;border-radius:999px;flex-shrink:0"></div>';
+    let skeletonRows = '';
+    const prevCount = (this._finderResults && this._finderResults.length) || 8;
+    for (let i = 0; i < Math.min(prevCount, 12); i++) {
+      skeletonRows += '<div class="finder-item finder-item-skeleton">'
+        + '<div class="' + artClass + ' skeleton" style="' + artRadius + '"></div>'
+        + '<div class="finder-item-info">'
+        + '<div class="skeleton" style="height:14px;width:' + (45 + (i * 13) % 30) + '%"></div>'
+        + '<div class="skeleton" style="height:11px;width:' + (25 + (i * 7) % 20) + '%;margin-top:6px"></div>'
+        + '</div>'
+        + tail
+        + '</div>';
+    }
+    container.innerHTML = '<div class="finder-list">' + skeletonRows + '</div>';
 
     try {
       if (type === 'recording' || type === 'youtube') {
@@ -956,7 +978,7 @@ Object.assign(UI, {
       + '<button class="lib-tab' + (this._artistView === 'downloads' ? ' active' : '') + '" data-artist-tab="downloads">Downloads</button>'
       + '</div>'
       + '<div id="finder-artist-content">'
-      + '<div id="artist-tracklist-panel"><div class="loading-spinner" style="margin:40px auto"></div></div>'
+      + '<div id="artist-tracklist-panel">' + this._tracklistSkeleton() + '</div>'
       + '<div id="artist-albums-panel" style="display:none"></div>'
       + '</div>';
 
@@ -1039,12 +1061,15 @@ Object.assign(UI, {
     this._artistTrackCache = [];
     this._artistTrackTotal = 0;
 
-    container.innerHTML = '<div style="padding:32px 22px;text-align:center">'
-      + '<div style="max-width:280px;margin:0 auto">'
+    container.innerHTML = '<div id="tracklist-loading">'
+      + '<div class="tracklist-toolbar">'
+      + '<div style="max-width:280px;flex:1">'
       + '<div class="progress-bar-track"><div class="progress-bar-fill" style="animation:progress-pulse 1.8s ease-in-out infinite"></div></div>'
-      + '<div style="color:var(--text2);font-size:14px;margin-top:16px;font-weight:500">Finding popular tracks&hellip;</div>'
-      + '<div style="color:var(--text3);font-size:13px;margin-top:4px">This can take a moment for artists with large catalogs.</div>'
-      + '</div></div>';
+      + '<div style="color:var(--text3);font-size:13px;margin-top:10px;text-align:center">Finding popular tracks&hellip; this can take a moment for artists with large catalogs.</div>'
+      + '</div>'
+      + '</div>'
+      + this._tracklistSkeleton(10)
+      + '</div>';
 
     const page = await Api.finderArtistTracks(releases[0].artistId || '', artistName, 0).catch(() => null);
     this._artistTrackFetching = false;
@@ -1063,6 +1088,24 @@ Object.assign(UI, {
     if (this._artistView === 'tracklist') {
       this._renderArtistTracklistDOM(container, this._artistTrackCache, this._artistTrackTotal, releases, artistName);
     }
+  },
+
+  // Skeleton rows shaped like finder-track-row (num + title/album + length +
+  // download pill) for the artist tracklist while it loads.
+  _tracklistSkeleton(rows) {
+    let html = '<div class="finder-tracklist">';
+    for (let i = 0; i < (rows || 10); i++) {
+      html += '<div class="finder-track-row">'
+        + '<div class="skeleton" style="width:18px;height:14px;flex-shrink:0"></div>'
+        + '<div class="finder-track-info">'
+        + '<div class="skeleton" style="height:14px;width:' + (40 + (i * 11) % 30) + '%"></div>'
+        + '<div class="skeleton" style="height:11px;width:' + (22 + (i * 7) % 18) + '%;margin-top:5px"></div>'
+        + '</div>'
+        + '<div class="skeleton" style="width:38px;height:13px;flex-shrink:0"></div>'
+        + '<div class="skeleton" style="width:76px;height:28px;border-radius:999px;flex-shrink:0"></div>'
+        + '</div>';
+    }
+    return html + '</div>';
   },
 
   _renderArtistTracklistDOM(container, allTracks, totalCount, releases, artistName) {
