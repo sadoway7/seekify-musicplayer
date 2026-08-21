@@ -157,6 +157,83 @@ body.mini-player-visible #app-content {
   transform: scale(1.08);
 }
 
+/* ── Scan Glitch tab icons (Home / Ripper / Library) ──
+   Each icon is layered inline SVG: .redlayer/.cyanlayer RGB-split ghosts,
+   .icon-core the real icon, .scanline a sweeping accent line. Colors live
+   here, NOT in presentation attributes — var() does not resolve inside
+   SVG presentation attributes. */
+.redlayer, .cyanlayer {
+  opacity: 0;
+  fill: none;
+}
+.redlayer { stroke: var(--glitch-red); }
+.cyanlayer { stroke: var(--glitch-cyan); }
+.ghost-fill.redlayer, .ghost-fill.cyanlayer { stroke: none; }
+.ghost-fill.redlayer { fill: var(--glitch-red); }
+.ghost-fill.cyanlayer { fill: var(--glitch-cyan); }
+
+.tab-item .icon-stroke { stroke: var(--text3); fill: none; }
+.tab-item .icon-fill, .tab-item .icon-dot { fill: var(--text3); }
+.tab-item.active .icon-stroke { stroke: var(--accent); }
+.tab-item.active .icon-fill,
+.tab-item.active .icon-dot { fill: var(--accent); }
+
+.scanline {
+  stroke: var(--accent);
+  stroke-width: 0.8;
+  opacity: 0;
+}
+
+/* select animation: snap out wide, settle into a small static offset.
+   forwards fill, NO idle loop. Losing .active drops the animation and the
+   layers reset to their base (hidden) state immediately. */
+.tab-item.active .redlayer { animation: split-red .6s ease-out forwards; }
+.tab-item.active .cyanlayer { animation: split-cyan .6s ease-out forwards; }
+.tab-item.active .icon-core { animation: flicker .6s steps(6); }
+.tab-item.active .scanline { animation: scan-in .62s ease-out .05s forwards; }
+
+@keyframes split-red {
+  0%   { opacity: .9;  transform: translate(-5px, -3.8px); }
+  35%  { opacity: .65; transform: translate(-2.4px, -1.8px); }
+  100% { opacity: .6;  transform: translate(-1px, -0.7px); }
+}
+@keyframes split-cyan {
+  0%   { opacity: .9;  transform: translate(5px, 3.8px); }
+  35%  { opacity: .65; transform: translate(2.4px, 1.8px); }
+  100% { opacity: .6;  transform: translate(1px, 0.7px); }
+}
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  15% { opacity: .4; }
+  30% { opacity: 1; }
+  45% { opacity: .55; }
+  60% { opacity: 1; }
+}
+@keyframes scan-in {
+  0%   { opacity: 0;   transform: translateY(-4px); }
+  50%  { opacity: .9; }
+  100% { opacity: .35; transform: translateY(0); }
+}
+
+/* Initial render: the already-active tab starts in its settled resting
+   state instead of replaying the select animation. _bindTabBar drops
+   no-anim on the first real tab switch. */
+#tab-bar.no-anim .tab-item.active .redlayer {
+  animation: none;
+  opacity: .6;
+  transform: translate(-1px, -0.7px);
+}
+#tab-bar.no-anim .tab-item.active .cyanlayer {
+  animation: none;
+  opacity: .6;
+  transform: translate(1px, 0.7px);
+}
+#tab-bar.no-anim .tab-item.active .icon-core { animation: none; }
+#tab-bar.no-anim .tab-item.active .scanline {
+  animation: none;
+  opacity: .35;
+}
+
 @media (max-width: 767px) {
   .tab-item {
     background: radial-gradient(circle at 50% 45%, rgba(212, 240, 64, 0.03), transparent 55%);

@@ -241,9 +241,11 @@ const UI = {
         if (!this.els.nowPlaying.classList.contains('hidden')) {
           this.hideNowPlaying();
         }
+        if (tab.dataset.tab !== Store.currentTab) {
+          document.getElementById('tab-bar').classList.remove('no-anim');
+        }
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        this._updateTabIcons();
         const tabName = tab.dataset.tab;
         Store.currentTab = tabName;
         // Favorites tab navigates to favorites view
@@ -259,23 +261,6 @@ const UI = {
         this.renderPage();
         this.els.content.scrollTop = 0;
       });
-    });
-  },
-
-  _tabIcons: {
-    home: { inactive: () => Icons.home(), active: () => Icons.homeFilled() },
-    finder: { inactive: () => Icons.magnet(), active: () => Icons.magnetFilled() },
-    library: { inactive: () => Icons.library(), active: () => Icons.libraryFilled() },
-  },
-
-  _updateTabIcons() {
-    document.querySelectorAll('.tab-item').forEach(t => {
-      const map = this._tabIcons[t.dataset.tab];
-      if (!map) return;
-      const svg = t.querySelector('svg');
-      if (!svg) return;
-      const newSvg = t.classList.contains('active') ? map.active() : map.inactive();
-      svg.outerHTML = newSvg;
     });
   },
 
@@ -1293,7 +1278,6 @@ const UI = {
         document.querySelectorAll('.tab-item').forEach(t => {
           t.classList.toggle('active', t.dataset.tab === prev.tab);
         });
-        this._updateTabIcons();
       }
       this._clearPollTimers();
       this.renderPage();
