@@ -106,6 +106,12 @@ func DbSetReviewStatus(trackID, status, flags, reviewer string) {
 			checked_at = datetime('now'),
 			reviewer = excluded.reviewer`,
 		trackID, status, flags, reviewer)
+	// Review statuses are embedded in /api/library responses (and ETag'd on
+	// the library version), so every status write must invalidate it. Bumping
+	// here — the single choke point — keeps callers from having to remember.
+	if LibraryVersionAdd != nil {
+		LibraryVersionAdd(1)
+	}
 }
 
 // DbSeedReviewUnchecked creates an "unchecked" review row only if none exists.
@@ -410,8 +416,10 @@ func CleanupOrphanedReviews() {
 		}
 	}
 
-	result, _ := store.DB.Exec("DELETE FROM track_reviews WHERE track_id NOT IN (SELECT id FROM tracks)")
-	orphans, _ := result.RowsAffected()
+	var orphans int64
+	if result, err := store.DB.Exec("DELETE FROM track_reviews WHERE track_id NOT IN (SELECT id FROM tracks)"); err == nil {
+		orphans, _ = result.RowsAffected()
+	}
 
 	if count > 0 || orphans > 0 {
 		log.Printf("[review] Seeded %d new review rows, cleaned up %d orphaned review rows", count, orphans)
@@ -1351,16 +1359,24 @@ func ReviewCountsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // DbGetReviewFlagCounts tallies per-flag counts across needs_review tracks.
+// Filters to tracks present in memory, matching DbGetReviewCounts — otherwise
+// the chip badges can disagree with the counts beside them.
 func DbGetReviewFlagCounts() map[string]int {
 	counts := map[string]int{}
-	rows, err := store.DB.Query("SELECT flags FROM track_reviews WHERE status = 'needs_review'")
+	rows, err := store.DB.Query("SELECT track_id, flags FROM track_reviews WHERE status = 'needs_review'")
 	if err != nil {
 		return counts
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var flagsJSON string
-		if rows.Scan(&flagsJSON) != nil {
+		var trackID, flagsJSON string
+		if rows.Scan(&trackID, &flagsJSON) != nil {
+			continue
+		}
+		store.Mu.RLock()
+		_, exists := store.Tracks[trackID]
+		store.Mu.RUnlock()
+		if !exists {
 			continue
 		}
 		var flags []string

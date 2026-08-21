@@ -233,18 +233,6 @@ Object.assign(UI, {
     } catch (e) {}
   },
 
-  renderDownloads() {
-    this._viewTrackList = [];
-
-    // ponytail: no page-header — the tab already labels this view; reclaiming
-    // the 56px title bar was the "wasted space above the filter pills".
-    let html = '<div id="downloads-content"><div class="loading-spinner" style="margin:40px auto"></div></div>';
-
-    this.els.content.innerHTML = html;
-    this._loadDownloads();
-    this._downloadPollTimer = setInterval(() => this._loadDownloads(), 3000);
-  },
-
   async _loadDownloads() {
     const container = document.getElementById('downloads-content');
     if (!container) return;

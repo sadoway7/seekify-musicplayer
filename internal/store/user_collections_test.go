@@ -94,6 +94,15 @@ func TestUserPlaylistsIsolation(t *testing.T) {
 	_ = bobPL
 }
 
+// A transient DB error during playlist delete must return false, not panic
+// (the prod panic class: ignored Exec error → nil Result → RowsAffected).
+func TestDbDeletePlaylistSurvivesDBError(t *testing.T) {
+	InitDB(filepath.Join(t.TempDir(), "closed.db"))
+	DB.Close()
+
+	DbDeletePlaylist("u", "p") // must not panic
+}
+
 // DbMigrateTrackID, DbDeleteTrack, and the dedup passes must cascade the new
 // track ID to user_favorites and user_recent — not just the legacy favorites/
 // recent tables. Otherwise AutoSort moves and dedup merges silently orphan

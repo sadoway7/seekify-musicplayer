@@ -19,9 +19,11 @@ func TestTriggerWorkerClaimsBeforeStarting(t *testing.T) {
 	})
 
 	release := make(chan struct{})
+	started := make(chan struct{})
 	var runs atomic.Int32
 	RegisterWorker(name, "test", "", func() {
 		runs.Add(1)
+		close(started)
 		<-release
 	})
 
@@ -40,6 +42,13 @@ func TestTriggerWorkerClaimsBeforeStarting(t *testing.T) {
 	}
 	close(start)
 	wg.Wait()
+	// The worker body runs on its own goroutine (SafeGo) — wait for it to
+	// actually start before asserting, else this races and flakes.
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("claimed worker never started")
+	}
 	close(release)
 
 	if got := successes.Load(); got != 1 {

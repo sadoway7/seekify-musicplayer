@@ -853,7 +853,10 @@ func DbGetOrCreatePlaylistByName(name string) string {
 }
 
 func DbDeletePlaylist(userID, id string) bool {
-	res, _ := DB.Exec("DELETE FROM playlists WHERE id = ? AND user_id = ?", id, userID)
+	res, err := DB.Exec("DELETE FROM playlists WHERE id = ? AND user_id = ?", id, userID)
+	if err != nil {
+		return false
+	}
 	affected, _ := res.RowsAffected()
 	if affected > 0 {
 		DB.Exec("DELETE FROM playlist_tracks WHERE playlist_id = ?", id)
