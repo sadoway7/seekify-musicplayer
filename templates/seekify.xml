@@ -20,6 +20,8 @@
 - Fresh new tab bar: custom icon set with a glitch/scanline accent on the active tab
 - The Shuffle All die on the home screen got a new flat, modern look
 - Album art loads faster on repeat visits and on slower connections
+- Dolby / Spatial Audio tracks that previously failed with a format error now play in every browser
+- Slow connections no longer cause one slow track to skip through the whole queue; playback recovers gracefully
 - Search and artist pages show content-shaped loading placeholders instead of a lone spinner, so the layout no longer jumps when results arrive
 - Signed-out visitors see a playable sample of the library on the home screen instead of an empty page
 - Faster app open: startup requests run in parallel, app assets are cached between releases, and opening the app with an unchanged library skips the full library re-download — most of the wait before the app was usable is gone

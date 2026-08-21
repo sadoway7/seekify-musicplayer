@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fix (playback): Dolby-audio .m4a files — Apple Music "Spatial Audio" and other Dolby Digital/Dolby Digital Plus rips — failed to play in Chrome and other browsers with a format error, exactly like the earlier Apple Lossless case. The server now detects all of these codecs and transparently serves a browser-playable copy.
+
+- Fix (playback): on slow connections a track that was still downloading could be wrongly skipped as broken, and the skip cascade could make every following track fail too — even manual retries. Slow-loading tracks now retry once via a much smaller stream, and picking any track manually always starts fresh.
+
 - Performance (covers): album covers now paint instantly from the browser cache on repeat views and quietly refresh in the background, instead of every render waiting on a revalidation round trip per cover — the home and library pages open visibly faster, especially on remote/phone connections.
 
 - UI (home): the Shuffle All die got a new flat look — solid dark body with lime pips and a single soft shadow band, replacing the cream toon-shaded style (tuned in a live style demo).
