@@ -208,9 +208,30 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 		if ct := mime.TypeByExtension(ext); ct != "" {
 			w.Header().Set("Content-Type", ct)
 		}
-		// ponytail: Safari caches JS/CSS aggressively; force revalidation
+		// HTML entry points get their ?v= params rewritten to this deploy's
+		// assetVersion so browsers pick up fresh JS/CSS after every deploy
+		// (and so those busted URLs can be cached immutably). Root "/" serves
+		// through here as /index.html — previously it went out with the
+		// hardcoded v= values from the file on disk.
+		if ext == ".html" {
+			if b, err := os.ReadFile(fullPath); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				w.Write(bustAssetVersions(b))
+				return
+			}
+		}
+		// ponytail: Safari caches JS/CSS aggressively; force revalidation.
+		// Exception: a ?v= matching this process's assetVersion is a
+		// per-deploy-busted URL — cache it immutably (saves 21 revalidation
+		// round trips per app open). Hardcoded v= values in ripperv2/admin
+		// never match and stay no-cache, so they can't go stale.
 		if ext == ".js" || ext == ".css" {
-			w.Header().Set("Cache-Control", "no-cache")
+			if r.URL.Query().Get("v") != "" && r.URL.Query().Get("v") == assetVersion {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 		}
 		http.ServeFile(w, r, fullPath)
 		return

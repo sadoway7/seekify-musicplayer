@@ -44,9 +44,13 @@ func StreamHandler(w http.ResponseWriter, r *http.Request) {
 	// request a transcoded copy. Cached .m4a is served Range-seekable exactly
 	// like a raw file; on any transcode failure we fall back to the original
 	// (graceful degradation — same behavior as before the feature).
-	if r.URL.Query().Get("fmt") == "aac" &&
+	// ALAC exception: browsers claim .m4a support (canPlayType) but can't
+	// decode Apple Lossless, so the server forces the transcode path for
+	// ALAC files regardless of the fmt param.
+	forced := ext == ".m4a" && transcode.IsALAC(fullPath)
+	if (r.URL.Query().Get("fmt") == "aac" || forced) &&
 		store.GetSettingBool("transcode_enabled", true) &&
-		needsTranscode(ext) {
+		(needsTranscode(ext) || forced) {
 		if cp, err := transcode.Ensure(id, fullPath); err == nil {
 			servePath = cp
 			serveType = "audio/mp4"

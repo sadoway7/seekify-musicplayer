@@ -57,40 +57,51 @@ const Store = {
     this.loading = true;
     let loaded = true;
     try {
-      // Resolve current user first (guest returns {guest:true}).
-      try { this.user = await Api.getMe(); } catch(e) { this.user = { guest: true }; }
-      // Public: whether self-registration is enabled (drives the Register button).
-      try { this.registrationMode = ((await Api.getRegistrationMode()) || {}).mode || 'off'; } catch(e) {}
-      const library = await Api.getLibrary();
+      // Independent fetches run in parallel — boot is latency-bound (remote
+      // phones), and the old sequential chain cost 7 round trips before the
+      // first render. getLibrary alone rejects (drives the error UI below);
+      // the rest degrade to defaults.
+      const [me, reg, library] = await Promise.all([
+        Api.getMe().catch(() => ({ guest: true })),
+        Api.getRegistrationMode().catch(() => null),
+        Api.getLibrary()
+      ]);
+      this.user = me || { guest: true };
+      this.registrationMode = ((reg) || {}).mode || 'off';
       this.library = library;
       this._libAt = Date.now();
       // Personal collections only when logged in; guests 401 on these.
       if (this.user && !this.user.guest) {
-        const [playlists, favorites, recent] = await Promise.all([
+        const [playlists, favorites, recent, ps, reviewCounts] = await Promise.all([
           Api.getPlaylists().catch(() => []),
           Api.getFavorites().catch(() => []),
-          Api.getRecent().catch(() => [])
+          Api.getRecent().catch(() => []),
+          Api.getPublicSettings().catch(() => null),
+          Api.getReviewCounts().catch(() => null)
         ]);
         this.playlists = playlists || [];
         this.favorites = favorites || [];
         this.recent = recent || [];
+        // Global display settings (admin-configured) must reach every client,
+        // so fetch the public subset for all users — no auth, no 401/403 noise.
+        if (ps) {
+          this.downloadsEnabled = ps.downloads_enabled !== 'false';
+          this.waveformStyle = ps.waveform_style || 'squiggle';
+          this.defaultNowPlayingView = ps.default_now_playing_view || 'album_art';
+        }
+        if (reviewCounts) this.reviewCounts = reviewCounts;
       } else {
         this.playlists = [];
         this.favorites = [];
         this.recent = [];
+        try {
+          const ps = await Api.getPublicSettings();
+          this.downloadsEnabled = ps.downloads_enabled !== 'false';
+          this.waveformStyle = ps.waveform_style || 'squiggle';
+          this.defaultNowPlayingView = ps.default_now_playing_view || 'album_art';
+        } catch(e) {}
       }
       this._rebuildMaps();
-      // Global display settings (admin-configured) must reach every client, so
-      // fetch the public subset for all users — no auth, no 401/403 noise.
-      try {
-        const ps = await Api.getPublicSettings();
-        this.downloadsEnabled = ps.downloads_enabled !== 'false';
-        this.waveformStyle = ps.waveform_style || 'squiggle';
-        this.defaultNowPlayingView = ps.default_now_playing_view || 'album_art';
-      } catch(e) {}
-      if (!this.isGuest) {
-        try { this.reviewCounts = await Api.getReviewCounts(); } catch(e) {}
-      }
     } catch (err) {
       loaded = false;
       UI.showToast('Failed to load library');

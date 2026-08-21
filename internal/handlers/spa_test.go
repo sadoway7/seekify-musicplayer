@@ -22,7 +22,7 @@ func TestSpaHandlerWhitelist(t *testing.T) {
 		{"/go.mod", http.StatusNotFound},
 		{"/css/styles.css", http.StatusOK},
 		{"/js/app.js", http.StatusOK},
-		{"/index.html", http.StatusMovedPermanently}, // ServeMux canonicalizes to /
+		{"/index.html", http.StatusOK}, // served through the v=-busting path (was ServeFile's 301 to /)
 		{"/admin.html", http.StatusOK},
 		{"/favicon.ico", http.StatusOK},
 		{"/icon.png", http.StatusOK},

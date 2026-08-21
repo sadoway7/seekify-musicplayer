@@ -1,7 +1,9 @@
 package transcode
 
 import (
+	"encoding/binary"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -133,5 +135,80 @@ func TestPruneCacheSpareFreshTmp(t *testing.T) {
 	}
 	if _, err := os.Stat(oldM4a); err == nil {
 		t.Error("31-day-old .m4a survived age purge")
+	}
+}
+
+// mp4Box builds one MP4 box: 4-byte big-endian size + fourcc + payload.
+func mp4Box(typ string, payload ...[]byte) []byte {
+	var p []byte
+	for _, part := range payload {
+		p = append(p, part...)
+	}
+	b := make([]byte, 8+len(p))
+	binary.BigEndian.PutUint32(b[0:4], uint32(len(b)))
+	copy(b[4:8], typ)
+	copy(b[8:], p)
+	return b
+}
+
+// m4aFile writes the given boxes to a temp .m4a and returns its path.
+func m4aFile(t *testing.T, boxes ...[]byte) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "a.m4a")
+	var b []byte
+	for _, box := range boxes {
+		b = append(b, box...)
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestIsALAC(t *testing.T) {
+	stsd := func(codec string) []byte {
+		return mp4Box("stsd", []byte{0, 0, 0, 0, 0, 0, 0, 1}, mp4Box(codec, []byte{0xC0, 0xFF, 0xEE}))
+	}
+	audioTrak := func(s []byte) []byte {
+		return mp4Box("moov", mp4Box("trak", mp4Box("mdia", mp4Box("minf", mp4Box("stbl", s)))))
+	}
+
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("alac"))); !IsALAC(p) {
+		t.Error("alac stsd not detected")
+	}
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("mp4a"))); IsALAC(p) {
+		t.Error("mp4a (AAC) misdetected as ALAC")
+	}
+	if p := m4aFile(t, []byte("this is not an mp4 at all")); IsALAC(p) {
+		t.Error("garbage detected as ALAC")
+	}
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), mp4Box("mdat", make([]byte, 64))); IsALAC(p) {
+		t.Error("file without stsd detected as ALAC")
+	}
+}
+
+// TestIsALACRealFiles validates the box walker against real ffmpeg-muxed
+// files (full moov tree: mvhd, tkhd, edts, real stsd payloads). Skipped
+// when ffmpeg is absent (graceful degradation — synthetic tests still run).
+func TestIsALACRealFiles(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	gen := func(name, codec string) string {
+		p := filepath.Join(dir, name)
+		cmd := exec.Command("ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+			"-f", "lavfi", "-i", "sine=frequency=440:duration=0.3",
+			"-c:a", codec, p)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("generate %s: %v: %s", name, err, out)
+		}
+		return p
+	}
+	if p := gen("alac.m4a", "alac"); !IsALAC(p) {
+		t.Error("real ALAC file not detected")
+	}
+	if p := gen("aac.m4a", "aac"); IsALAC(p) {
+		t.Error("real AAC file misdetected as ALAC")
 	}
 }

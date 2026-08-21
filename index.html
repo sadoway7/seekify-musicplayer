@@ -8,7 +8,7 @@
        app navbar must sit flush at the bottom — verified correct WITHOUT cover. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#0E0E0E">
+  <meta name="theme-color" content="#0a0b0a">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,6 +24,9 @@
   <link rel="stylesheet" href="css/review.css?v=20260713">
   <link rel="stylesheet" href="css/ripperv2.css?v=20260702g">
   <style>
+    /* Paints dark before the external stylesheet loads — kills the white
+       flash on PWA/app open. Matches --bg in base.css. */
+    html{background:#0a0b0a}
     .auth-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:10000;padding:24px}
     .auth-overlay.hidden{display:none}
     .auth-card{width:100%;max-width:360px;text-align:center}
@@ -98,9 +101,9 @@
 
   </div>
 
-  <nav id="tab-bar" class="tab-bar" role="tablist">
+  <nav id="tab-bar" class="tab-bar no-anim" role="tablist">
     <button class="tab-item active" data-tab="home" role="tab" aria-selected="true">
-      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 21v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6z"/></svg>
+      <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><path class="redlayer" d="M14 5 L22 9.5 V18.5 L14 23 L6 18.5 V9.5 Z" stroke-width="1.5"/><path class="cyanlayer" d="M14 5 L22 9.5 V18.5 L14 23 L6 18.5 V9.5 Z" stroke-width="1.5"/><g class="icon-core"><path class="icon-stroke" d="M14 5 L22 9.5 V18.5 L14 23 L6 18.5 V9.5 Z" stroke-width="1.5"/><circle class="icon-dot" cx="14" cy="14" r="2.4"/></g><path class="scanline" d="M6 12.5 H22"/></svg>
       <span>Home</span>
     </button>
     <button class="tab-item" data-tab="search" role="tab" aria-selected="false" style="display:none">
@@ -112,12 +115,12 @@
       <span>Favorites</span>
     </button>
     <button class="tab-item" data-tab="finder" role="tab" aria-selected="false">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.8 19.6 C 13.4 16.3 7.6 13.4 7.6 9 C 7.6 5.2 10.9 3.4 13.8 5.4 C 16.2 7 15.9 9.7 13.4 10.2 C 12 10.5 10.9 9.6 11.2 8.2"/></svg>
+      <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><path class="redlayer ghost-fill" d="M5 20 L10 6 L13 6 L9 18 L15 18 L10 25 Z"/><path class="cyanlayer ghost-fill" d="M5 20 L10 6 L13 6 L9 18 L15 18 L10 25 Z"/><g class="icon-core"><path class="icon-fill" d="M5 20 L10 6 L13 6 L9 18 L15 18 L10 25 Z"/><path class="icon-fill" d="M16 4 L23 18 L19 18 L22 25 L14 13 L18 13 Z" opacity="0.35"/></g><path class="scanline" d="M4 15 H24"/></svg>
       <span>Ripper</span>
       <span class="tab-badge" style="display:none"></span>
     </button>
     <button class="tab-item" data-tab="library" role="tab" aria-selected="false">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-7.4a2 2 0 0 1-1.5-.7l-1.2-1.4A2 2 0 0 0 8.4 3.7H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2z"/></svg>
+      <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><path class="redlayer" d="M5 8 V22 M9.5 6 V24 M14 8 V22 M18.5 5 V25 M23 9 V21" stroke-width="1.4" stroke-linecap="round"/><path class="cyanlayer" d="M5 8 V22 M9.5 6 V24 M14 8 V22 M18.5 5 V25 M23 9 V21" stroke-width="1.4" stroke-linecap="round"/><g class="icon-core"><path class="icon-stroke" d="M5 8 V22 M9.5 6 V24 M14 8 V22 M18.5 5 V25 M23 9 V21" stroke-width="1.7" stroke-linecap="round"/></g><path class="scanline" d="M4 15 H24"/></svg>
       <span>Library</span>
     </button>
     <button class="tab-item" data-tab="settings" id="tab-settings" role="tab" aria-selected="false" style="display:none">

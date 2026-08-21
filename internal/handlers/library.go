@@ -28,6 +28,22 @@ func StatsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func LibraryHandler(w http.ResponseWriter, r *http.Request) {
+	// Conditional requests: repeat opens revalidate instead of re-downloading
+	// the full library (~3MB). The version is the ETag — every body-changing
+	// write bumps it (scanner, metadata edits, review statuses via
+	// DbSetReviewStatus). no-cache forces revalidation so a bump is always
+	// picked up; an unchanged library costs one ~100-byte 304.
+	ver := LibraryVersion.Load()
+	etag := `"` + strconv.FormatInt(ver, 10) + `"`
+	w.Header().Set("Cache-Control", "no-cache")
+	if r.Header.Get("If-None-Match") == etag {
+		// gzip middleware pre-sets Content-Encoding; a 304 has no body.
+		w.Header().Del("Content-Encoding")
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("ETag", etag)
+
 	// Review statuses live in their own DB table; no map lock needed to read them.
 	reviewStatuses := review.DbLoadAllReviewStatuses()
 
@@ -91,7 +107,7 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 		Tracks:  trackList,
 		Albums:  albumList,
 		Artists: artistList,
-		Version: LibraryVersion.Load(),
+		Version: ver,
 	}
 
 	if hasOffset || hasLimit {

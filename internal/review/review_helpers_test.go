@@ -1,11 +1,14 @@
 package review
 
 import (
+	"database/sql"
 	"musicapp/internal/models"
 	"musicapp/internal/store"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestNormalizeForCompare(t *testing.T) {
@@ -27,6 +30,59 @@ func TestNormalizeForCompare(t *testing.T) {
 			t.Errorf("NormalizeForCompare(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
+}
+
+// Every review-status write must invalidate the library version — the
+// /api/library ETag depends on it. The bump lives inside DbSetReviewStatus
+// (the choke point) so no caller can forget it.
+func TestDbSetReviewStatusBumpsLibraryVersion(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "bump.db"))
+	InitReviewTables()
+
+	bumped := 0
+	old := LibraryVersionAdd
+	LibraryVersionAdd = func(delta int64) { bumped++ }
+	t.Cleanup(func() { LibraryVersionAdd = old })
+
+	DbSetReviewStatus("t1", "needs_review", `["missing_title"]`, "test")
+	if bumped != 1 {
+		t.Fatalf("DbSetReviewStatus bumps = %d, want 1", bumped)
+	}
+}
+
+// Boot-path panic class: CleanupOrphanedReviews runs synchronously at startup
+// (server.go, no recover). A write-lock contention (WAL lets the read pass,
+// the DELETE stalls then errors) must not crash the process with a nil
+// Result deref — at boot that is process death, not a recovered 500.
+func TestCleanupOrphanedReviewsSurvivesWriteLock(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "locked.db")
+	store.InitDB(dbPath)
+	InitReviewTables()
+
+	// One in-memory track, already reviewed → the INSERT loop no-ops and the
+	// only stalled write is the orphan DELETE.
+	store.Mu.Lock()
+	prevTracks := store.Tracks
+	store.Tracks = map[string]*models.Track{"t1": {ID: "t1", Title: "S", FilePath: "s.mp3"}}
+	store.Mu.Unlock()
+	DbSetReviewStatus("t1", "reviewed_ok", "[]", "test")
+	t.Cleanup(func() {
+		store.Mu.Lock()
+		store.Tracks = prevTracks
+		store.Mu.Unlock()
+	})
+
+	conn, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Exec("BEGIN IMMEDIATE"); err != nil {
+		t.Fatalf("hold write lock: %v", err)
+	}
+	defer conn.Exec("ROLLBACK")
+
+	CleanupOrphanedReviews() // must not panic
 }
 
 func TestTitleSimilarity_exact(t *testing.T) {
@@ -243,9 +299,23 @@ func TestDbGetReviewFlagCounts(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
 	InitReviewTables()
 
+	store.Mu.Lock()
+	prevTracks := store.Tracks
+	store.Tracks = map[string]*models.Track{
+		"a": {ID: "a", Title: "A", FilePath: "a.mp3"},
+		"b": {ID: "b", Title: "B", FilePath: "b.mp3"},
+	}
+	store.Mu.Unlock()
+	t.Cleanup(func() {
+		store.Mu.Lock()
+		store.Tracks = prevTracks
+		store.Mu.Unlock()
+	})
+
 	DbSetReviewStatus("a", "needs_review", `["missing_title","no_cover"]`, "worker")
 	DbSetReviewStatus("b", "needs_review", `["missing_title"]`, "worker")
-	DbSetReviewStatus("c", "reviewed_ok", `["missing_title"]`, "worker") // must not count
+	DbSetReviewStatus("ghost", "needs_review", `["missing_title"]`, "worker") // track not in memory — must not count
+	DbSetReviewStatus("c", "reviewed_ok", `["missing_title"]`, "worker")     // must not count
 
 	counts := DbGetReviewFlagCounts()
 	if counts["missing_title"] != 2 {

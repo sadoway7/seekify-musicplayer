@@ -99,6 +99,53 @@ func TestTrackGenreFieldsPersistAndSerialize(t *testing.T) {
 	}
 }
 
+func TestLibraryHandlerETag304(t *testing.T) {
+	store.InitDB(filepath.Join(t.TempDir(), "etag.db"))
+	store.Mu.Lock()
+	store.Tracks = map[string]*models.Track{
+		"t1": {ID: "t1", Title: "Song A", Artist: "Artist X", FilePath: "x.mp3"},
+	}
+	store.Albums = map[string]*models.Album{}
+	store.Mu.Unlock()
+
+	// First request: 200 with an ETag.
+	req := httptest.NewRequest(http.MethodGet, "/api/library", nil)
+	rec := httptest.NewRecorder()
+	LibraryHandler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want 200", rec.Code)
+	}
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("no ETag on 200 response")
+	}
+
+	// Revalidation with a matching If-None-Match: 304, no body.
+	req2 := httptest.NewRequest(http.MethodGet, "/api/library", nil)
+	req2.Header.Set("If-None-Match", etag)
+	rec2 := httptest.NewRecorder()
+	LibraryHandler(rec2, req2)
+	if rec2.Code != http.StatusNotModified {
+		t.Fatalf("revalidate status = %d, want 304", rec2.Code)
+	}
+	if rec2.Body.Len() != 0 {
+		t.Fatalf("304 body = %d bytes, want 0", rec2.Body.Len())
+	}
+
+	// A library change bumps the version → old ETag no longer matches → 200.
+	LibraryVersion.Add(1)
+	req3 := httptest.NewRequest(http.MethodGet, "/api/library", nil)
+	req3.Header.Set("If-None-Match", etag)
+	rec3 := httptest.NewRecorder()
+	LibraryHandler(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("post-change status = %d, want 200 (stale ETag must not 304)", rec3.Code)
+	}
+	if got := rec3.Header().Get("ETag"); got == etag {
+		t.Fatal("ETag unchanged after library change")
+	}
+}
+
 func TestTrackUpsertPreservesApprovedGenreMetadata(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "approved-genre.db"))
 	approved := &models.Track{

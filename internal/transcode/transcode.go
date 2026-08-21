@@ -10,7 +10,9 @@ package transcode
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -254,4 +256,85 @@ func PruneCache() {
 			}
 		}
 	}
+}
+
+var (
+	alacMu   sync.Mutex
+	alacMemo = map[string]bool{}
+)
+
+// IsALAC reports whether an .m4a file's audio is Apple Lossless. Browsers
+// claim MP4 support via canPlayType but cannot decode ALAC, and clients only
+// request fmt=aac for FLAC/Opus/Ogg/WAV — so the server must detect ALAC
+// itself and force transcoding (see StreamHandler). Walks the MP4 boxes
+// (moov→trak→mdia→minf→stbl→stsd); any parse failure = false, which keeps
+// today's serve-the-original behavior. Memoized by path+size+mtime.
+func IsALAC(path string) bool {
+	si, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	key := fmt.Sprintf("%s|%d|%d", path, si.Size(), si.ModTime().UnixNano())
+	alacMu.Lock()
+	cached, ok := alacMemo[key]
+	alacMu.Unlock()
+	if ok {
+		return cached
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	result := findAlacBox(f, 0, si.Size(), 0)
+
+	alacMu.Lock()
+	if len(alacMemo) >= 4096 {
+		// ponytail: crude reset cap; LRU if a library ever exceeds it
+		alacMemo = map[string]bool{}
+	}
+	alacMemo[key] = result
+	alacMu.Unlock()
+	return result
+}
+
+// findAlacBox walks MP4 boxes in [start, start+limit) looking for an stsd
+// box whose first sample entry is 'alac', recursing into the container
+// chain that holds it. limit<0 means "to end of file".
+func findAlacBox(r io.ReaderAt, start, limit int64, depth int) bool {
+	if depth > 6 {
+		return false
+	}
+	var pos int64
+	for pos+8 <= limit {
+		var hdr [8]byte
+		if _, err := r.ReadAt(hdr[:], start+pos); err != nil {
+			return false
+		}
+		boxSize := int64(binary.BigEndian.Uint32(hdr[0:4]))
+		boxType := string(hdr[4:8])
+		if boxSize == 0 { // "extends to end of file"
+			boxSize = limit - pos
+		}
+		if boxSize < 8 || boxSize > limit-pos {
+			return false
+		}
+		switch boxType {
+		case "moov", "trak", "mdia", "minf", "stbl":
+			if findAlacBox(r, start+pos+8, boxSize-8, depth+1) {
+				return true
+			}
+		case "stsd":
+			// stsd body: version/flags(4) + entry_count(4), then entries of
+			// size(4) + format fourcc(4). The first entry decides.
+			var ent [8]byte
+			if _, err := r.ReadAt(ent[:], start+pos+16); err != nil {
+				return false
+			}
+			return string(ent[4:8]) == "alac"
+		}
+		pos += boxSize
+	}
+	return false
 }

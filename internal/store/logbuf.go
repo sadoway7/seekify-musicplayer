@@ -35,7 +35,7 @@ func (rb *RingBuffer) Write(p []byte) (int, error) {
 	n := len(p)
 	for _, b := range p {
 		if rb.full {
-			rb.r = rb.w // drop oldest as we overwrite
+			rb.r = (rb.r + 1) % len(rb.buf) // drop oldest byte as we overwrite it
 		}
 		rb.buf[rb.w] = b
 		rb.w = (rb.w + 1) % len(rb.buf)

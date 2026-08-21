@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -188,6 +189,111 @@ func TestStreamHandlerFmtAacRealTranscode(t *testing.T) {
 	probe := exec.Command(ff, "-v", "error", "-i", cachePath, "-f", "null", "-")
 	if out, err := probe.CombinedOutput(); err != nil {
 		t.Fatalf("cached m4a fails ffprobe: %v: %s", err, out)
+	}
+}
+
+// Real ALAC-in-m4a must be transcoded even WITHOUT fmt=aac: Chrome claims
+// m4a support via canPlayType but cannot decode ALAC (DEMUXER_ERROR).
+// Real AAC m4a must keep serving raw. Both skip when ffmpeg is absent.
+func TestStreamHandlerALACForcesTranscode(t *testing.T) {
+	ff := findFF()
+	if ff == "" {
+		t.Skip("ffmpeg not available")
+	}
+	setupTranscodeTestDB(t)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "track.m4a")
+	gen := exec.Command(ff, "-y", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+		"-c:a", "alac", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("generate alac m4a: %v: %s", err, out)
+	}
+
+	store.Mu.Lock()
+	prevTracks := store.Tracks
+	prevMusicDir := store.MusicDir
+	store.MusicDir = dir
+	store.Tracks = map[string]*models.Track{
+		"track": {ID: "track", FilePath: "track.m4a"},
+	}
+	store.Mu.Unlock()
+	t.Cleanup(func() {
+		store.Mu.Lock()
+		store.Tracks = prevTracks
+		store.MusicDir = prevMusicDir
+		store.Mu.Unlock()
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stream/track", nil) // no fmt param
+	rec := httptest.NewRecorder()
+	StreamHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "audio/mp4" {
+		t.Fatalf("Content-Type = %q, want audio/mp4", ct)
+	}
+	cachePath := filepath.Join(filepath.Dir(store.DBPath), "transcode", "track.m4a")
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("ALAC was not transcoded (cache missing): %v", err)
+	}
+	probe := exec.Command(ff, "-v", "error", "-i", cachePath, "-f", "null", "-")
+	if out, err := probe.CombinedOutput(); err != nil {
+		t.Fatalf("transcoded m4a fails ffprobe: %v: %s", err, out)
+	}
+}
+
+func TestStreamHandlerAACm4aServedRaw(t *testing.T) {
+	ff := findFF()
+	if ff == "" {
+		t.Skip("ffmpeg not available")
+	}
+	setupTranscodeTestDB(t)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "track.m4a")
+	gen := exec.Command(ff, "-y", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+		"-c:a", "aac", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("generate aac m4a: %v: %s", err, out)
+	}
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store.Mu.Lock()
+	prevTracks := store.Tracks
+	prevMusicDir := store.MusicDir
+	store.MusicDir = dir
+	store.Tracks = map[string]*models.Track{
+		"track": {ID: "track", FilePath: "track.m4a"},
+	}
+	store.Mu.Unlock()
+	t.Cleanup(func() {
+		store.Mu.Lock()
+		store.Tracks = prevTracks
+		store.MusicDir = prevMusicDir
+		store.Mu.Unlock()
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stream/track", nil)
+	rec := httptest.NewRecorder()
+	StreamHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Body.Bytes(); !bytes.Equal(got, raw) {
+		t.Fatal("AAC m4a was transcoded/served from cache — must be served byte-identical raw")
+	}
+	cachePath := filepath.Join(filepath.Dir(store.DBPath), "transcode", "track.m4a")
+	if _, err := os.Stat(cachePath); err == nil {
+		t.Fatal("transcode cache created for plain AAC m4a")
 	}
 }
 

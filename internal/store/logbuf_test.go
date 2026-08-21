@@ -30,3 +30,17 @@ func TestRingBufferConcurrentSnapshots(t *testing.T) {
 		t.Fatalf("snapshot length = %d, exceeds capacity", got)
 	}
 }
+
+func TestRingBufferPreservesTailAfterOverflow(t *testing.T) {
+	rb := NewRingBuffer(8)
+	rb.Write([]byte("abcdefghijklmnop")) // 16 bytes into 8 — keep last 8
+	if got := string(rb.Bytes()); got != "ijklmnop" {
+		t.Fatalf("after overflow = %q, want %q", got, "ijklmnop")
+	}
+
+	rb2 := NewRingBuffer(8)
+	rb2.Write([]byte("12345678")) // exact fill, no overflow
+	if got := string(rb2.Bytes()); got != "12345678" {
+		t.Fatalf("exact fill = %q, want %q", got, "12345678")
+	}
+}

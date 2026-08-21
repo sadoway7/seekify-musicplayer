@@ -45,13 +45,14 @@ const App = {
 
     ReviewUI.init();
 
-    // First-run setup: no users exist yet → bootstrap admin.
+    // Skeleton first so the dark shell paints immediately; the setup probe
+    // is one round trip and only redirects first-run installs.
+    UI.homeSkeleton();
+
     try {
       const st = await Api.getSetupStatus();
       if (st && st.needsSetup) { UI.showSetupScreen(); return; }
     } catch (e) {}
-
-    UI.homeSkeleton();
 
     const storeLoaded = await Store.init();
     if (!storeLoaded) return;
