@@ -165,7 +165,7 @@ func m4aFile(t *testing.T, boxes ...[]byte) string {
 	return path
 }
 
-func TestIsALAC(t *testing.T) {
+func TestIsBrowserUnsupportedM4A(t *testing.T) {
 	stsd := func(codec string) []byte {
 		return mp4Box("stsd", []byte{0, 0, 0, 0, 0, 0, 0, 1}, mp4Box(codec, []byte{0xC0, 0xFF, 0xEE}))
 	}
@@ -173,16 +173,22 @@ func TestIsALAC(t *testing.T) {
 		return mp4Box("moov", mp4Box("trak", mp4Box("mdia", mp4Box("minf", mp4Box("stbl", s)))))
 	}
 
-	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("alac"))); !IsALAC(p) {
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("alac"))); !IsBrowserUnsupportedM4A(p) {
 		t.Error("alac stsd not detected")
 	}
-	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("mp4a"))); IsALAC(p) {
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("ec-3"))); !IsBrowserUnsupportedM4A(p) {
+		t.Error("ec-3 (Dolby/Spatial Audio) stsd not detected")
+	}
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("ac-3"))); !IsBrowserUnsupportedM4A(p) {
+		t.Error("ac-3 (Dolby Digital) stsd not detected")
+	}
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), audioTrak(stsd("mp4a"))); IsBrowserUnsupportedM4A(p) {
 		t.Error("mp4a (AAC) misdetected as ALAC")
 	}
-	if p := m4aFile(t, []byte("this is not an mp4 at all")); IsALAC(p) {
+	if p := m4aFile(t, []byte("this is not an mp4 at all")); IsBrowserUnsupportedM4A(p) {
 		t.Error("garbage detected as ALAC")
 	}
-	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), mp4Box("mdat", make([]byte, 64))); IsALAC(p) {
+	if p := m4aFile(t, mp4Box("ftyp", []byte("M4A ")), mp4Box("mdat", make([]byte, 64))); IsBrowserUnsupportedM4A(p) {
 		t.Error("file without stsd detected as ALAC")
 	}
 }
@@ -190,7 +196,7 @@ func TestIsALAC(t *testing.T) {
 // TestIsALACRealFiles validates the box walker against real ffmpeg-muxed
 // files (full moov tree: mvhd, tkhd, edts, real stsd payloads). Skipped
 // when ffmpeg is absent (graceful degradation — synthetic tests still run).
-func TestIsALACRealFiles(t *testing.T) {
+func TestIsBrowserUnsupportedM4ARealFiles(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
 	}
@@ -205,10 +211,23 @@ func TestIsALACRealFiles(t *testing.T) {
 		}
 		return p
 	}
-	if p := gen("alac.m4a", "alac"); !IsALAC(p) {
+	if p := gen("alac.m4a", "alac"); !IsBrowserUnsupportedM4A(p) {
 		t.Error("real ALAC file not detected")
 	}
-	if p := gen("aac.m4a", "aac"); IsALAC(p) {
+	if p := gen("aac.m4a", "aac"); IsBrowserUnsupportedM4A(p) {
 		t.Error("real AAC file misdetected as ALAC")
+	}
+}
+
+// Regression: a real Apple Music "Spatial Audio" rip (E-AC-3 in m4a) pulled
+// from a production library. Chrome cannot decode Dolby codecs and reports
+// MP4 support via canPlayType, so the server must force transcoding for it.
+func TestIsBrowserUnsupportedM4AProdSpatialAudioFile(t *testing.T) {
+	path := os.Getenv("SEEKIFY_SPATIAL_M4A")
+	if path == "" {
+		t.Skip("SEEKIFY_SPATIAL_M4A not set")
+	}
+	if !IsBrowserUnsupportedM4A(path) {
+		t.Fatal("real Spatial Audio (ec-3) file not detected")
 	}
 }

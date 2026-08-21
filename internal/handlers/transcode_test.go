@@ -195,6 +195,64 @@ func TestStreamHandlerFmtAacRealTranscode(t *testing.T) {
 // Real ALAC-in-m4a must be transcoded even WITHOUT fmt=aac: Chrome claims
 // m4a support via canPlayType but cannot decode ALAC (DEMUXER_ERROR).
 // Real AAC m4a must keep serving raw. Both skip when ffmpeg is absent.
+// Handler-level regression with a real production "Spatial Audio" file
+// (E-AC-3 in m4a). Skips when SEEKIFY_SPATIAL_M4A is not set.
+func TestStreamHandlerSpatialAudioForcesTranscode(t *testing.T) {
+	ff := findFF()
+	if ff == "" {
+		t.Skip("ffmpeg not available")
+	}
+	path := os.Getenv("SEEKIFY_SPATIAL_M4A")
+	if path == "" {
+		t.Skip("SEEKIFY_SPATIAL_M4A not set")
+	}
+	setupTranscodeTestDB(t)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "track.m4a")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store.Mu.Lock()
+	prevTracks := store.Tracks
+	prevMusicDir := store.MusicDir
+	store.MusicDir = dir
+	store.Tracks = map[string]*models.Track{
+		"track": {ID: "track", FilePath: "track.m4a"},
+	}
+	store.Mu.Unlock()
+	t.Cleanup(func() {
+		store.Mu.Lock()
+		store.Tracks = prevTracks
+		store.MusicDir = prevMusicDir
+		store.Mu.Unlock()
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stream/track", nil)
+	rec := httptest.NewRecorder()
+	StreamHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "audio/mp4" {
+		t.Fatalf("Content-Type = %q, want audio/mp4 (transcoded)", ct)
+	}
+	cachePath := filepath.Join(filepath.Dir(store.DBPath), "transcode", "track.m4a")
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("spatial-audio file was not transcoded (cache missing): %v", err)
+	}
+	probe := exec.Command(ff, "-v", "error", "-i", cachePath, "-f", "null", "-")
+	if out, err := probe.CombinedOutput(); err != nil {
+		t.Fatalf("transcoded m4a fails ffprobe: %v: %s", err, out)
+	}
+}
+
 func TestStreamHandlerALACForcesTranscode(t *testing.T) {
 	ff := findFF()
 	if ff == "" {

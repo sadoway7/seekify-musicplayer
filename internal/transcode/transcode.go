@@ -263,13 +263,15 @@ var (
 	alacMemo = map[string]bool{}
 )
 
-// IsALAC reports whether an .m4a file's audio is Apple Lossless. Browsers
-// claim MP4 support via canPlayType but cannot decode ALAC, and clients only
-// request fmt=aac for FLAC/Opus/Ogg/WAV — so the server must detect ALAC
-// itself and force transcoding (see StreamHandler). Walks the MP4 boxes
+// IsBrowserUnsupportedM4A reports whether an .m4a file's audio codec is one
+// browsers cannot decode even though they claim MP4 support via canPlayType:
+// Apple Lossless (alac), Dolby Digital Plus (ec-3 — Apple Music "Spatial
+// Audio" rips), or Dolby Digital (ac-3). Clients only request fmt=aac for
+// FLAC/Opus/Ogg/WAV, so the server must detect these itself and force
+// transcoding (see StreamHandler). Walks the MP4 boxes
 // (moov→trak→mdia→minf→stbl→stsd); any parse failure = false, which keeps
 // today's serve-the-original behavior. Memoized by path+size+mtime.
-func IsALAC(path string) bool {
+func IsBrowserUnsupportedM4A(path string) bool {
 	si, err := os.Stat(path)
 	if err != nil {
 		return false
@@ -332,7 +334,11 @@ func findAlacBox(r io.ReaderAt, start, limit int64, depth int) bool {
 			if _, err := r.ReadAt(ent[:], start+pos+16); err != nil {
 				return false
 			}
-			return string(ent[4:8]) == "alac"
+			switch string(ent[4:8]) {
+			case "alac", "ec-3", "ac-3":
+				return true
+			}
+			return false
 		}
 		pos += boxSize
 	}
