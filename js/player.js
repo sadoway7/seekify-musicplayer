@@ -178,6 +178,9 @@ const Player = {
   },
 
   play(track, trackList, source) {
+    // User-initiated play: a previous auto-advance failure chain (possibly
+    // "all tracks unavailable") must not doom this fresh attempt.
+    this._consecutiveErrors = 0;
     if (this.getCurrentTrack() && this.getCurrentTrack().id === track.id) {
       if (!this.playing) {
         this.audio.play().catch(() => {});
@@ -205,15 +208,21 @@ const Player = {
 
   playInQueue(index) {
     if (index < 0 || index >= this.queue.length) return;
+    // Manual pick voids any earlier auto-advance failure streak.
+    this._consecutiveErrors = 0;
     this.currentIndex = index;
     const track = this.queue[this.currentIndex];
     this._loadAndPlay(track);
   },
 
-  _loadAndPlay(track) {
+  _loadAndPlay(track, forceTranscode) {
     this._clearLoadTimeout();
     this._errorHandledForCurrent = false;
-    this.audio.src = Api.streamUrl(track.id, this._needsTranscode(track));
+    // forceTranscode marks a slow-network retry: only allow one per load so a
+    // genuinely unplayable track still skips instead of looping.
+    this._triedTranscodeFallback = forceTranscode === true;
+    const wantTranscode = forceTranscode === true || this._needsTranscode(track);
+    this.audio.src = Api.streamUrl(track.id, wantTranscode);
     this.audio.play().then(() => {
       this.playing = true;
       if (this.onStateChange) this.onStateChange();
@@ -235,7 +244,7 @@ const Player = {
     // raw streams — a whole-file AAC encode of a long FLAC can run 10-30s.
     // The timeout only guards "server never delivers"; 30s for transcoded
     // loads, 10s for everything else.
-    const timeoutMs = this._needsTranscode(track) ? 30000 : 10000;
+    const timeoutMs = wantTranscode ? 30000 : 10000;
     let timerId;
     this._loadTimeout = setTimeout(() => {
       // Stale-closure guard: pause, an error handler, or a new track load
@@ -295,6 +304,23 @@ const Player = {
     this.playing = false;
     console.warn('[player] _onMediaError', { reason, trackId: this.getCurrentTrack() && this.getCurrentTrack().id, consecutiveErrors: this._consecutiveErrors + 1, queueLen: this.queue.length });
     this._reportFailure(reason);
+
+    // Slow-network rescue: a load timeout while the network state is still
+    // actively loading means the file is fine but too big for the pipe —
+    // typical for 30-100MB FLACs on phones. Skipping here cascades (each
+    // skip aborts a partial download and starts another huge one). Instead,
+    // retry the SAME track once via the compact AAC stream (~10x smaller).
+    if (reason === 'load-timeout' &&
+        !this._triedTranscodeFallback &&
+        this.audio && this.audio.networkState === 2) {
+      const t = this.getCurrentTrack();
+      if (t && !this._needsTranscode(t)) {
+        console.warn('[player] load timeout on slow network — retrying with transcode', { trackId: t.id });
+        this._consecutiveErrors = 0;
+        this._loadAndPlay(t, true);
+        return;
+      }
+    }
 
     if (this.queue.length === 0) {
       if (this.onStateChange) this.onStateChange();

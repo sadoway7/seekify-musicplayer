@@ -186,3 +186,55 @@ test('pause during a slow load clears the load timeout (no force-skip)', () => {
   assert.equal(skips.length, 0, 'paused load must not skip to the next track');
   assert.equal(failures.length, 0, 'paused load must not log a playback failure');
 });
+
+test('load timeout on slow network retries same track via transcode instead of skipping', () => {
+  const { Player, createdAudio, timeouts } = loadPlayer({}, [], {
+    'audio/flac': 'maybe'
+  });
+  Player.init();
+  const queue = [
+    { id: 'slow', filePath: 'Album/01 - Big.flac' },
+    { id: 'next', filePath: 'Album/02 - Song.flac' }
+  ];
+  Player.play(queue[0], queue, { type: 'album' });
+  assert.ok(!createdAudio[0].src.includes('fmt=aac'), 'first load is native');
+
+  // Simulate: still actively downloading when the 10s timeout fires.
+  Player.audio.networkState = 2;
+  const timeout = timeouts.find(t => t.ms === 10000);
+  timeout.fn();
+
+  assert.ok(Player.audio.src.includes('fmt=aac'), 'retried with compact stream');
+  assert.equal(Player.currentIndex, 0, 'same track, not skipped');
+  assert.equal(Player._consecutiveErrors, 0, 'slow network is not a broken file');
+  assert.ok(timeouts.some(t => t.ms === 30000), 'retry arms the transcode timeout');
+});
+
+test('second timeout after transcode retry skips the track (no loop)', () => {
+  const { Player, createdAudio, timeouts } = loadPlayer({}, [], {
+    'audio/flac': 'maybe'
+  });
+  Player.init();
+  const queue = [
+    { id: 'slow', filePath: 'Album/01 - Big.flac' },
+    { id: 'next', filePath: 'Album/02 - Song.flac' }
+  ];
+  Player.play(queue[0], queue, { type: 'album' });
+  Player.audio.networkState = 2;
+  timeouts.find(t => t.ms === 10000).fn();   // retry with aac
+  timeouts.find(t => t.ms === 30000).fn();   // still fails
+
+  assert.equal(Player.currentIndex, 1, 'advanced to next track');
+});
+
+test('user-initiated play resets the consecutive-error streak', () => {
+  const { Player } = loadPlayer({}, [], { 'audio/flac': 'maybe' });
+  Player.init();
+  Player._consecutiveErrors = 99;
+  Player.play({ id: 'fresh', filePath: 'Album/01 - Song.flac' }, [{ id: 'fresh', filePath: 'Album/01 - Song.flac' }]);
+  assert.equal(Player._consecutiveErrors, 0);
+
+  Player._consecutiveErrors = 5;
+  Player.playInQueue(0);
+  assert.equal(Player._consecutiveErrors, 0, 'manual queue pick also resets');
+});
