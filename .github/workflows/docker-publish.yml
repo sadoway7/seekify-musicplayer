@@ -9,7 +9,18 @@ permissions:
   packages: write
 
 jobs:
+  validate-ca-templates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Community Apps XML
+        # A bare & in a changelog bullet silently dropped Seekify from the
+        # CA store once (3f1217b). Block that class for good.
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+          xmllint --noout templates/*.xml ca_profile.xml
   build-and-push:
+    needs: validate-ca-templates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
