@@ -183,24 +183,23 @@ window.ShuffleDie = (() => {
       vec3 localPoint = toLocal(point);
       float pips = pipMask(localPoint);
 
-      vec3 body = vec3(0.80, 0.81, 0.76);
-      vec3 lime = vec3(0.66, 0.88, 0.05);
-      vec3 surface = mix(body, lime, pips);
-
+      // Flat look (tuned in the style demo, 2026-08-20): solid body #141514,
+      // solid lime pips #c7eb38, one soft-edged shadow band, gentle gamma
+      // lift, faint dither. No gradients, no specular, no outline.
+      vec3 bodyLit = vec3(0.078, 0.082, 0.078);
+      vec3 bodyDark = bodyLit * 0.52;
+      vec3 pipColor = vec3(0.780, 0.922, 0.220);
       vec3 lightDirection = normalize(vec3(-0.62, 0.88, 0.68));
-      float wrappedLight = clamp((dot(normal, lightDirection) + 0.30) / 1.30, 0.0, 1.0);
-      float toonLight = mix(0.50, 1.05, smoothstep(0.0, 1.0, wrappedLight));
+      float diff = max(dot(normal, lightDirection), 0.0);
+      float lit = smoothstep(0.25, 0.32, diff);
       vec3 viewDirection = normalize(rayOrigin - point);
-      vec3 halfDirection = normalize(lightDirection + viewDirection);
-      float specular = smoothstep(0.86, 0.94, max(dot(normal, halfDirection), 0.0)) * 0.065;
-      float facing = max(dot(normal, viewDirection), 0.0);
-      vec3 color = surface * toonLight + specular + lime * pips * 0.04;
-      float outline = 1.0 - smoothstep(0.05, 0.20, facing);
-      color = mix(color, vec3(0.075, 0.082, 0.072), outline * 0.82);
-      color = pow(color, vec3(1.0 / 2.2));
+      vec3 color = mix(bodyDark, bodyLit, lit);
+      color = mix(color, pipColor, pips);
+      color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 0.61));
+      color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 2.2));
       float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-      color += (dither - 0.5) / 320.0;
-      gl_FragColor = vec4(color, 1.0);
+      color += (dither - 0.5) * 0.00627;
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
     }
   `;
 

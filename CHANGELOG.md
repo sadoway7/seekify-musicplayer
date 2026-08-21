@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- UI (home): the Shuffle All die got a new flat look — solid dark body with lime pips and a single soft shadow band, replacing the cream toon-shaded style (tuned in a live style demo).
+
 - UI (Ripper): search results and the artist tracklist now show content-shaped skeleton rows while loading instead of a lone spinner — the layout no longer jumps when results arrive.
 
 - UI (home): signed-out visitors now see a playable sample strip (shuffle card plus random tracks with cover art) below the welcome banner instead of an empty page.
