@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Performance (covers): album covers now paint instantly from the browser cache on repeat views and quietly refresh in the background, instead of every render waiting on a revalidation round trip per cover — the home and library pages open visibly faster, especially on remote/phone connections.
+
 - UI (home): the Shuffle All die got a new flat look — solid dark body with lime pips and a single soft shadow band, replacing the cream toon-shaded style (tuned in a live style demo).
 
 - UI (Ripper): search results and the artist tracklist now show content-shaped skeleton rows while loading instead of a lone spinner — the layout no longer jumps when results arrive.

@@ -160,7 +160,12 @@ func serveCoverBytes(w http.ResponseWriter, r *http.Request, data []byte, conten
 	h.Write(data)
 	etag := fmt.Sprintf(`"c2-%x"`, h.Sum32())
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "no-cache")
+	// no-cache forces revalidation, but stale-while-revalidate lets the
+	// browser paint its cached copy instantly and refresh in the background
+	// — home/library renders fire 100+ cover requests, and waiting on each
+	// revalidation round trip was most of the perceived slowness. Stale
+	// content self-corrects on the next render (the app re-renders often).
+	w.Header().Set("Cache-Control", "no-cache, stale-while-revalidate=604800")
 	w.Header().Set("ETag", etag)
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
