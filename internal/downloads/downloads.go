@@ -391,6 +391,18 @@ func runDownloadCmd(jobID, ytdlpPath string, args []string) (output string, err 
 	}
 }
 
+// KillActiveJob terminates the subprocess running for jobID, if any. Used by
+// the job-delete handler so a removed job stops downloading instead of
+// running to completion and importing its file into the library.
+func KillActiveJob(jobID string) {
+	DownloadMu.Lock()
+	cmd := ActiveJobs[jobID]
+	DownloadMu.Unlock()
+	if cmd != nil {
+		KillProcessTree(cmd)
+	}
+}
+
 func InitDownloadTables() {
 	store.DB.Exec(`CREATE TABLE IF NOT EXISTS download_jobs (
 		id TEXT PRIMARY KEY,
@@ -562,7 +574,7 @@ func DbGetQueuedJobs() ([]DownloadJob, error) {
 		status, error, source, audio_quality, file_path, file_deleted, progress_stage,
 		override_dir, search_query, convert_to_flac, playlist_id, video_id, created_at, completed_at,
 		pipeline, recording_id, release_id, artist_id, genre, year, candidates, user_id, expected_duration
-		FROM download_jobs WHERE status = 'queued' ORDER BY created_at DESC LIMIT 1`)
+		FROM download_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`)
 	if err != nil {
 		return nil, err
 	}

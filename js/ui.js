@@ -453,6 +453,7 @@ const UI = {
     const onStart = (e) => {
       this._waveformHoverX = -1;
       this.seeking = true;
+      this._seekTrackId = (Player.getCurrentTrack() || {}).id || null;
       const f = getFraction(e);
       this._waveformProgress = f;
       this._paintWaveform(f);
@@ -470,6 +471,14 @@ const UI = {
       if (!this.seeking) return;
       this.seeking = false;
       this._waveformHoverX = -1;
+      // A drag held across a track change must not seek the new track.
+      if (this._seekTrackId !== ((Player.getCurrentTrack() || {}).id || null)) {
+        const dur = Player.audio.duration;
+        const cf = dur && isFinite(dur) ? Player.audio.currentTime / dur : 0;
+        this._waveformProgress = cf;
+        this._paintWaveform(cf);
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
       let clientX;
       if (e.changedTouches) {

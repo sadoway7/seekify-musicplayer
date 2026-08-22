@@ -351,6 +351,8 @@ const ReviewUI = {
         await Store.refreshLibrary();
         el.remove();
         UI.showToast((data && data.deleted != null ? data.deleted : 0) + ' files deleted');
+        const playing = Player.getCurrentTrack();
+        if (playing && !Store.getTrack(playing.id)) Player.next();
         if (typeof onDone === 'function') onDone();
       } catch (e) {
         el.remove();

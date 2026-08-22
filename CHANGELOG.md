@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fix (downloads): deleting a job that is actively downloading now stops the download process instead of letting it finish in the background — the track no longer appears in the library after you deleted its job.
+
+- Fix (downloads): picking a Soulseek quality candidate can no longer trigger a second, automatic search for the same job in the moment between your pick and the download starting — selections download exactly what you chose, once.
+
+- Fix (watched playlists): when the download limit is reached during a watched-playlist sync, new tracks are retried on the next sync instead of being permanently marked completed and silently never downloaded.
+
+- Fix (downloads): the download queue now takes the oldest waiting job first instead of the newest — queued tracks download in the order they were added and new submissions no longer starve older ones.
+
+- Fix (downloads): "Clear Completed" no longer deletes jobs that are still searching or waiting for a quality pick — only finished/failed jobs are cleared.
+
+- Fix (Needs Review): bulk-deleting all flagged tracks now skips playback forward if the currently-playing track was among the deleted, instead of continuing to play a deleted file.
+
+- Fix (player): finishing a waveform seek drag after the track auto-changed no longer jumps the new track to the old drag position.
+
 - Fix (playback): Dolby-audio .m4a files — Apple Music "Spatial Audio" and other Dolby Digital/Dolby Digital Plus rips — failed to play in Chrome and other browsers with a format error, exactly like the earlier Apple Lossless case. The server now detects all of these codecs and transparently serves a browser-playable copy.
 
 - Fix (playback): on slow connections a track that was still downloading could be wrongly skipped as broken, and the skip cascade could make every following track fail too — even manual retries. Slow-loading tracks now retry once via a much smaller stream, and picking any track manually always starts fresh.

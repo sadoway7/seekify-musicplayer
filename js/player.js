@@ -590,29 +590,6 @@ const Player = {
     if (this.onQueueChange) this.onQueueChange();
   },
 
-  playNextInQueue(track) {
-    const insertAt = this.currentIndex + 1;
-    this.queue.splice(insertAt, 0, track);
-    if (this.shuffle && this._originalQueue.length > 0) {
-      this._originalQueue.push(track);
-    }
-    if (this.onQueueChange) this.onQueueChange();
-  },
-
-  clearQueue() {
-    const current = this.getCurrentTrack();
-    if (current) {
-      this.queue = [current];
-      this._originalQueue = [];
-      this.currentIndex = 0;
-    } else {
-      this.queue = [];
-      this._originalQueue = [];
-      this.currentIndex = -1;
-    }
-    if (this.onQueueChange) this.onQueueChange();
-  },
-
   isSingleMode() {
     return this.queue.length <= 1;
   },
@@ -634,14 +611,5 @@ const Player = {
       this.playing = false;
       if (this.onStateChange) this.onStateChange();
     }
-  },
-
-  _randomIndex() {
-    if (this.queue.length <= 1) return 0;
-    let idx;
-    do {
-      idx = Math.floor(Math.random() * this.queue.length);
-    } while (idx === this.currentIndex);
-    return idx;
   }
 };

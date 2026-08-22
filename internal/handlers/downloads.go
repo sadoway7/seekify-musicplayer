@@ -411,6 +411,7 @@ func DownloadJobDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	downloads.KillActiveJob(id)
 	store.DB.Exec("DELETE FROM download_jobs WHERE id = ?", id)
 
 	writeJSON(w, map[string]string{"status": "deleted"})
@@ -446,30 +447,33 @@ func DownloadJobSelectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job.VideoID = req.VideoID
-	job.Status = "queued"
-	job.ProgressStage = ""
-	job.Error = ""
-	// Soulseek selection resolves the picked candidate from CandidatesJSON
-	// inside ProcessSlskSelection; clearing it here (before the goroutine
-	// runs) would make the selection always fail with "candidate no longer
-	// available". Clear it only for the YouTube path, which doesn't use it.
-	if job.Source != "soulseek" {
-		job.CandidatesJSON = ""
-	}
-	downloads.DbUpdateJob(job)
-
 	if job.Source == "soulseek" {
 		idx, err := strconv.Atoi(req.VideoID)
 		if err != nil || idx < 0 {
 			http.Error(w, `{"error":"invalid selection index"}`, http.StatusBadRequest)
 			return
 		}
+		// Persist a non-queued status BEFORE spawning: a 'queued' row is
+		// claimable by any queue driver in the spawn window, which would
+		// re-search and auto-pick a different candidate (double download).
+		job.VideoID = req.VideoID
+		job.Status = "downloading"
+		job.ProgressStage = ""
+		job.Error = ""
+		downloads.DbUpdateJob(job)
+		resp := *job
 		store.SafeGo("slsk-selection", func() { downloads.ProcessSlskSelection(job, idx) })
-	} else {
-		store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
+		writeJSON(w, resp)
+		return
 	}
 
+	job.VideoID = req.VideoID
+	job.Status = "queued"
+	job.ProgressStage = ""
+	job.Error = ""
+	job.CandidatesJSON = ""
+	downloads.DbUpdateJob(job)
+	store.SafeGo("process-queue", func() { downloads.ProcessDownloadQueue() })
 	writeJSON(w, job)
 }
 
@@ -512,9 +516,9 @@ func QueueClearCompletedHandler(w http.ResponseWriter, r *http.Request) {
 	u := auth.CurrentUser(r)
 	var result sql.Result
 	if u != nil && u.Role == auth.RoleAdmin {
-		result, _ = store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading')")
+		result, _ = store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'searching', 'downloading', 'needs_selection')")
 	} else if u != nil {
-		result, _ = store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'downloading') AND user_id = ?", u.ID)
+		result, _ = store.DB.Exec("DELETE FROM download_jobs WHERE status NOT IN ('queued', 'searching', 'downloading', 'needs_selection') AND user_id = ?", u.ID)
 	}
 	cleared := 0
 	if result != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"musicapp/internal/downloads"
@@ -353,7 +354,12 @@ func RefreshWatchedPlaylist(p *WatchedPlaylist) error {
 			continue
 		}
 
-		job, _ := downloads.CreateDownloadJob("", "", artist, title, "", "", 0, 0, "", videoID, 0)
+		job, err := downloads.CreateDownloadJob("", "", artist, title, "", "", 0, 0, "", videoID, 0)
+		if errors.Is(err, downloads.ErrDownloadLimit) {
+			// Rate-limited this sync: skip the row entirely so the next
+			// sync retries it, instead of marking it completed forever.
+			continue
+		}
 		if job != nil {
 			job.PlaylistID = libraryPlaylistID
 			store.DB.Exec("UPDATE download_jobs SET playlist_id = ? WHERE id = ?", libraryPlaylistID, job.ID)

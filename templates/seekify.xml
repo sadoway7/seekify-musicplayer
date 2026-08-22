@@ -16,79 +16,58 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-08-22
+- Download queue runs jobs in the order they were added
+- Deleting a running download now stops it immediately
+- Clear Completed no longer touches jobs still searching or picking quality
+- Picking a Soulseek quality option always downloads exactly your pick
+- Watched playlists retry tracks that hit the download limit; player fixes
+
 2026-08-20
-- Fresh new tab bar: custom icon set with a glitch/scanline accent on the active tab
-- The Shuffle All die on the home screen got a new flat, modern look
-- Album art loads faster on repeat visits and on slower connections
-- Dolby / Spatial Audio tracks that previously failed with a format error now play in every browser
-- Slow connections no longer cause one slow track to skip through the whole queue; playback recovers gracefully
-- Search and artist pages show content-shaped loading placeholders instead of a lone spinner, so the layout no longer jumps when results arrive
-- Signed-out visitors see a playable sample of the library on the home screen instead of an empty page
-- Faster app open: startup requests run in parallel, app assets are cached between releases, and opening the app with an unchanged library skips the full library re-download — most of the wait before the app was usable is gone
-- The installed app and PWA open with the app's dark background instead of a white flash, and the browser tint matches the app theme on every screen
-- Apple Lossless (.m4a ALAC) tracks now play in Chrome and other browsers — the server detects them and serves a browser-playable copy automatically
-- The Server Log and Track Log in admin Settings no longer come up empty after the app has been running for a while
-- The Needs Review filter counts stay accurate after files are removed from the library
-- Installed app launches reliably reuse the running app instead of occasionally opening a duplicate tab
-- General stability and bug fixes
+- New tab bar with custom icons; redesigned Shuffle All die
+- Faster app open and album art loading
+- Dolby / Spatial Audio and Apple Lossless tracks now play everywhere
+- Slow connections no longer skip through the queue
+- Download queue runs jobs in the order they were added; general bug fixes
 
 2026-08-19
-- Playback dependability work: hardened the audio streaming pipeline against stalled encoders, extended load timeouts for slower connections, and fixed pausing during a slow load jumping to the next song
-- Album art fetching now retries on a daily schedule instead of only at startup, so a network hiccup at boot should no longer leave placeholder covers until the next restart
-- New automatic safety backup of your library database (kept 7 days) for extra peace of mind when updating
-- Library maintenance (cleanup and duplicate removal) runs on a steadier schedule and the Workers panel now shows every background job with its frequency
-- Fixes for playlist issues: contents could be lost if an error occurred mid-save, and shared playlists could become hidden from other users after a restart
-- YouTube downloads should more often pick the real music version instead of a music video
-- Faster app start: the app avoids re-downloading the library and cover images it just fetched
-- New Logs tab in admin Settings — view, copy, or download server and review logs without shell access to the container
-- Download reliability: failed sources now fall back correctly on retry, tracks credited to multiple artists ("A, B &amp; C") now match on Soulseek, and the Save File button no longer fails on the first attempt
-- Album imports now check each track's expected length, so live or extended versions are far less likely to replace the studio recording
-- Smoother navigation: background loads finishing while you're elsewhere no longer jump the view around, and dragging in the app no longer highlights text
-- Background downloads are no longer interrupted by heavy library scanning activity
-- The Needs Review page now only shows filter chips for categories that actually have flagged tracks, and its rescan action now processes just the flagged tracks instead of the whole library
-- Updated bundled components for performance and stability
-- Friendlier placeholder artwork and general stability, performance, and bug fixes
+- Playback is more dependable on slow connections
+- Album art now retries on a daily schedule
+- New Logs tab in admin Settings
+- Playlist and download reliability fixes
+- Automatic 7-day backup of the library database
 
 2026-08-10
-- Restored Chromecast and AirPlay support. An experimental audio-leveling feature had inadvertently broken remote playback on all browsers
-- The audio loudness leveling toggle in Settings is temporarily disabled (shown greyed-out with a note); it will return as server-side processing that doesn't conflict with casting
-- On iPhone/iPad the visualizer is audio-reactive again AND keeps AirPlay working: the server precomputes a frequency-band timeline per track and the player plays it back in sync, so no in-browser audio routing is needed (AirPlay is unaffected). First play of a track is ambient for a moment while the analysis is generated, then the visualizer pulses. Chrome, Firefox, and Android keep direct live analysis
-- While casting to an AirPlay speaker the visualizer hides itself (back to album art) and the toggle is disabled; it comes back when AirPlay disconnects
+- Restored Chromecast and AirPlay support
+- iPhone/iPad visualizer is audio-reactive again, AirPlay unaffected
+- Loudness leveling toggle temporarily disabled pending a rework
 
 2026-08-09
-- Corrupt or incomplete downloads are now caught and rejected at download time, and downloads automatically try another source when one fails
-- Files that fail to play or seek are surfaced for review so they can be re-downloaded
-- App no longer freezes during library scans; faster startup (no duplicate scan on boot)
-- Visualizer performance improved (smoother playback while it runs)
-- UI cursor fixes and more accurate review flags
-- General stability and bug fixes
+- Downloads verify files and fall back to another source on failure
+- Broken files are surfaced for review
+- No more freezes during library scans; faster startup
+- Visualizer and UI polish
+
 2026-08-02
-- Mobile playback: songs start instantly on iPhone/iPad (transcoding added for formats mobile browsers can't stream; desktop unchanged)
-- Downloads no longer occasionally run twice or leave the queue appearing stuck
-- Playlist track order and favorite/download toggles stay correct under rapid or concurrent use
-- Detects audio files that fail to play and surfaces them for review
-- New "Scan for Corrupt Audio" admin tool to find broken files across the library
-- New downloads are checked more thoroughly before being added to the library
-- "Retry All" for failed downloads now reliably retries every failed job
+- Songs start instantly on iPhone/iPad
+- Download queue reliability: no double runs, "Retry All" works
+- Playlists and favorites stay correct under rapid use
+- New "Scan for Corrupt Audio" admin tool
 - General reliability and bug fixes
 
 2026-07-30
-- Home page improvements: multi-column grids on large screens, refreshed section styling, ambient dice animation
-- Desktop mini-player: seekable progress bar, shuffle/repeat/like/share/download controls
-- Desktop mini-player no longer closes the playlist when closing the now-playing screen
-- Home page uses more of the screen on large displays
-- Context menu cursor fix
-- Tell search engines not to index the app (deep links keep working)
-- Experimental optional audio loudness leveling (toggle in Settings → Playback)
-- Download queue reliability fix and clearer download-source labels
-- Admin settings reorganized with a section dropdown
+- Home page: multi-column grids and refreshed styling
+- Desktop mini-player: seek bar and playback controls
+- Optional loudness leveling (Settings → Playback)
+- Clearer download-source labels
+- Minor UI fixes
 
 2026-07-29
 - Playback reliability improvements
 
 2026-07-28
 - Visualizer performance and polish
-- Refined shuffle-dice animation
+- Refined shuffle-die animation
 - General stability and bug fixes
 
 2026-07-17
@@ -107,7 +86,6 @@
 - Improved queue controls (Play Next, live refresh)
 - Metadata ranking prefers original releases over compilations
 - Downloads: pause/resume control and concurrency limits
-- Better media-client streaming support
 - Initial Community Apps listing with screenshots
 
 2026-07-10
@@ -120,7 +98,7 @@
 2026-06
 - Early beta</Changes>
   <Date>2026-08-10</Date>
-  <LastUpdate>1786382528</LastUpdate>
+  <LastUpdate>1787385304</LastUpdate>
   <MinVer>6.1</MinVer>
   <License>MIT</License>
   <Screenshot>https://raw.githubusercontent.com/sadoway7/seekify-musicplayer/main/docs/screenshots/01-home-library.jpg</Screenshot>
