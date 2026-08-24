@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- UI: toast notifications redesigned — larger light pill, dead-centered on screen with a springy pop that matches the app's motion style.
+
+- Fix (guests): tapping the favorite button while signed out now shows a clear "Log in to save favorites" toast instead of a generic failure.
+
+- Fix (home): the signed-out sample strip now fills exactly one row on every screen size instead of spilling a stray card onto a second row on wide displays.
+
 - Fix (web): app updates can no longer serve stale JS/CSS — asset versions are now stamped by the server on every deploy instead of hand-edited, removing the "forgot to bump" failure mode entirely.
 
 - Internal (architecture): the in-memory library now sits behind a single locking module, routes are declared in one table with their auth levels, and the remaining cross-package hooks are wired in one visible place — no behavior change, just a smaller, safer surface for future work. (Full write-up: ARCHITECTURE-REVIEW-AUG-23.md, executed cards 1/2/4/5.)

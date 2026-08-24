@@ -281,6 +281,7 @@ const UI = {
       } else if (e.target.closest('.mini-like-btn')) {
         const track = Player.getCurrentTrack();
         if (track) {
+          if (Store.isGuest) { this.showToast('Log in to save favorites'); return; }
           Api.toggleFavorite(track.id).then(() => {
             Store.refreshFavorites().then(() => {
               this.updateMiniPlayer();
@@ -353,6 +354,7 @@ const UI = {
     this.els.npLikeBtn.addEventListener('click', async () => {
       const track = Player.getCurrentTrack();
       if (!track) return;
+      if (Store.isGuest) { this.showToast('Log in to save favorites'); return; }
       try {
         await Api.toggleFavorite(track.id);
         await Store.refreshFavorites();

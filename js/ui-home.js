@@ -146,7 +146,11 @@ Object.assign(UI, {
       const withArt = Store.library.tracks.filter(t => t.artist && t.artist !== 'Unknown' && t.albumID && Store.getAlbum(t.albumID) && Store.getAlbum(t.albumID).hasCover);
       if (withArt.length > 0) {
         const pool = withArt.slice();
-        const max = Math.min(pool.length, 7);
+        // Fill exactly one row: shuffle card + (cols-1) picks, matching the
+        // grid breakpoints (3/4/5/7 columns) so wide screens never get an
+        // orphan card spilling onto a second row.
+        const cols = window.innerWidth >= 1440 ? 7 : window.innerWidth >= 1024 ? 5 : window.innerWidth >= 768 ? 4 : 3;
+        const max = Math.min(pool.length, cols - 1);
         const picks = [];
         while (picks.length < max) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
         let sample = '<div class="mega-title" style="margin-top:24px"><span>Recently Played</span></div>';

@@ -261,6 +261,7 @@ Object.assign(UI, {
       }},
       { type: 'divider' },
       { label: isFav ? 'Remove from Favorites' : 'Add to Favorites', icon: isFav ? Icons.heartFilled() : Icons.heart(), action: async () => {
+        if (Store.isGuest) { this.hideContextMenu(); this.showToast('Log in to save favorites'); return; }
         try {
           await Api.toggleFavorite(trackId);
           await Store.refreshFavorites();

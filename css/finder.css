@@ -752,29 +752,6 @@
   background: rgba(212, 240, 64, 0.12);
 }
 
-.toast {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--l2);
-  color: var(--text-primary);
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: var(--fs-caption);
-  font-weight: 500;
-  opacity: 0;
-  transition: opacity 0.3s, transform 0.3s;
-  z-index: 1000;
-  pointer-events: none;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-}
-
-.toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
 .queue-section {
   margin: var(--sp-4) var(--page-margin) var(--sp-6);
   background: var(--l2);
