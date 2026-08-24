@@ -7,23 +7,14 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"sync/atomic"
 )
 
-// LibraryVersion is incremented whenever the library changes (scan, watcher, metadata update).
-var LibraryVersion atomic.Int64
-
 func StatsHandler(w http.ResponseWriter, r *http.Request) {
-	store.Mu.RLock()
-	trackCount := len(store.Tracks)
-	albumCount := len(store.Albums)
-	store.Mu.RUnlock()
-
 	w.Header().Set("Cache-Control", "no-cache")
 	writeJSON(w, map[string]interface{}{
-		"tracks":  trackCount,
-		"albums":  albumCount,
-		"version": LibraryVersion.Load(),
+		"tracks":  store.TrackCount(),
+		"albums":  store.AlbumCount(),
+		"version": store.LibraryVersion.Load(),
 	})
 }
 
@@ -33,7 +24,7 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 	// write bumps it (scanner, metadata edits, review statuses via
 	// DbSetReviewStatus). no-cache forces revalidation so a bump is always
 	// picked up; an unchanged library costs one ~100-byte 304.
-	ver := LibraryVersion.Load()
+	ver := store.LibraryVersion.Load()
 	etag := `"` + strconv.FormatInt(ver, 10) + `"`
 	w.Header().Set("Cache-Control", "no-cache")
 	if r.Header.Get("If-None-Match") == etag {
@@ -47,47 +38,50 @@ func LibraryHandler(w http.ResponseWriter, r *http.Request) {
 	// Review statuses live in their own DB table; no map lock needed to read them.
 	reviewStatuses := review.DbLoadAllReviewStatuses()
 
-	// Snapshot the maps under the read lock; sort and encode after release so a
-	// slow client draining the response cannot block writers.
-	store.Mu.RLock()
-	trackList := make([]models.Track, 0, len(store.Tracks))
-	for _, t := range store.Tracks {
-		copy := *t
-		if rs, ok := reviewStatuses[t.ID]; ok {
-			copy.ReviewStatus = rs.Status
-			copy.ReviewFlags = rs.Flags
+	// Snapshot the maps under one read lock; sort and encode after release so
+	// a slow client draining the response cannot block writers.
+	var trackList []models.Track
+	var albumList []models.Album
+	var artistList []models.Artist
+	store.View(func(l *store.Library) {
+		trackList = make([]models.Track, 0, len(l.Tracks))
+		for _, t := range l.Tracks {
+			copy := *t
+			if rs, ok := reviewStatuses[t.ID]; ok {
+				copy.ReviewStatus = rs.Status
+				copy.ReviewFlags = rs.Flags
+			}
+			trackList = append(trackList, copy)
 		}
-		trackList = append(trackList, copy)
-	}
 
-	albumList := make([]models.Album, 0, len(store.Albums))
-	for _, a := range store.Albums {
-		albumList = append(albumList, *a)
-	}
+		albumList = make([]models.Album, 0, len(l.Albums))
+		for _, a := range l.Albums {
+			albumList = append(albumList, *a)
+		}
 
-	artistMap := make(map[string]*models.Artist)
-	for _, t := range store.Tracks {
-		name := t.Artist
-		if _, exists := artistMap[name]; !exists {
-			artistMap[name] = &models.Artist{Name: name}
+		artistMap := make(map[string]*models.Artist)
+		for _, t := range l.Tracks {
+			name := t.Artist
+			if _, exists := artistMap[name]; !exists {
+				artistMap[name] = &models.Artist{Name: name}
+			}
+			artistMap[name].TrackCount++
 		}
-		artistMap[name].TrackCount++
-	}
-	for _, a := range store.Albums {
-		name := a.Artist
-		if _, exists := artistMap[name]; exists {
-			artistMap[name].AlbumCount++
+		for _, a := range l.Albums {
+			name := a.Artist
+			if _, exists := artistMap[name]; exists {
+				artistMap[name].AlbumCount++
+			}
 		}
-	}
-	store.Mu.RUnlock()
+
+		artistList = make([]models.Artist, 0, len(artistMap))
+		for _, a := range artistMap {
+			artistList = append(artistList, *a)
+		}
+	})
 
 	sort.Slice(trackList, func(i, j int) bool { return trackList[i].Title < trackList[j].Title })
 	sort.Slice(albumList, func(i, j int) bool { return albumList[i].Name < albumList[j].Name })
-
-	artistList := make([]models.Artist, 0, len(artistMap))
-	for _, a := range artistMap {
-		artistList = append(artistList, *a)
-	}
 	sort.Slice(artistList, func(i, j int) bool {
 		return artistList[i].Name < artistList[j].Name
 	})

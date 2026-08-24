@@ -240,14 +240,14 @@ func FinderSearchArtists(query string, limit int) ([]FinderArtist, error) {
 		return nil, fmt.Errorf("invalid response from MusicBrainz: %v", err)
 	}
 
-	store.Mu.RLock()
 	libraryArtists := map[string]bool{}
-	for _, t := range store.Tracks {
-		if t.Artist != "" {
-			libraryArtists[strings.ToLower(t.Artist)] = true
+	store.View(func(l *store.Library) {
+		for _, t := range l.Tracks {
+			if t.Artist != "" {
+				libraryArtists[strings.ToLower(t.Artist)] = true
+			}
 		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	for _, a := range searchResp.Artists {
 		inLibrary := libraryArtists[strings.ToLower(a.Name)]
@@ -751,9 +751,7 @@ var (
 )
 
 func getLibraryLookup() map[string]bool {
-	store.Mu.RLock()
-	currentCount := len(store.Tracks)
-	store.Mu.RUnlock()
+	currentCount := store.TrackCount()
 
 	cachedLibLookupMu.RLock()
 	if cachedLibLookup != nil && cachedLibLookupCount == currentCount {
@@ -774,27 +772,29 @@ func getLibraryLookup() map[string]bool {
 
 // buildLibraryLookup creates a lookup map of "artist|title" keys for library tracks.
 func buildLibraryLookup() map[string]bool {
-	store.Mu.RLock()
-	defer store.Mu.RUnlock()
-	m := make(map[string]bool, len(store.Tracks)*2)
-	for _, t := range store.Tracks {
-		if t.Artist != "" && t.Title != "" {
-			m[strings.ToLower(t.Artist+"|"+t.Title)] = true
+	var m map[string]bool
+	store.View(func(l *store.Library) {
+		m = make(map[string]bool, len(l.Tracks)*2)
+		for _, t := range l.Tracks {
+			if t.Artist != "" && t.Title != "" {
+				m[strings.ToLower(t.Artist+"|"+t.Title)] = true
+			}
 		}
-	}
+	})
 	return m
 }
 
 // buildAlbumLookup creates a lookup map of "artist|album" keys for library albums.
 func buildAlbumLookup() map[string]bool {
-	store.Mu.RLock()
-	defer store.Mu.RUnlock()
-	m := make(map[string]bool, len(store.Albums)*2)
-	for _, a := range store.Albums {
-		if a.Artist != "" && a.Name != "" {
-			m[strings.ToLower(a.Artist+"|"+a.Name)] = true
+	var m map[string]bool
+	store.View(func(l *store.Library) {
+		m = make(map[string]bool, len(l.Albums)*2)
+		for _, a := range l.Albums {
+			if a.Artist != "" && a.Name != "" {
+				m[strings.ToLower(a.Artist+"|"+a.Name)] = true
+			}
 		}
-	}
+	})
 	return m
 }
 

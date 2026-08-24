@@ -14,10 +14,13 @@ const Api = {
       }
       const res = await fetch(url, fetchOpts);
       if (!res.ok) {
+        // Fallback callers opt out of the global auth flow: fire-and-forget
+        // telemetry (duration reports, playback errors) must not pop the
+        // login screen over a guest's player.
+        if (fallback !== undefined) return fallback;
         if (res.status === 401 && !url.startsWith('/api/me') && !url.startsWith('/api/login') && !url.startsWith('/api/setup') && !url.startsWith('/api/library')) {
           window.dispatchEvent(new CustomEvent('auth-required'));
         }
-        if (fallback !== undefined) return fallback;
         let msg = errMsg || 'Request failed';
         try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
         throw new Error(msg);
@@ -34,7 +37,10 @@ const Api = {
   streamUrl(id, transcode) { return '/api/stream/' + id + (transcode ? '?fmt=aac' : ''); },
   downloadUrl(id) { return '/api/download/' + id; },
   coverUrl(albumId) {
-    const v = (this._coverVer && this._coverVer[albumId]) || this._libVersion;
+    // Per-album busts only. Never key on the global library version — every
+    // version bump would mint new URLs and re-download every cover on screen;
+    // server-side ETag revalidation already picks up changed art.
+    const v = this._coverVer && this._coverVer[albumId];
     return '/api/cover/' + albumId + (v ? '?v=' + v : '');
   },
   bustCover(albumId) {
@@ -47,7 +53,7 @@ const Api = {
 
   // ── GET (throw on error) ──
   getLibrary() {
-    return this._req('/api/library', { errMsg: 'Failed to load library' }).then(d => { this._libVersion = d.version; return d; });
+    return this._req('/api/library', { errMsg: 'Failed to load library' });
   },
   getPlaylists() { return this._req('/api/playlists', { errMsg: 'Failed to load playlists' }); },
   getFavorites() { return this._req('/api/favorites', { errMsg: 'Failed to load favorites' }); },

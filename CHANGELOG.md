@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- Fix (web): app updates can no longer serve stale JS/CSS — asset versions are now stamped by the server on every deploy instead of hand-edited, removing the "forgot to bump" failure mode entirely.
+
+- Internal (architecture): the in-memory library now sits behind a single locking module, routes are declared in one table with their auth levels, and the remaining cross-package hooks are wired in one visible place — no behavior change, just a smaller, safer surface for future work. (Full write-up: ARCHITECTURE-REVIEW-AUG-23.md, executed cards 1/2/4/5.)
+
+- Removal (ripper): the old standalone Ripper page (`/ripperv2`) has been removed — the Finder tab is the one rip/download UI. Everything it did (search, queue, quality picks) lives in the Finder; downloads, watched playlists, and enrichment are untouched.
+
+- Performance (covers): album covers no longer re-download across the whole home page every time the library changes (a finished download, a scan, an edit) — only covers that actually changed refresh now, so background activity no longer causes visible cover flicker and reload bursts, especially on remote/phone connections.
+
+- Performance (home): during an active download session or scan, the home page now refreshes once per settled batch instead of re-fetching and re-rendering the whole library after every single track lands.
+
+- Fix (playback): losing internet mid-playlist no longer burns through the whole queue — network failures now pause playback and automatically resume the current track when the connection returns.
+
+- Fix (playback): a track that stalls mid-song (buffer runs dry and never refills) now recovers itself — one automatic retry, then a clear "tap play" pause, instead of hanging the progress bar forever.
+
+- Fix (playback): auto-skipping broken files stops after three consecutive failures instead of grinding through the entire queue with a skip-storm.
+
+- Fix (playback): a late error from a skipped track can no longer be blamed on the next track — no more wrong files flagged for review or wrongly reported durations.
+
+- Fix (guests): guest playback no longer pops the login screen when it reports a track duration or a playback hiccup in the background.
+
+- Fix (playback): deep links (`?play=…`) now start through the same guarded load path as everything else, so the first tap of play can't hang silently on a bad connection.
+
+- Fix (playback): Shuffle All uses a proper unbiased shuffle and resets shuffle state through the player instead of bypassing it.
+
+- Fix (server): audio streams now send cache validators (ETag/Last-Modified) so clients re-validate cheaply and detect changed files after a retag instead of splicing stale bytes; the server also sheds hung connections via header/idle timeouts.
+
 - Fix (downloads): deleting a job that is actively downloading now stops the download process instead of letting it finish in the background — the track no longer appears in the library after you deleted its job.
 
 - Fix (downloads): picking a Soulseek quality candidate can no longer trigger a second, automatic search for the same job in the moment between your pick and the download starting — selections download exactly what you chose, once.

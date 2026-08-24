@@ -230,10 +230,8 @@ func BandsPath(trackID string) string {
 // GetCached returns the cached timeline for trackID. ok is false if the cache
 // is missing, corrupt, or stale (older than the source file).
 func GetCached(trackID string) (res *Result, ok bool, err error) {
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-	if !exists {
+	track := store.GetTrack(trackID)
+	if track == nil {
 		return nil, false, nil
 	}
 	srcPath := scanner.ResolveFilePath(track.FilePath)
@@ -281,10 +279,8 @@ func GenerateAsync(trackID string) {
 		bandSem <- struct{}{}
 		defer func() { <-bandSem }()
 
-		store.Mu.RLock()
-		track, exists := store.Tracks[trackID]
-		store.Mu.RUnlock()
-		if !exists {
+		track := store.GetTrack(trackID)
+		if track == nil {
 			return
 		}
 

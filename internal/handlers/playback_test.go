@@ -18,16 +18,12 @@ func setupPlaybackTestDB(t *testing.T) {
 	t.Helper()
 	store.InitDB(filepath.Join(t.TempDir(), "test.db"))
 	review.InitReviewTables()
-	store.Mu.Lock()
 	// Assign (not insert): store.InitDB doesn't populate Tracks, so a filtered
 	// test run (-run TestPlayback...) must not depend on another test file
 	// having seeded the map first.
-	store.Tracks = map[string]*models.Track{"t1": {ID: "t1", Title: "T", Artist: "A"}}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(map[string]*models.Track{"t1": {ID: "t1", Title: "T", Artist: "A"}}, nil)
 	t.Cleanup(func() {
-		store.Mu.Lock()
-		delete(store.Tracks, "t1")
-		store.Mu.Unlock()
+		store.Update(func(l *store.Library) { delete(l.Tracks, "t1") })
 	})
 }
 

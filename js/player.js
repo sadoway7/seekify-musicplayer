@@ -18,6 +18,10 @@ const Player = {
   _errorHandledForCurrent: false,
   _loadTimeout: null,
   _unsupportedExts: null,
+  _stallTimeout: null,
+  _stallRetried: false,
+  _networkPaused: false,
+  _activeSrc: null,
 
   // Probe once: which audio formats can this browser stream? iOS/macOS Safari
   // returns "" for FLAC/Opus/Ogg (it must download the whole file before
@@ -64,10 +68,15 @@ const Player = {
     this._unsupportedExts = this._detectUnsupportedExts();
     this.audio.volume = this.volume;
     this.audio.addEventListener('timeupdate', () => {
+      // Fresh data flowing means any armed stall watchdog is obsolete.
+      this._clearStallTimeout();
       if (this.onTimeUpdate) this.onTimeUpdate();
     });
     this.audio.addEventListener('ended', () => this._onEnded());
     this.audio.addEventListener('loadedmetadata', () => {
+      // A stale load (src already swapped or cleared) must not report the
+      // wrong track's duration.
+      if (this._activeSrc !== null && this.audio.src !== this._activeSrc) return;
       if (this.onTimeUpdate) this.onTimeUpdate();
       this._syncPositionState();
       // Report duration to server if track doesn't have one yet
@@ -90,11 +99,16 @@ const Player = {
       // load-timeout failure, and force-skip to (and auto-play) the next
       // track the user explicitly paused away from.
       this._clearLoadTimeout();
+      this._clearStallTimeout();
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
       if (this.onStateChange) this.onStateChange();
     });
     this.audio.addEventListener('error', (e) => {
       const a = this.audio;
+      // A late error from an already-replaced or cleared source belongs to
+      // the old load, not the current track — don't flag/skip the wrong song.
+      // ponytail: repeat-one reloads of the same URL are indistinguishable; accepted.
+      if (this._activeSrc !== null && a.src !== this._activeSrc) return;
       console.warn('[player] audio error event', {
         error: a.error,
         code: a.error && a.error.code,
@@ -135,6 +149,7 @@ const Player = {
       // actually flowing. Only now is the current source known to be healthy.
       this._consecutiveErrors = 0;
       this._clearLoadTimeout();
+      this._clearStallTimeout();
       if (!('mediaSession' in navigator)) return;
       navigator.mediaSession.setActionHandler('play', () => { this.audio.play().catch(() => {}); });
       navigator.mediaSession.setActionHandler('pause', () => { this.audio.pause(); });
@@ -147,6 +162,29 @@ const Player = {
         }
       });
     });
+
+    // Mid-playback stall watchdog: `waiting` fires when the buffer runs dry.
+    // If no data arrives for 30s, retry the track once (fresh load); a second
+    // stall pauses instead of hanging the progress bar forever.
+    this.audio.addEventListener('waiting', () => {
+      this._clearStallTimeout();
+      if (!this.getCurrentTrack() || this.audio.paused) return;
+      let timerId;
+      this._stallTimeout = setTimeout(() => {
+        if (this._stallTimeout !== timerId) return;
+        this._stallTimeout = null;
+        this._onStallTimeout();
+      }, 30000);
+      timerId = this._stallTimeout;
+    });
+
+    // Resume when connectivity returns: reload the paused track through the
+    // guarded path instead of replaying the failed source.
+    try {
+      if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('online', () => this._resumeAfterNetwork());
+      }
+    } catch (e) { /* non-browser contexts (tests) have no window */ }
   },
 
   // ponytail: iOS needs finite position state to render prev/next-track buttons
@@ -217,12 +255,16 @@ const Player = {
 
   _loadAndPlay(track, forceTranscode) {
     this._clearLoadTimeout();
+    this._clearStallTimeout();
     this._errorHandledForCurrent = false;
+    this._stallRetried = false;
+    this._networkPaused = false;
     // forceTranscode marks a slow-network retry: only allow one per load so a
     // genuinely unplayable track still skips instead of looping.
     this._triedTranscodeFallback = forceTranscode === true;
     const wantTranscode = forceTranscode === true || this._needsTranscode(track);
     this.audio.src = Api.streamUrl(track.id, wantTranscode);
+    this._activeSrc = this.audio.src;
     this.audio.play().then(() => {
       this.playing = true;
       if (this.onStateChange) this.onStateChange();
@@ -278,6 +320,58 @@ const Player = {
     }
   },
 
+  _clearStallTimeout() {
+    if (this._stallTimeout) {
+      clearTimeout(this._stallTimeout);
+      this._stallTimeout = null;
+    }
+  },
+
+  // Stall watchdog expiry: retry the current track once (fresh load), then
+  // pause with a "tap play" affordance. Never advances the queue.
+  _onStallTimeout() {
+    console.warn('[player] playback stalled', {
+      src: this.audio.src,
+      networkState: this.audio.networkState,
+      readyState: this.audio.readyState,
+      currentTime: this.audio.currentTime,
+    });
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this._pauseForNetwork();
+      return;
+    }
+    const t = this.getCurrentTrack();
+    if (!t) return;
+    if (!this._stallRetried) {
+      // _loadAndPlay resets the flag; set it after so a second stall pauses.
+      this._loadAndPlay(t);
+      this._stallRetried = true;
+      return;
+    }
+    this._pauseForNetwork('Stream stalled — tap play to retry');
+  },
+
+  // Network-flavored failure: stop trying (a skip cascade aborts a download
+  // per track and never resumes when connectivity returns), remember why, and
+  // let either the window 'online' event or a tap on play reload fresh.
+  _pauseForNetwork(toastMsg) {
+    this._clearLoadTimeout();
+    this._clearStallTimeout();
+    this._networkPaused = true;
+    this.playing = false;
+    this.audio.pause();
+    if (typeof UI !== 'undefined' && UI.showToast) {
+      UI.showToast(toastMsg || 'Network unavailable — playback paused');
+    }
+    if (this.onStateChange) this.onStateChange();
+  },
+
+  _resumeAfterNetwork() {
+    if (!this._networkPaused) return;
+    const t = this.getCurrentTrack();
+    if (t) this._loadAndPlay(t);
+  },
+
   // Report this failure (once per track load, via _onMediaError's guard) to
   // the server's weekly playback-failure log: reason, media error code, player
   // state, and whether the load was a transcode request. Never throws.
@@ -304,6 +398,20 @@ const Player = {
     this.playing = false;
     console.warn('[player] _onMediaError', { reason, trackId: this.getCurrentTrack() && this.getCurrentTrack().id, consecutiveErrors: this._consecutiveErrors + 1, queueLen: this.queue.length });
     this._reportFailure(reason);
+
+    // Network-flavored failures are transient, not broken files: pause
+    // instead of skipping. Code 2 without a corrupt-seek message is a
+    // genuine network error; a codeless failure while the browser reports
+    // being offline is too. Decode/unsupported (3/4) always skip — the file
+    // itself is the problem, connectivity won't fix it.
+    const err = this.audio && this.audio.error;
+    const errCode = err && err.code;
+    const seekCorruptMsg = errCode === 2 && /demuxer|seek failed|PIPELINE_ERROR/i.test((err && err.message) || '');
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if ((errCode === 2 && !seekCorruptMsg) || (offline && !errCode)) {
+      this._pauseForNetwork();
+      return;
+    }
 
     // Slow-network rescue: a load timeout while the network state is still
     // actively loading means the file is fine but too big for the pipe —
@@ -332,9 +440,14 @@ const Player = {
       UI.showToast('File unavailable — skipping');
     }
 
-    if (this._consecutiveErrors >= this.queue.length) {
+    // Cap the auto-skip cascade: three consecutive bad tracks is a network
+    // or library problem, not three coincidentally broken files — don't let
+    // a dead connection grind through a 300-track queue.
+    if (this._consecutiveErrors >= Math.min(this.queue.length, 3)) {
       if (typeof UI !== 'undefined' && UI.showToast) {
-        UI.showToast('All tracks in queue unavailable — playback stopped');
+        UI.showToast(this._consecutiveErrors >= this.queue.length
+          ? 'All tracks in queue unavailable — playback stopped'
+          : 'Multiple tracks unavailable — playback stopped');
       }
       if (this.onStateChange) this.onStateChange();
       return;
@@ -358,7 +471,14 @@ const Player = {
     // keeps the toggle decision in sync with ground truth so rapid clicks and
     // transient stalls don't cause missed/duplicated toggles.
     if (this.audio.paused) {
-      this.audio.play().catch(() => {});
+      // After a network pause (or a deep-link that only primed the queue),
+      // the current source is dead or absent — reload through the guarded
+      // path instead of replaying it.
+      if ((this._networkPaused || !this.audio.src) && this.getCurrentTrack()) {
+        this._loadAndPlay(this.getCurrentTrack());
+      } else {
+        this.audio.play().catch(() => {});
+      }
     } else {
       this.audio.pause();
     }
@@ -529,6 +649,7 @@ const Player = {
     this.playing = false;
     this._consecutiveErrors = 0;
     this._errorHandledForCurrent = false;
+    this._networkPaused = false;
     this.audio.pause();
     this.audio.removeAttribute('src');
     this.audio.load();

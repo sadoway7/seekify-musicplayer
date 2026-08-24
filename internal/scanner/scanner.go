@@ -22,7 +22,6 @@ var scanning atomic.Bool
 var (
 	WakeReviewWorker       func()
 	InsertUncheckedReviews func(newTracks map[string]*models.Track)
-	LibraryVersionAdd      func(delta int64)
 	DeleteReview           func(trackID string)
 	SetReviewStatus        func(trackID, status, flags, reviewer string)
 	SeedReviewUnchecked    func(trackID string)
@@ -176,15 +175,16 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			continue
 		}
 		fileModTime := fileInfo.ModTime().Unix()
-		store.Mu.RLock()
-		existing := store.Tracks[trackID]
+		var existing *models.Track
 		var existingSnapshot *models.Track
-		if existing != nil {
-			snapshot := *existing
-			existingSnapshot = &snapshot
-		}
-		if existing != nil && existing.ModTime == fileModTime {
-			store.Mu.RUnlock()
+		store.View(func(l *store.Library) {
+			existing = l.Tracks[trackID]
+			if existing != nil {
+				snapshot := *existing
+				existingSnapshot = &snapshot
+			}
+		})
+		if existing != nil && existingSnapshot.ModTime == fileModTime {
 			// Still include it in the new tracks map so it isn't deleted
 			newTracks[trackID] = existing
 			if existingSnapshot.Album != "" {
@@ -203,7 +203,6 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			}
 			continue
 		}
-		store.Mu.RUnlock()
 
 		parts := strings.Split(relPath, string(filepath.Separator))
 		folderArtist := ""
@@ -327,23 +326,23 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	log.Printf("[scan] Tag reading done, %d changed of %d total, writing to DB...", len(changedTracks), len(newTracks))
 
 	// Build the primary-path dedup set under a short RLock, then run the DB
-	// commit WITHOUT store.Mu: a 50k-track scan commit previously held the
+	// commit WITHOUT the library write lock: a 50k-track scan commit previously held the
 	// write lock for its entire duration, freezing every /api/library,
 	// /api/stream and /api/cover reader for seconds. The DB is independent
 	// of the in-memory maps; only the final map swap below needs the lock.
-	store.Mu.RLock()
-	oldTrackCount := len(store.Tracks)
+	oldTrackCount := store.TrackCount()
 	var primaryPaths map[string]bool
 	if prefix != "" {
 		prefixKey := prefix + ":"
 		primaryPaths = make(map[string]bool)
-		for _, t := range store.Tracks {
-			if !strings.HasPrefix(t.FilePath, prefixKey) && !strings.Contains(t.FilePath, ":") {
-				primaryPaths[t.FilePath] = true
+		store.View(func(l *store.Library) {
+			for _, t := range l.Tracks {
+				if !strings.HasPrefix(t.FilePath, prefixKey) && !strings.Contains(t.FilePath, ":") {
+					primaryPaths[t.FilePath] = true
+				}
 			}
-		}
+		})
 	}
-	store.Mu.RUnlock()
 
 	commitOK := false
 	// Tracks/albums whose upsert failed: a failed statement doesn't poison
@@ -384,7 +383,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 	}
 
 	// Review callbacks touch only the local newTracks map and their own DB
-	// tables — no store.Tracks/Albums access. Running them outside store.Mu
+	// tables — no library-map access. Running them outside the library lock
 	// avoids blocking all library reads (every /api/library, /api/stream,
 	// /api/cover handler takes Mu.RLock) during the review insert phase.
 	pendingReviews := newTracks
@@ -407,9 +406,9 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		return stats
 	}
 
-	store.Mu.Lock()
+	store.Update(func(l *store.Library) {
 	if prefix == "" {
-		for oldID, oldTrack := range store.Tracks {
+		for oldID, oldTrack := range l.Tracks {
 			if strings.Contains(oldTrack.FilePath, ":") {
 				continue
 			}
@@ -423,9 +422,9 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 
 		// Primary scan: replace only primary-dir entries in global maps
 		// First remove old primary tracks
-		for id := range store.Tracks {
-			if !strings.Contains(store.Tracks[id].FilePath, ":") {
-				delete(store.Tracks, id)
+		for id := range l.Tracks {
+			if !strings.Contains(l.Tracks[id].FilePath, ":") {
+				delete(l.Tracks, id)
 			}
 		}
 		// Then merge new primary tracks in
@@ -433,25 +432,25 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			if failedTracks[id] {
 				continue // not persisted — keep memory matched to the DB
 			}
-			store.Tracks[id] = t
+			l.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
 			if failedAlbums[id] {
 				continue
 			}
-			store.Albums[id] = a
+			l.Albums[id] = a
 		}
 		// Clean up orphaned albums (no tracks reference them)
 		usedAlbums := make(map[string]bool)
-		for _, t := range store.Tracks {
+		for _, t := range l.Tracks {
 			if t.AlbumID != "" {
 				usedAlbums[t.AlbumID] = true
 			}
 		}
-		for id := range store.Albums {
+		for id := range l.Albums {
 			if !usedAlbums[id] {
 				store.DbDeleteAlbum(id)
-				delete(store.Albums, id)
+				delete(l.Albums, id)
 			}
 		}
 	} else {
@@ -459,7 +458,7 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 		// Skip media-dir tracks whose normalized path already exists as a
 		// primary-dir track (prevents cross-prefix duplicates).
 		primaryPaths := make(map[string]bool)
-		for _, t := range store.Tracks {
+		for _, t := range l.Tracks {
 			if !strings.HasPrefix(t.FilePath, "media:") && !strings.Contains(t.FilePath, ":") {
 				primaryPaths[t.FilePath] = true
 			}
@@ -472,19 +471,19 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 			if failedTracks[id] {
 				continue // not persisted — keep memory matched to the DB
 			}
-			store.Tracks[id] = t
+			l.Tracks[id] = t
 		}
 		for id, a := range newAlbums {
 			if failedAlbums[id] {
 				continue
 			}
-			store.Albums[id] = a
+			l.Albums[id] = a
 		}
 		// Prune media-dir tracks whose files disappeared since the last scan.
 		// The merge above only adds; files removed externally must be cleaned up
 		// here (same os.Stat pattern as the primary prune above).
 		prefixKey := prefix + ":"
-		for oldID, oldTrack := range store.Tracks {
+		for oldID, oldTrack := range l.Tracks {
 			if !strings.HasPrefix(oldTrack.FilePath, prefixKey) {
 				continue
 			}
@@ -496,11 +495,11 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 				if DeleteReview != nil {
 					DeleteReview(oldID)
 				}
-				delete(store.Tracks, oldID)
+				delete(l.Tracks, oldID)
 			}
 		}
 	}
-	store.Mu.Unlock()
+	})
 
 	// Review callbacks run after Mu is released — they snapshot newTracks
 	// (a local) and hit only the track_reviews table.
@@ -537,27 +536,25 @@ func ScanMusicDirWithPrefixLocked(dir string, prefix string) models.ScanStats {
 // Duration=0 alone is not enough — newly downloaded files may not have been
 // probed by ffprobe yet. We must not delete legitimately downloaded music.
 func PruneTruncatedTracks() int {
-	store.Mu.RLock()
 	toDelete := make(map[string]string)
-	for id, t := range store.Tracks {
-		if t.Duration != 0 {
-			continue
+	store.View(func(l *store.Library) {
+		for id, t := range l.Tracks {
+			if t.Duration != 0 {
+				continue
+			}
+			// Check the actual file size on disk — only prune if tiny
+			fp := ResolveFilePath(t.FilePath)
+			info, err := os.Stat(fp)
+			if err != nil || info.Size() < 10240 {
+				toDelete[id] = fp
+			}
 		}
-		// Check the actual file size on disk — only prune if tiny
-		fp := ResolveFilePath(t.FilePath)
-		info, err := os.Stat(fp)
-		if err != nil || info.Size() < 10240 {
-			toDelete[id] = fp
-		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	for id, fp := range toDelete {
 		os.Remove(fp) // best-effort
 		store.DbDeleteTrack(id)
-		store.Mu.Lock()
-		delete(store.Tracks, id)
-		store.Mu.Unlock()
+		store.Update(func(l *store.Library) { delete(l.Tracks, id) })
 	}
 	if len(toDelete) > 0 {
 		log.Printf("[scanner] Pruned %d truncated tracks (0 duration)", len(toDelete))
@@ -570,19 +567,17 @@ func PruneTruncatedTracks() int {
 // never appear in the library.
 func PruneSharedDirTracks() int {
 	var toDelete []string
-	store.Mu.RLock()
-	for id, t := range store.Tracks {
-		if store.IsInSlskShareDir(t.FilePath) {
-			toDelete = append(toDelete, id)
+	store.View(func(l *store.Library) {
+		for id, t := range l.Tracks {
+			if store.IsInSlskShareDir(t.FilePath) {
+				toDelete = append(toDelete, id)
+			}
 		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	for _, id := range toDelete {
 		store.DbDeleteTrack(id)
-		store.Mu.Lock()
-		delete(store.Tracks, id)
-		store.Mu.Unlock()
+		store.Update(func(l *store.Library) { delete(l.Tracks, id) })
 	}
 	if len(toDelete) > 0 {
 		log.Printf("[scanner] Pruned %d tracks from Soulseek share dir", len(toDelete))
@@ -596,15 +591,16 @@ func PruneSharedDirTracks() int {
 // reliable way to reconcile the library. Only provably-missing files
 // (os.IsNotExist) are removed; transient filesystem errors are left alone.
 func PruneMissingTracks() int {
-	store.Mu.RLock()
 	type entry struct {
 		id, filePath string
 	}
-	all := make([]entry, 0, len(store.Tracks))
-	for id, t := range store.Tracks {
-		all = append(all, entry{id: id, filePath: t.FilePath})
-	}
-	store.Mu.RUnlock()
+	var all []entry
+	store.View(func(l *store.Library) {
+		all = make([]entry, 0, len(l.Tracks))
+		for id, t := range l.Tracks {
+			all = append(all, entry{id: id, filePath: t.FilePath})
+		}
+	})
 
 	var orphans []string
 	for _, e := range all {
@@ -619,30 +615,28 @@ func PruneMissingTracks() int {
 
 	store.ScanMu.Lock()
 	defer store.ScanMu.Unlock()
-	store.Mu.Lock()
 	removed := 0
-	for _, id := range orphans {
-		t, ok := store.Tracks[id]
-		if !ok {
-			continue
+	store.Update(func(l *store.Library) {
+		for _, id := range orphans {
+			t, ok := l.Tracks[id]
+			if !ok {
+				continue
+			}
+			if _, err := os.Stat(ResolveFilePath(t.FilePath)); !os.IsNotExist(err) {
+				continue
+			}
+			store.DbDeleteTrack(id)
+			if DeleteReview != nil {
+				DeleteReview(id)
+			}
+			delete(l.Tracks, id)
+			removed++
 		}
-		if _, err := os.Stat(ResolveFilePath(t.FilePath)); !os.IsNotExist(err) {
-			continue
-		}
-		store.DbDeleteTrack(id)
-		if DeleteReview != nil {
-			DeleteReview(id)
-		}
-		delete(store.Tracks, id)
-		removed++
-	}
-	store.Mu.Unlock()
+	})
 
 	if removed > 0 {
 		log.Printf("[scan] Pruned %d tracks whose files no longer exist", removed)
-		if LibraryVersionAdd != nil {
-			LibraryVersionAdd(1)
-		}
+		store.LibraryVersion.Add(1)
 	}
 	return removed
 }
@@ -675,13 +669,13 @@ func ExtractEmbeddedCovers() {
 	coverDir := filepath.Join(store.MusicDir, "images")
 	os.MkdirAll(coverDir, 0755)
 
-	store.Mu.RLock()
 	type job struct {
 		filePath string
 		albumID  string
 	}
 	var jobs []job
-	for _, t := range store.Tracks {
+	store.View(func(l *store.Library) {
+	for _, t := range l.Tracks {
 		if !t.HasCover || t.AlbumID == "" {
 			continue
 		}
@@ -705,7 +699,7 @@ func ExtractEmbeddedCovers() {
 		}
 		jobs = append(jobs, job{filePath: t.FilePath, albumID: t.AlbumID})
 	}
-	store.Mu.RUnlock()
+	})
 
 	if len(jobs) == 0 {
 		return
@@ -737,11 +731,11 @@ func ExtractEmbeddedCovers() {
 			continue
 		}
 
-		store.Mu.Lock()
-		if a, ok := store.Albums[j.albumID]; ok {
+		store.Update(func(l *store.Library) {
+		if a, ok := l.Albums[j.albumID]; ok {
 			a.HasCover = true
 		}
-		store.Mu.Unlock()
+		})
 
 		saved++
 	}
@@ -833,14 +827,11 @@ func ScanSingleFile(filePath string) {
 	if track.AlbumArtist == "" {
 		track.AlbumArtist = track.Artist
 	}
-	store.Mu.RLock()
-	existing := store.Tracks[trackID]
 	var existingSnapshot *models.Track
-	if existing != nil {
+	if existing := store.GetTrack(trackID); existing != nil {
 		snapshot := *existing
 		existingSnapshot = &snapshot
 	}
-	store.Mu.RUnlock()
 	applyScannedGenre(track, existingSnapshot)
 	if hasRealTags {
 		track.HasMetadata = true
@@ -882,27 +873,25 @@ func ScanSingleFile(filePath string) {
 		return
 	}
 
-	store.Mu.Lock()
-	store.Tracks[trackID] = track
-	if track.Album != "" {
-		if _, exists := store.Albums[albumID]; !exists {
-			store.Albums[albumID] = &models.Album{
-				ID:         albumID,
-				Name:       track.Album,
-				Artist:     track.AlbumArtist,
-				Year:       track.Year,
-				HasCover:   track.HasCover,
-				TrackCount: 1,
+	store.Update(func(l *store.Library) {
+		l.Tracks[trackID] = track
+		if track.Album != "" {
+			if _, exists := l.Albums[albumID]; !exists {
+				l.Albums[albumID] = &models.Album{
+					ID:         albumID,
+					Name:       track.Album,
+					Artist:     track.AlbumArtist,
+					Year:       track.Year,
+					HasCover:   track.HasCover,
+					TrackCount: 1,
+				}
+			} else {
+				l.Albums[albumID].TrackCount++
 			}
-		} else {
-			store.Albums[albumID].TrackCount++
 		}
-	}
-	store.Mu.Unlock()
+	})
 
-	if LibraryVersionAdd != nil {
-		LibraryVersionAdd(1)
-	}
+	store.LibraryVersion.Add(1)
 	if SeedReviewUnchecked != nil {
 		SeedReviewUnchecked(trackID)
 	}

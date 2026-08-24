@@ -14,16 +14,13 @@ import (
 func TestLibraryHandler_ReturnsTracksAlbumsArtists(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "test.db"))
 
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"t1": {ID: "t1", Title: "Song A", Artist: "Artist X", AlbumID: "a1", FilePath: "music/x/01.mp3"},
 		"t2": {ID: "t2", Title: "Song B", Artist: "Artist Y", AlbumID: "a2", FilePath: "music/y/02.mp3"},
-	}
-	store.Albums = map[string]*models.Album{
+	}, map[string]*models.Album{
 		"a1": {ID: "a1", Name: "Album One", Artist: "Artist X"},
 		"a2": {ID: "a2", Name: "Album Two", Artist: "Artist Y"},
-	}
-	store.Mu.Unlock()
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/library", nil)
 	rec := httptest.NewRecorder()
@@ -75,10 +72,7 @@ func TestTrackGenreFieldsPersistAndSerialize(t *testing.T) {
 		t.Fatalf("raw genre hydration = %#v, want Melodic House/tag", rawLoaded)
 	}
 
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{track.ID: loaded, raw.ID: rawLoaded}
-	store.Albums = map[string]*models.Album{}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(map[string]*models.Track{track.ID: loaded, raw.ID: rawLoaded}, map[string]*models.Album{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/library", nil)
 	rec := httptest.NewRecorder()
@@ -101,12 +95,9 @@ func TestTrackGenreFieldsPersistAndSerialize(t *testing.T) {
 
 func TestLibraryHandlerETag304(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "etag.db"))
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"t1": {ID: "t1", Title: "Song A", Artist: "Artist X", FilePath: "x.mp3"},
-	}
-	store.Albums = map[string]*models.Album{}
-	store.Mu.Unlock()
+	}, map[string]*models.Album{})
 
 	// First request: 200 with an ETag.
 	req := httptest.NewRequest(http.MethodGet, "/api/library", nil)
@@ -133,7 +124,7 @@ func TestLibraryHandlerETag304(t *testing.T) {
 	}
 
 	// A library change bumps the version → old ETag no longer matches → 200.
-	LibraryVersion.Add(1)
+	store.LibraryVersion.Add(1)
 	req3 := httptest.NewRequest(http.MethodGet, "/api/library", nil)
 	req3.Header.Set("If-None-Match", etag)
 	rec3 := httptest.NewRecorder()

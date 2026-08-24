@@ -202,9 +202,7 @@ func FinderCoverHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkDuplicateInLibrary(artist, title string) bool {
-	store.Mu.RLock()
-	defer store.Mu.RUnlock()
-	for _, t := range store.Tracks {
+	for _, t := range store.AllTracks() {
 		if strings.EqualFold(t.Artist, artist) && strings.EqualFold(t.Title, title) {
 			return true
 		}

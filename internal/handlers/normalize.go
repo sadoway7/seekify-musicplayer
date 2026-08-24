@@ -27,10 +27,7 @@ func NormalizeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	_, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-	if !exists {
+	if store.GetTrack(trackID) == nil {
 		writeJSONError(w, http.StatusNotFound, "track not found")
 		return
 	}

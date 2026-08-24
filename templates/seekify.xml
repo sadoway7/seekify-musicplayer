@@ -16,6 +16,13 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-08-23
+- Playback stays solid when the connection drops: pauses instead of skipping the queue, and picks back up when you are back online
+- A stalled stream now recovers itself instead of freezing the progress bar
+- Album covers and the home page no longer reload in bursts while downloads or scans run in the background
+- Updates always load fresh app code; retired the old standalone Ripper page in favor of the Finder tab
+- General performance and stability improvements
+
 2026-08-22
 - Download queue runs jobs in the order they were added
 - Deleting a running download now stops it immediately

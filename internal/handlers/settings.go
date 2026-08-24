@@ -150,14 +150,14 @@ func PlaylistImportHandler(w http.ResponseWriter, r *http.Request) {
 		status := "pending"
 		if inLib {
 			status = "completed"
-			store.Mu.RLock()
-			for _, tr := range store.Tracks {
-				if strings.EqualFold(tr.Artist, artist) && strings.EqualFold(tr.Title, title) {
-					store.DbAddTrackToPlaylist(libraryPlaylistID, tr.ID)
-					break
+			store.View(func(l *store.Library) {
+				for _, tr := range l.Tracks {
+					if strings.EqualFold(tr.Artist, artist) && strings.EqualFold(tr.Title, title) {
+						store.DbAddTrackToPlaylist(libraryPlaylistID, tr.ID)
+						break
+					}
 				}
-			}
-			store.Mu.RUnlock()
+			})
 		}
 
 		store.DB.Exec("INSERT INTO watched_playlist_tracks (playlist_id, video_id, artist, title, status) VALUES (?, ?, ?, ?, ?)",

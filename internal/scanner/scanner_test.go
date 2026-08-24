@@ -124,18 +124,17 @@ func TestScanSingleFilePreservesApprovedGenre(t *testing.T) {
 	store.MusicDir = dir
 	store.MusicDirs = map[string]string{"": dir}
 	id := models.GenerateID("Song.mp3")
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{id: {
+	store.ReplaceLibrary(map[string]*models.Track{id: {
 		ID: id, FilePath: "Song.mp3", Genre: "Rock", GenreCanonical: "Rock",
 		GenreSource: "tag", HasMetadata: true,
-	}}
-	store.Albums = map[string]*models.Album{}
-	store.Mu.Unlock()
+	}}, map[string]*models.Album{})
 
 	scanner.ScanSingleFile(path)
-	store.Mu.RLock()
-	track := *store.Tracks[id]
-	store.Mu.RUnlock()
+	ptr := store.GetTrack(id)
+	if ptr == nil {
+		t.Fatal("track missing from library after scan")
+	}
+	track := *ptr
 	if track.Genre != "Rock" || track.GenreCanonical != "Rock" || track.GenreSource != "tag" {
 		t.Fatalf("approved genre after scan = %#v, want Rock/tag", track)
 	}

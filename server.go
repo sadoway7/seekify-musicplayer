@@ -2,7 +2,6 @@ package main
 
 import (
 	"compress/gzip"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -80,8 +79,7 @@ func main() {
 		log.Printf("Media music directory: %s", absMedia)
 	}
 
-	store.Tracks = make(map[string]*models.Track)
-	store.Albums = make(map[string]*models.Album)
+	store.ReplaceLibrary(make(map[string]*models.Track), make(map[string]*models.Album))
 	store.CoverCache = make(map[string][]byte)
 	store.CustomCovers = make(map[string]bool)
 
@@ -92,23 +90,14 @@ func main() {
 	watched.InitWatchedTables()
 	review.InitReviewTables()
 
-	// Wire scanner callbacks (avoid circular import from scanner -> main)
-	downloads.EnrichFunc = handlers.EnrichWithPython
-	scanner.WakeReviewWorker = review.WakeReviewWorker
-	scanner.InsertUncheckedReviews = review.DbInsertUncheckedReviews
-	scanner.LibraryVersionAdd = func(delta int64) { handlers.LibraryVersion.Add(delta) }
-	review.LibraryVersionAdd = func(delta int64) { handlers.LibraryVersion.Add(delta) }
-	scanner.DeleteReview = review.DbDeleteReview
-	scanner.SetReviewStatus = review.DbSetReviewStatus
-	scanner.SeedReviewUnchecked = review.DbSeedReviewUnchecked
+	wireCrossPackageHooks()
 
 	// Try loading from DB first
 	dbTracks := store.DbLoadTracks()
 	dbAlbums := store.DbLoadAlbums()
 	if len(dbTracks) > 0 {
-		store.Tracks = dbTracks
-		store.Albums = dbAlbums
-		log.Printf("Loaded %d tracks and %d albums from database", len(store.Tracks), len(store.Albums))
+		store.ReplaceLibrary(dbTracks, dbAlbums)
+		log.Printf("Loaded %d tracks and %d albums from database", store.TrackCount(), store.AlbumCount())
 	}
 
 	// Covers and artist art are lazy-loaded from disk on first request
@@ -157,13 +146,13 @@ func main() {
 					}
 					count := scanner.CountAudioFiles(dir)
 					mediaDBCount := 0
-					store.Mu.RLock()
-					for _, t := range store.Tracks {
-						if strings.HasPrefix(t.FilePath, prefix+":") {
-							mediaDBCount++
+					store.View(func(l *store.Library) {
+						for _, t := range l.Tracks {
+							if strings.HasPrefix(t.FilePath, prefix+":") {
+								mediaDBCount++
+							}
 						}
-					}
-					store.Mu.RUnlock()
+					})
 					if count != mediaDBCount {
 						log.Printf("Media dir [%s] file count changed (%d in DB vs %d on disk), rescanning", prefix, mediaDBCount, count)
 						needScan = true
@@ -176,7 +165,7 @@ func main() {
 		if needScan {
 			log.Printf("Scanning music directory: %s", store.MusicDir)
 			stats := scanner.ScanMusicDir(store.MusicDir)
-			log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, len(store.Tracks))
+			log.Printf("Primary scan complete: %d files found, %d tracks loaded", stats.Scanned, store.TrackCount())
 
 			for prefix, dir := range store.MusicDirs {
 				if prefix == "" {
@@ -184,12 +173,10 @@ func main() {
 				}
 				log.Printf("Scanning media directory [%s]: %s", prefix, dir)
 				mediaStats := scanner.ScanMusicDirWithPrefix(dir, prefix)
-				log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, len(store.Tracks))
+				log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, store.TrackCount())
 			}
 
-		if scanner.LibraryVersionAdd != nil {
-				scanner.LibraryVersionAdd(1)
-			}
+		store.LibraryVersion.Add(1)
 		} else {
 			log.Printf("File counts match DB, skipping full scan")
 		}
@@ -322,172 +309,13 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/api/library", handlers.LibraryHandler)
-	mux.HandleFunc("/api/stats", handlers.StatsHandler)
-	mux.HandleFunc("/api/stream/", handlers.StreamHandler)
-	mux.HandleFunc("/api/transcode-warm/", handlers.TranscodeWarmHandler)
-	mux.HandleFunc("/api/cover/", handlers.CoverHandler)
-	mux.HandleFunc("/api/artist-art/", handlers.ArtistArtHandler)
-	mux.HandleFunc("/api/artist-art-fetch/", handlers.ArtistArtFetchHandler)
-	mux.HandleFunc("/api/scan", auth.RequireAdmin(handlers.ScanHandler))
-	mux.HandleFunc("/api/library-upload", auth.RequireAdmin(handlers.LibraryUploadHandler))
-	mux.HandleFunc("/api/playlists", auth.RequireUser(handlers.PlaylistsHandler))
-	mux.HandleFunc("/api/playlists/", auth.RequireUser(handlers.PlaylistHandler))
-	mux.HandleFunc("/api/favorites", auth.RequireUser(handlers.FavoritesHandler))
-	mux.HandleFunc("/api/favorites/", auth.RequireUser(handlers.FavoriteToggleHandler))
-	mux.HandleFunc("/api/recent", auth.RequireUser(handlers.RecentHandler))
-	mux.HandleFunc("/api/recent/", auth.RequireUser(handlers.RecentAddHandler))
-	mux.HandleFunc("/admin", auth.RequireAdmin(handlers.AdminHandler))
-	mux.HandleFunc("/api/v2/resolve-url", auth.RequireUser(handlers.ResolveURLHandler))
-	mux.HandleFunc("/api/v2/search", auth.RequireUser(handlers.V2SearchHandler))
-	mux.HandleFunc("/ripperv2", handlers.RipperV2Handler)
-	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-		ytdlp := downloads.FindYtDlp()
-		ffmpeg := downloads.FindFfmpeg()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"yt-dlp": ytdlp,
-			"ffmpeg": ffmpeg,
-		})
-	})
-	mux.HandleFunc("/api/setup-status", handlers.SetupStatusHandler)
-	mux.HandleFunc("/api/setup", handlers.SetupHandler)
-	mux.HandleFunc("/api/login", handlers.LoginHandler)
-	mux.HandleFunc("/api/logout", handlers.LogoutHandler)
-	mux.HandleFunc("/api/me", handlers.MeHandler)
-	mux.HandleFunc("/api/users/me/password", auth.RequireUser(handlers.ChangeOwnPasswordHandler))
-	mux.HandleFunc("/api/registration", handlers.RegistrationModeHandler)
-	mux.HandleFunc("/api/register", handlers.RegisterHandler)
-	mux.HandleFunc("/api/files", handlers.RequireAdmin(handlers.FileListHandler))
-	mux.HandleFunc("/api/upload", handlers.RequireAdmin(handlers.UploadHandler))
-	mux.HandleFunc("/api/delete", handlers.RequireAdmin(handlers.DeleteFileHandler))
-	mux.HandleFunc("/api/folders", handlers.RequireAdmin(handlers.CreateFolderHandler))
+	registerRoutes(mux)
 
-	mux.HandleFunc("/api/download/", handlers.DownloadHandler)
-	mux.HandleFunc("/api/admin/downloads", handlers.RequireAdmin(handlers.DownloadsListHandler))
-	mux.HandleFunc("/api/admin/download-toggle/", handlers.RequireAdmin(handlers.DownloadToggleHandler))
-	mux.HandleFunc("/api/admin/downloads-enable-all", handlers.RequireAdmin(handlers.DownloadsEnableAllHandler))
-	mux.HandleFunc("/api/workers", handlers.RequireAdmin(handlers.WorkersHandler))
-	mux.HandleFunc("/api/workers/run", handlers.RequireAdmin(handlers.WorkerRunHandler))
-
-	// Debug: view production server logs (admin-protected).
-	mux.HandleFunc("/api/admin/logs", handlers.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		if r.URL.Query().Get("tracks") != "" {
-			w.Write(store.FilterTrackLogs())
-		} else {
-			w.Write(store.GetLogBuffer())
-		}
-	}))
-
-	mux.HandleFunc("/api/waveform/", handlers.WaveformHandler)
-	mux.HandleFunc("/api/bands/", handlers.BandsHandler)
-	mux.HandleFunc("/api/normalize/", auth.RequireUser(handlers.NormalizeHandler))
-	mux.HandleFunc("/api/track-duration/", auth.RequireUser(handlers.TrackDurationHandler))
-	mux.HandleFunc("/api/playback-error/", auth.RequireUser(handlers.TrackPlaybackErrorHandler))
-	// Weekly playback-failure log (client-reported playback failures + track/
-	// transcode context), one JSON object per line.
-	mux.HandleFunc("/api/admin/playback-failures", auth.RequireAdmin(handlers.PlaybackFailuresLogHandler))
+	// Dev-only waveform playground (no auth; serves a static page).
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
 	})
-	registerMetadataRoutes(mux)
 
-	mux.HandleFunc("/api/finder/search", handlers.FinderSearchHandler)
-	mux.HandleFunc("/api/finder/artist/", handlers.FinderArtistReleasesHandler)
-	mux.HandleFunc("/api/finder/artist-track-progress", handlers.ArtistTrackProgressHandler)
-	mux.HandleFunc("/api/finder/release/", handlers.FinderReleaseTracksHandler)
-	mux.HandleFunc("/api/finder/cover/", handlers.FinderCoverHandler)
-	mux.HandleFunc("/api/finder/youtube", auth.RequireUser(handlers.YoutubeSearchHandler))
-	mux.HandleFunc("/api/preview/", auth.RequireUser(handlers.PreviewAudioHandler))
-	mux.HandleFunc("/api/download-job/", handlers.DownloadJobFileHandler)
-
-	mux.HandleFunc("/api/queue", auth.RequireUser(handlers.DownloadQueueHandler))
-	mux.HandleFunc("/api/queue/add", auth.RequireUser(handlers.DownloadQueueAddHandler))
-	mux.HandleFunc("/api/queue/add-batch", auth.RequireUser(handlers.DownloadQueueAddBatchHandler))
-	mux.HandleFunc("/api/queue/counts", auth.RequireUser(handlers.QueueCountsHandler))
-	mux.HandleFunc("/api/queue/clear-completed", auth.RequireUser(handlers.QueueClearCompletedHandler))
-	mux.HandleFunc("/api/queue/retry-all-failed", auth.RequireUser(handlers.DownloadRetryAllFailedHandler))
-	mux.HandleFunc("/api/queue/toggle-pause", auth.RequireAdmin(handlers.DownloadTogglePauseHandler))
-	mux.HandleFunc("/api/soulseek/connect", auth.RequireAdmin(handlers.SoulseekConnectHandler))
-	mux.HandleFunc("/api/queue/", auth.RequireUser(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if strings.HasSuffix(path, "/retry") {
-			handlers.DownloadJobRetryHandler(w, r)
-		} else if strings.HasSuffix(path, "/delete") {
-			handlers.DownloadJobDeleteHandler(w, r)
-		} else if strings.HasSuffix(path, "/select") {
-			handlers.DownloadJobSelectHandler(w, r)
-		} else {
-			handlers.DownloadJobStatusHandler(w, r)
-		}
-	}))
-
-	mux.HandleFunc("/api/bulk-import", auth.RequireUser(handlers.BulkImportHandler))
-
-	mux.HandleFunc("/api/shared-queue", handlers.SharedQueueCreateHandler)
-	mux.HandleFunc("/api/shared-queue/", handlers.SharedQueueGetHandler)
-
-	mux.HandleFunc("/api/playlist-import", auth.RequireUser(handlers.PlaylistImportHandler))
-	mux.HandleFunc("/api/watch/", auth.RequireUser(handlers.WatchedPlaylistsHandler))
-	mux.HandleFunc("/api/watch", auth.RequireUser(handlers.WatchedPlaylistsHandler))
-
-	// Public display settings (waveform style, downloads flag) — admin-set globals
-	// every client needs to render the site. No auth; sensitive config + writes
-	// stay admin-only via /api/settings below.
-	mux.HandleFunc("/api/settings/public", handlers.PublicSettingsHandler)
-	mux.HandleFunc("/api/settings", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			handlers.SettingsSetHandler(w, r)
-		} else {
-			handlers.SettingsGetHandler(w, r)
-		}
-	}))
-
-	// Admin user management + download limits.
-	mux.HandleFunc("/api/admin/users", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			handlers.AdminListUsers(w, r)
-		} else {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	}))
-	mux.HandleFunc("/api/admin/users/create", auth.RequireAdmin(handlers.AdminCreateUser))
-	mux.HandleFunc("/api/admin/users/", auth.RequireAdmin(handlers.AdminUserSubrouter))
-	mux.HandleFunc("/api/admin/registration", auth.RequireAdmin(handlers.AdminRegistrationSettingsHandler))
-	mux.HandleFunc("/api/admin/download-limits", auth.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handlers.AdminGetDownloadLimits(w, r)
-		case http.MethodPut:
-			handlers.AdminPutDownloadLimits(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	}))
-
-	mux.HandleFunc("/api/cookies/upload", handlers.CorsAny(handlers.UploadCookiesHandler))
-	mux.HandleFunc("/api/cookies/clear", handlers.ClearCookiesHandler)
-	mux.HandleFunc("/api/cookies/extract", handlers.ExtractCookiesHandler)
-	mux.HandleFunc("/api/cookies/status", handlers.CookiesStatusHandler)
-	mux.HandleFunc("/api/cookies/extension.zip", ExtensionZipHandler)
-
-	mux.HandleFunc("/api/review/tracks", auth.RequireAdmin(review.ReviewTracksHandler))
-	mux.HandleFunc("/api/review/counts", auth.RequireAdmin(review.ReviewCountsHandler))
-	mux.HandleFunc("/api/review/mark-ok", auth.RequireAdmin(review.ReviewMarkOkHandler))
-	mux.HandleFunc("/api/review/edit-meta", auth.RequireAdmin(review.ReviewEditMetaHandler))
-	mux.HandleFunc("/api/review/upload-cover", auth.RequireAdmin(handlers.UploadCustomCoverHandler))
-	mux.HandleFunc("/api/review/clear-cover", auth.RequireAdmin(handlers.ClearCustomCoverHandler))
-	mux.HandleFunc("/api/review/delete", auth.RequireAdmin(review.ReviewDeleteHandler))
-	mux.HandleFunc("/api/review/delete-all", auth.RequireAdmin(review.ReviewDeleteAllHandler))
-	mux.HandleFunc("/api/review/bulk-delete", auth.RequireAdmin(review.ReviewBulkDeleteHandler))
-	mux.HandleFunc("/api/review/bulk-approve", auth.RequireAdmin(review.ReviewBulkApproveHandler))
-	mux.HandleFunc("/api/review/recheck-all", auth.RequireAdmin(review.ReviewRecheckAllHandler))
-	mux.HandleFunc("/api/review/enrich", auth.RequireAdmin(review.ReviewEnrichHandler))
-	mux.HandleFunc("/api/review/scan-integrity", auth.RequireAdmin(review.IntegrityScanHandler))
-	mux.HandleFunc("/api/review/progress", auth.RequireAdmin(review.ReviewProgressHandler))
-	mux.HandleFunc("/api/review/log", auth.RequireAdmin(review.ReviewLogHandler))
 
 	var handler http.Handler = mux
 	handler = auth.SessionLoad(handler)
@@ -523,39 +351,33 @@ func main() {
 		handlers.OpenBrowser(url)
 	})
 
-	if err := http.ListenAndServe(addr, handler); err != nil {
+	// Header-read and idle timeouts shed dead/hung clients. Deliberately no
+	// WriteTimeout: synchronous transcodes can legitimately run for minutes
+	// and long streams must not be cut off mid-file.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }
 
-func registerMetadataRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/metadata-preview", adminMethod(http.MethodPost, handlers.MetadataPreviewHandler))
-	mux.HandleFunc("/api/metadata/scan", adminMethod(http.MethodPost, handlers.MetadataScanHandler))
-	mux.HandleFunc("/api/metadata/rescan/", adminMethod(http.MethodPost, handlers.MetadataRescanHandler))
-	mux.HandleFunc("/api/metadata/rescan-sync/", adminMethod(http.MethodPost, handlers.MetadataRescanSyncHandler))
-	mux.HandleFunc("/api/metadata/search", adminMethod(http.MethodGet, handlers.MetadataSearchHandler))
-	mux.HandleFunc("/api/metadata/update-track/", adminMethod(http.MethodPost, handlers.MetadataUpdateTrackHandler))
-	mux.HandleFunc("/api/metadata/scan-progress", adminMethod(http.MethodGet, handlers.MetadataScanProgressHandler))
-	mux.HandleFunc("/api/metadata/pending", adminMethod(http.MethodGet, handlers.MetadataPendingHandler))
-	mux.HandleFunc("/api/metadata/all", adminMethod(http.MethodGet, handlers.MetadataAllHandler))
-	mux.HandleFunc("/api/metadata/approve/", adminMethod(http.MethodPost, handlers.MetadataApproveHandler))
-	mux.HandleFunc("/api/metadata/reject/", adminMethod(http.MethodPost, handlers.MetadataRejectHandler))
-	mux.HandleFunc("/api/metadata/approve-all", adminMethod(http.MethodPost, handlers.MetadataApproveAllHandler))
-	mux.HandleFunc("/api/metadata/clear", adminMethod(http.MethodPost, handlers.MetadataClearHandler))
-	mux.HandleFunc("/api/metadata/counts", adminMethod(http.MethodGet, handlers.MetadataCountsHandler))
-	mux.HandleFunc("/api/metadata/undo/", adminMethod(http.MethodPost, handlers.MetadataUndoHandler))
-}
-
-func adminMethod(method string, next http.HandlerFunc) http.HandlerFunc {
-	adminNext := auth.RequireAdmin(next)
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != method {
-			w.Header().Set("Allow", method)
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		adminNext(w, r)
-	}
+// wireCrossPackageHooks is THE composition point for cross-package seams.
+// These function vars exist only to break import cycles (scanner/review/
+// downloads cannot import each other or the handlers package); they are nil
+// until wired here and MUST be wired before the server starts serving.
+// Library cache invalidation is no longer a seam: store.LibraryVersion is
+// called directly by scanner/review.
+func wireCrossPackageHooks() {
+	downloads.EnrichFunc = handlers.EnrichWithPython
+	scanner.WakeReviewWorker = review.WakeReviewWorker
+	scanner.InsertUncheckedReviews = review.DbInsertUncheckedReviews
+	scanner.DeleteReview = review.DbDeleteReview
+	scanner.SetReviewStatus = review.DbSetReviewStatus
+	scanner.SeedReviewUnchecked = review.DbSeedReviewUnchecked
 }
 
 func recoveryMiddleware(next http.Handler) http.Handler {

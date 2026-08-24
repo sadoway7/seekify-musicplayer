@@ -79,18 +79,18 @@ func enrichDownloadGenre(trackID string, job *DownloadJob) {
 	}
 	if len(canonical) > 0 {
 		joined := strings.Join(canonical, ", ")
-		store.Mu.Lock()
-		track, ok := store.Tracks[trackID]
-		if ok && track.GenreSource != "manual" {
-			if _, dbErr := store.DB.Exec(`UPDATE tracks SET genre = ?, genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?`,
-				joined, joined, "musicbrainz", time.Now().Unix(), trackID); dbErr == nil {
-				track.GenreCanonical = joined
-				track.GenreSource = "musicbrainz"
-				track.GenreCheckedAt = time.Now().Unix()
-				log.Printf("[download-genre] set %s to %s for %s", trackID, joined, job.Title)
+		store.Update(func(l *store.Library) {
+			track, ok := l.Tracks[trackID]
+			if ok && track.GenreSource != "manual" {
+				if _, dbErr := store.DB.Exec(`UPDATE tracks SET genre = ?, genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?`,
+					joined, joined, "musicbrainz", time.Now().Unix(), trackID); dbErr == nil {
+					track.GenreCanonical = joined
+					track.GenreSource = "musicbrainz"
+					track.GenreCheckedAt = time.Now().Unix()
+					log.Printf("[download-genre] set %s to %s for %s", trackID, joined, job.Title)
+				}
 			}
-		}
-		store.Mu.Unlock()
+		})
 	}
 }
 
@@ -752,14 +752,18 @@ func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, tr
 	}
 
 	if artist != "" && title != "" {
-		store.Mu.RLock()
-		for _, t := range store.Tracks {
-			if strings.EqualFold(t.Artist, artist) && strings.EqualFold(t.Title, title) {
-				store.Mu.RUnlock()
-				return nil, fmt.Errorf("already in library")
+		inLibrary := false
+		store.View(func(l *store.Library) {
+			for _, t := range l.Tracks {
+				if strings.EqualFold(t.Artist, artist) && strings.EqualFold(t.Title, title) {
+					inLibrary = true
+					break
+				}
 			}
+		})
+		if inLibrary {
+			return nil, fmt.Errorf("already in library")
 		}
-		store.Mu.RUnlock()
 	}
 
 	// Dedup: reject if there's already an in-flight job for the same track.
@@ -1071,15 +1075,15 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 	scanner.ScanSingleFile(audioFile)
 
 	// Enrich canonical genre from MusicBrainz now that the track is in memory.
-	store.Mu.Lock()
 	var enrichedTrack *models.Track
-	for _, tr := range store.Tracks {
-		if scanner.ResolveFilePath(tr.FilePath) == audioFile {
-			enrichedTrack = tr
-			break
+	store.View(func(l *store.Library) {
+		for _, tr := range l.Tracks {
+			if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+				enrichedTrack = tr
+				break
+			}
 		}
-	}
-	store.Mu.Unlock()
+	})
 	if enrichedTrack != nil && enrichedTrack.GenreCanonical == "" && enrichedTrack.GenreSource != "manual" {
 		store.SafeGo("enrich-download-genre", func() { enrichDownloadGenre(enrichedTrack.ID, job) })
 	}
@@ -1091,61 +1095,61 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 	// worker's short-duration check and the UI's seek bar.
 	if probedDur > 0 {
 		durSec := int(probedDur)
-		store.Mu.Lock()
-		for _, tr := range store.Tracks {
-			if scanner.ResolveFilePath(tr.FilePath) == audioFile {
-				if tr.Duration == 0 {
-					tr.Duration = durSec
-					store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", durSec, tr.ID)
+		store.Update(func(l *store.Library) {
+			for _, tr := range l.Tracks {
+				if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+					if tr.Duration == 0 {
+						tr.Duration = durSec
+						store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", durSec, tr.ID)
+					}
+					break
 				}
-				break
 			}
-		}
-		store.Mu.Unlock()
+		})
 	}
 
 	if job.AlbumMBID != "" {
-		store.Mu.RLock()
 		var albumID string
-		for _, tr := range store.Tracks {
-			if scanner.ResolveFilePath(tr.FilePath) == audioFile {
-				albumID = tr.AlbumID
-				break
+		store.View(func(l *store.Library) {
+			for _, tr := range l.Tracks {
+				if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+					albumID = tr.AlbumID
+					break
+				}
 			}
-		}
-		store.Mu.RUnlock()
+		})
 		if albumID != "" {
 			musicbrainz.FetchAndCacheCoverByMBID(albumID, job.AlbumMBID)
 		}
 	} else {
 		// No MBID (common for bulk Soulseek imports). Fall back to a
 		// name-based cover search using the track's tag metadata.
-		store.Mu.RLock()
 		var albumID, artist, album string
-		for _, tr := range store.Tracks {
-			if scanner.ResolveFilePath(tr.FilePath) == audioFile {
-				albumID = tr.AlbumID
-				artist = tr.Artist
-				album = tr.Album
-				break
+		store.View(func(l *store.Library) {
+			for _, tr := range l.Tracks {
+				if scanner.ResolveFilePath(tr.FilePath) == audioFile {
+					albumID = tr.AlbumID
+					artist = tr.Artist
+					album = tr.Album
+					break
+				}
 			}
-		}
-		store.Mu.RUnlock()
+		})
 		if albumID != "" && artist != "" && album != "" {
 			musicbrainz.FetchAndCacheCover(albumID, artist, album)
 		}
 	}
 
 	if job.PlaylistID != "" && job.Artist != "" && job.Title != "" {
-		store.Mu.RLock()
-		for _, tr := range store.Tracks {
-			if strings.EqualFold(tr.Artist, job.Artist) && strings.EqualFold(tr.Title, job.Title) {
-				store.DbAddTrackToPlaylist(job.PlaylistID, tr.ID)
-				log.Printf("[download] Added %s - %s to playlist %s", tr.Artist, tr.Title, job.PlaylistID)
-				break
+		store.View(func(l *store.Library) {
+			for _, tr := range l.Tracks {
+				if strings.EqualFold(tr.Artist, job.Artist) && strings.EqualFold(tr.Title, job.Title) {
+					store.DbAddTrackToPlaylist(job.PlaylistID, tr.ID)
+					log.Printf("[download] Added %s - %s to playlist %s", tr.Artist, tr.Title, job.PlaylistID)
+					break
+				}
 			}
-		}
-		store.Mu.RUnlock()
+		})
 	}
 	return true
 }

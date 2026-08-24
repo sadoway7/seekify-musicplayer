@@ -128,9 +128,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 				ogDesc = "Private Music Library."
 			}
 		} else if trackID != "" {
-			store.Mu.RLock()
-			t := store.Tracks[trackID]
-			store.Mu.RUnlock()
+			t := store.GetTrack(trackID)
 			if t == nil {
 				t = store.DbGetTrackByID(trackID)
 			}
@@ -145,9 +143,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 				ogDesc = "Private Music Library."
 			}
 		} else if albumID != "" {
-			store.Mu.RLock()
-			a := store.Albums[albumID]
-			store.Mu.RUnlock()
+			a := store.GetAlbum(albumID)
 			if a == nil {
 				a = store.DbGetAlbumByID(albumID)
 			}
@@ -191,7 +187,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 	// Root-level PNGs (icon.png, favicon-*.png, apple-touch-icon.png, icon-192.png)
 	// are allowed; nested PNGs under /data/ etc. are not (no "/" in path).
 	isRootPng := strings.HasSuffix(path, ".png") && !strings.Contains(strings.TrimPrefix(path, "/"), "/")
-	allowed := path == "/index.html" || path == "/admin.html" || path == "/ripperv2.html" ||
+	allowed := path == "/index.html" || path == "/admin.html" ||
 		path == "/favicon.ico" || path == "/manifest.webmanifest" || isRootPng ||
 		strings.HasPrefix(path, "/css/") || strings.HasPrefix(path, "/js/") ||
 		strings.HasPrefix(path, "/img/") || strings.HasPrefix(path, "/assets/") ||
@@ -224,7 +220,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 		// ponytail: Safari caches JS/CSS aggressively; force revalidation.
 		// Exception: a ?v= matching this process's assetVersion is a
 		// per-deploy-busted URL — cache it immutably (saves 21 revalidation
-		// round trips per app open). Hardcoded v= values in ripperv2/admin
+		// round trips per app open). Hardcoded v= values in admin
 		// never match and stay no-cache, so they can't go stale.
 		if ext == ".js" || ext == ".css" {
 			if r.URL.Query().Get("v") != "" && r.URL.Query().Get("v") == assetVersion {

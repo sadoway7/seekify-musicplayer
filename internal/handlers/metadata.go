@@ -49,10 +49,8 @@ func MetadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-	if !exists {
+	track := store.GetTrack(trackID)
+	if track == nil {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
@@ -75,20 +73,18 @@ func MetadataRescanHandler(w http.ResponseWriter, r *http.Request) {
 
 		inserted := 0
 		for _, cand := range candidates {
-			score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
-			if score < 0.5 {
-				continue
-			}
+		score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
+		if score < 0.5 {
+			continue
+		}
 
-			store.Mu.RLock()
-			hasCover := false
-			if cand.AlbumID != "" {
-				coverPath := filepath.Join(store.MusicDir, "images", cand.AlbumID+".jpg")
-				if _, err := os.Stat(coverPath); err == nil {
-					hasCover = true
-				}
+		hasCover := false
+		if cand.AlbumID != "" {
+			coverPath := filepath.Join(store.MusicDir, "images", cand.AlbumID+".jpg")
+			if _, err := os.Stat(coverPath); err == nil {
+				hasCover = true
 			}
-			store.Mu.RUnlock()
+		}
 
 			match := &models.MetadataMatch{
 				ID:          models.GenerateUUID(),
@@ -122,10 +118,8 @@ func MetadataRescanSyncHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-	if !exists {
+	track := store.GetTrack(trackID)
+	if track == nil {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
@@ -255,7 +249,6 @@ func MetadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 	for _, cand := range candidates {
 		score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 
-		store.Mu.RLock()
 		hasCover := false
 		if cand.AlbumID != "" {
 			coverPath := filepath.Join(store.MusicDir, "images", cand.AlbumID+".jpg")
@@ -263,7 +256,6 @@ func MetadataSearchHandler(w http.ResponseWriter, r *http.Request) {
 				hasCover = true
 			}
 		}
-		store.Mu.RUnlock()
 
 		out = append(out, rescanCandidate{
 			Title:       cand.Title,
@@ -308,7 +300,6 @@ func searchMBRecordings(searchArtist, searchTitle string, limit int) []rescanCan
 
 			score := musicbrainz.ScoreMatch(searchArtist, searchTitle, cand.Artist, cand.Title, cand.Album)
 
-			store.Mu.RLock()
 			hasCover := false
 			if cand.AlbumID != "" {
 				coverPath := filepath.Join(store.MusicDir, "images", cand.AlbumID+".jpg")
@@ -316,9 +307,8 @@ func searchMBRecordings(searchArtist, searchTitle string, limit int) []rescanCan
 					hasCover = true
 				}
 			}
-			store.Mu.RUnlock()
 
-		results = append(results, rescanCandidate{
+			results = append(results, rescanCandidate{
 			Title:       cand.Title,
 			Artist:      cand.Artist,
 			Album:       cand.Album,
@@ -407,79 +397,86 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.Lock()
-	track, exists := store.Tracks[trackID]
-	if !exists {
-		store.Mu.Unlock()
+	var track *models.Track
+	updated := false
+	store.Update(func(l *store.Library) {
+		var exists bool
+		track, exists = l.Tracks[trackID]
+		if !exists {
+			track = nil
+			return
+		}
+		updated = true
+
+		oldAlbumID := track.AlbumID
+		oldHasCover := track.HasCover
+
+		if body.Title != "" {
+			track.Title = body.Title
+		}
+		if body.Artist != "" {
+			track.Artist = body.Artist
+		}
+		if body.Album != "" {
+			track.Album = body.Album
+		}
+		if body.AlbumArtist != "" {
+			track.AlbumArtist = body.AlbumArtist
+		}
+		if track.AlbumArtist == "" {
+			track.AlbumArtist = track.Artist
+		}
+		if track.Album != "" {
+			track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
+		}
+		track.HasMetadata = true
+
+		coverDir := filepath.Join(store.MusicDir, "images")
+		os.MkdirAll(coverDir, 0755)
+
+		if track.AlbumID != "" {
+			newPath := filepath.Join(coverDir, track.AlbumID+".jpg")
+			if _, err := os.Stat(newPath); os.IsNotExist(err) {
+				var data []byte
+				if oldAlbumID != "" {
+					if d, err := os.ReadFile(filepath.Join(coverDir, oldAlbumID+".jpg")); err == nil {
+						data = d
+					}
+				}
+				if len(data) == 0 {
+					store.CoverMu.RLock()
+					if d, ok := store.CoverCache[oldAlbumID]; ok {
+						data = d
+					}
+					store.CoverMu.RUnlock()
+				}
+				if oldHasCover && len(data) == 0 {
+					if picData, err := extractCoverFromFile(track.FilePath); err == nil && len(picData) > 0 {
+						data = picData
+					}
+				}
+				if len(data) > 0 {
+					os.WriteFile(newPath, data, 0644)
+					store.CacheCover(track.AlbumID, data)
+					track.HasCover = true
+					store.MoveCustomCover(oldAlbumID, track.AlbumID)
+				}
+			}
+		}
+
+		store.DbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
+		if oldAlbumID != "" && track.AlbumID != oldAlbumID {
+			track.HasCover = false
+		}
+		// Regrouping changed track data; bump so open SPAs refresh (same contract
+		// as the scanner and custom-cover handlers).
+		store.LibraryVersion.Add(1)
+		musicbrainz.RebuildAlbums(l)
+	})
+	if !updated {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
-
-	oldAlbumID := track.AlbumID
-	oldHasCover := track.HasCover
-
-	if body.Title != "" {
-		track.Title = body.Title
-	}
-	if body.Artist != "" {
-		track.Artist = body.Artist
-	}
-	if body.Album != "" {
-		track.Album = body.Album
-	}
-	if body.AlbumArtist != "" {
-		track.AlbumArtist = body.AlbumArtist
-	}
-	if track.AlbumArtist == "" {
-		track.AlbumArtist = track.Artist
-	}
-	if track.Album != "" {
-		track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
-	}
-	track.HasMetadata = true
-
-	coverDir := filepath.Join(store.MusicDir, "images")
-	os.MkdirAll(coverDir, 0755)
-
-	if track.AlbumID != "" {
-		newPath := filepath.Join(coverDir, track.AlbumID+".jpg")
-		if _, err := os.Stat(newPath); os.IsNotExist(err) {
-			var data []byte
-			if oldAlbumID != "" {
-				if d, err := os.ReadFile(filepath.Join(coverDir, oldAlbumID+".jpg")); err == nil {
-					data = d
-				}
-			}
-			if len(data) == 0 {
-				store.CoverMu.RLock()
-				if d, ok := store.CoverCache[oldAlbumID]; ok {
-					data = d
-				}
-				store.CoverMu.RUnlock()
-			}
-			if oldHasCover && len(data) == 0 {
-				if picData, err := extractCoverFromFile(track.FilePath); err == nil && len(picData) > 0 {
-					data = picData
-				}
-			}
-			if len(data) > 0 {
-				os.WriteFile(newPath, data, 0644)
-				store.CacheCover(track.AlbumID, data)
-				track.HasCover = true
-				store.MoveCustomCover(oldAlbumID, track.AlbumID)
-			}
-		}
-	}
-
-	store.DbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
-	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
-		track.HasCover = false
-	}
-	// Regrouping changed track data; bump so open SPAs refresh (same contract
-	// as the scanner and custom-cover handlers).
-	LibraryVersion.Add(1)
-	musicbrainz.RebuildAlbumsFromTracksLocked()
-	store.Mu.Unlock()
 
 	// Manual rescan override: the user explicitly picked a candidate from the
 	// rescan modal, so we fetch fresh art and REPLACE the current cover (custom
@@ -515,12 +512,12 @@ func MetadataUpdateTrackHandler(w http.ResponseWriter, r *http.Request) {
 			coverPath := filepath.Join(coverDir, track.AlbumID+".jpg")
 			os.WriteFile(coverPath, coverData, 0644)
 			store.CacheCover(track.AlbumID, coverData)
-			store.Mu.Lock()
-			track.HasCover = true
-			if a, ok := store.Albums[track.AlbumID]; ok {
-				a.HasCover = true
-			}
-			store.Mu.Unlock()
+			store.Update(func(l *store.Library) {
+				track.HasCover = true
+				if a, ok := l.Albums[track.AlbumID]; ok {
+					a.HasCover = true
+				}
+			})
 			log.Printf("[metadata] Cover fetched and cached for %s", track.AlbumID)
 		} else {
 			log.Printf("[metadata] No cover obtained for %s; keeping existing", track.AlbumID)
@@ -542,19 +539,19 @@ func MetadataPendingHandler(w http.ResponseWriter, r *http.Request) {
 
 	enriched := make([]models.MetadataMatch, 0, len(matches))
 	for _, m := range matches {
-		store.Mu.RLock()
-		if t, ok := store.Tracks[m.TrackID]; ok {
-			m.FilePath = t.FilePath
-			if _, hasCover := func() ([]byte, bool) {
-				store.CoverMu.RLock()
-				defer store.CoverMu.RUnlock()
-				d, e := store.CoverCache[t.AlbumID]
-				return d, e
-			}(); hasCover {
-				m.HasCover = true
+		store.View(func(l *store.Library) {
+			if t, ok := l.Tracks[m.TrackID]; ok {
+				m.FilePath = t.FilePath
+				if _, hasCover := func() ([]byte, bool) {
+					store.CoverMu.RLock()
+					defer store.CoverMu.RUnlock()
+					d, e := store.CoverCache[t.AlbumID]
+					return d, e
+				}(); hasCover {
+					m.HasCover = true
+				}
 			}
-		}
-		store.Mu.RUnlock()
+		})
 
 		if m.MBAlbumID != "" {
 			coverDir := filepath.Join(store.MusicDir, "images")
@@ -646,11 +643,11 @@ func MetadataUndoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Restore track from file tags on next scan
-	store.Mu.Lock()
-	if t, exists := store.Tracks[trackID]; exists {
-		t.HasMetadata = false
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if t, exists := l.Tracks[trackID]; exists {
+			t.HasMetadata = false
+		}
+	})
 
 	writeJSON(w, map[string]bool{"undone": true})
 }

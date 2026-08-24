@@ -10,7 +10,6 @@ import (
 )
 
 func AutoSortMusic() {
-	store.Mu.RLock()
 	type moveJob struct {
 		src      string
 		dst      string
@@ -20,7 +19,8 @@ func AutoSortMusic() {
 	}
 	var jobs []moveJob
 
-	for _, t := range store.Tracks {
+	store.View(func(l *store.Library) {
+	for _, t := range l.Tracks {
 		if t.Artist == "" || t.Title == "" {
 			continue
 		}
@@ -64,7 +64,7 @@ func AutoSortMusic() {
 			newRelPath: newRelPath,
 		})
 	}
-	store.Mu.RUnlock()
+	})
 
 	if len(jobs) == 0 {
 		return
@@ -99,15 +99,15 @@ func AutoSortMusic() {
 
 		// Update in-memory map immediately so the old path isn't served
 		// (404) between the rename and the rescan.
-		store.Mu.Lock()
-		if old, ok := store.Tracks[job.oldID]; ok {
-			deleted := old
-			deleted.FilePath = job.newRelPath
-			deleted.ID = job.newID
-			delete(store.Tracks, job.oldID)
-			store.Tracks[job.newID] = deleted
-		}
-		store.Mu.Unlock()
+		store.Update(func(l *store.Library) {
+			if old, ok := l.Tracks[job.oldID]; ok {
+				deleted := old
+				deleted.FilePath = job.newRelPath
+				deleted.ID = job.newID
+				delete(l.Tracks, job.oldID)
+				l.Tracks[job.newID] = deleted
+			}
+		})
 
 		moved++
 	}

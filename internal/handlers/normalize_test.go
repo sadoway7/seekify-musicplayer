@@ -13,9 +13,7 @@ import (
 
 func TestNormalizeHandler_NotFound(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "test.db"))
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(map[string]*models.Track{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/normalize/nope", nil)
 	rec := httptest.NewRecorder()
@@ -32,11 +30,9 @@ func TestNormalizeHandler_Cached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"t1": {ID: "t1", Title: "Song", Artist: "A", FilePath: "music/x.mp3"},
-	}
-	store.Mu.Unlock()
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/normalize/t1", nil)
 	rec := httptest.NewRecorder()
@@ -66,11 +62,9 @@ func TestNormalizeHandler_Disabled(t *testing.T) {
 	store.SetSetting("audio_normalization", "false")
 	defer store.SetSetting("audio_normalization", "true")
 
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"t1": {ID: "t1", Title: "Song", FilePath: "music/x.mp3"},
-	}
-	store.Mu.Unlock()
+	}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/normalize/t1", nil)
 	rec := httptest.NewRecorder()

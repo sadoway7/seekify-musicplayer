@@ -147,7 +147,7 @@ const UI = {
   },
 
   // Guest tried a login-only action (download). Show a prominent prompt
-  // instead of a silent 401. Built lazily; reused across finder + ripper.
+  // instead of a silent 401. Built lazily; reused across the finder.
   _showAccountRequired() {
     let modal = document.getElementById('account-required-modal');
     if (!modal) {
@@ -1319,7 +1319,6 @@ const UI = {
     // user has navigated away from the finder.
     this._pollFinderGen = (this._pollFinderGen || 0) + 1;
     if (this._workerPoll) { clearInterval(this._workerPoll); this._workerPoll = null; }
-    if (typeof RipperV2 !== 'undefined' && RipperV2._pollTimer) { clearInterval(RipperV2._pollTimer); RipperV2._pollTimer = null; }
     // Stop a finder preview that's still playing when the user leaves the finder.
     if (this._previewAudio) { this._previewAudio.pause(); this._previewAudio = null; }
   },
@@ -1343,7 +1342,6 @@ const UI = {
           case 'finder': self.renderFinder(); break;
           case 'finder-artist': self.renderFinderArtist(Store.viewData); break;
           case 'finder-release': self.renderFinderRelease(Store.viewData); break;
-          case 'ripper2': RipperV2.render(self.els.content); break;
           case 'downloads': self.renderSettings(); break;
           case 'settings': self.renderSettings(); break;
           case 'metadata-review': self.renderMetadataReview(); break;

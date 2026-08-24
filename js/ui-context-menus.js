@@ -537,9 +537,15 @@ Object.assign(UI, {
         ? this._viewTrackList.slice()
         : Store.library.tracks.slice();
       if (list.length > 0) {
-        const shuffled = list.sort(() => Math.random() - 0.5);
-        const capped = shuffled.slice(0, 100);
-        Player.shuffle = false;
+        // Fisher-Yates (a comparator-based sort shuffle is biased).
+        for (let i = list.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [list[i], list[j]] = [list[j], list[i]];
+        }
+        const capped = list.slice(0, 100);
+        // Reset shuffle through the real mutator so _originalQueue and UI
+        // state stay in lockstep — play() below replaces the queue anyway.
+        if (Player.shuffle) Player.toggleShuffle();
         const source = (action === 'shuffle-all')
           ? { type: 'all', name: 'All Music' }
           : this._getViewSource();

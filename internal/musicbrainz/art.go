@@ -147,21 +147,21 @@ func FetchMissingArtistArt() {
 		ArtFetchMu.Unlock()
 	}()
 
-	store.Mu.RLock()
 	type artistInfo struct {
 		name string
 	}
 	var artists []artistInfo
 	seen := map[string]bool{}
-	for _, t := range store.Tracks {
-		n := t.Artist
-		if n == "" || seen[n] {
-			continue
+	store.View(func(l *store.Library) {
+		for _, t := range l.Tracks {
+			n := t.Artist
+			if n == "" || seen[n] {
+				continue
+			}
+			seen[n] = true
+			artists = append(artists, artistInfo{name: n})
 		}
-		seen[n] = true
-		artists = append(artists, artistInfo{name: n})
-	}
-	store.Mu.RUnlock()
+	})
 
 	log.Printf("[artist-art] Fetching images for %d artists...", len(artists))
 
@@ -268,11 +268,11 @@ func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
 		data, err := os.ReadFile(coverPath)
 		if err == nil {
 			store.CacheCover(albumID, data)
-			store.Mu.Lock()
-			if a, ok := store.Albums[albumID]; ok {
-				a.HasCover = true
-			}
-			store.Mu.Unlock()
+			store.Update(func(l *store.Library) {
+				if a, ok := l.Albums[albumID]; ok {
+					a.HasCover = true
+				}
+			})
 			return true
 		}
 	}
@@ -286,11 +286,11 @@ func FetchAndCacheCoverByMBID(albumID, releaseMBID string) bool {
 
 	store.CacheCover(albumID, data)
 
-	store.Mu.Lock()
-	if a, ok := store.Albums[albumID]; ok {
-		a.HasCover = true
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if a, ok := l.Albums[albumID]; ok {
+			a.HasCover = true
+		}
+	})
 
 	return true
 }
@@ -311,11 +311,11 @@ func FetchAndCacheCover(albumID, artist, album string) bool {
 		data, err := os.ReadFile(coverPath)
 		if err == nil {
 			store.CacheCover(albumID, data)
-			store.Mu.Lock()
-			if a, ok := store.Albums[albumID]; ok {
-				a.HasCover = true
-			}
-			store.Mu.Unlock()
+			store.Update(func(l *store.Library) {
+				if a, ok := l.Albums[albumID]; ok {
+					a.HasCover = true
+				}
+			})
 			return true
 		}
 	}
@@ -336,11 +336,11 @@ func FetchAndCacheCover(albumID, artist, album string) bool {
 
 	store.CacheCover(albumID, data)
 
-	store.Mu.Lock()
-	if a, ok := store.Albums[albumID]; ok {
-		a.HasCover = true
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if a, ok := l.Albums[albumID]; ok {
+			a.HasCover = true
+		}
+	})
 
 	log.Printf("MusicBrainz: fetched cover for %s - %s", artist, album)
 	return true
@@ -368,19 +368,19 @@ func FetchMissingCovers() {
 		CoverFetchMu.Unlock()
 	}()
 
-	store.Mu.RLock()
 	type albumInfo struct {
 		id     string
 		artist string
 		name   string
 	}
 	var missing []albumInfo
-	for _, a := range store.Albums {
-		if !a.HasCover && a.Name != "" && a.Artist != "" && !store.IsCustomCover(a.ID) {
-			missing = append(missing, albumInfo{a.ID, a.Artist, a.Name})
+	store.View(func(l *store.Library) {
+		for _, a := range l.Albums {
+			if !a.HasCover && a.Name != "" && a.Artist != "" && !store.IsCustomCover(a.ID) {
+				missing = append(missing, albumInfo{a.ID, a.Artist, a.Name})
+			}
 		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	log.Printf("Fetching missing covers for %d albums from MusicBrainz...", len(missing))
 

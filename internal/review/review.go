@@ -37,7 +37,6 @@ var (
 // preserves them across stale rechecks so they aren't wiped to reviewed_ok.
 var externalFlags = map[string]bool{"playback_error": true, "corrupt_audio": true}
 
-var LibraryVersionAdd func(delta int64)
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -109,9 +108,7 @@ func DbSetReviewStatus(trackID, status, flags, reviewer string) {
 	// Review statuses are embedded in /api/library responses (and ETag'd on
 	// the library version), so every status write must invalidate it. Bumping
 	// here — the single choke point — keeps callers from having to remember.
-	if LibraryVersionAdd != nil {
-		LibraryVersionAdd(1)
-	}
+	store.LibraryVersion.Add(1)
 }
 
 // DbSeedReviewUnchecked creates an "unchecked" review row only if none exists.
@@ -133,10 +130,7 @@ func DbGetReviewCounts() map[string]int {
 	for rows.Next() {
 		var trackID, status string
 		rows.Scan(&trackID, &status)
-		store.Mu.RLock()
-		_, exists := store.Tracks[trackID]
-		store.Mu.RUnlock()
-		if !exists {
+		if store.GetTrack(trackID) == nil {
 			continue
 		}
 		counts[status]++
@@ -160,10 +154,7 @@ func DbGetTracksByReviewStatus(status string, limit int) []string {
 	for rows.Next() {
 		var id string
 		rows.Scan(&id)
-		store.Mu.RLock()
-		_, exists := store.Tracks[id]
-		store.Mu.RUnlock()
-		if !exists {
+		if store.GetTrack(id) == nil {
 			continue
 		}
 		ids = append(ids, id)
@@ -188,10 +179,7 @@ func DbGetStaleReviewTracks(status string, age time.Duration, limit int) []strin
 	for rows.Next() {
 		var id string
 		rows.Scan(&id)
-		store.Mu.RLock()
-		_, exists := store.Tracks[id]
-		store.Mu.RUnlock()
-		if !exists {
+		if store.GetTrack(id) == nil {
 			continue
 		}
 		ids = append(ids, id)
@@ -249,21 +237,22 @@ func DbGetReviewTracksPage(limit, offset int, flags ...string) []models.Track {
 		rows.Scan(&trackID, &flagsJSON)
 		rowBuf = append(rowBuf, row{trackID, flagsJSON})
 	}
-	store.Mu.RLock()
-	result := make([]models.Track, 0, len(rowBuf))
+	var result []models.Track
 	var orphanIDs []string
-	for _, r := range rowBuf {
-		t, exists := store.Tracks[r.id]
-		if !exists {
-			orphanIDs = append(orphanIDs, r.id)
-			continue
+	store.View(func(l *store.Library) {
+		result = make([]models.Track, 0, len(rowBuf))
+		for _, r := range rowBuf {
+			t, exists := l.Tracks[r.id]
+			if !exists {
+				orphanIDs = append(orphanIDs, r.id)
+				continue
+			}
+			cp := *t
+			cp.ReviewStatus = "needs_review"
+			json.Unmarshal([]byte(r.flags), &cp.ReviewFlags)
+			result = append(result, cp)
 		}
-		cp := *t
-		cp.ReviewStatus = "needs_review"
-		json.Unmarshal([]byte(r.flags), &cp.ReviewFlags)
-		result = append(result, cp)
-	}
-	store.Mu.RUnlock()
+	})
 	if len(orphanIDs) > 0 {
 		store.SafeGo("review-cleanup", func() { cleanupOrphanedReviewIDs(orphanIDs) })
 	}
@@ -308,12 +297,12 @@ func DbDeleteReview(trackID string) {
 }
 
 func SeedMissingReviewTracks() {
-	store.Mu.RLock()
-	trackIDs := make([]string, 0, len(store.Tracks))
-	for id := range store.Tracks {
-		trackIDs = append(trackIDs, id)
-	}
-	store.Mu.RUnlock()
+	trackIDs := make([]string, 0, store.TrackCount())
+	store.View(func(l *store.Library) {
+		for id := range l.Tracks {
+			trackIDs = append(trackIDs, id)
+		}
+	})
 
 	rows, err := store.DB.Query("SELECT track_id FROM track_reviews")
 	if err != nil {
@@ -389,12 +378,12 @@ func cleanupOrphanedReviewIDs(ids []string) {
 }
 
 func CleanupOrphanedReviews() {
-	store.Mu.RLock()
-	existingIDs := make([]string, 0, len(store.Tracks))
-	for id := range store.Tracks {
-		existingIDs = append(existingIDs, id)
-	}
-	store.Mu.RUnlock()
+	existingIDs := make([]string, 0, store.TrackCount())
+	store.View(func(l *store.Library) {
+		for id := range l.Tracks {
+			existingIDs = append(existingIDs, id)
+		}
+	})
 
 	rows, err := store.DB.Query("SELECT track_id FROM track_reviews")
 	if err != nil {
@@ -457,95 +446,96 @@ func DbInsertUncheckedReviews(newTracks map[string]*models.Track) {
 }
 
 func saveGenreResult(trackID, canonical, source string, checkedAt int64) bool {
-	store.Mu.Lock()
-	defer store.Mu.Unlock()
-	track, ok := store.Tracks[trackID]
-	if !ok {
-		return false
-	}
-	if track.GenreCanonical != "" || track.GenreCheckedAt != 0 {
-		return false
-	}
-	if _, err := store.DB.Exec(`UPDATE tracks SET genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?`,
-		canonical, source, checkedAt, trackID); err != nil {
-		log.Printf("[review-enrich] genre result save failed for %s: %v", trackID, err)
-		return false
-	}
-	track.GenreCanonical = canonical
-	track.GenreSource = source
-	track.GenreCheckedAt = checkedAt
-	return true
+	saved := false
+	store.Update(func(l *store.Library) {
+		track, ok := l.Tracks[trackID]
+		if !ok {
+			return
+		}
+		if track.GenreCanonical != "" || track.GenreCheckedAt != 0 {
+			return
+		}
+		if _, err := store.DB.Exec(`UPDATE tracks SET genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?`,
+			canonical, source, checkedAt, trackID); err != nil {
+			log.Printf("[review-enrich] genre result save failed for %s: %v", trackID, err)
+			return
+		}
+		track.GenreCanonical = canonical
+		track.GenreSource = source
+		track.GenreCheckedAt = checkedAt
+		saved = true
+	})
+	return saved
 }
 
 func DbUpdateTrackMeta(trackID string, fields map[string]interface{}) {
-	store.Mu.Lock()
-	track, exists := store.Tracks[trackID]
-	if !exists {
-		store.Mu.Unlock()
-		return
-	}
-	genreChanged := false
-	if v, ok := fields["title"].(string); ok && v != "" {
-		track.Title = v
-	}
-	if v, ok := fields["artist"].(string); ok && v != "" {
-		track.Artist = v
-	}
-	if v, ok := fields["album"].(string); ok && v != "" {
-		track.Album = v
-	}
-	if v, ok := fields["albumArtist"].(string); ok {
-		track.AlbumArtist = v
-	}
-	if v, ok := fields["trackNumber"].(float64); ok {
-		track.TrackNumber = int(v)
-	}
-	if v, ok := fields["year"].(float64); ok {
-		track.Year = int(v)
-	}
-	if v, ok := fields["genreCanonical"].(string); ok {
-		genres := models.CanonicalGenres(v)
-		if len(genres) == 0 && strings.TrimSpace(v) != "" {
-			track.GenreCanonical = strings.TrimSpace(v)
-		} else if len(genres) > 0 {
-			track.GenreCanonical = strings.Join(genres, ", ")
+	store.Update(func(l *store.Library) {
+		track, exists := l.Tracks[trackID]
+		if !exists {
+			return
 		}
-		track.GenreSource = "manual"
-		track.GenreCheckedAt = 0
-		if track.Genre != "" && track.GenreCanonical != "" {
-			track.Genre = track.GenreCanonical
+		genreChanged := false
+		if v, ok := fields["title"].(string); ok && v != "" {
+			track.Title = v
 		}
-		genreChanged = true
-	}
-	if track.AlbumArtist == "" {
-		track.AlbumArtist = track.Artist
-	}
-	oldAlbumID := track.AlbumID
-	if track.Album != "" {
-		track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
-	} else {
-		track.AlbumID = models.GenerateID("single:" + trackID)
-	}
-	if oldAlbumID != "" && track.AlbumID != oldAlbumID {
-		store.MoveCustomCover(oldAlbumID, track.AlbumID)
-	}
-	track.HasMetadata = true
+		if v, ok := fields["artist"].(string); ok && v != "" {
+			track.Artist = v
+		}
+		if v, ok := fields["album"].(string); ok && v != "" {
+			track.Album = v
+		}
+		if v, ok := fields["albumArtist"].(string); ok {
+			track.AlbumArtist = v
+		}
+		if v, ok := fields["trackNumber"].(float64); ok {
+			track.TrackNumber = int(v)
+		}
+		if v, ok := fields["year"].(float64); ok {
+			track.Year = int(v)
+		}
+		if v, ok := fields["genreCanonical"].(string); ok {
+			genres := models.CanonicalGenres(v)
+			if len(genres) == 0 && strings.TrimSpace(v) != "" {
+				track.GenreCanonical = strings.TrimSpace(v)
+			} else if len(genres) > 0 {
+				track.GenreCanonical = strings.Join(genres, ", ")
+			}
+			track.GenreSource = "manual"
+			track.GenreCheckedAt = 0
+			if track.Genre != "" && track.GenreCanonical != "" {
+				track.Genre = track.GenreCanonical
+			}
+			genreChanged = true
+		}
+		if track.AlbumArtist == "" {
+			track.AlbumArtist = track.Artist
+		}
+		oldAlbumID := track.AlbumID
+		if track.Album != "" {
+			track.AlbumID = models.GenerateAlbumID(track.AlbumArtist, track.Album)
+		} else {
+			track.AlbumID = models.GenerateID("single:" + trackID)
+		}
+		if oldAlbumID != "" && track.AlbumID != oldAlbumID {
+			store.MoveCustomCover(oldAlbumID, track.AlbumID)
+		}
+		track.HasMetadata = true
 
-	store.DbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
+		store.DbUpdateTrackMetadata(track.ID, track.Title, track.Artist, track.Album, track.AlbumArtist)
 
-	if tn, ok := fields["trackNumber"].(float64); ok {
-		store.DB.Exec("UPDATE tracks SET track_number = ? WHERE id = ?", int(tn), track.ID)
-	}
-	if yr, ok := fields["year"].(float64); ok {
-		store.DB.Exec("UPDATE tracks SET year = ? WHERE id = ?", int(yr), track.ID)
-	}
-	if genreChanged {
-		store.DB.Exec("UPDATE tracks SET genre = CASE WHEN ? = '' THEN genre ELSE ? END, genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?",
-			track.Genre, track.Genre, track.GenreCanonical, track.GenreSource, track.GenreCheckedAt, track.ID)
-	}
+		if tn, ok := fields["trackNumber"].(float64); ok {
+			store.DB.Exec("UPDATE tracks SET track_number = ? WHERE id = ?", int(tn), track.ID)
+		}
+		if yr, ok := fields["year"].(float64); ok {
+			store.DB.Exec("UPDATE tracks SET year = ? WHERE id = ?", int(yr), track.ID)
+		}
+		if genreChanged {
+			store.DB.Exec("UPDATE tracks SET genre = CASE WHEN ? = '' THEN genre ELSE ? END, genre_canonical = ?, genre_source = ?, genre_checked_at = ? WHERE id = ?",
+				track.Genre, track.Genre, track.GenreCanonical, track.GenreSource, track.GenreCheckedAt, track.ID)
+		}
 
-	musicbrainz.RebuildAlbumsFromTracksLocked()
-	store.Mu.Unlock()
+		musicbrainz.RebuildAlbums(l)
+	})
 
 	DbSetReviewStatus(trackID, "reviewed_ok", "[]", "manual")
 }
@@ -563,25 +553,22 @@ func ResolveTrackFilePath(track *models.Track) string {
 }
 
 func ReviewDeleteTrack(trackID string) error {
-	store.Mu.Lock()
-	track, exists := store.Tracks[trackID]
-	if !exists {
-		store.Mu.Unlock()
+	track := store.GetTrack(trackID)
+	if track == nil {
 		return nil
 	}
 	fullPath := ResolveTrackFilePath(track)
-	store.Mu.Unlock()
 
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
-	store.Mu.Lock()
-	delete(store.Tracks, trackID)
-	store.DbDeleteTrack(trackID)
-	DbDeleteReview(trackID)
-	musicbrainz.RebuildAlbumsFromTracksLocked()
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		delete(l.Tracks, trackID)
+		store.DbDeleteTrack(trackID)
+		DbDeleteReview(trackID)
+		musicbrainz.RebuildAlbums(l)
+	})
 
 	return nil
 }
@@ -597,13 +584,13 @@ func ReviewDeleteAllFlagged() (int, error) {
 		path string
 	}
 	items := make([]item, 0, len(ids))
-	store.Mu.RLock()
-	for _, id := range ids {
-		if track, exists := store.Tracks[id]; exists {
-			items = append(items, item{id, ResolveTrackFilePath(track)})
+	store.View(func(l *store.Library) {
+		for _, id := range ids {
+			if track, exists := l.Tracks[id]; exists {
+				items = append(items, item{id, ResolveTrackFilePath(track)})
+			}
 		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	for _, it := range items {
 		if err := os.Remove(it.path); err != nil && !os.IsNotExist(err) {
@@ -611,14 +598,14 @@ func ReviewDeleteAllFlagged() (int, error) {
 		}
 	}
 
-	store.Mu.Lock()
-	for _, it := range items {
-		delete(store.Tracks, it.id)
-		store.DbDeleteTrack(it.id)
-		DbDeleteReview(it.id)
-	}
-	musicbrainz.RebuildAlbumsFromTracksLocked()
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		for _, it := range items {
+			delete(l.Tracks, it.id)
+			store.DbDeleteTrack(it.id)
+			DbDeleteReview(it.id)
+		}
+		musicbrainz.RebuildAlbums(l)
+	})
 
 	if len(items) > 0 {
 		log.Printf("[review] Deleted all flagged tracks: %d removed", len(items))
@@ -647,15 +634,15 @@ func ReviewApproveFlagged(flags []string) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	store.Mu.Lock()
-	for _, id := range ids {
-		DbSetReviewStatus(id, "reviewed_ok", "[]", "manual")
-		if t, ok := store.Tracks[id]; ok {
-			t.ReviewStatus = "reviewed_ok"
-			t.ReviewFlags = nil
+	store.Update(func(l *store.Library) {
+		for _, id := range ids {
+			DbSetReviewStatus(id, "reviewed_ok", "[]", "manual")
+			if t, ok := l.Tracks[id]; ok {
+				t.ReviewStatus = "reviewed_ok"
+				t.ReviewFlags = nil
+			}
 		}
-	}
-	store.Mu.Unlock()
+	})
 	return len(ids), nil
 }
 
@@ -670,13 +657,13 @@ func ReviewDeleteFlagged(flags []string) (int, error) {
 		path string
 	}
 	items := make([]item, 0, len(ids))
-	store.Mu.RLock()
-	for _, id := range ids {
-		if track, exists := store.Tracks[id]; exists {
-			items = append(items, item{id, ResolveTrackFilePath(track)})
+	store.View(func(l *store.Library) {
+		for _, id := range ids {
+			if track, exists := l.Tracks[id]; exists {
+				items = append(items, item{id, ResolveTrackFilePath(track)})
+			}
 		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	for _, it := range items {
 		if err := os.Remove(it.path); err != nil && !os.IsNotExist(err) {
@@ -684,14 +671,14 @@ func ReviewDeleteFlagged(flags []string) (int, error) {
 		}
 	}
 
-	store.Mu.Lock()
-	for _, it := range items {
-		delete(store.Tracks, it.id)
-		store.DbDeleteTrack(it.id)
-		DbDeleteReview(it.id)
-	}
-	musicbrainz.RebuildAlbumsFromTracksLocked()
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		for _, it := range items {
+			delete(l.Tracks, it.id)
+			store.DbDeleteTrack(it.id)
+			DbDeleteReview(it.id)
+		}
+		musicbrainz.RebuildAlbums(l)
+	})
 
 	log.Printf("[review] Bulk deleted flagged tracks: %d removed", len(items))
 	return len(items), nil
@@ -721,10 +708,7 @@ func trackHasEffectiveCover(t *models.Track) bool {
 	if cached {
 		return true
 	}
-	store.Mu.RLock()
-	a, ok := store.Albums[t.AlbumID]
-	store.Mu.RUnlock()
-	if ok && a.HasCover {
+	if a := store.GetAlbum(t.AlbumID); a != nil && a.HasCover {
 		return true
 	}
 	coverPath := filepath.Join(store.MusicDir, "images", t.AlbumID+".jpg")
@@ -895,16 +879,16 @@ func resolveTrackPath(filePath string) string {
 }
 
 func CheckAllDuplicates() {
-	store.Mu.RLock()
 	byArtist := make(map[string][]models.Track)
-	for _, t := range store.Tracks {
-		artistKey := strings.ToLower(strings.TrimSpace(t.Artist))
-		if artistKey == "" || artistKey == "unknown artist" {
-			continue
+	store.View(func(l *store.Library) {
+		for _, t := range l.Tracks {
+			artistKey := strings.ToLower(strings.TrimSpace(t.Artist))
+			if artistKey == "" || artistKey == "unknown artist" {
+				continue
+			}
+			byArtist[artistKey] = append(byArtist[artistKey], *t)
 		}
-		byArtist[artistKey] = append(byArtist[artistKey], *t)
-	}
-	store.Mu.RUnlock()
+	})
 
 	for _, artistTracks := range byArtist {
 		if len(artistTracks) < 2 {
@@ -1196,14 +1180,14 @@ func RunReviewBatch() bool {
 	ReviewLogData.Entries = append(ReviewLogData.Entries, fmt.Sprintf("--- Scan started %s ---", time.Now().Format("2006-01-02 15:04:05")))
 	ReviewLogData.Unlock()
 
-	store.Mu.RLock()
 	var toCheck []models.Track
-	for _, id := range batch {
-		if t, ok := store.Tracks[id]; ok {
-			toCheck = append(toCheck, *t)
+	store.View(func(l *store.Library) {
+		for _, id := range batch {
+			if t, ok := l.Tracks[id]; ok {
+				toCheck = append(toCheck, *t)
+			}
 		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	for idx := range toCheck {
 		t := &toCheck[idx]
@@ -1247,11 +1231,11 @@ func RunReviewBatch() bool {
 			if t.Duration == 0 {
 				if probed := probeTrackDuration(t.FilePath); probed > 0 {
 					t.Duration = probed
-					store.Mu.Lock()
-					if orig, ok := store.Tracks[t.ID]; ok {
-						orig.Duration = probed
-					}
-					store.Mu.Unlock()
+					store.Update(func(l *store.Library) {
+						if orig, ok := l.Tracks[t.ID]; ok {
+							orig.Duration = probed
+						}
+					})
 					store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", probed, t.ID)
 				}
 			}
@@ -1373,10 +1357,7 @@ func DbGetReviewFlagCounts() map[string]int {
 		if rows.Scan(&trackID, &flagsJSON) != nil {
 			continue
 		}
-		store.Mu.RLock()
-		_, exists := store.Tracks[trackID]
-		store.Mu.RUnlock()
-		if !exists {
+		if store.GetTrack(trackID) == nil {
 			continue
 		}
 		var flags []string
@@ -1398,12 +1379,12 @@ func ReviewMarkOkHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	DbSetReviewStatus(body.TrackID, "reviewed_ok", "[]", "manual")
 
-	store.Mu.Lock()
-	if t, ok := store.Tracks[body.TrackID]; ok {
-		t.ReviewStatus = "reviewed_ok"
-		t.ReviewFlags = nil
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if t, ok := l.Tracks[body.TrackID]; ok {
+			t.ReviewStatus = "reviewed_ok"
+			t.ReviewFlags = nil
+		}
+	})
 
 	writeJSON(w, map[string]bool{"ok": true})
 }
@@ -1420,16 +1401,14 @@ func ReviewEditMetaHandler(w http.ResponseWriter, r *http.Request) {
 	DbUpdateTrackMeta(body.TrackID, body.Fields)
 	DbSetReviewStatus(body.TrackID, "reviewed_ok", "[]", "manual")
 
-	if LibraryVersionAdd != nil {
-		LibraryVersionAdd(1)
-	}
+	store.LibraryVersion.Add(1)
 
-	store.Mu.Lock()
-	if t, ok := store.Tracks[body.TrackID]; ok {
-		t.ReviewStatus = "reviewed_ok"
-		t.ReviewFlags = nil
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if t, ok := l.Tracks[body.TrackID]; ok {
+			t.ReviewStatus = "reviewed_ok"
+			t.ReviewFlags = nil
+		}
+	})
 
 	writeJSON(w, map[string]bool{"updated": true})
 }
@@ -1609,14 +1588,14 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Snapshot IDs; each iteration re-reads the current track under the lock.
-		store.Mu.RLock()
 		var trackIDs []string
-		for _, id := range ids {
-			if _, ok := store.Tracks[id]; ok {
-				trackIDs = append(trackIDs, id)
+		store.View(func(l *store.Library) {
+			for _, id := range ids {
+				if _, ok := l.Tracks[id]; ok {
+					trackIDs = append(trackIDs, id)
+				}
 			}
-		}
-		store.Mu.RUnlock()
+		})
 
 		enrichProgress.Lock()
 		enrichProgress.Checked = 0
@@ -1630,14 +1609,11 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 		appliedGenres := 0
 
 		for i, trackID := range trackIDs {
-			store.Mu.RLock()
-			current, ok := store.Tracks[trackID]
-			if !ok {
-				store.Mu.RUnlock()
+			current := store.GetTrack(trackID)
+			if current == nil {
 				continue
 			}
 			snapshot := *current
-			store.Mu.RUnlock()
 
 			enrichProgress.Lock()
 			enrichProgress.Checked = i
@@ -1656,40 +1632,44 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 			best := cands[0]
 			score := musicbrainz.ScoreMatch(searchArtist, searchTitle, best.Artist, best.Title, best.Album)
 			if score >= 0.7 {
-				store.Mu.Lock()
-				current, ok = store.Tracks[trackID]
-				if !ok {
-					store.Mu.Unlock()
+				gone := false
+				store.Update(func(l *store.Library) {
+					current, ok := l.Tracks[trackID]
+					if !ok {
+						gone = true
+						return
+					}
+					// Only fill in missing fields; never overwrite existing metadata
+					// during a genre-enrich run so album IDs (and their covers) stay stable.
+					changed := false
+					if current.Artist == "" && best.Artist != "" {
+						current.Artist = best.Artist
+						changed = true
+					}
+					if current.Title == "" && best.Title != "" {
+						current.Title = best.Title
+						changed = true
+					}
+					if current.Album == "" && best.Album != "" {
+						current.Album = best.Album
+						changed = true
+					}
+					if current.AlbumArtist == "" && best.Artist != "" {
+						current.AlbumArtist = best.Artist
+						changed = true
+					}
+					if changed {
+						if current.Album != "" {
+							current.AlbumID = models.GenerateAlbumID(current.AlbumArtist, current.Album)
+						}
+						current.HasMetadata = true
+						store.DbUpdateTrackMetadata(current.ID, current.Title, current.Artist, current.Album, current.AlbumArtist)
+						appliedMeta++
+					}
+				})
+				if gone {
 					continue
 				}
-				// Only fill in missing fields; never overwrite existing metadata
-				// during a genre-enrich run so album IDs (and their covers) stay stable.
-				changed := false
-				if current.Artist == "" && best.Artist != "" {
-					current.Artist = best.Artist
-					changed = true
-				}
-				if current.Title == "" && best.Title != "" {
-					current.Title = best.Title
-					changed = true
-				}
-				if current.Album == "" && best.Album != "" {
-					current.Album = best.Album
-					changed = true
-				}
-				if current.AlbumArtist == "" && best.Artist != "" {
-					current.AlbumArtist = best.Artist
-					changed = true
-				}
-				if changed {
-					if current.Album != "" {
-						current.AlbumID = models.GenerateAlbumID(current.AlbumArtist, current.Album)
-					}
-					current.HasMetadata = true
-					store.DbUpdateTrackMetadata(current.ID, current.Title, current.Artist, current.Album, current.AlbumArtist)
-					appliedMeta++
-				}
-				store.Mu.Unlock()
 			}
 		}
 
@@ -1735,23 +1715,19 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 
 
 			// Phase B: cover — now album may be populated from metadata
-			store.Mu.RLock()
-			current = store.Tracks[trackID]
+			current = store.GetTrack(trackID)
 			albumID, artist, album := "", "", ""
 			if current != nil {
 				albumID = current.AlbumID
 				artist = current.Artist
 				album = current.Album
 			}
-			store.Mu.RUnlock()
 			if albumID != "" && artist != "" && album != "" {
 				// Check if cover already exists
-				store.Mu.RLock()
 				hasCover := false
-				if a, ok := store.Albums[albumID]; ok {
+				if a := store.GetAlbum(albumID); a != nil {
 					hasCover = a.HasCover
 				}
-				store.Mu.RUnlock()
 				if !hasCover && !store.IsCustomCover(albumID) {
 					if musicbrainz.FetchAndCacheCover(albumID, artist, album) {
 						fetchedCovers++
@@ -1778,8 +1754,8 @@ func ReviewEnrichHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Signal open SPAs: genres/metadata/covers changed. One bump per run,
 		// not per track — the /api/stats poll refetches the library once.
-		if appliedMeta+appliedGenres+fetchedCovers > 0 && LibraryVersionAdd != nil {
-			LibraryVersionAdd(int64(len(trackIDs)))
+		if appliedMeta+appliedGenres+fetchedCovers > 0 {
+			store.LibraryVersion.Add(int64(len(trackIDs)))
 		}
 	})
 }
@@ -1827,13 +1803,14 @@ func IntegrityScanHandler(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		// Snapshot IDs + display info + resolved paths outside the lock.
-		store.Mu.RLock()
 		type item struct{ id, title, artist, path string }
-		items := make([]item, 0, len(store.Tracks))
-		for id, t := range store.Tracks {
-			items = append(items, item{id, t.Title, t.Artist, ResolveTrackFilePath(t)})
-		}
-		store.Mu.RUnlock()
+		var items []item
+		store.View(func(l *store.Library) {
+			items = make([]item, 0, len(l.Tracks))
+			for id, t := range l.Tracks {
+				items = append(items, item{id, t.Title, t.Artist, ResolveTrackFilePath(t)})
+			}
+		})
 
 		integrityProgress.Lock()
 		integrityProgress.Checked = 0
@@ -1887,12 +1864,12 @@ func flagTrack(trackID, flag, reviewer string) {
 	}
 	flagsJSON, _ := json.Marshal(flags)
 	DbSetReviewStatus(trackID, "needs_review", string(flagsJSON), reviewer)
-	store.Mu.Lock()
-	if t, ok := store.Tracks[trackID]; ok {
-		t.ReviewStatus = "needs_review"
-		t.ReviewFlags = flags
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if t, ok := l.Tracks[trackID]; ok {
+			t.ReviewStatus = "needs_review"
+			t.ReviewFlags = flags
+		}
+	})
 }
 
 func hasFlag(flags []string, flag string) bool {

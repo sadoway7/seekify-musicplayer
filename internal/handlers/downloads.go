@@ -35,12 +35,10 @@ func jobOwnedOrAdmin(w http.ResponseWriter, r *http.Request, job *downloads.Down
 func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/download/")
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[id]
-	downloadEnabled := exists && track.DownloadEnabled
-	store.Mu.RUnlock()
+	track := store.GetTrack(id)
+	downloadEnabled := track != nil && track.DownloadEnabled
 
-	if !exists {
+	if track == nil {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
@@ -90,33 +88,32 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func DownloadsListHandler(w http.ResponseWriter, r *http.Request) {
-	store.Mu.RLock()
-	defer store.Mu.RUnlock()
+	store.View(func(l *store.Library) {
+		type downloadTrack struct {
+			ID      string `json:"id"`
+			Title   string `json:"title"`
+			Artist  string `json:"artist"`
+			Album   string `json:"album"`
+			Enabled bool   `json:"enabled"`
+		}
 
-	type downloadTrack struct {
-		ID      string `json:"id"`
-		Title   string `json:"title"`
-		Artist  string `json:"artist"`
-		Album   string `json:"album"`
-		Enabled bool   `json:"enabled"`
-	}
+		var result []downloadTrack
+		for _, t := range l.Tracks {
+			result = append(result, downloadTrack{
+				ID:      t.ID,
+				Title:   t.Title,
+				Artist:  t.Artist,
+				Album:   t.Album,
+				Enabled: t.DownloadEnabled,
+			})
+		}
 
-	var result []downloadTrack
-	for _, t := range store.Tracks {
-		result = append(result, downloadTrack{
-			ID:      t.ID,
-			Title:   t.Title,
-			Artist:  t.Artist,
-			Album:   t.Album,
-			Enabled: t.DownloadEnabled,
-		})
-	}
+		if result == nil {
+			result = []downloadTrack{}
+		}
 
-	if result == nil {
-		result = []downloadTrack{}
-	}
-
-	writeJSON(w, result)
+		writeJSON(w, result)
+	})
 }
 
 func DownloadToggleHandler(w http.ResponseWriter, r *http.Request) {
@@ -131,22 +128,18 @@ func DownloadToggleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	_, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-
-	if !exists {
+	if store.GetTrack(trackID) == nil {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
 
 	enabled := store.DbToggleDownload(trackID)
 
-	store.Mu.Lock()
-	if t, ok := store.Tracks[trackID]; ok {
-		t.DownloadEnabled = enabled
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if t, ok := l.Tracks[trackID]; ok {
+			t.DownloadEnabled = enabled
+		}
+	})
 
 	writeJSON(w, map[string]bool{"enabled": enabled})
 }
@@ -157,11 +150,11 @@ func DownloadsEnableAllHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	store.DbEnableAllDownloads()
-	store.Mu.Lock()
-	for _, t := range store.Tracks {
-		t.DownloadEnabled = true
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		for _, t := range l.Tracks {
+			t.DownloadEnabled = true
+		}
+	})
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

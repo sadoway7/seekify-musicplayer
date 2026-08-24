@@ -207,7 +207,7 @@ func firstAdminID() string {
 	return id
 }
 
-// DedupTracks runs all dedup passes and reloads store.Tracks from the clean DB.
+// DedupTracks runs all dedup passes and reloads the library from the clean DB.
 // Safe to call periodically. The reload is skipped when no duplicates were
 // found — the maps already match the DB, and reloading them under Mu.Lock()
 // (full SELECT + map rebuild) froze every library/stream reader every 5 min.
@@ -217,13 +217,9 @@ func DedupTracks() {
 	}
 	// Sync in-memory state with the freshly-cleaned DB so the UI doesn't
 	// show stale duplicates between dedup runs.
-	Mu.Lock()
-	Tracks = DbLoadTracks()
+	tracks := DbLoadTracks()
 	albums := DbLoadAlbums()
-	if albums != nil {
-		Albums = albums
-	}
-	Mu.Unlock()
+	ReplaceLibrary(tracks, albums)
 }
 
 // dedupTracksByFilePath merges any tracks sharing the same file_path,
@@ -1128,13 +1124,9 @@ func DbUpdateTrackMetadata(trackID, title, artist, album, albumArtist string) {
 }
 
 func AlbumIDForTrack(trackID string) (string, bool) {
-	Mu.RLock()
-	if t, ok := Tracks[trackID]; ok && t.AlbumID != "" {
-		albumID := t.AlbumID
-		Mu.RUnlock()
-		return albumID, true
+	if t := GetTrack(trackID); t != nil && t.AlbumID != "" {
+		return t.AlbumID, true
 	}
-	Mu.RUnlock()
 
 	var albumID string
 	if err := DB.QueryRow(`SELECT album_id FROM tracks WHERE id = ?`, trackID).Scan(&albumID); err != nil || albumID == "" {

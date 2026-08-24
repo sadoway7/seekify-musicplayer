@@ -85,7 +85,6 @@ func ScanMetadataForTracks() models.MetadataScanResult {
 		MetaScanLock.Unlock()
 	}()
 
-	store.Mu.RLock()
 	type trackInfo struct {
 		id       string
 		title    string
@@ -93,59 +92,60 @@ func ScanMetadataForTracks() models.MetadataScanResult {
 		filePath string
 	}
 
-	existingMatches := map[string]bool{}
-	rows, _ := store.DB.Query(`SELECT DISTINCT track_id FROM metadata_matches`)
-	if rows != nil {
-		for rows.Next() {
-			var tid string
-			rows.Scan(&tid)
-			existingMatches[tid] = true
-		}
-		rows.Close()
-	}
-
 	var unmatched []trackInfo
 	var skipped int
-	for _, t := range store.Tracks {
-		if existingMatches[t.ID] {
-			continue
+	store.View(func(l *store.Library) {
+		existingMatches := map[string]bool{}
+		rows, _ := store.DB.Query(`SELECT DISTINCT track_id FROM metadata_matches`)
+		if rows != nil {
+			for rows.Next() {
+				var tid string
+				rows.Scan(&tid)
+				existingMatches[tid] = true
+			}
+			rows.Close()
 		}
 
-		// Skip tracks that already have complete tags (e.g. Lidarr-managed files)
-		if t.Artist != "" && t.Title != "" && t.Album != "" {
-			skipped++
-			continue
-		}
+		for _, t := range l.Tracks {
+			if existingMatches[t.ID] {
+				continue
+			}
 
-		searchTitle := t.Title
-		searchArtist := t.Artist
+			// Skip tracks that already have complete tags (e.g. Lidarr-managed files)
+			if t.Artist != "" && t.Title != "" && t.Album != "" {
+				skipped++
+				continue
+			}
 
-		if searchTitle == "" || searchArtist == "" {
-			filename := scanner.TitleFromFilename(t.FilePath)
-			if searchTitle == "" && searchArtist == "" {
-				if sepIdx := strings.Index(filename, " - "); sepIdx != -1 {
-					searchArtist = strings.TrimSpace(filename[:sepIdx])
-					searchTitle = strings.TrimSpace(filename[sepIdx+3:])
-				} else {
+			searchTitle := t.Title
+			searchArtist := t.Artist
+
+			if searchTitle == "" || searchArtist == "" {
+				filename := scanner.TitleFromFilename(t.FilePath)
+				if searchTitle == "" && searchArtist == "" {
+					if sepIdx := strings.Index(filename, " - "); sepIdx != -1 {
+						searchArtist = strings.TrimSpace(filename[:sepIdx])
+						searchTitle = strings.TrimSpace(filename[sepIdx+3:])
+					} else {
+						searchTitle = filename
+					}
+				} else if searchTitle == "" {
 					searchTitle = filename
 				}
-			} else if searchTitle == "" {
-				searchTitle = filename
 			}
-		}
 
-		if searchTitle == "" {
-			continue
-		}
+			if searchTitle == "" {
+				continue
+			}
 
-		unmatched = append(unmatched, trackInfo{
-			id:       t.ID,
-			title:    searchTitle,
-			artist:   searchArtist,
-			filePath: t.FilePath,
-		})
-	}
-	store.Mu.RUnlock()
+			unmatched = append(unmatched, trackInfo{
+				id:       t.ID,
+				title:    searchTitle,
+				artist:   searchArtist,
+				filePath: t.FilePath,
+			})
+		}
+	})
 
 	var result models.MetadataScanResult
 	var resultMu sync.Mutex
@@ -240,7 +240,6 @@ func ScanMetadataForTracks() models.MetadataScanResult {
 					continue
 				}
 
-				store.Mu.RLock()
 				hasCover := false
 				if cand.AlbumID != "" {
 					coverDir := filepath.Join(store.MusicDir, "images")
@@ -249,7 +248,6 @@ func ScanMetadataForTracks() models.MetadataScanResult {
 						hasCover = true
 					}
 				}
-				store.Mu.RUnlock()
 
 				match := &models.MetadataMatch{
 					ID:          models.GenerateUUID(),
@@ -341,9 +339,9 @@ func ApplyApprovedMatches() int {
 		}
 	}
 
-	store.Mu.Lock()
+	store.Update(func(l *store.Library) {
 	for _, m := range bestPerTrack {
-		track, exists := store.Tracks[m.TrackID]
+		track, exists := l.Tracks[m.TrackID]
 		if !exists {
 			continue
 		}
@@ -396,9 +394,9 @@ func ApplyApprovedMatches() int {
 	}
 
 	if applied > 0 {
-		RebuildAlbumsFromTracksLocked()
+		RebuildAlbums(l)
 	}
-	store.Mu.Unlock()
+	})
 
 	store.SafeGo("apply-covers", func() {
 		for _, job := range coverJobs {
@@ -418,11 +416,11 @@ func ApplyApprovedMatches() int {
 
 			if diskData, err := os.ReadFile(coverPath); err == nil && len(diskData) > 0 {
 				store.CacheCover(job.trackAlbumID, diskData)
-				store.Mu.Lock()
-				if a, ok := store.Albums[job.trackAlbumID]; ok {
-					a.HasCover = true
-				}
-				store.Mu.Unlock()
+				store.Update(func(l *store.Library) {
+					if a, ok := l.Albums[job.trackAlbumID]; ok {
+						a.HasCover = true
+					}
+				})
 				continue
 			}
 
@@ -439,11 +437,11 @@ func ApplyApprovedMatches() int {
 						if len(data) > 0 {
 							os.WriteFile(coverPath, data, 0644)
 							store.CacheCover(job.trackAlbumID, data)
-							store.Mu.Lock()
-							if a, ok := store.Albums[job.trackAlbumID]; ok {
-								a.HasCover = true
-							}
-							store.Mu.Unlock()
+							store.Update(func(l *store.Library) {
+								if a, ok := l.Albums[job.trackAlbumID]; ok {
+									a.HasCover = true
+								}
+							})
 							log.Printf("[cover] Fetched cover for %s - %s", job.artist, job.album)
 							time.Sleep(800 * time.Millisecond)
 							continue
@@ -463,15 +461,16 @@ func ApplyApprovedMatches() int {
 	return applied
 }
 
-// RebuildAlbumsFromTracksLocked rebuilds store.Albums from the current
-// store.Tracks map and persists each album via DbUpsertAlbum.
-//
-// MUST be called under store.Mu.Lock() — it reads store.Tracks and rewrites
-// store.Albums without taking the lock itself.
-func RebuildAlbumsFromTracksLocked() {
+// RebuildAlbums rebuilds the album index from the track list, writing the
+// result into l.Albums and persisting each album via DbUpsertAlbum.
+// It takes no locks: call it as store.Update(musicbrainz.RebuildAlbums) so
+// the album swap and the caller's surrounding mutations share one critical
+// section. CoverMu under store's mutex preserves the established
+// Mu→CoverMu ordering.
+func RebuildAlbums(l *store.Library) {
 	newAlbums := make(map[string]*models.Album)
 	coverDir := filepath.Join(store.MusicDir, "images")
-	for _, t := range store.Tracks {
+	for _, t := range l.Tracks {
 		if t.Album != "" {
 			if _, exists := newAlbums[t.AlbumID]; !exists {
 				newAlbums[t.AlbumID] = &models.Album{
@@ -501,8 +500,8 @@ func RebuildAlbumsFromTracksLocked() {
 			}
 		}
 	}
-	store.Albums = newAlbums
-	for _, a := range store.Albums {
+	l.Albums = newAlbums
+	for _, a := range l.Albums {
 		if err := store.DbUpsertAlbum(a); err != nil {
 			log.Printf("[musicbrainz] upsert album %s (%s): %v", a.ID, a.Name, err)
 		}

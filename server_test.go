@@ -94,7 +94,7 @@ func TestMetadataRoutesRequireAdminAndEnforceMethods(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	registerMetadataRoutes(mux)
+	registerRoutes(mux)
 	// Match the production mux's SPA/API catch-all; method mismatches must not
 	// fall through to it as a 404.
 	mux.HandleFunc("/", http.NotFound)

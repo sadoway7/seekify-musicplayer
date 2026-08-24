@@ -109,10 +109,8 @@ func ComputeAsync(trackID string) {
 		normSem <- struct{}{}
 		defer func() { <-normSem }()
 
-		store.Mu.RLock()
-		track, exists := store.Tracks[trackID]
-		store.Mu.RUnlock()
-		if !exists {
+		track := store.GetTrack(trackID)
+		if track == nil {
 			markUncomputable(trackID)
 			return
 		}

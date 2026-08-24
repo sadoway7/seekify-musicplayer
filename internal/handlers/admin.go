@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"io"
-	"musicapp/internal/auth"
 	"musicapp/internal/store"
 	"musicapp/internal/bands"
 	"musicapp/internal/waveform"
@@ -14,13 +13,6 @@ import (
 	"strings"
 	"time"
 )
-
-// RequireAdmin gates an endpoint to admin-role users. Delegates to the auth
-// package so the many handlers.RequireAdmin(...) call sites in server.go keep
-// working after the passcode gate was retired.
-func RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return auth.RequireAdmin(next)
-}
 
 func AdminHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -253,16 +245,16 @@ func TrackDurationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.Lock()
 	updated := false
-	if t, ok := store.Tracks[trackID]; ok {
-		if t.Duration == 0 {
-			t.Duration = body.Duration
-			store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", body.Duration, trackID)
-			updated = true
+	store.Update(func(l *store.Library) {
+		if t, ok := l.Tracks[trackID]; ok {
+			if t.Duration == 0 {
+				t.Duration = body.Duration
+				store.DB.Exec("UPDATE tracks SET duration = ? WHERE id = ?", body.Duration, trackID)
+				updated = true
+			}
 		}
-	}
-	store.Mu.Unlock()
+	})
 
 	writeJSON(w, map[string]bool{"updated": updated})
 }

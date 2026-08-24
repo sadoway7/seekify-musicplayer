@@ -69,18 +69,18 @@ func UploadCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 	store.RemoveCover(albumID)
 	store.CacheCover(albumID, data)
 
-	store.Mu.Lock()
-	if t, ok := store.Tracks[trackID]; ok {
-		t.HasCover = true
-	}
-	if a, ok := store.Albums[albumID]; ok {
-		a.HasCover = true
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if t, ok := l.Tracks[trackID]; ok {
+			t.HasCover = true
+		}
+		if a, ok := l.Albums[albumID]; ok {
+			a.HasCover = true
+		}
+	})
 
 	store.SetCustomCover(albumID)
 
-	LibraryVersion.Add(1)
+	store.LibraryVersion.Add(1)
 
 	log.Printf("[cover] Custom cover uploaded for album %s (%d bytes)", albumID, len(data))
 
@@ -119,7 +119,7 @@ func ClearCustomCoverHandler(w http.ResponseWriter, r *http.Request) {
 
 	scanner.ExtractEmbeddedCovers()
 
-	LibraryVersion.Add(1)
+	store.LibraryVersion.Add(1)
 
 	log.Printf("[cover] Custom cover cleared for album %s", albumID)
 

@@ -20,17 +20,14 @@ func setupCreateJobTestDB(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "test.db"))
 	InitDownloadTables()
 	store.SetSetting("download_paused", "true")
-	store.Mu.Lock()
-	prevTracks := store.Tracks
-	store.Tracks = map[string]*models.Track{}
-	store.Mu.Unlock()
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
+	store.ReplaceLibrary(map[string]*models.Track{}, nil)
 	t.Cleanup(func() {
 		store.DB.Close()
 		store.DB = prevDB
 		store.DBPath = prevPath
-		store.Mu.Lock()
-		store.Tracks = prevTracks
-		store.Mu.Unlock()
+		store.ReplaceLibrary(prevTracks, nil)
 	})
 }
 

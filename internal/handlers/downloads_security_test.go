@@ -10,21 +10,16 @@ import (
 )
 
 func TestDownloadHandlerRejectsTrackWithDownloadsDisabled(t *testing.T) {
-	store.Mu.Lock()
-	previousTracks := store.Tracks
-	store.Tracks = map[string]*models.Track{
+	var previousTracks map[string]*models.Track
+	store.View(func(l *store.Library) { previousTracks = l.Tracks })
+	store.ReplaceLibrary(map[string]*models.Track{
 		"disabled": {
 			ID:              "disabled",
 			Title:           "No Download",
 			DownloadEnabled: false,
 		},
-	}
-	store.Mu.Unlock()
-	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = previousTracks
-		store.Mu.Unlock()
-	})
+	}, nil)
+	t.Cleanup(func() { store.ReplaceLibrary(previousTracks, nil) })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/download/disabled", nil)
 	rec := httptest.NewRecorder()

@@ -71,8 +71,6 @@ const App = {
     const path = window.location.pathname;
     if (path === '/settings' || path === '/settings/') {
       Store.currentView = 'settings';
-    } else if (path === '/ripperv2' || path === '/ripperv2/') {
-      Store.currentView = 'ripper2';
     }
 
     try {
@@ -102,9 +100,11 @@ const App = {
     } else if (playId) {
       const track = Store.getTrack(playId);
       if (track) {
+        // Prime the queue only — no direct audio.src poke. The first tap of
+        // play routes through togglePlay → _loadAndPlay, arming the load
+        // watchdog instead of bypassing it.
         Player.queue = [track];
         Player.currentIndex = 0;
-        Player.audio.src = Api.streamUrl(track.id, Player._needsTranscode(track));
         Player.playing = false;
         if (Player.onTrackChange) Player.onTrackChange(track);
         if (Player.onStateChange) Player.onStateChange();
@@ -143,14 +143,30 @@ const App = {
 
   _startLibraryPoll() {
     let lastVersion = null;
+    let pendingVersion = null;
     let stableCount = 0;
     const poll = async () => {
       const stats = await Api.getStats();
       if (!stats) { setTimeout(poll, 15000); return; }
       if (lastVersion === null) lastVersion = stats.version;
       const empty = !Store.library.tracks || Store.library.tracks.length === 0;
-      if (stats.version !== lastVersion || (empty && stats.tracks > 0)) {
+      let refresh = false;
+      if (empty && stats.tracks > 0 && pendingVersion === null) {
+        // Rescue: local Store is empty but the server has tracks (missed
+        // bump on first boot) — refresh immediately.
+        refresh = true;
+      } else if (stats.version !== lastVersion) {
+        // Debounce: a rip session or scan bumps the version per file, and
+        // refreshing per bump means a full library refetch + home re-render
+        // (and, historically, a cover reload) per track. Wait one stable
+        // poll cycle, then fetch once.
+        stableCount = 0;
+        if (pendingVersion === stats.version) refresh = true;
+        else pendingVersion = stats.version;
+      }
+      if (refresh) {
         lastVersion = stats.version;
+        pendingVersion = null;
         stableCount = 0;
         await Store.refreshLibrary();
         if (Store.currentView === 'home') {

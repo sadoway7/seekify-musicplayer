@@ -143,9 +143,7 @@ func ForceRescan() {
 
 	ExtractEmbeddedCovers()
 
-	if LibraryVersionAdd != nil {
-		LibraryVersionAdd(1)
-	}
+	store.LibraryVersion.Add(1)
 
 	// Update file counts so the watcher doesn't immediately re-trigger
 	watcherMu.Lock()
@@ -225,15 +223,11 @@ func CheckAndRescan() {
 		// Rescan the changed directory
 		if d.prefix == "" {
 			stats := ScanMusicDir(store.MusicDir)
-			store.Mu.RLock()
-			trackCount := len(store.Tracks)
-			store.Mu.RUnlock()
+			trackCount := store.TrackCount()
 			log.Printf("[watcher] Primary rescan: %d scanned, %d total tracks", stats.Scanned, trackCount)
 		} else {
 			stats := ScanMusicDirWithPrefix(d.dir, d.prefix)
-			store.Mu.RLock()
-			trackCount := len(store.Tracks)
-			store.Mu.RUnlock()
+			trackCount := store.TrackCount()
 			log.Printf("[watcher] Media rescan [%s]: %d scanned, %d total tracks", d.prefix, stats.Scanned, trackCount)
 		}
 
@@ -244,9 +238,7 @@ func CheckAndRescan() {
 		lastFileSnapshot[d.dir] = current
 		watcherMu.Unlock()
 
-		if LibraryVersionAdd != nil {
-			LibraryVersionAdd(1)
-		}
+		store.LibraryVersion.Add(1)
 		didWork = true
 	}
 	// Cleanup (prune/dedup) runs on its own 5-minute ticker in server.go —

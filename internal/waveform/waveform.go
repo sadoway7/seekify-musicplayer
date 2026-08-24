@@ -141,10 +141,8 @@ func GetCachedWaveform(trackID string) ([]float64, error) {
 	// Stale if the cache predates the source (re-tag/re-download) — same
 	// check bands and transcode use; without it a replaced file keeps its
 	// old waveform forever.
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-	if !exists {
+	track := store.GetTrack(trackID)
+	if track == nil {
 		return nil, nil
 	}
 	if srcInfo, err := os.Stat(scanner.ResolveFilePath(track.FilePath)); err == nil {
@@ -185,10 +183,8 @@ func GenerateAsync(trackID string) {
 		waveSem <- struct{}{}
 		defer func() { <-waveSem }()
 
-		store.Mu.RLock()
-		track, exists := store.Tracks[trackID]
-		store.Mu.RUnlock()
-		if !exists {
+		track := store.GetTrack(trackID)
+		if track == nil {
 			return
 		}
 

@@ -65,19 +65,16 @@ func withTrack(t *testing.T, filename string) {
 	if err := os.WriteFile(filepath.Join(dir, filename), []byte("fake audio data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	store.Mu.Lock()
-	prevTracks := store.Tracks
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
 	prevMusicDir := store.MusicDir
 	store.MusicDir = dir
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"track": {ID: "track", FilePath: filename},
-	}
-	store.Mu.Unlock()
+	}, nil)
 	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = prevTracks
+		store.ReplaceLibrary(prevTracks, nil)
 		store.MusicDir = prevMusicDir
-		store.Mu.Unlock()
 	})
 }
 
@@ -150,19 +147,16 @@ func TestStreamHandlerFmtAacRealTranscode(t *testing.T) {
 		t.Fatalf("generate flac: %v: %s", err, out)
 	}
 
-	store.Mu.Lock()
-	prevTracks := store.Tracks
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
 	prevMusicDir := store.MusicDir
 	store.MusicDir = dir
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"track": {ID: "track", FilePath: "track.flac"},
-	}
-	store.Mu.Unlock()
+	}, nil)
 	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = prevTracks
+		store.ReplaceLibrary(prevTracks, nil)
 		store.MusicDir = prevMusicDir
-		store.Mu.Unlock()
 	})
 
 	// Range request through the transcode path — must return the cached m4a.
@@ -218,19 +212,16 @@ func TestStreamHandlerSpatialAudioForcesTranscode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store.Mu.Lock()
-	prevTracks := store.Tracks
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
 	prevMusicDir := store.MusicDir
 	store.MusicDir = dir
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"track": {ID: "track", FilePath: "track.m4a"},
-	}
-	store.Mu.Unlock()
+	}, nil)
 	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = prevTracks
+		store.ReplaceLibrary(prevTracks, nil)
 		store.MusicDir = prevMusicDir
-		store.Mu.Unlock()
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/stream/track", nil)
@@ -269,19 +260,16 @@ func TestStreamHandlerALACForcesTranscode(t *testing.T) {
 		t.Fatalf("generate alac m4a: %v: %s", err, out)
 	}
 
-	store.Mu.Lock()
-	prevTracks := store.Tracks
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
 	prevMusicDir := store.MusicDir
 	store.MusicDir = dir
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"track": {ID: "track", FilePath: "track.m4a"},
-	}
-	store.Mu.Unlock()
+	}, nil)
 	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = prevTracks
+		store.ReplaceLibrary(prevTracks, nil)
 		store.MusicDir = prevMusicDir
-		store.Mu.Unlock()
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/stream/track", nil) // no fmt param
@@ -324,19 +312,16 @@ func TestStreamHandlerAACm4aServedRaw(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store.Mu.Lock()
-	prevTracks := store.Tracks
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
 	prevMusicDir := store.MusicDir
 	store.MusicDir = dir
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"track": {ID: "track", FilePath: "track.m4a"},
-	}
-	store.Mu.Unlock()
+	}, nil)
 	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = prevTracks
+		store.ReplaceLibrary(prevTracks, nil)
 		store.MusicDir = prevMusicDir
-		store.Mu.Unlock()
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/stream/track", nil)

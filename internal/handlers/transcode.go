@@ -40,10 +40,8 @@ func TranscodeWarmHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
-	store.Mu.RUnlock()
-	if !exists {
+	track := store.GetTrack(trackID)
+	if track == nil {
 		http.NotFound(w, r)
 		return
 	}

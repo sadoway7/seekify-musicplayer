@@ -39,14 +39,11 @@ func TestDbSetReviewStatusBumpsLibraryVersion(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "bump.db"))
 	InitReviewTables()
 
-	bumped := 0
-	old := LibraryVersionAdd
-	LibraryVersionAdd = func(delta int64) { bumped++ }
-	t.Cleanup(func() { LibraryVersionAdd = old })
+	before := store.LibraryVersion.Load()
 
 	DbSetReviewStatus("t1", "needs_review", `["missing_title"]`, "test")
-	if bumped != 1 {
-		t.Fatalf("DbSetReviewStatus bumps = %d, want 1", bumped)
+	if after := store.LibraryVersion.Load(); after != before+1 {
+		t.Fatalf("DbSetReviewStatus bumps = %d, want 1", after-before)
 	}
 }
 
@@ -61,16 +58,11 @@ func TestCleanupOrphanedReviewsSurvivesWriteLock(t *testing.T) {
 
 	// One in-memory track, already reviewed → the INSERT loop no-ops and the
 	// only stalled write is the orphan DELETE.
-	store.Mu.Lock()
-	prevTracks := store.Tracks
-	store.Tracks = map[string]*models.Track{"t1": {ID: "t1", Title: "S", FilePath: "s.mp3"}}
-	store.Mu.Unlock()
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
+	store.ReplaceLibrary(map[string]*models.Track{"t1": {ID: "t1", Title: "S", FilePath: "s.mp3"}}, nil)
 	DbSetReviewStatus("t1", "reviewed_ok", "[]", "test")
-	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = prevTracks
-		store.Mu.Unlock()
-	})
+	t.Cleanup(func() { store.ReplaceLibrary(prevTracks, nil) })
 
 	conn, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -203,27 +195,18 @@ func TestTrackHasEffectiveCover(t *testing.T) {
 		t.Error("track with embedded cover should be true")
 	}
 
-	store.Mu.Lock()
-	if store.Albums == nil {
-		store.Albums = make(map[string]*models.Album)
-	}
-	store.Albums["album-mb"] = &models.Album{ID: "album-mb", HasCover: true}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(nil, map[string]*models.Album{"album-mb": {ID: "album-mb", HasCover: true}})
 	trackAlbumCover := &models.Track{HasCover: false, AlbumID: "album-mb"}
 	if !trackHasEffectiveCover(trackAlbumCover) {
 		t.Error("track whose album has cover should be true")
 	}
-	store.Mu.Lock()
-	delete(store.Albums, "album-mb")
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) { delete(l.Albums, "album-mb") })
 }
 
 func TestSaveGenreResultPersistsSourceAndTimestamp(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "genre.db"))
 	track := &models.Track{ID: "genre-result", Title: "Song", FilePath: "Song.mp3"}
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{track.ID: track}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(map[string]*models.Track{track.ID: track}, nil)
 	store.DbUpsertTrack(track)
 
 	if !saveGenreResult(track.ID, "Rock", "musicbrainz", 123) {
@@ -235,9 +218,7 @@ func TestSaveGenreResultPersistsSourceAndTimestamp(t *testing.T) {
 	}
 
 	empty := &models.Track{ID: "genre-empty", Title: "Empty", FilePath: "Empty.mp3"}
-	store.Mu.Lock()
-	store.Tracks[empty.ID] = empty
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) { l.Tracks[empty.ID] = empty })
 	store.DbUpsertTrack(empty)
 	if !saveGenreResult(empty.ID, "", "none", 456) {
 		t.Fatal("saveGenreResult returned false for a valid empty result")
@@ -277,9 +258,7 @@ func TestCheckMetadataCompletenessUsesCanonicalGenre(t *testing.T) {
 func TestDbUpdateTrackMetaAcceptsMultipleGenres(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "multi-genre.db"))
 	track := &models.Track{ID: "multi", Title: "Song", Artist: "Artist", FilePath: "Song.mp3", HasCover: true}
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{track.ID: track}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(map[string]*models.Track{track.ID: track}, nil)
 	store.DbUpsertTrack(track)
 
 	DbUpdateTrackMeta(track.ID, map[string]interface{}{
@@ -299,18 +278,13 @@ func TestDbGetReviewFlagCounts(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
 	InitReviewTables()
 
-	store.Mu.Lock()
-	prevTracks := store.Tracks
-	store.Tracks = map[string]*models.Track{
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
+	store.ReplaceLibrary(map[string]*models.Track{
 		"a": {ID: "a", Title: "A", FilePath: "a.mp3"},
 		"b": {ID: "b", Title: "B", FilePath: "b.mp3"},
-	}
-	store.Mu.Unlock()
-	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = prevTracks
-		store.Mu.Unlock()
-	})
+	}, nil)
+	t.Cleanup(func() { store.ReplaceLibrary(prevTracks, nil) })
 
 	DbSetReviewStatus("a", "needs_review", `["missing_title","no_cover"]`, "worker")
 	DbSetReviewStatus("b", "needs_review", `["missing_title"]`, "worker")
@@ -332,17 +306,11 @@ func TestDbGetReviewFlagCounts(t *testing.T) {
 func TestDbGetStaleReviewTracks(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "review.db"))
 	InitReviewTables()
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"fresh": {ID: "fresh", Title: "Fresh", FilePath: "Fresh.mp3"},
 		"stale": {ID: "stale", Title: "Stale", FilePath: "Stale.mp3"},
-	}
-	store.Mu.Unlock()
-	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = nil
-		store.Mu.Unlock()
-	})
+	}, nil)
+	t.Cleanup(func() { store.Update(func(l *store.Library) { l.Tracks = nil }) })
 
 	DbSetReviewStatus("fresh", "needs_review", "[]", "worker")
 	DbSetReviewStatus("stale", "needs_review", "[]", "worker")
@@ -368,9 +336,7 @@ func TestDbGetStaleReviewTracks(t *testing.T) {
 func TestSaveGenreResultLeavesMemoryOnDatabaseError(t *testing.T) {
 	store.InitDB(filepath.Join(t.TempDir(), "genre-error.db"))
 	track := &models.Track{ID: "genre-error", Title: "Song", FilePath: "Song.mp3"}
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{track.ID: track}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(map[string]*models.Track{track.ID: track}, nil)
 	store.DbUpsertTrack(track)
 	store.DB.Close()
 	t.Cleanup(func() { store.InitDB(filepath.Join(t.TempDir(), "genre-error-restore.db")) })

@@ -32,9 +32,7 @@ func TestGetCachedWaveformStaleAfterSourceChange(t *testing.T) {
 	now := time.Now()
 	os.Chtimes(src, now, now)
 
-	store.Mu.Lock()
-	store.Tracks = map[string]*models.Track{"stale1": {ID: "stale1", FilePath: "song.flac"}}
-	store.Mu.Unlock()
+	store.ReplaceLibrary(map[string]*models.Track{"stale1": {ID: "stale1", FilePath: "song.flac"}}, nil)
 
 	// Cache older than source → miss.
 	writeWaveCache(t, "stale1", []float64{0.1, 0.5}, now.Add(-time.Hour))

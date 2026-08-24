@@ -141,13 +141,11 @@ func TrackPlaybackErrorHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[trackID]
+	track := store.GetTrack(trackID)
 	var snapshot models.Track
-	if exists {
+	if track != nil {
 		snapshot = *track
 	}
-	store.Mu.RUnlock()
 
 	// 1) Log every failure with full context.
 	entry := playbackFailureEntry{
@@ -164,7 +162,7 @@ func TrackPlaybackErrorHandler(w http.ResponseWriter, r *http.Request) {
 		entry.User = u.Username
 	}
 	entry.UA = r.UserAgent()
-	if exists {
+	if track != nil {
 		entry.Title = snapshot.Title
 		entry.Artist = snapshot.Artist
 		entry.Album = snapshot.Album
@@ -186,7 +184,7 @@ func TrackPlaybackErrorHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
 		return
 	}
-	if !exists {
+	if track == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -207,12 +205,12 @@ func TrackPlaybackErrorHandler(w http.ResponseWriter, r *http.Request) {
 	flagsJSON, _ := json.Marshal(flags)
 	review.DbSetReviewStatus(trackID, "needs_review", string(flagsJSON), "playback")
 
-	store.Mu.Lock()
-	if t, ok := store.Tracks[trackID]; ok {
-		t.ReviewStatus = "needs_review"
-		t.ReviewFlags = flags
-	}
-	store.Mu.Unlock()
+	store.Update(func(l *store.Library) {
+		if t, ok := l.Tracks[trackID]; ok {
+			t.ReviewStatus = "needs_review"
+			t.ReviewFlags = flags
+		}
+	})
 
 	writeJSON(w, map[string]bool{"ok": true})
 }

@@ -930,20 +930,20 @@ func SeedSlskShare(shareDir string) (int, error) {
 		ext  string
 	}
 	var infos []candInfo
-	store.Mu.RLock()
-	for _, t := range store.Tracks {
-		resolved := scanner.ResolveFilePath(t.FilePath)
-		ext := strings.ToLower(filepath.Ext(resolved))
-		if _, ok := store.AudioExtensions[ext]; !ok {
-			continue
+	store.View(func(l *store.Library) {
+		for _, t := range l.Tracks {
+			resolved := scanner.ResolveFilePath(t.FilePath)
+			ext := strings.ToLower(filepath.Ext(resolved))
+			if _, ok := store.AudioExtensions[ext]; !ok {
+				continue
+			}
+			stem := strings.TrimSpace(t.Artist + " - " + t.Title)
+			if stem == "" || stem == "-" {
+				stem = strings.TrimSuffix(filepath.Base(resolved), filepath.Ext(resolved))
+			}
+			infos = append(infos, candInfo{path: resolved, stem: stem, ext: ext})
 		}
-		stem := strings.TrimSpace(t.Artist + " - " + t.Title)
-		if stem == "" || stem == "-" {
-			stem = strings.TrimSuffix(filepath.Base(resolved), filepath.Ext(resolved))
-		}
-		infos = append(infos, candInfo{path: resolved, stem: stem, ext: ext})
-	}
-	store.Mu.RUnlock()
+	})
 
 	type sized struct {
 		info candInfo

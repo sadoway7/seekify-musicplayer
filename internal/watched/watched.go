@@ -56,13 +56,13 @@ func SyncWatchedPlaylistsToLibrary() {
 		return
 	}
 
-	store.Mu.RLock()
 	libTracks := make(map[string]string)
-	for _, t := range store.Tracks {
-		key := strings.ToLower(t.Artist + "|" + t.Title)
-		libTracks[key] = t.ID
-	}
-	store.Mu.RUnlock()
+	store.View(func(l *store.Library) {
+		for _, t := range l.Tracks {
+			key := strings.ToLower(t.Artist + "|" + t.Title)
+			libTracks[key] = t.ID
+		}
+	})
 
 	for _, wp := range playlists {
 		libraryPlaylistID := store.DbGetOrCreatePlaylistByName(wp.Name)
@@ -326,14 +326,15 @@ func RefreshWatchedPlaylist(p *WatchedPlaylist) error {
 
 	newCount := 0
 
-	store.Mu.RLock()
-	libLookup := make(map[string]string, len(store.Tracks))
-	for _, tr := range store.Tracks {
-		if tr.Artist != "" && tr.Title != "" {
-			libLookup[strings.ToLower(tr.Artist+"|"+tr.Title)] = tr.ID
+	var libLookup map[string]string
+	store.View(func(l *store.Library) {
+		libLookup = make(map[string]string, len(l.Tracks))
+		for _, tr := range l.Tracks {
+			if tr.Artist != "" && tr.Title != "" {
+				libLookup[strings.ToLower(tr.Artist+"|"+tr.Title)] = tr.ID
+			}
 		}
-	}
-	store.Mu.RUnlock()
+	})
 
 	for _, t := range tracksFromYT {
 		artist, title, videoID := t.Artist, t.Title, t.VideoID

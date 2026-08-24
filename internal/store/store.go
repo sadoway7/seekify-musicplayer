@@ -8,9 +8,11 @@ import (
 )
 
 var (
-	Tracks     map[string]*models.Track
-	Albums     map[string]*models.Album
-	Mu         sync.RWMutex
+	// tracks/albums/mu are package-private on purpose: all access flows
+	// through library.go View/Update/sugar so locking stays in one place.
+	tracks map[string]*models.Track
+	albums map[string]*models.Album
+	mu     sync.RWMutex
 	CoverCache      map[string][]byte
 	CoverMu         sync.RWMutex
 	CoverCacheOrder []string

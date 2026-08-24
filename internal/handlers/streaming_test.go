@@ -48,19 +48,16 @@ func TestStreamHandlerSuffixRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store.Mu.Lock()
-	previousTracks := store.Tracks
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
 	previousMusicDir := store.MusicDir
 	store.MusicDir = dir
-	store.Tracks = map[string]*models.Track{
+	store.ReplaceLibrary(map[string]*models.Track{
 		"track": {ID: "track", FilePath: "track.mp3"},
-	}
-	store.Mu.Unlock()
+	}, nil)
 	t.Cleanup(func() {
-		store.Mu.Lock()
-		store.Tracks = previousTracks
+		store.ReplaceLibrary(prevTracks, nil)
 		store.MusicDir = previousMusicDir
-		store.Mu.Unlock()
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/stream/track", nil)
@@ -77,5 +74,53 @@ func TestStreamHandlerSuffixRange(t *testing.T) {
 	}
 	if got := rec.Body.String(); got != "6789" {
 		t.Fatalf("body = %q, want %q", got, "6789")
+	}
+}
+
+func TestServeRangeableValidators(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.mp3")
+	if err := os.WriteFile(path, []byte("0123456789"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	serve := func(headers map[string]string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/stream/x", nil)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		serveRangeable(rec, req, path, "audio/mpeg")
+		return rec
+	}
+
+	rec := serve(nil)
+	if rec.Code != http.StatusOK || rec.Body.String() != "0123456789" {
+		t.Fatalf("plain GET: status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	etag := rec.Header().Get("ETag")
+	lastMod := rec.Header().Get("Last-Modified")
+	if etag == "" || lastMod == "" {
+		t.Fatalf("validators missing: etag=%q lastModified=%q", etag, lastMod)
+	}
+
+	if rec := serve(map[string]string{"If-None-Match": etag}); rec.Code != http.StatusNotModified || rec.Body.Len() != 0 {
+		t.Fatalf("If-None-Match: status=%d body=%q, want 304 empty", rec.Code, rec.Body.String())
+	}
+
+	if rec := serve(map[string]string{"Range": "bytes=2-5", "If-Range": etag}); rec.Code != http.StatusPartialContent || rec.Body.String() != "2345" {
+		t.Fatalf("matching If-Range: status=%d body=%q, want 206 2345", rec.Code, rec.Body.String())
+	}
+
+	if rec := serve(map[string]string{"Range": "bytes=2-5", "If-Range": lastMod}); rec.Code != http.StatusPartialContent || rec.Body.String() != "2345" {
+		t.Fatalf("date-form If-Range: status=%d body=%q, want 206 2345", rec.Code, rec.Body.String())
+	}
+
+	if rec := serve(map[string]string{"Range": "bytes=2-5", "If-Range": `"s-1-999999"`}); rec.Code != http.StatusOK || rec.Body.String() != "0123456789" {
+		t.Fatalf("stale If-Range: status=%d body=%q, want 200 full", rec.Code, rec.Body.String())
+	}
+
+	if rec := serve(map[string]string{"Range": "bytes=2-5"}); rec.Code != http.StatusPartialContent || rec.Body.String() != "2345" {
+		t.Fatalf("bare Range: status=%d body=%q, want 206 2345", rec.Code, rec.Body.String())
 	}
 }

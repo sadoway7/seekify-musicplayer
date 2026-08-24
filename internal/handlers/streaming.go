@@ -20,11 +20,8 @@ import (
 func StreamHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/stream/")
 
-	store.Mu.RLock()
-	track, exists := store.Tracks[id]
-	store.Mu.RUnlock()
-
-	if !exists {
+	track := store.GetTrack(id)
+	if track == nil {
 		http.Error(w, "Track not found", http.StatusNotFound)
 		return
 	}
@@ -79,7 +76,26 @@ func serveRangeable(w http.ResponseWriter, r *http.Request, path, contentType st
 
 	fileSize := stat.Size()
 
+	// Validators let clients revalidate cached ranges cheaply and — more
+	// importantly — detect a file that changed underneath them (retag,
+	// re-transcode): a stale If-Range drops the Range and serves the whole
+	// new file instead of splicing mismatched bytes.
+	etag := fmt.Sprintf("\"s-%d-%d\"", fileSize, stat.ModTime().UnixNano())
+	lastModified := stat.ModTime().UTC().Format(http.TimeFormat)
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Last-Modified", lastModified)
+
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
 	rangeHeader := r.Header.Get("Range")
+	// If-Range: honor the Range only when the validator still matches;
+	// a mismatch means the client's cached copy is stale.
+	if ir := r.Header.Get("If-Range"); ir != "" && ir != etag && ir != lastModified {
+		rangeHeader = ""
+	}
 	if rangeHeader != "" {
 		start, end, ok := parseByteRange(rangeHeader, fileSize)
 		if !ok {
@@ -201,11 +217,9 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.Mu.RLock()
-	album, ok := store.Albums[albumID]
-	store.Mu.RUnlock()
+	album := store.GetAlbum(albumID)
 	var albumName string
-	if ok {
+	if album != nil {
 		albumName = album.Name
 	}
 
@@ -254,24 +268,28 @@ func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fallback: use first album cover for this artist
-	store.Mu.RLock()
-	for _, a := range store.Albums {
-		if a.Artist == "" || strings.ToLower(strings.TrimSpace(a.Artist)) != key {
-			continue
+	served := false
+	store.View(func(l *store.Library) {
+		for _, a := range l.Albums {
+			if a.Artist == "" || strings.ToLower(strings.TrimSpace(a.Artist)) != key {
+				continue
+			}
+			if !a.HasCover {
+				continue
+			}
+			coverPath := filepath.Join(store.MusicDir, "images", a.ID+".jpg")
+			if coverData, err := os.ReadFile(coverPath); err == nil {
+				served = true
+				w.Header().Set("Content-Type", "image/jpeg")
+				w.Header().Set("Cache-Control", "public, max-age=86400")
+				w.Write(coverData)
+				return
+			}
 		}
-		if !a.HasCover {
-			continue
-		}
-		coverPath := filepath.Join(store.MusicDir, "images", a.ID+".jpg")
-		if coverData, err := os.ReadFile(coverPath); err == nil {
-			store.Mu.RUnlock()
-			w.Header().Set("Content-Type", "image/jpeg")
-			w.Header().Set("Cache-Control", "public, max-age=86400")
-			w.Write(coverData)
-			return
-		}
+	})
+	if served {
+		return
 	}
-	store.Mu.RUnlock()
 
 	svg := scanner.GeneratePlaceholderSVG(artistName, artistName)
 	w.Header().Set("Content-Type", "image/svg+xml")

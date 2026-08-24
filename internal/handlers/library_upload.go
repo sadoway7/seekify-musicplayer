@@ -86,12 +86,13 @@ func LibraryUploadHandler(w http.ResponseWriter, r *http.Request) {
 
 		trackID := models.GenerateID(rel)
 		review.DbSetReviewStatus(trackID, "reviewed_ok", "[]", "upload")
-		store.Mu.Lock()
-		if t, ok := store.Tracks[trackID]; ok {
-			t.ReviewStatus = "reviewed_ok"
-		}
-		track := store.Tracks[trackID]
-		store.Mu.Unlock()
+		var track *models.Track
+		store.Update(func(l *store.Library) {
+			if t, ok := l.Tracks[trackID]; ok {
+				t.ReviewStatus = "reviewed_ok"
+			}
+			track = l.Tracks[trackID]
+		})
 
 		if track != nil {
 			tracks = append(tracks, map[string]interface{}{
@@ -110,7 +111,7 @@ func LibraryUploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(uploaded) > 0 {
-		LibraryVersion.Add(1)
+		store.LibraryVersion.Add(1)
 		log.Printf("[upload] Library add: %d file(s) added, %d error(s)", len(uploaded), len(uploadErrors))
 	}
 
