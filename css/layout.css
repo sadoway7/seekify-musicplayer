@@ -256,20 +256,8 @@ body.mini-player-visible #app-content {
 }
 
 @media (min-width: 768px) {
-  .tab-item.active::after {
-    content: '';
-    position: absolute;
-    bottom: 2px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--text1);
-    box-shadow: 0 0 6px rgba(238, 238, 232, 0.4);
-  }
   .tab-item:active {
     transform: scale(0.92);
-    background: rgba(255, 255, 255, 0.03);
+    background: radial-gradient(circle at 50% 45%, rgba(238, 238, 232, 0.10), transparent 55%);
   }
 }
