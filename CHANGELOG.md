@@ -6,7 +6,7 @@
 
 - Performance (playback): tracks now get their compact AAC streaming copy prepared in the background when added (upload or download), and existing libraries get a one-time warm-up pass after upgrade — the first play of a large lossless file (e.g. on iPhone) no longer waits on a cold conversion or times out.
 
-## 2026-08-23 — Playback reliability, toasts, ripper removal
+## 2026-08-23 — Playback reliability, toasts, cleanup
 
 - UI: toast notifications redesigned — larger light pill, dead-centered on screen with a springy pop that matches the app's motion style.
 
@@ -18,7 +18,7 @@
 
 - Internal (architecture): the in-memory library now sits behind a single locking module, routes are declared in one table with their auth levels, and the remaining cross-package hooks are wired in one visible place — no behavior change, just a smaller, safer surface for future work. (Full write-up: ARCHITECTURE-REVIEW-AUG-23.md, executed cards 1/2/4/5.)
 
-- Removal (ripper): the old standalone Ripper page (`/ripperv2`) has been removed — the Finder tab is the one rip/download UI. Everything it did (search, queue, quality picks) lives in the Finder; downloads, watched playlists, and enrichment are untouched.
+- Cleanup (UI): the unused standalone `/ripperv2` page — an early duplicate of the Finder's search/download flow — has been removed. All rip/download functionality is unchanged and lives in the Finder tab.
 
 - Performance (covers): album covers no longer re-download across the whole home page every time the library changes (a finished download, a scan, an edit) — only covers that actually changed refresh now, so background activity no longer causes visible cover flicker and reload bursts, especially on remote/phone connections.
 
