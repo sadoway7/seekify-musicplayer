@@ -85,6 +85,7 @@ func LibraryUploadHandler(w http.ResponseWriter, r *http.Request) {
 		scanner.ScanSingleFile(dstPath)
 
 		trackID := models.GenerateID(rel)
+		WarmTranscodeCache(trackID, dstPath)
 		review.DbSetReviewStatus(trackID, "reviewed_ok", "[]", "upload")
 		var track *models.Track
 		store.Update(func(l *store.Library) {

@@ -274,6 +274,12 @@ func stripCookiesArgs(args []string) []string {
 // If nil, TagAudioFile is used as fallback.
 var EnrichFunc func(audioFile string, job *DownloadJob)
 
+// TranscodeWarmFunc is a callback set by main to break the circular dependency
+// (downloads cannot import transcode: transcode imports downloads for the
+// niced-ffmpeg helper). Called after a download finalizes so the AAC streaming
+// cache is warm before the first play. If nil, warming is skipped.
+var TranscodeWarmFunc func(trackID, path string)
+
 // FindBinary locates an executable by name on PATH, falling back to a list of
 // well-known absolute paths (checked via os.Stat). Returns "" if not found.
 func FindBinary(name string, fallbackPaths ...string) string {
@@ -1084,6 +1090,9 @@ func finalizeDownload(job *DownloadJob, downloadedPath string, expectedDuration 
 			}
 		}
 	})
+	if enrichedTrack != nil && TranscodeWarmFunc != nil {
+		TranscodeWarmFunc(enrichedTrack.ID, audioFile)
+	}
 	if enrichedTrack != nil && enrichedTrack.GenreCanonical == "" && enrichedTrack.GenreSource != "manual" {
 		store.SafeGo("enrich-download-genre", func() { enrichDownloadGenre(enrichedTrack.ID, job) })
 	}

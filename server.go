@@ -218,6 +218,15 @@ func main() {
 				log.Printf("[startup] soulseek: auto-connected as %s", u)
 			}
 		}
+
+		// Last: warm the AAC cache for pre-existing tracks. Must run after the
+		// scan/DB load above — a concurrent fire sees an empty library and
+		// burns the once-per-library marker on nothing.
+		store.SafeGo("transcode-backfill", func() {
+			store.WorkerStart("transcode-backfill")
+			defer store.WorkerDone("transcode-backfill", nil)
+			handlers.BackfillTranscodeCache()
+		})
 	}()
 
 	// Register all background workers with the registry so the settings
@@ -249,6 +258,9 @@ func main() {
 	})
 	store.RegisterWorker("transcode-prune", "Purges stale/oversized transcode cache entries", "Every 30 min", func() {
 		transcode.PruneCache()
+	})
+	store.RegisterWorker("transcode-backfill", "Warms AAC streaming cache for pre-existing tracks (runs once)", "Startup (once per library)", func() {
+		handlers.BackfillTranscodeCache()
 	})
 
 	runWorker := func(name string, body func()) {
@@ -373,6 +385,7 @@ func main() {
 // called directly by scanner/review.
 func wireCrossPackageHooks() {
 	downloads.EnrichFunc = handlers.EnrichWithPython
+	downloads.TranscodeWarmFunc = handlers.WarmTranscodeCache
 	scanner.WakeReviewWorker = review.WakeReviewWorker
 	scanner.InsertUncheckedReviews = review.DbInsertUncheckedReviews
 	scanner.DeleteReview = review.DbDeleteReview
