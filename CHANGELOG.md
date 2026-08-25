@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- UI: visual refresh — signature lime accents replaced with a soft off-white across tabs, buttons, chips, and badges; action buttons and filter chips reshaped as smooth pills; Needs Review header actions realigned and sized to match the filter row.
+
+- Performance (playback): tracks now get their compact AAC streaming copy prepared in the background when added (upload or download), and existing libraries get a one-time warm-up pass after upgrade — the first play of a large lossless file (e.g. on iPhone) no longer waits on a cold conversion or times out.
+
 - UI: toast notifications redesigned — larger light pill, dead-centered on screen with a springy pop that matches the app's motion style.
 
 - Fix (guests): tapping the favorite button while signed out now shows a clear "Log in to save favorites" toast instead of a generic failure.

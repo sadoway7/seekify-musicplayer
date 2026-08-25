@@ -753,7 +753,7 @@
 
 /* Review page header */
 .review-page-header {
-  padding: 16px 16px 12px;
+  padding: 16px var(--page-margin) 12px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -788,7 +788,18 @@
 
 .review-page-header .detail-actions {
   width: 100%;
-  padding-left: 4px;
+  padding-left: 0;
+  gap: 8px;
+}
+
+.review-page-header .detail-actions > button {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 13px;
+}
+
+.review-page-header .detail-play-btn {
+  padding: 7px 16px;
 }
 
 @media (max-width: 600px) {

@@ -52,7 +52,7 @@
    row of sub-chips that cluttered the header. */
 .finder-search-container {
   position: relative;
-  margin: 12px var(--page-margin) 10px;
+  margin: 18px var(--page-margin) 16px;
 }
 .finder-type-dropdown {
   position: absolute;
@@ -66,7 +66,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--accent);
+  background: var(--text1);
   border: none;
   color: #111;
   font-size: 12px;
@@ -109,7 +109,7 @@
   align-items: center;
 }
 .finder-type-option:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
-.finder-type-option.active { color: var(--accent); font-weight: 700; }
+.finder-type-option.active { color: var(--text-primary); font-weight: 700; }
 /* Keep the input text out from under the dropdown. */
 .finder-search-container .finder-search-input { padding-right: 96px; }
 
@@ -241,7 +241,13 @@
   z-index: 1;
   width: 20px;
   height: 20px;
-  color: rgba(255,255,255,0.9);
+  color: rgba(255,255,255,0.45);
+  transition: color 0.15s ease;
+}
+
+.home-menu-btn:hover svg,
+.home-menu-wrap:has(.home-menu-dropdown.open) .home-menu-btn svg {
+  color: rgba(255,255,255,0.95);
 }
 
 .home-menu-btn .hm-bar {
@@ -579,10 +585,10 @@
 .finder-in-library {
   font-size: 10px;
   font-weight: 700;
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--text1);
+  background: rgba(255, 255, 255, 0.08);
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: 999px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -688,13 +694,13 @@
 }
 
 .finder-download-btn {
-  background: var(--accent);
+  background: var(--text-primary);
   border: none;
   color: #111;
   padding: 0 10px;
   height: 32px;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -709,7 +715,7 @@
 }
 
 .finder-download-btn:hover {
-  background: var(--accent-hover);
+  background: #d8d8d2;
 }
 
 .finder-download-btn:active {
@@ -725,7 +731,7 @@
   font-size: 10px;
   font-weight: 700;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: 999px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -736,8 +742,8 @@
 }
 
 .finder-in-library {
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--text1);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .finder-in-own-library {
@@ -748,8 +754,9 @@
 }
 
 .finder-in-queue {
-  color: var(--accent);
-  background: rgba(212, 240, 64, 0.12);
+  color: var(--text1);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 .queue-section {
@@ -954,8 +961,9 @@
 .queue-stats {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 6px var(--page-margin) 8px;
+  gap: 20px;
+  margin-top: -14px;
+  padding: 7px var(--page-margin) 14px;
 }
 
 .queue-stats-badges {
@@ -967,18 +975,38 @@
 .queue-stats-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   gap: 8px;
   width: 100%;
 }
-/* ponytail: mobile-first — buttons flex to fill edge-to-edge as one row;
-   >=640px they shrink to content width and left-align. */
+.queue-stats-left {
+  display: flex;
+  gap: 8px;
+}
+/* Ghost icon-only admin actions (settings/pause/retry/clear) — faint fill,
+   just the glyph, subtle lift on hover. */
 .queue-stats-actions .settings-btn {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
   justify-content: center;
-  font-size: 13px;
-  padding: 9px 12px;
-  min-height: 42px;
+  background: rgba(255,255,255,0.07);
+  color: var(--text-secondary);
+  padding: 0;
+  min-height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+}
+.queue-stats-actions .settings-btn:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: var(--text-primary); }
+.queue-stats-actions .settings-btn svg { width: 20px; height: 20px; }
+/* Icon buttons with small text labels — pill, not circle. */
+.queue-stats-actions .settings-btn .icon-btn-label {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 2px 0 4px;
+}
+.queue-stats-actions .settings-btn.has-label {
+  min-width: 0;
+  border-radius: 999px;
+  padding: 0 14px 0 10px;
 }
 /* Primary action (Retry All) goes full-width on top so its label never
    truncates on narrow screens; the rest share the next row. */
@@ -1022,9 +1050,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
-  border-radius: 14px;
-  font-size: 12px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 13px;
   font-weight: 600;
   border: 1px solid var(--border, #333);
   background: transparent;
@@ -1035,16 +1063,16 @@
 }
 .dl-chip b { font-weight: 700; opacity: .85; }
 /* Hover lightens the chip without flipping to white text (which collides
-   with the active accent background). */
+   with the active white background). */
 .dl-chip:hover { border-color: var(--text-muted, #555); background: rgba(255,255,255,0.04); }
 .dl-chip-on {
-  background: var(--accent, #d4f040);
-  color: #000;
-  border-color: var(--accent, #d4f040);
+  background: var(--text1, #eeeee8);
+  color: #111;
+  border-color: var(--text1, #eeeee8);
 }
 .dl-chip-on b { opacity: 1; }
 /* Active chip keeps its dark text on hover — don't override with white. */
-.dl-chip-on:hover { background: var(--accent, #d4f040); color: #000; }
+.dl-chip-on:hover { background: var(--text1, #eeeee8); color: #111; }
 
 .queue-job-list {
   padding: 8px var(--page-margin);
@@ -1473,7 +1501,7 @@
   100% { transform: translateX(350%); }
 }
 
-.review-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; }
-.review-filter-chip { padding: 4px 12px; border-radius: 12px; font-size: 12px; border: 1px solid var(--border, #333); background: transparent; color: var(--text-muted, #888); cursor: pointer; }
-.review-filter-chip:hover { color: var(--text, #fff); border-color: var(--text-muted, #555); }
-.review-filter-chip.active { background: var(--accent, #1a73e8); color: #000; border-color: var(--accent, #1a73e8); }
+.review-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 18px var(--page-margin) 14px; }
+.review-filter-chip { display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid var(--border, #333); background: transparent; color: var(--text-muted, #888); cursor: pointer; white-space: nowrap; transition: background .12s, color .12s, border-color .12s; }
+.review-filter-chip:hover { color: var(--text, #fff); border-color: var(--text-muted, #555); background: rgba(255,255,255,0.04); }
+.review-filter-chip.active { background: var(--text1, #eeeee8); color: #111; border-color: var(--text1, #eeeee8); }

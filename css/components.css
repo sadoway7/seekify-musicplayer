@@ -105,6 +105,7 @@
   position: fixed;
   inset: 0;
   margin: auto;
+  bottom: 25vh;
   width: fit-content;
   height: fit-content;
   max-width: calc(100vw - 48px);

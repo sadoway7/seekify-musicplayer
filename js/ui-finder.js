@@ -294,10 +294,12 @@ Object.assign(UI, {
       if (failedCount > 0) chips.push({ key: 'failed', label: 'Failed', count: failedCount });
       if (counts.completed > 0) chips.push({ key: 'done', label: 'Done', count: counts.completed });
       html += '<div class="queue-stats-actions">'
+        + '<div class="queue-stats-left">'
+        + (Store.isAdmin ? '<button class="settings-btn icon-btn has-label" id="btn-dl-pause" title="' + (this._downloadPaused ? 'Resume' : 'Pause') + '" aria-label="' + (this._downloadPaused ? 'Resume downloads' : 'Pause downloads') + '">' + (this._downloadPaused ? Icons.play() : Icons.pause()) + '<span class="icon-btn-label">' + (this._downloadPaused ? 'Resume' : 'Pause') + '</span></button>' : '')
+        + (failedCount > 0 ? '<button class="settings-btn icon-btn has-label" id="btn-retry-all-failed" title="Retry All" aria-label="Retry all failed">' + Icons.refresh() + '<span class="icon-btn-label">Retry</span></button>' : '')
+        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn icon-btn has-label" id="btn-clear-history" title="Clear History" aria-label="Clear completed history">' + Icons.trash() + '<span class="icon-btn-label">Clear</span></button>' : '')
+        + '</div>'
         + (Store.isAdmin ? '<button class="settings-btn icon-btn" id="btn-dl-settings" title="Settings" aria-label="Download settings">' + Icons.gear() + '</button>' : '')
-        + (Store.isAdmin ? '<button class="settings-btn icon-btn" id="btn-dl-pause" title="' + (this._downloadPaused ? 'Resume' : 'Pause') + '" aria-label="' + (this._downloadPaused ? 'Resume downloads' : 'Pause downloads') + '">' + (this._downloadPaused ? Icons.play() : Icons.pause()) + '</button>' : '')
-        + (failedCount > 0 ? '<button class="settings-btn icon-btn" id="btn-retry-all-failed" title="Retry All" aria-label="Retry all failed">' + Icons.refresh() + '</button>' : '')
-        + (counts.completed > 0 || counts.failed > 0 ? '<button class="settings-btn" id="btn-clear-history" title="Clear History" aria-label="Clear completed history">Clear</button>' : '')
         + '</div>';
       let chipsHtml = '<div class="dl-chips">';
       chips.forEach(c => {

@@ -1,4 +1,9 @@
 @media (min-width: 768px) {
+  .home-cta-banner {
+    border-radius: 24px 0 0 24px;
+    margin-left: 20px;
+  }
+
   .mega-title span {
     font-size: 40px;
     text-transform: none;
@@ -88,7 +93,7 @@
   }
 
   .tab-item.active {
-    background: var(--accent-soft);
+    background: rgba(238, 238, 232, 0.08);
     box-shadow: var(--shadow-raised), var(--highlight-top);
   }
 

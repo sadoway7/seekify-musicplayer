@@ -68,7 +68,7 @@ Object.assign(UI, {
 
     html += '<div class="home-top-row">'
       + '<div class="home-menu-wrap" id="home-menu-wrap">'
-      + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu">' + Icons.circle() + '</button>'
+      + '<button class="home-menu-btn" id="home-menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg></button>'
       + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
       + '<div class="home-menu-label">Options</div>'
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
@@ -123,11 +123,11 @@ Object.assign(UI, {
   _homeRecent() {
     if (Store.isGuest) {
       const reg = Store.registrationMode && Store.registrationMode !== 'off';
-      let cta = '<div style="position:relative;margin-top:24px;overflow:hidden;background:var(--l1);min-height:144px;display:flex;align-items:center">';
+      let cta = '<div class="home-cta-banner" style="position:relative;margin-top:24px;overflow:hidden;background:var(--l1);min-height:144px;display:flex;align-items:center">';
       // Accent glow tints the banner backdrop.
       cta += '<div style="position:absolute;inset:0;background:radial-gradient(120% 160% at 6% 35%, rgba(212,240,64,.13), transparent 55%);pointer-events:none"></div>';
       // Logo as a large faded tilted backdrop on the right; screen blend drops the icon's black bg.
-      cta += '<img src="/icon.png" alt="" aria-hidden="true" style="position:absolute;right:-26px;top:50%;transform:translateY(-50%) rotate(-15deg);width:232px;height:232px;opacity:.30;mix-blend-mode:screen;pointer-events:none">';
+      cta += '<img src="/icon.png" alt="" aria-hidden="true" style="position:absolute;right:-6px;top:50%;transform:translateY(-50%) rotate(-15deg);width:232px;height:232px;opacity:.30;mix-blend-mode:screen;pointer-events:none">';
       // Content stacks left (block, not a flex row) so the capsule never gets
       // pushed over the logo on the right.
       cta += '<div style="position:relative;z-index:1;padding:24px 28px;width:100%">';
@@ -136,7 +136,7 @@ Object.assign(UI, {
       cta += '<div style="font-size:15px;line-height:1.45;color:var(--text-secondary);max-width:360px;margin-bottom:18px">Log in to track your listening, save favorites, and build playlists.</div>';
       // Integrated capsule action bar — buttons share one shell, no individual borders.
       cta += '<div style="display:inline-flex;align-items:stretch;background:var(--bg);border-radius:999px;padding:4px;box-shadow:var(--shadow-deep)">';
-      cta += '<button id="home-cta-login" style="padding:11px 26px;border:none;border-radius:999px;background:var(--accent);color:var(--bg);font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Log in</button>';
+      cta += '<button id="home-cta-login" style="padding:11px 26px;border:none;border-radius:999px;background:var(--text-primary);color:var(--bg);font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Log in</button>';
       if (reg) {
         cta += '<button id="home-cta-register" style="padding:11px 26px;border:none;border-radius:999px;background:transparent;color:var(--text-primary);font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer">Create account</button>';
       }

@@ -677,10 +677,12 @@
 
 .lib-tabs {
   display: flex;
-  gap: 10px;
-  background: transparent;
-  box-shadow: none;
-  padding: 6px var(--page-margin) 20px;
+  gap: 4px;
+  background: var(--l1);
+  border-radius: 999px;
+  box-shadow: var(--shadow-deep);
+  margin: 6px var(--page-margin) 10px;
+  padding: 4px;
 }
 
 @media (min-width: 768px) {
@@ -710,8 +712,8 @@
 }
 
 .lib-tab.active {
-  background: var(--accent);
-  color: #111;
+  background: var(--text-primary);
+  color: var(--bg);
   border-color: transparent;
   box-shadow: none;
 }

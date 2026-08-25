@@ -146,11 +146,11 @@ body.mini-player-visible #app-content {
 }
 
 .tab-item.active {
-  color: var(--accent);
+  color: var(--text1);
 }
 
 .tab-item.active span {
-  color: var(--accent);
+  color: var(--text1);
 }
 
 /* The badge keeps its own colors even when the tab is active — the label
@@ -181,12 +181,12 @@ body.mini-player-visible #app-content {
 
 .tab-item .icon-stroke { stroke: var(--text3); fill: none; }
 .tab-item .icon-fill, .tab-item .icon-dot { fill: var(--text3); }
-.tab-item.active .icon-stroke { stroke: var(--accent); }
+.tab-item.active .icon-stroke { stroke: var(--text1); }
 .tab-item.active .icon-fill,
-.tab-item.active .icon-dot { fill: var(--accent); }
+.tab-item.active .icon-dot { fill: var(--text1); }
 
 .scanline {
-  stroke: var(--accent);
+  stroke: var(--text1);
   stroke-width: 0.8;
   opacity: 0;
 }
@@ -246,7 +246,7 @@ body.mini-player-visible #app-content {
     background: radial-gradient(circle at 50% 45%, rgba(212, 240, 64, 0.03), transparent 55%);
   }
   .tab-item.active {
-    background: radial-gradient(circle at 50% 45%, rgba(212, 240, 64, 0.09), transparent 55%);
+    background: radial-gradient(circle at 50% 45%, rgba(238, 238, 232, 0.09), transparent 55%);
   }
   .tab-item:active {
     transform: scale(0.93);
@@ -265,8 +265,8 @@ body.mini-player-visible #app-content {
     width: 4px;
     height: 4px;
     border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 6px rgba(212, 240, 64, 0.4);
+    background: var(--text1);
+    box-shadow: 0 0 6px rgba(238, 238, 232, 0.4);
   }
   .tab-item:active {
     transform: scale(0.92);
