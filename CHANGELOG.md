@@ -2,9 +2,13 @@
 
 ## Unreleased
 
+## 2026-08-25 — Playback resilience & visual refresh
+
 - UI: visual refresh — signature lime accents replaced with a soft off-white across tabs, buttons, chips, and badges; action buttons and filter chips reshaped as smooth pills; Needs Review header actions realigned and sized to match the filter row.
 
 - Performance (playback): tracks now get their compact AAC streaming copy prepared in the background when added (upload or download), and existing libraries get a one-time warm-up pass after upgrade — the first play of a large lossless file (e.g. on iPhone) no longer waits on a cold conversion or times out.
+
+## 2026-08-23 — Playback reliability, toasts, ripper removal
 
 - UI: toast notifications redesigned — larger light pill, dead-centered on screen with a springy pop that matches the app's motion style.
 
@@ -38,6 +42,8 @@
 
 - Fix (server): audio streams now send cache validators (ETag/Last-Modified) so clients re-validate cheaply and detect changed files after a retag instead of splicing stale bytes; the server also sheds hung connections via header/idle timeouts.
 
+## 2026-08-22 — Downloads queue fixes
+
 - Fix (downloads): deleting a job that is actively downloading now stops the download process instead of letting it finish in the background — the track no longer appears in the library after you deleted its job.
 
 - Fix (downloads): picking a Soulseek quality candidate can no longer trigger a second, automatic search for the same job in the moment between your pick and the download starting — selections download exactly what you chose, once.
@@ -51,6 +57,8 @@
 - Fix (Needs Review): bulk-deleting all flagged tracks now skips playback forward if the currently-playing track was among the deleted, instead of continuing to play a deleted file.
 
 - Fix (player): finishing a waveform seek drag after the track auto-changed no longer jumps the new track to the old drag position.
+
+## 2026-08-20 — Playback compatibility & app-open performance
 
 - Fix (playback): Dolby-audio .m4a files — Apple Music "Spatial Audio" and other Dolby Digital/Dolby Digital Plus rips — failed to play in Chrome and other browsers with a format error, exactly like the earlier Apple Lossless case. The server now detects all of these codecs and transparently serves a browser-playable copy.
 
@@ -84,6 +92,8 @@
 
 - Fix (playback): Apple Lossless (ALAC) .m4a tracks failed to play in Chrome and some other browsers (format error) because the browser claimed support for the container while unable to decode the codec. The server now detects ALAC files and transparently serves a browser-playable AAC copy.
 
+## 2026-08-19 — Soulseek reliability & Logs tab
+
 - UI (Needs Review): "Rescan Meta, Art & Genres" now processes only the tracks flagged for review shown on that page — previously it scanned the whole library for any track missing a canonical genre, making the run far longer than the page implied.
 
 - Fix (downloads): a rare database hiccup during heavy library scans could crash an in-flight download job with an internal error instead of retrying; download job bookkeeping now tolerates transient database failures.
@@ -109,6 +119,8 @@
 - Downloads (wrong-version protection): album/artist imports now know each track's real length (from MusicBrainz) and use it two ways — YouTube candidates whose duration closely matches the studio recording are strongly preferred (a "Live Version" upload of the same song runs 15-50% longer and previously won selection on title/channel bonuses alone), and a downloaded file substantially longer than the expected track is rejected automatically. When no length is known (single-track downloads, searches), behavior is unchanged. Verified against a real case: a live-version "I Am the Man" that previously shipped as the studio track now selects the correct studio recording.
 
 - Reliability (background jobs): album cover and artist art fetching now runs on a daily schedule in addition to startup — previously a network hiccup at boot left placeholders until the next restart or manual trigger. The library cleanup pass (prune + duplicate removal) now keeps its own 5-minute schedule even when the file watcher is disabled, and the transcode-cache purge is visible in the Workers panel. The Workers panel now shows every background job with its true frequency.
+
+## 2026-08-18 — Data safety & mobile playback hardening
 
 - Reliability (database): the server now keeps a rolling 7-day safety backup of the library database (created at startup before anything touches it), so a failed upgrade or corruption never means total library loss. Restores are a file copy back.
 
@@ -148,6 +160,8 @@
 
 - Fix (mobile/Safari playback, "sometimes songs don't play"): two root causes addressed. (1) The next-track transcode prewarm ran at normal CPU priority — when the user hit play while the prewarm encode was running, the two encodes raced for CPU and the foreground (play) encode could blow past the client's 10s load timeout, which then skipped the track. Prewarm now runs at background priority (`nice -n 19`, same playback-first policy as waveform/bands/normalize; `transcode.EnsureLow`). (2) That fixed 10s timeout was too tight for legitimate cold-cache transcodes of long files (a whole-file AAC encode can take 10-30s on first play); the client now arms a 30s load timeout for transcoded loads, 10s for native streams. Skipped: progressive/streaming transcode output (would eliminate the wait entirely but is a transcode-pipeline rewrite) — add if cold-start first-play latency still bothers after these fixes.
 
+## 2026-08-10 — Visualizer & playback CPU policy
+
 - Playback reliability (keystone): introduced a playback-first ffmpeg CPU policy so the reactive visualizer and fast mobile playback coexist. All background audio analysis (waveform, frequency bands, and EBU R128 normalize) now shells out to ffmpeg at the lowest OS scheduling priority (`nice -n 19`, via a shared `downloads.NicedFfmpegCommandContext` helper), so it always yields CPU to the foreground playback transcode — which runs synchronously in the stream handler (`StreamHandler` blocks until the AAC encode finishes) and must stay fast. Re-enabled the previously-disabled band-timeline generation (reactive visualizer on iOS, without breaking AirPlay); bands also remains cap-1 and only fetched when the visualizer is on. Root cause of the earlier ricocheting regressions (bands broke playback → disabling bands killed the visualizer) was the lack of any priority layer across the shared server CPU; this is that layer. See PROGRESS.md.
 
 - Fix (mobile playback): the precomputed band timeline is now only generated when the visualizer is actually turned on. The initial implementation fetched `/api/bands/<id>` on every track change on iOS, triggering a heavy full-track ffmpeg decode per track in the background — which competed with the transcode endpoint for CPU and stalled mobile playback (songs not playing / slow to load). Bands now lazy-load from the render loop only while the visualizer is on, and bands generation concurrency is capped at 1 (was 2) so it never competes with playback/transcode. Users who don't use the visualizer incur zero server load.
@@ -157,6 +171,8 @@
 - Visualizer (iOS): reverted to decorative mode (album colors + ambient motion, no pulse) — the only state where AirPlay reliably works on iPhone. Three Web Audio variants were tested on device and all broke AirPlay the moment a media element entered a running AudioContext: MES-on-primary → analyser → speaker (9051caf — the pre-regression "working" state, which actually had AirPlay dead), MES-on-secondary → gain(0) → speaker (b8b88c6, 077c6ff), and MES-on-secondary → analyser → MediaStreamDestinationNode (e22a5d3). The culprit is the `AudioContext` + `createMediaElementSource` itself, not where the graph outputs — so no Web Audio routing preserves AirPlay on iOS. The only theoretical path to reactive-viz + AirPlay is JS-side decoding with no AudioContext (WebCodecs/WASM), a separate major project. The AirPlay smart-disable is retained: when AirPlay engages, the visualizer hides to album art with a toast ("Visualizer is unavailable during AirPlay") and restores on disconnect. Chrome/Firefox/Android keep full reactivity via `captureStream` (unchanged).
 - Fix (casting): restored Chromecast/AirPlay support by removing the shared Web Audio gain graph from the player. Routing the primary `<audio>` element through `createMediaElementSource` (added by the audio-normalization feature) silently disabled remote playback — Chrome drops Cast and Safari drops AirPlay for any media element tapped by Web Audio. The graph was created on first track load regardless of whether normalization was enabled, so casting broke for everyone. The visualizer is restored to its pre-graph design: Chrome/Firefox/Android analyze a silent `captureStream()` copy (primary element stays native → Cast/AirPlay keep working); Safari/iOS has no `captureStream`, so it runs decoratively (no Web Audio reroute) — AirPlay stays intact.
 - Audio normalization: client-side replay-gain is temporarily disabled — it required the Web Audio graph that broke casting. The Settings toggle is shown greyed-out with an explanatory note; the backend (per-track `gain_db`, `/api/normalize/<id>`, EBU R128 analysis) remains in place dormant and will return as server-side gain baked into the transcode path, which doesn't conflict with remote playback.
+## 2026-08-09 — Mobile playback & library reliability
+
 - Fix: JS cache-busters bumped for all files changed this release (api, player, store, visualizer, app) — returning visitors were running old JS against the new backend, which caused slow/broken first loads after deploy.
 - Settings: "missing genre" review flag is now off by default for new installs (existing installs keep their saved setting).
 - UI: CSS cache-buster bumped so the cursor fix (arrow instead of I-beam on clickable elements) actually loads for returning visitors.
@@ -175,10 +191,14 @@
 - Fix (downloads): the download watchdog no longer resets jobs that are still searching. `orphanReset` ran every 2 minutes and re-queued any `searching`/`downloading`/`tagging` job with no registered subprocess — but search-phase jobs (YouTube/Soulseek search) legitimately have no subprocess, so they were reset mid-search and processed a second time. This caused duplicate downloads, the UI flipping a completed job back to "downloading", and download slots being consumed by duplicates — worst for Soulseek, whose search can wait tens of minutes on the login mutex behind in-flight downloads. `orphanReset` now requires a job to be persistently orphaned (active status, no subprocess) for ~45 min before resetting — comfortably past any legitimate search window. Restart-time orphans are still recovered by `RecoverStalledDownloads` at boot.
 - Concurrency: playlist-position assignment and the favorite/download toggles now run inside `BEGIN IMMEDIATE` transactions. Concurrent calls could previously interleave at statement granularity (e.g. several downloads finishing into the same playlist at once both read `MAX(position)` and created duplicate positions; rapid toggles lost updates). The legacy single-admin `DbAddRecent` — untransactional and with no callers — is removed; the live per-user recents path (`DbAddUserRecent`) was already transactional.
 - Fix (downloads): the retry endpoint now rejects non-`failed` jobs with 409. It previously re-queued any job by id, so retrying an in-flight job would spawn a second processing goroutine (duplicate download). The UI only surfaces Retry on failed jobs, so this was reachable only via a direct API call.
+## 2026-08-02 — Corrupt-audio detection
+
 - Library: new "Scan for Corrupt Audio" admin action (Settings → Library/Tasks) decode-checks every file and surfaces corrupt ones in Needs Review under a "Corrupt Audio" flag — finds bad files nobody has played yet, complementing the playback-failure detector. Runs in the background with live progress; non-destructive (flags only).
 - Downloads: newly downloaded files are now decode-validated (ffmpeg decodes the whole stream to null) before being accepted into the library, catching mid-stream corruption that passes the existing ffprobe header check. A file with intact headers but broken audio frames previously entered the library and only failed when played; it's now rejected at download time. (End-truncation was already caught by the duration-ratio check.)
 - Bad-file detection: tracks that fail to play in-browser (decode error or unsupported codec) are now reported to the server and surface in Needs Review under a new "Playback Failed" flag. Previously the player logged the failure to the browser console and skipped — the most reliable "this file is broken" signal was discarded, so corrupt/truncated downloads stayed hidden. Network errors are ignored (transient); the periodic review worker now preserves this externally-set flag instead of wiping it on recheck.
 - Fix: "Retry All" on the downloads/failed tab now retries every failed job in a single request instead of firing one HTTP call per job. The old per-job loop aborted on the first transient error (DB write contention, a 4xx, a network blip), leaving most of a large failed batch un-retried.
+## 2026-07-30 — Desktop home & mini-player
+
 - Home (desktop): "New Songs" and "Playlists" sections now use multi-column grids (2 columns at ≥768px, 3 at ≥1440px).
 - Home: section titles now have a subtle gradient fade and slightly brighter text.
 - Home: shuffle dice has ambient rotation again (slow continuous tumble on all axes).
