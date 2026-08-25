@@ -1,7 +1,5 @@
 # Changelog
 
-## Unreleased
-
 ## 2026-08-25 — Playback resilience & visual refresh
 
 - UI: visual refresh — signature lime accents replaced with a soft off-white across tabs, buttons, chips, and badges; action buttons and filter chips reshaped as smooth pills; Needs Review header actions realigned and sized to match the filter row.
