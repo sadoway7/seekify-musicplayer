@@ -157,8 +157,9 @@ go test ./...                 # must pass
 
 - Single test / package: `go test ./internal/store/ -run TestRecent`
 - Tracked JS tests (plain `node`, no runner): `js/player.test.mjs`,
-  `js/visualizer.test.mjs`, `scripts/home_discovery_test.mjs`,
-  `scripts/player_queue_test.mjs`, `scripts/regression_fixes_test.mjs`.
+  `js/visualizer.test.mjs`, `js/ui-player-chrome.test.mjs`,
+  `scripts/home_discovery_test.mjs`, `scripts/player_queue_test.mjs`,
+  `scripts/regression_fixes_test.mjs`.
 - Never weaken, skip, or delete a test to make a change pass.
 - JS has no type checking and no build step — never assume a JS change is
   safe without loading it. For frontend or handler changes, run the app and

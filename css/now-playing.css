@@ -366,7 +366,7 @@
 }
 
 @keyframes npTitleScroll {
-  0%, 8% { transform: translateX(0); }
+  0%, 8% { transform: translateX(var(--marquee-from, 0px)); }
   92%, 100% { transform: translateX(var(--marquee-dist, 0px)); }
 }
 
