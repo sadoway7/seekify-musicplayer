@@ -157,10 +157,9 @@ The passcode guards the settings screen only, never the player or your music.
 
 </details>
 
-## Roadmap & Changelog
+## Changelog
 
-Seekify moves fast; what's in `main` is the app. Things being looked at live
-in [ROADMAP.md](ROADMAP.md); what changed lives in
+Seekify moves fast; what's in `main` is the app. What changed lives in
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Credits
