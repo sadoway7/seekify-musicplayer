@@ -282,12 +282,15 @@ const UI = {
         const track = Player.getCurrentTrack();
         if (track) {
           if (Store.isGuest) { this.showToast('Log in to save favorites'); return; }
-          Api.toggleFavorite(track.id).then(() => {
-            Store.refreshFavorites().then(() => {
-              this.updateMiniPlayer();
-              this.showToast(Store.isFavorite(track.id) ? 'Added to favorites' : 'Removed from favorites');
-            });
-          }).catch(() => this.showToast('Failed to update favorites'));
+          const settled = Store.toggleFavorite(track.id);
+          this.updateMiniPlayer();
+          settled.then((r) => {
+            this.updateMiniPlayer();
+            this.showToast(r.added ? 'Added to Favorites' : 'Removed from Favorites');
+          }).catch(() => {
+            this.updateMiniPlayer();
+            this.showToast('Failed to update favorites');
+          });
         }
       } else if (e.target.closest('.mini-share-btn')) {
         const track = Player.getCurrentTrack();
@@ -296,7 +299,7 @@ const UI = {
           if (navigator.share) {
             navigator.share({ url: shareUrl }).catch(() => {});
           } else {
-            navigator.clipboard.writeText(shareUrl).then(() => this.showToast('Link copied')).catch(() => this.showToast('Share not supported'));
+            navigator.clipboard.writeText(shareUrl).then(() => this.showToast('Link copied')).catch(() => this.showToast('Sharing not supported — link copied'));
           }
         }
       } else if (e.target.closest('.mini-download-btn')) {
@@ -351,18 +354,19 @@ const UI = {
       this.updateNowPlaying();
     });
 
-    this.els.npLikeBtn.addEventListener('click', async () => {
+    this.els.npLikeBtn.addEventListener('click', () => {
       const track = Player.getCurrentTrack();
       if (!track) return;
       if (Store.isGuest) { this.showToast('Log in to save favorites'); return; }
-      try {
-        await Api.toggleFavorite(track.id);
-        await Store.refreshFavorites();
+      const settled = Store.toggleFavorite(track.id);
+      this.updateNowPlaying();
+      settled.then((r) => {
         this.updateNowPlaying();
-        this.showToast(Store.isFavorite(track.id) ? 'Added to favorites' : 'Removed from favorites');
-      } catch (err) {
+        this.showToast(r.added ? 'Added to Favorites' : 'Removed from Favorites');
+      }).catch(() => {
+        this.updateNowPlaying();
         this.showToast('Failed to update favorites');
-      }
+      });
     });
 
     document.querySelector('.np-queue-btn').addEventListener('click', () => {
@@ -390,7 +394,7 @@ const UI = {
           await navigator.clipboard.writeText(shareUrl);
           this.showToast('Link copied');
         } catch (err) {
-          this.showToast('Share not supported');
+          this.showToast('Sharing not supported — link copied');
         }
       }
     });
@@ -1231,7 +1235,7 @@ const UI = {
           catch (err) { if (err.name !== 'AbortError') this.showToast('Share failed'); }
         } else {
           try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); }
-          catch (err) { this.showToast('Share not supported'); }
+          catch (err) { this.showToast('Sharing not supported — link copied'); }
         }
       }},
       { label: 'Delete', icon: Icons.trash(), action: async () => {
@@ -1697,7 +1701,7 @@ const UI = {
           const name = btn.dataset.worker;
           btn.disabled = true;
           btn.querySelector('span').textContent = 'Triggered';
-          try { await Api.runWorker(name); } catch (e) { this.showToast('Failed to trigger worker'); }
+          try { await Api.runWorker(name); } catch (e) { this.showToast('Couldn’t start background task'); }
           setTimeout(render, 500);
         });
       });
@@ -1939,7 +1943,7 @@ const UI = {
         btn.disabled = true;
         try {
           await Api.metadataUndo(id);
-          this.showToast('Match undone — will be re-evaluated on next scan');
+          this.showToast('Match undone');
           await Store.refreshLibrary();
           this._loadHistory();
         } catch (err) {

@@ -100,11 +100,13 @@ const Player = {
       // track the user explicitly paused away from.
       this._clearLoadTimeout();
       this._clearStallTimeout();
+      this._clearPrepareNotice();
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
       if (this.onStateChange) this.onStateChange();
     });
     this.audio.addEventListener('error', (e) => {
       const a = this.audio;
+      this._clearPrepareNotice();
       // A late error from an already-replaced or cleared source belongs to
       // the old load, not the current track — don't flag/skip the wrong song.
       // ponytail: repeat-one reloads of the same URL are indistinguishable; accepted.
@@ -150,6 +152,7 @@ const Player = {
       this._consecutiveErrors = 0;
       this._clearLoadTimeout();
       this._clearStallTimeout();
+      this._clearPrepareNotice();
       if (!('mediaSession' in navigator)) return;
       navigator.mediaSession.setActionHandler('play', () => { this.audio.play().catch(() => {}); });
       navigator.mediaSession.setActionHandler('pause', () => { this.audio.pause(); });
@@ -263,6 +266,8 @@ const Player = {
     // genuinely unplayable track still skips instead of looping.
     this._triedTranscodeFallback = forceTranscode === true;
     const wantTranscode = forceTranscode === true || this._needsTranscode(track);
+    this._clearPrepareNotice();
+    if (wantTranscode) this._armPrepareNotice();
     this.audio.src = Api.streamUrl(track.id, wantTranscode);
     this._activeSrc = this.audio.src;
     this.audio.play().then(() => {
@@ -320,6 +325,35 @@ const Player = {
     }
   },
 
+  // Cold-cache transcodes (?fmt=aac on Safari) block the stream response for
+  // the whole encode — up to 30s of silence with no visible cue. Show a
+  // sticky "Preparing…" notice after a grace period; warm tracks start within
+  // it and never flash the notice.
+  _armPrepareNotice() {
+    let timerId;
+    this._prepareNoticeTimer = setTimeout(() => {
+      if (this._prepareNoticeTimer !== timerId) return;
+      this._prepareNoticeTimer = null;
+      this._prepareShown = true;
+      if (typeof UI !== 'undefined' && UI.showToast) {
+        UI.showToast('Preparing this track for streaming…', { sticky: true });
+      }
+    }, 1500);
+    timerId = this._prepareNoticeTimer;
+  },
+
+  _clearPrepareNotice() {
+    if (this._prepareNoticeTimer) {
+      clearTimeout(this._prepareNoticeTimer);
+      this._prepareNoticeTimer = null;
+    }
+    // Only remove the toast we showed — never an unrelated pending toast.
+    if (this._prepareShown) {
+      this._prepareShown = false;
+      if (typeof UI !== 'undefined' && UI.hideToast) UI.hideToast();
+    }
+  },
+
   _clearStallTimeout() {
     if (this._stallTimeout) {
       clearTimeout(this._stallTimeout);
@@ -348,7 +382,7 @@ const Player = {
       this._stallRetried = true;
       return;
     }
-    this._pauseForNetwork('Stream stalled — tap play to retry');
+    this._pauseForNetwork('Playback stalled — tap play to retry');
   },
 
   // Network-flavored failure: stop trying (a skip cascade aborts a download
@@ -361,7 +395,7 @@ const Player = {
     this.playing = false;
     this.audio.pause();
     if (typeof UI !== 'undefined' && UI.showToast) {
-      UI.showToast(toastMsg || 'Network unavailable — playback paused');
+      UI.showToast(toastMsg || 'Offline — playback paused');
     }
     if (this.onStateChange) this.onStateChange();
   },
@@ -437,7 +471,7 @@ const Player = {
 
     this._consecutiveErrors++;
     if (typeof UI !== 'undefined' && UI.showToast) {
-      UI.showToast('File unavailable — skipping');
+      UI.showToast('Track unavailable — skipping');
     }
 
     // Cap the auto-skip cascade: three consecutive bad tracks is a network

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-26 — Single-track downloads, toast polish
+
+- UI (favorites): the heart button now responds instantly — the icon flips the moment you tap it, and the confirmation only appears after the server has actually saved the change (with an honest error and revert if it didn't).
+
+- Fix (downloads): single-track downloads from a Finder search or artist/album tracklist now know the recording's real length, so the same wrong-version protection that already guarded album imports applies everywhere — live/extended YouTube uploads that run far longer than the studio recording are skipped at selection and rejected after download instead of quietly entering the library.
+
+- UI (toasts): toast notices now carry a small icon matching their meaning (error, favorite, download, share, success), and wording was tightened throughout — shorter, consistent messages ("Couldn't …" for failures, unified "N tracks added", plain "Saved").
+
+## 2026-08-26 — First-play feedback
+
+- UI (playback): when a track needs a moment of server-side preparation before its first play (large file, first listen on this server), a "Preparing this track for streaming…" notice now appears instead of silence — so a slow start reads as work-in-progress, not a broken app. It dismisses itself the moment audio starts.
+
 ## 2026-08-25 — Playback resilience & visual refresh
 
 - UI: visual refresh — signature lime accents replaced with a soft off-white across tabs, buttons, chips, and badges; action buttons and filter chips reshaped as smooth pills; Needs Review header actions realigned and sized to match the filter row.

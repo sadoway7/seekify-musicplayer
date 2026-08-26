@@ -404,18 +404,47 @@ Object.assign(UI, {
     setTimeout(() => el.remove(), ms || 200);
   },
 
-  showToast(message) {
+  showToast(message, opts) {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
     clearTimeout(this._toastTimer);
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.textContent = message;
+    const icon = opts && opts.icon !== undefined ? opts.icon : this._toastIconFor(message);
+    if (icon) {
+      toast.innerHTML = '<span class="toast-icon"></span><span class="toast-text"></span>';
+      toast.querySelector('.toast-icon').innerHTML = icon;
+      toast.querySelector('.toast-text').textContent = message;
+    } else {
+      toast.textContent = message;
+    }
     document.body.appendChild(toast);
+    if (opts && opts.sticky) return;
     this._toastTimer = setTimeout(() => {
       toast.classList.add('removing');
       setTimeout(() => toast.remove(), 300);
     }, 2500);
+  },
+
+  // Icon is inferred from the message so every existing call site gets one
+  // without a sweep. Order matters: hard failures, degraded playback states,
+  // in-progress work, then topic nouns, default success.
+  _toastIconFor(msg) {
+    const m = (msg || '').toLowerCase();
+    if (/fail|error|couldn|not supported|invalid|not allowed|reject/.test(m)) return Icons.xCircle();
+    if (/stalled|offline|paused|unavailable|not available|skipping|stopping|tap play|nothing logged|log in/.test(m)) return Icons.warning();
+    if (/preparing|searching|rechecking|scanning|refreshing|fetching/.test(m)) return Icons.refresh();
+    if (/favorite/.test(m)) return Icons.heartFilled();
+    if (/playlist/.test(m)) return Icons.music();
+    if (/queue|download|import|cookies/.test(m)) return Icons.download();
+    if (/share|link|copied/.test(m)) return Icons.share();
+    return Icons.check();
+  },
+
+  hideToast() {
+    clearTimeout(this._toastTimer);
+    const t = document.querySelector('.toast');
+    if (t) t.remove();
   },
 
   showConfirm(message, onConfirm) {

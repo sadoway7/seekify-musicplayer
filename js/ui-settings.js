@@ -544,14 +544,14 @@ Object.assign(UI, {
   _adminUpdateUser(id, patch) {
     Api.adminUpdateUser(id, patch)
       .then(() => this._loadAdminUsers())
-      .catch(err => UI.showToast((err && err.message) || 'Update failed'));
+      .catch(err => UI.showToast((err && err.message) || 'Couldn’t update user'));
   },
 
   _adminDelete(id) {
     if (!confirm('Delete this user? This cannot be undone.')) return;
     Api.adminDeleteUser(id)
       .then(() => this._loadAdminUsers())
-      .catch(err => UI.showToast((err && err.message) || 'Delete failed'));
+      .catch(err => UI.showToast((err && err.message) || 'Couldn’t delete user'));
   },
 
   _adminReset(id) {
@@ -559,20 +559,20 @@ Object.assign(UI, {
     if (!pw) return;
     Api.adminResetPassword(id, pw)
       .then(() => UI.showToast('Password reset'))
-      .catch(err => UI.showToast((err && err.message) || 'Reset failed'));
+      .catch(err => UI.showToast((err && err.message) || 'Couldn’t reset password'));
   },
 
   _adminApprove(id) {
     Api.adminApproveUser(id)
       .then(() => this._loadAdminUsers())
-      .catch(err => UI.showToast((err && err.message) || 'Approve failed'));
+      .catch(err => UI.showToast((err && err.message) || 'Couldn’t approve user'));
   },
 
   _adminReject(id) {
     if (!confirm('Reject and delete this pending registration?')) return;
     Api.adminRejectUser(id)
       .then(() => this._loadAdminUsers())
-      .catch(err => UI.showToast((err && err.message) || 'Reject failed'));
+      .catch(err => UI.showToast((err && err.message) || 'Couldn’t reject user'));
   },
 
   _setRegMsg(id, text, isError) {
@@ -724,7 +724,7 @@ Object.assign(UI, {
       if (copyLogBtn) copyLogBtn.addEventListener('click', async () => {
         try {
           const log = await Api.getReviewLog();
-          if (!log) { this._showToast('No log yet'); return; }
+          if (!log) { this._showToast('Nothing logged yet'); return; }
           await navigator.clipboard.writeText(log);
           this._showToast('Log copied');
         } catch (e) {
@@ -916,7 +916,7 @@ Object.assign(UI, {
         payload.download_concurrency = concurrency.value || '3';
       }
       await Api.saveSettings(payload);
-      this._showToast('Import settings saved');
+      this._showToast('Saved');
     } catch (e) {
       this._showToast('Failed to save settings');
     }
@@ -1118,7 +1118,7 @@ Object.assign(UI, {
     if (btn) btn.disabled = true;
     try {
       await Api.uploadCookies(file);
-      this._showToast('Cookies uploaded — downloads should work now');
+      this._showToast('Cookies saved — downloads should work again');
       this._refreshCookiesStatus();
     } catch (e) {
       this._showToast(e.message || 'Upload failed');
@@ -1144,7 +1144,7 @@ Object.assign(UI, {
     if (el) el.textContent = 'Extracting cookies from ' + browser + '… (one Keychain prompt)';
     try {
       const result = await Api.extractCookies(browser);
-      this._showToast('Cookies saved from ' + browser + ' — no more prompts');
+      this._showToast(browser + ' cookies saved — no more YouTube prompts');
       this._refreshCookiesStatus();
     } catch (e) {
       this._showToast(e.message || 'Extraction failed');
@@ -1172,7 +1172,7 @@ Object.assign(UI, {
         review_enabled: String(getToggle('review')),
         review_recheck_hours: getInterval('setting-review-recheck-hours')
       });
-      this._showToast('Worker settings saved');
+      this._showToast('Saved');
     } catch (e) {
       this._showToast('Failed to save worker settings');
     }
@@ -1186,7 +1186,7 @@ Object.assign(UI, {
     });
     try {
       await Api.saveSettings(data);
-      this._showToast('Review settings saved');
+      this._showToast('Saved');
     } catch (e) {
       this._showToast('Failed to save review settings');
     }
@@ -1200,7 +1200,7 @@ Object.assign(UI, {
       Store.waveformStyle = sel.value;
       const track = Player.getCurrentTrack();
       if (track) this._loadWaveform(track);
-      this._showToast('Waveform style saved');
+      this._showToast('Saved');
     } catch (e) {
       this._showToast('Failed to save waveform style');
     }
@@ -1212,7 +1212,7 @@ Object.assign(UI, {
     try {
       await Api.saveSettings({ default_now_playing_view: sel.value });
       Store.defaultNowPlayingView = sel.value;
-      this._showToast('Default Now Playing view saved');
+      this._showToast('Default view saved');
     } catch (e) {
       this._showToast('Failed to save setting');
     }
@@ -1226,7 +1226,7 @@ Object.assign(UI, {
     if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
     try {
       const result = await Api.bulkImport(input.value);
-      this._showToast(result.queued + ' tracks queued');
+      this._showToast(result.queued + ' tracks added');
       input.value = '';
     } catch (e) {
       this._showToast('Bulk import failed');
@@ -1476,7 +1476,7 @@ Object.assign(UI, {
       this.showToast('Matches cleared');
       await this._loadMetadataStatus();
     } catch (err) {
-      this.showToast('Failed to clear');
+      this.showToast('Couldn’t clear matches');
     }
   },
 

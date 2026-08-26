@@ -529,7 +529,7 @@ Object.assign(UI, {
               if (pollCount < 600) { setTimeout(poll, 1500); return; }
             }
           } catch (e) {}
-          self._showToast('Rescan complete — refreshing genres and metadata');
+          self._showToast('Metadata refreshed');
           // Only re-render the review page if the user is still on it; the
           // library-version bump already refreshes data everywhere else.
           if (Store.currentView === 'needs-review') self.navigateTo('needs-review');

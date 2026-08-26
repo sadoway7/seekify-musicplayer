@@ -109,9 +109,12 @@
   width: fit-content;
   height: fit-content;
   max-width: calc(100vw - 48px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: #f4f4ef;
   color: #0a0b0a;
-  padding: 16px 32px;
+  padding: 16px 28px;
   border-radius: 999px;
   font-size: 16px;
   font-weight: 500;
@@ -122,6 +125,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   will-change: transform, opacity;
+}
+
+.toast-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.toast-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.toast-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .toast.removing {

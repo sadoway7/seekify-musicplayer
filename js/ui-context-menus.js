@@ -115,7 +115,7 @@ Object.assign(UI, {
         if (navigator.share) {
           try { await navigator.share({ title: artistName, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
         } else {
-          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Sharing not supported — link copied'); }
         }
       }}
     ], triggerEl);
@@ -148,7 +148,7 @@ Object.assign(UI, {
         if (navigator.share) {
           try { await navigator.share({ title: album.name, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
         } else {
-          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Sharing not supported — link copied'); }
         }
       }}
     ], triggerEl);
@@ -182,7 +182,7 @@ Object.assign(UI, {
         if (navigator.share) {
           try { await navigator.share({ title: shareTitle, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
         } else {
-          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Sharing not supported — link copied'); }
         }
       }},
       { label: 'Rename', icon: Icons.edit(), action: () => {
@@ -260,19 +260,20 @@ Object.assign(UI, {
         document.body.removeChild(a);
       }},
       { type: 'divider' },
-      { label: isFav ? 'Remove from Favorites' : 'Add to Favorites', icon: isFav ? Icons.heartFilled() : Icons.heart(), action: async () => {
+      { label: isFav ? 'Remove from Favorites' : 'Add to Favorites', icon: isFav ? Icons.heartFilled() : Icons.heart(), action: () => {
         if (Store.isGuest) { this.hideContextMenu(); this.showToast('Log in to save favorites'); return; }
-        try {
-          await Api.toggleFavorite(trackId);
-          await Store.refreshFavorites();
-          this.hideContextMenu();
+        this.hideContextMenu();
+        const settled = Store.toggleFavorite(trackId);
+        this.updateNowPlaying();
+        settled.then((r) => {
           this.renderPage();
           this.updateNowPlaying();
-          this.showToast(isFav ? 'Removed from favorites' : 'Added to favorites');
-        } catch (err) {
-          this.hideContextMenu();
+          this.showToast(r.added ? 'Added to Favorites' : 'Removed from Favorites');
+        }).catch(() => {
+          this.renderPage();
+          this.updateNowPlaying();
           this.showToast('Failed to update favorites');
-        }
+        });
       }}
     ];
 
@@ -336,7 +337,7 @@ Object.assign(UI, {
         if (navigator.share) {
           try { await navigator.share({ title: track.title, url: shareUrl }); } catch (e) { if (e.name !== 'AbortError') this.showToast('Share failed'); }
         } else {
-          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Share not supported'); }
+          try { await navigator.clipboard.writeText(shareUrl); this.showToast('Link copied'); } catch (e) { this.showToast('Sharing not supported — link copied'); }
         }
       }},
       { label: 'Add to Playlist', icon: Icons.plus(), action: () => {
@@ -590,7 +591,7 @@ Object.assign(UI, {
       if (navigator.share) {
         navigator.share({ title: shareTitle + ' — Music Playlist', url: shareUrl }).catch(() => {});
       } else {
-        navigator.clipboard.writeText(shareUrl).then(() => this.showToast('Link copied')).catch(() => this.showToast('Share not supported'));
+        navigator.clipboard.writeText(shareUrl).then(() => this.showToast('Link copied')).catch(() => this.showToast('Sharing not supported — link copied'));
       }
       return;
     }

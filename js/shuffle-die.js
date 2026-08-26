@@ -183,12 +183,12 @@ window.ShuffleDie = (() => {
       vec3 localPoint = toLocal(point);
       float pips = pipMask(localPoint);
 
-      // Flat look (tuned in the style demo, 2026-08-20): solid body #141514,
-      // solid white pips, one soft-edged shadow band, gentle gamma
-      // lift, faint dither. No gradients, no specular, no outline.
-      vec3 bodyLit = vec3(0.078, 0.082, 0.078);
+      // Flat look (tuned in the style demo, 2026-08-20, inverted 2026-08-26):
+      // solid white body, solid dark pips #141514, one soft-edged shadow band,
+      // gentle gamma lift, faint dither. No gradients, no specular, no outline.
+      vec3 bodyLit = vec3(0.933, 0.933, 0.910);
       vec3 bodyDark = bodyLit * 0.52;
-      vec3 pipColor = vec3(0.933, 0.933, 0.910);
+      vec3 pipColor = vec3(0.078, 0.082, 0.078);
       vec3 lightDirection = normalize(vec3(-0.62, 0.88, 0.68));
       float diff = max(dot(normal, lightDirection), 0.0);
       float lit = smoothstep(0.25, 0.32, diff);

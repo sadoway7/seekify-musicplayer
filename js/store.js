@@ -141,6 +141,30 @@ const Store = {
     }
   },
 
+  // Optimistic favorite toggle: local state flips immediately (hearts paint
+  // right away), the server call follows. Resolves with the server-confirmed
+  // state; on failure the local flip is reverted and the error re-thrown so
+  // callers can show a truthful toast.
+  async toggleFavorite(trackId) {
+    const idx = this.favorites.indexOf(trackId);
+    const adding = idx === -1;
+    if (adding) this.favorites.push(trackId);
+    else this.favorites.splice(idx, 1);
+    try {
+      await Api.toggleFavorite(trackId);
+      await this.refreshFavorites();
+      return { added: this.isFavorite(trackId) };
+    } catch (err) {
+      try {
+        this.favorites = await Api.getFavorites();
+      } catch (e2) {
+        if (adding) this.favorites = this.favorites.filter(id => id !== trackId);
+        else if (this.favorites.indexOf(trackId) === -1) this.favorites.push(trackId);
+      }
+      throw err;
+    }
+  },
+
   async refreshRecent() {
     try {
       this.recent = await Api.getRecent();

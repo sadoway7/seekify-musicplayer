@@ -281,6 +281,7 @@
   z-index: 1;
   object-fit: contain;
   padding: 6%;
+  filter: invert(1); /* ponytail: PNG asset is dark-bodied; matches inverted shader until asset is re-exported */
 }
 
 .shuffle-die-canvas {
