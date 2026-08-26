@@ -1,6 +1,7 @@
 package musicbrainz
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,17 +69,22 @@ type MbRecording struct {
 }
 
 func MbDoRequest(reqURL string) ([]byte, error) {
-	return MbDoRequestWithRetry(reqURL, 2)
+	return MbDoRequestCtx(context.Background(), reqURL, 2)
 }
 
 func MbDoRequestWithRetry(reqURL string, retries int) ([]byte, error) {
-	if _, err := reserveMusicBrainzSlot(musicbrainzRateFile(), musicBrainzRequestInterval); err != nil {
+	return MbDoRequestCtx(context.Background(), reqURL, retries)
+}
+
+func MbDoRequestCtx(ctx context.Context, reqURL string, retries int) ([]byte, error) {
+	if _, err := reserveMusicBrainzSlotCtx(ctx, musicbrainzRateFile(), musicBrainzRequestInterval); err != nil {
 		return nil, fmt.Errorf("MusicBrainz rate gate: %v", err)
 	}
 	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return nil, err
 	}
+	req = req.WithContext(ctx)
 	req.Header.Set("User-Agent", "Seekify/1.0 (https://github.com/sadoway7/seekify-musicplayer)")
 
 	resp, err := MbClient.Do(req)
@@ -93,8 +99,10 @@ func MbDoRequestWithRetry(reqURL string, retries int) ([]byte, error) {
 	}
 
 	if resp.StatusCode == 503 && retries > 0 {
-		time.Sleep(1100 * time.Millisecond)
-		return MbDoRequestWithRetry(reqURL, retries-1)
+		if err := sleepContext(ctx, 1100*time.Millisecond); err != nil {
+			return nil, err
+		}
+		return MbDoRequestCtx(ctx, reqURL, retries-1)
 	}
 	if resp.StatusCode == 503 {
 		return nil, fmt.Errorf("rate limited by MusicBrainz (503)")
@@ -114,6 +122,10 @@ func musicbrainzRateFile() string {
 }
 
 func reserveMusicBrainzSlot(path string, interval time.Duration) (time.Time, error) {
+	return reserveMusicBrainzSlotCtx(context.Background(), path, interval)
+}
+
+func reserveMusicBrainzSlotCtx(ctx context.Context, path string, interval time.Duration) (time.Time, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return time.Time{}, err
 	}
@@ -130,7 +142,11 @@ func reserveMusicBrainzSlot(path string, interval time.Duration) (time.Time, err
 	data, _ := io.ReadAll(f)
 	if next, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil {
 		if wait := time.Until(time.Unix(0, next)); wait > 0 {
-			time.Sleep(wait)
+			// Canceled while queued behind another request: bail without
+			// advancing the gate — no MusicBrainz request is being made.
+			if err := sleepContext(ctx, wait); err != nil {
+				return time.Time{}, err
+			}
 		}
 	}
 
@@ -145,6 +161,17 @@ func reserveMusicBrainzSlot(path string, interval time.Duration) (time.Time, err
 		return time.Time{}, err
 	}
 	return reserved, nil
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 func EscapeLucene(s string) string {

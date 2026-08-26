@@ -1,6 +1,7 @@
 package musicbrainz
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"musicapp/internal/store"
@@ -74,14 +75,14 @@ type ArtistTrack struct {
 	InLibrary bool   `json:"inLibrary"`
 }
 
-func FinderSearchRecordings(query string, limit int) ([]FinderRecording, error) {
+func FinderSearchRecordings(ctx context.Context, query string, limit int) ([]FinderRecording, error) {
 	var results []FinderRecording
 
 	luceneQuery := BuildRecordingQuery(query)
 	reqURL := fmt.Sprintf("%s/recording/?query=%s&fmt=json&limit=%d",
 		MbBaseURL, url.QueryEscape(luceneQuery), limit)
 
-	body, err := MbDoRequest(reqURL)
+	body, err := MbDoRequestCtx(ctx, reqURL, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -214,12 +215,12 @@ func BuildRecordingQuery(raw string) string {
 	return buildLuceneQuery(raw, "artistname", "recording")
 }
 
-func FinderSearchArtists(query string, limit int) ([]FinderArtist, error) {
+func FinderSearchArtists(ctx context.Context, query string, limit int) ([]FinderArtist, error) {
 	var results []FinderArtist
 
 	reqURL := fmt.Sprintf("%s/artist/?query=%s&fmt=json&limit=%d", MbBaseURL, url.QueryEscape(query), limit)
 
-	body, err := MbDoRequest(reqURL)
+	body, err := MbDoRequestCtx(ctx, reqURL, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -267,14 +268,14 @@ func FinderSearchArtists(query string, limit int) ([]FinderArtist, error) {
 	return results, nil
 }
 
-func FinderSearchReleases(query string, limit int) ([]FinderRelease, error) {
+func FinderSearchReleases(ctx context.Context, query string, limit int) ([]FinderRelease, error) {
 	var results []FinderRelease
 
 	luceneQuery := BuildReleaseQuery(query)
 	reqURL := fmt.Sprintf("%s/release/?query=%s&fmt=json&limit=%d",
 		MbBaseURL, url.QueryEscape(luceneQuery), limit)
 
-	body, err := MbDoRequest(reqURL)
+	body, err := MbDoRequestCtx(ctx, reqURL, 2)
 	if err != nil {
 		return nil, err
 	}

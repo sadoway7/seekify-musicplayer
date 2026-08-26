@@ -36,7 +36,7 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch searchType {
 	case "recording":
-		results, err := musicbrainz.FinderSearchRecordings(q, limit)
+		results, err := musicbrainz.FinderSearchRecordings(r.Context(), q, limit)
 		if err != nil {
 			log.Printf("[finder] Recording search error: %v", err)
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -48,7 +48,7 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, results)
 
 	case "artist":
-		results, err := musicbrainz.FinderSearchArtists(q, limit)
+		results, err := musicbrainz.FinderSearchArtists(r.Context(), q, limit)
 		if err != nil {
 			log.Printf("[finder] Artist search error: %v", err)
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -60,7 +60,7 @@ func FinderSearchHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, results)
 
 	case "release":
-		results, err := musicbrainz.FinderSearchReleases(q, limit)
+		results, err := musicbrainz.FinderSearchReleases(r.Context(), q, limit)
 		if err != nil {
 			log.Printf("[finder] Release search error: %v", err)
 			writeJSONError(w, http.StatusInternalServerError, err.Error())

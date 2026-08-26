@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-26 — Finder search reliability
+
+- Fix (Finder): retyping a search no longer stalls or fails. Previously, changing your search terms left the old search running on the server, where it queued ahead of the new one through the MusicBrainz rate limiter — the new search could hang ~10s and then report "MusicBrainz may be rate-limited". The old search is now cancelled the moment you change the query, on both the client and the server.
+
 ## 2026-08-26 — Single-track downloads, toast polish
 
 - UI (favorites): the heart button now responds instantly — the icon flips the moment you tap it, and the confirmation only appears after the server has actually saved the change (with an honest error and revert if it didn't).

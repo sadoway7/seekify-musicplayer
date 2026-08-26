@@ -4,10 +4,11 @@ const Api = {
   // fallback on HTTP error or network failure. errMsg is the default thrown message;
   // server-sent j.error is preferred when present (only when throwing).
   async _req(url, opts = {}) {
-    const { method = 'GET', body, fallback, errMsg, credentials } = opts;
+    const { method = 'GET', body, fallback, errMsg, credentials, signal } = opts;
     try {
       const fetchOpts = { method };
       if (credentials) fetchOpts.credentials = 'include';
+      if (signal) fetchOpts.signal = signal;
       if (body !== undefined) {
         if (body instanceof FormData) { fetchOpts.body = body; }
         else { fetchOpts.headers = { 'Content-Type': 'application/json' }; fetchOpts.body = JSON.stringify(body); }
@@ -60,8 +61,8 @@ const Api = {
   getRecent() { return this._req('/api/recent', { errMsg: 'Failed to load recent' }); },
   getFiles(path) { return this._req('/api/admin/files' + (path ? '?path=' + encodeURIComponent(path) : ''), { errMsg: 'Failed to get files' }); },
   metadataUndo(id) { return this._req('/api/metadata/undo/' + id, { method: 'POST', errMsg: 'Undo failed' }); },
-  finderSearch(q, type) { return this._req('/api/finder/search?q=' + encodeURIComponent(q) + '&type=' + (type || 'recording'), { errMsg: 'Finder search failed' }); },
-  finderYouTubeSearch(q) { return this._req('/api/finder/youtube?q=' + encodeURIComponent(q), { errMsg: 'YouTube search failed' }); },
+  finderSearch(q, type, signal) { return this._req('/api/finder/search?q=' + encodeURIComponent(q) + '&type=' + (type || 'recording'), { errMsg: 'Finder search failed', signal }); },
+  finderYouTubeSearch(q, signal) { return this._req('/api/finder/youtube?q=' + encodeURIComponent(q), { errMsg: 'YouTube search failed', signal }); },
   finderArtistReleases(mbid) { return this._req('/api/finder/artist/' + mbid + '/releases', { errMsg: 'Failed to load artist releases' }); },
   finderArtistTracks(mbid, artist, offset) {
     const p = 'artist=' + encodeURIComponent(artist) + '&offset=' + (offset || 0) + '&limit=100';

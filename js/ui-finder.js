@@ -710,6 +710,12 @@ Object.assign(UI, {
       && type === this._finderType
       && this.els.content.querySelector('#finder-results') === container;
 
+    // Abort the in-flight stale search: without this, the old request keeps
+    // queuing on the server's MusicBrainz rate gate ahead of the new one.
+    if (this._finderSearchAbort) this._finderSearchAbort.abort();
+    const abortCtl = new AbortController();
+    this._finderSearchAbort = abortCtl;
+
     if (!query) {
       container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
         + '<div class="empty-state-text">Search for songs, artists, or albums on MusicBrainz</div></div>';
@@ -749,9 +755,9 @@ Object.assign(UI, {
       }
       let results;
       if (type === 'youtube') {
-        results = await Api.finderYouTubeSearch(query);
+        results = await Api.finderYouTubeSearch(query, abortCtl.signal);
       } else {
-        results = await Api.finderSearch(query, type);
+        results = await Api.finderSearch(query, type, abortCtl.signal);
       }
       if (!isCurrentRequest()) return;
       this._finderResults = results;
