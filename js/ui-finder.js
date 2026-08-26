@@ -166,7 +166,7 @@ Object.assign(UI, {
       input.value = '';
       this._loadWatchedPlaylists();
       this._pollDownloadBadge();
-      this._showToast(queued > 0 ? queued + ' tracks added to queue' : (total > 0 ? total + ' tracks imported' : 'Playlist imported'));
+      this._showToast(queued > 0 ? queued + ' tracks added' : (total > 0 ? total + ' tracks imported' : 'Playlist imported'));
     } catch (e) {
       const detail = e && e.message ? e.message : '';
       if (resultEl) resultEl.innerHTML = '<div class="playlist-import-error">Failed' + (detail ? ': ' + this._esc(detail) : ': invalid URL or yt-dlp not available') + '</div>';
@@ -465,7 +465,7 @@ Object.assign(UI, {
           if (!tryPlay(track)) {
             Store.refreshLibrary().then(() => {
               if (!tryPlay(find())) {
-                this._showToast('Track not yet in library — try scanning first');
+                this._showToast('Track not in library yet — waiting for scan');
               }
             });
           }
@@ -784,7 +784,7 @@ Object.assign(UI, {
         } else if (this._isQueued(r.artist, r.title)) {
           statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
         } else {
-          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" data-album="' + this._esc(r.album || '') + '" data-album-mbid="' + this._esc(r.albumId || '') + '" aria-label="Download ' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
+          statusHtml = '<button class="finder-download-btn" data-action="download-song" data-artist="' + this._esc(r.artist) + '" data-title="' + this._esc(r.title) + '" data-album="' + this._esc(r.album || '') + '" data-album-mbid="' + this._esc(r.albumId || '') + '" data-length="' + (r.length || 0) + '" aria-label="Download ' + this._esc(r.title) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
         }
         html += '<div class="finder-item">'
           + '<div class="finder-item-art"><img src="' + (r.albumId ? Api.finderCoverUrl(r.albumId) : '') + '" alt="" onerror="this.style.display=\'none\'"></div>'
@@ -886,7 +886,8 @@ Object.assign(UI, {
           artist: dlBtn.dataset.artist,
           title: dlBtn.dataset.title,
           album: dlBtn.dataset.album || '',
-          albumMbid: dlBtn.dataset.albumMbid || ''
+          albumMbid: dlBtn.dataset.albumMbid || '',
+          lengthSec: parseInt(dlBtn.dataset.length) || 0
         });
         if (queued) {
           const badge = document.createElement('span');
@@ -930,7 +931,7 @@ Object.assign(UI, {
     try {
       const result = await Api.previewUrl(videoId);
       const streamUrl = result.url;
-      if (!streamUrl) { this._showToast('Preview unavailable'); return; }
+      if (!streamUrl) { this._showToast('Preview not available'); return; }
       const audio = new Audio(streamUrl);
       audio.volume = 0.3;
       this._previewAudio = audio;
@@ -952,7 +953,7 @@ Object.assign(UI, {
     } catch (err) {
       const msg = err.message || 'Failed to add to queue';
       if (msg.includes('already in library') || msg.includes('already')) {
-        this._showToast('Already in your library');
+        this._showToast('Already in library');
       } else {
         this._showToast(msg);
       }
@@ -1129,7 +1130,7 @@ Object.assign(UI, {
       } else if (this._isQueued(t.artist, t.title)) {
         statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
       } else {
-        statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(t.album) + '" data-album-mbid="' + this._esc(t.albumId) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="0" title="Download">' + Icons.download() + '<span>Download</span></button>';
+        statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(t.artist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(t.album) + '" data-album-mbid="' + this._esc(t.albumId) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="0" data-length="' + (t.length || 0) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
       }
       html += '<div class="finder-track-row" data-track-search="' + this._esc((t.title + ' ' + t.album + ' ' + t.artist).toLowerCase()) + '">'
         + '<div class="finder-track-num">' + (i + 1) + '</div>'
@@ -1189,7 +1190,8 @@ Object.assign(UI, {
           album: btn.dataset.album || '',
           albumMbid: btn.dataset.albumMbid || '',
           trackNumber: parseInt(btn.dataset.trackNumber) || 0,
-          trackTotal: parseInt(btn.dataset.trackTotal) || 0
+          trackTotal: parseInt(btn.dataset.trackTotal) || 0,
+          lengthSec: parseInt(btn.dataset.length) || 0
         });
         if (queued) {
           const badge = document.createElement('span');
@@ -1248,7 +1250,7 @@ Object.assign(UI, {
             lengthSec: t.length || 0
           }));
           Api.queueAddBatch(trackList).then(() => {
-            this._showToast(tracks.length + ' tracks added to queue');
+            this._showToast(tracks.length + ' tracks added');
           }).catch(() => {
             this._showToast('Failed to add tracks to queue');
           });
@@ -1265,7 +1267,7 @@ Object.assign(UI, {
         } else if (this._isQueued(trackArtist, t.title)) {
           statusHtml = '<span class="finder-status-badge finder-in-queue">Queued</span>';
         } else {
-          statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(trackArtist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(title) + '" data-album-mbid="' + this._esc(data.mbid) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="' + tracks.length + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
+          statusHtml = '<button class="finder-download-btn finder-track-dl" data-action="download-song" data-artist="' + this._esc(trackArtist) + '" data-title="' + this._esc(t.title) + '" data-album="' + this._esc(title) + '" data-album-mbid="' + this._esc(data.mbid) + '" data-track-number="' + (t.position || (i+1)) + '" data-track-total="' + tracks.length + '" data-length="' + (t.length || 0) + '" title="Download">' + Icons.download() + '<span>Download</span></button>';
         }
         thtml += '<div class="finder-track-row">'
           + '<div class="finder-track-num">' + t.position + '</div>'
@@ -1291,7 +1293,8 @@ Object.assign(UI, {
             album: btn.dataset.album || '',
             albumMbid: btn.dataset.albumMbid || '',
             trackNumber: parseInt(btn.dataset.trackNumber) || 0,
-            trackTotal: parseInt(btn.dataset.trackTotal) || 0
+            trackTotal: parseInt(btn.dataset.trackTotal) || 0,
+            lengthSec: parseInt(btn.dataset.length) || 0
           });
           if (queued) {
             const badge = document.createElement('span');

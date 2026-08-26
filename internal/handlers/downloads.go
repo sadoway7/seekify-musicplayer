@@ -207,6 +207,7 @@ func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 		ArtistID    string `json:"artistId"`
 		Genre       string `json:"genre"`
 		Year        string `json:"year"`
+		LengthSec   int    `json:"lengthSec"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
@@ -220,7 +221,7 @@ func DownloadQueueAddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	job, err := downloads.CreateDownloadJob(
 		userID, req.Query, req.Artist, req.Title, req.Album,
-		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir, "", 0,
+		req.AlbumMBID, req.TrackNum, req.TrackTotal, req.OverrideDir, "", req.LengthSec,
 	)
 	if err != nil {
 		status := http.StatusInternalServerError
