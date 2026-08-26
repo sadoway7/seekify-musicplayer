@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	_ "embed"
 	"fmt"
 	"hash/fnv"
 	"log"
@@ -13,6 +14,12 @@ import (
 
 	"github.com/dhowden/tag"
 )
+
+//go:embed placeholder.webp
+var placeholderArt []byte
+
+// PlaceholderArt is the no-artwork fallback image for album covers.
+func PlaceholderArt() []byte { return placeholderArt }
 
 // scanning is true while a ScanMusicDirWithPrefixLocked pass is running.
 // The watcher checks it to avoid overlapping the startup scan.

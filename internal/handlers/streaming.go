@@ -217,14 +217,7 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	album := store.GetAlbum(albumID)
-	var albumName string
-	if album != nil {
-		albumName = album.Name
-	}
-
-	svg := scanner.GeneratePlaceholderSVG(albumName, albumID)
-	serveCoverBytes(w, r, []byte(svg), "image/svg+xml")
+	serveCoverBytes(w, r, scanner.PlaceholderArt(), "image/webp")
 }
 
 func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {
