@@ -24,20 +24,19 @@ function fakeTitle(clientWidth, textWidth) {
   };
 }
 
-test('marqueeOverhang: half the overflow, never negative', () => {
+test('marqueeDistance: full overflow, never negative', () => {
   const UI = loadUI({});
-  assert.equal(UI.marqueeOverhang(1000, 500), 250);
-  assert.equal(UI.marqueeOverhang(400, 500), 0);
-  assert.equal(UI.marqueeOverhang(600, 500), 50);
+  assert.equal(UI.marqueeDistance(1000, 500), 500);
+  assert.equal(UI.marqueeDistance(400, 500), 0);
+  assert.equal(UI.marqueeDistance(600, 500), 100);
 });
 
-test('long title scrolls from +overhang to -overhang (start and end reachable)', () => {
+test('long title anchors left and scrolls the full overflow', () => {
   const UI = loadUI({ selectNodeContents() {}, getBoundingClientRect: () => ({ width: 1000 }) });
   const el = fakeTitle(500, 1000);
   UI._checkTitleOverflow.call({ els: { npTitle: el } });
   assert.ok(el.classList.contains('scrolling'), 'should scroll');
-  assert.equal(el.props['--marquee-from'], '250px', 'start must shift right into view');
-  assert.equal(el.props['--marquee-dist'], '-250px', 'end must shift left into view');
+  assert.equal(el.props['--marquee-dist'], '-500px', 'scrolls the full overflow');
 });
 
 test('short title does not scroll', () => {
@@ -45,5 +44,5 @@ test('short title does not scroll', () => {
   const el = fakeTitle(500, 400);
   UI._checkTitleOverflow.call({ els: { npTitle: el } });
   assert.ok(!el.classList.contains('scrolling'));
-  assert.equal(el.props['--marquee-from'], undefined);
+  assert.equal(el.props['--marquee-dist'], undefined);
 });

@@ -191,11 +191,11 @@ Object.assign(UI, {
     }
   },
 
-  // Marquee geometry for the now-playing title. A centered overflowing
-  // title clips both edges equally, so the scroll runs from +overhang
-  // (title start flush left) to -overhang (title end flush right).
-  marqueeOverhang(textWidth, clientWidth) {
-    return Math.max(0, (textWidth - clientWidth) / 2);
+  // Marquee distance for the now-playing title. Scrolling titles anchor
+  // left at rest (text-align:left) and travel the full overflow so the
+  // whole title passes through; short titles stay centered.
+  marqueeDistance(textWidth, clientWidth) {
+    return Math.max(0, textWidth - clientWidth);
   },
 
   _checkTitleOverflow() {
@@ -203,18 +203,16 @@ Object.assign(UI, {
     if (!el) return;
     el.classList.remove('scrolling');
     el.style.removeProperty('--marquee-dur');
-    el.style.removeProperty('--marquee-from');
     el.style.removeProperty('--marquee-dist');
     // scrollWidth only counts the right overhang of a centered title;
     // a Range measures the full glyph run so the start is reachable.
     const range = document.createRange();
     range.selectNodeContents(el);
     const textWidth = range.getBoundingClientRect().width;
-    const overhang = UI.marqueeOverhang(textWidth, el.clientWidth);
-    if (overhang > 2) {
+    const dist = UI.marqueeDistance(textWidth, el.clientWidth);
+    if (dist > 2) {
       el.style.setProperty('--marquee-dur', Math.max(6, textWidth / 60) + 's');
-      el.style.setProperty('--marquee-from', overhang + 'px');
-      el.style.setProperty('--marquee-dist', '-' + overhang + 'px');
+      el.style.setProperty('--marquee-dist', '-' + dist + 'px');
       el.classList.add('scrolling');
     }
   },
