@@ -217,7 +217,7 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serveCoverBytes(w, r, scanner.PlaceholderArt(), "image/webp")
+	serveCoverBytes(w, r, []byte(scanner.PlaceholderArtSVG(albumID)), "image/svg+xml")
 }
 
 func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {

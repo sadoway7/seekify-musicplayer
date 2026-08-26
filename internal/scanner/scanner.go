@@ -2,6 +2,7 @@ package scanner
 
 import (
 	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"hash/fnv"
 	"log"
@@ -18,8 +19,21 @@ import (
 //go:embed placeholder.webp
 var placeholderArt []byte
 
-// PlaceholderArt is the no-artwork fallback image for album covers.
-func PlaceholderArt() []byte { return placeholderArt }
+var placeholderArtB64 = base64.StdEncoding.EncodeToString(placeholderArt)
+
+// PlaceholderArtSVG returns the no-artwork fallback for album covers: the
+// vinyl-record image under a subtle per-ID hue overlay, so a screen full of
+// art-less albums isn't a wall of identical records.
+func PlaceholderArtSVG(id string) string {
+	h := fnv.New32a()
+	h.Write([]byte(id))
+	hue := h.Sum32() % 360
+
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <image href="data:image/webp;base64,%s" width="512" height="512"/>
+  <rect width="512" height="512" fill="hsl(%d, 45%%, 35%%)" opacity="0.14"/>
+</svg>`, placeholderArtB64, hue)
+}
 
 // scanning is true while a ScanMusicDirWithPrefixLocked pass is running.
 // The watcher checks it to avoid overlapping the startup scan.

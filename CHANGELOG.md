@@ -2,7 +2,7 @@
 
 ## 2026-08-26 — Album art placeholder
 
-- UI (artwork): albums without cover art now show a vinyl-record placeholder image instead of a nearly-blank gradient — everywhere covers appear, including the player.
+- UI (artwork): albums without cover art now show a vinyl-record placeholder — with a faint per-album color tint so a shelf of art-less albums doesn't look like a wall of identical records — instead of a nearly-blank gradient, everywhere covers appear, including the player.
 
 ## 2026-08-26 — Finder search reliability
 

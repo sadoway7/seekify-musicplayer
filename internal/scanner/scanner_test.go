@@ -66,6 +66,23 @@ func TestGeneratePlaceholderSVG_differentIDs(t *testing.T) {
 	}
 }
 
+func TestPlaceholderArtSVG(t *testing.T) {
+	svg1 := scanner.PlaceholderArtSVG("id1")
+	if !contains(svg1, "<svg") || !contains(svg1, "data:image/webp;base64,") {
+		t.Error("placeholder missing svg or embedded record image")
+	}
+	if !contains(svg1, "opacity") {
+		t.Error("placeholder missing hue overlay")
+	}
+	svg2 := scanner.PlaceholderArtSVG("id2")
+	if svg1 == svg2 {
+		t.Error("different album IDs should tint the record differently")
+	}
+	if scanner.PlaceholderArtSVG("id1") != svg1 {
+		t.Error("same ID should produce identical placeholder")
+	}
+}
+
 func TestResolveFilePath_primary(t *testing.T) {
 	store.MusicDir = "/music"
 	store.MusicDirs = map[string]string{"": "/music"}
