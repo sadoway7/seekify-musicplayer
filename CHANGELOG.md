@@ -2,6 +2,7 @@
 
 ## 2026-08-26 — Now-playing title marquee fix
 
+- Fix (player): scrolling titles now actually show the rest of the words — the clip window previously travelled with the text, leaving the overflowed part permanently blank. The text now slides inside a fixed window so the whole title passes through.
 - Fix (player): long song titles in the Now Playing view now sit flush against the left edge while scrolling — like a classic marquee — instead of starting centered with both ends clipped. Short titles remain centered, and each scroll pass restarts from the beginning of the title.
 - Fix (player): long song titles in the Now Playing view no longer start with their first word cut off at the screen edge. The scrolling title now begins flush with the start of the name and scrolls just far enough to reveal the end — previously a centered overflow clipped both edges and the scroll never reached the beginning.
 

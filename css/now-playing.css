@@ -366,9 +366,12 @@
   animation: npTitleScroll var(--marquee-dur, 8s) ease-in-out infinite;
 }
 
+/* text-indent (not transform): the clip lives on .np-title itself, so
+   transforming the element moves the window with the text and the tail
+   never enters view. Indent slides glyphs inside the stationary clip. */
 @keyframes npTitleScroll {
-  0%, 8% { transform: translateX(0); }
-  92%, 100% { transform: translateX(var(--marquee-dist, 0px)); }
+  0%, 8% { text-indent: 0; }
+  92%, 100% { text-indent: var(--marquee-dist, 0px); }
 }
 
 .np-artist {
