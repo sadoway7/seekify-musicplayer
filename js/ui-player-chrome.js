@@ -529,8 +529,15 @@ Object.assign(UI, {
     const vibS = Math.min(100, s + 35);
     const vibL = Math.min(65, Math.max(45, l + 10));
     const playedColor = 'hsl(' + h + ',' + vibS + '%,' + vibL + '%)';
+    // Border/glow: the album hue shifted close to white — keeps the pill
+    // visible on dark art without reading as a saturated accent.
+    const ringH = h, ringS = Math.round(vibS * 0.55), ringL = Math.min(80, vibL + 18);
+    const ringColor = 'hsla(' + ringH + ',' + ringS + '%,' + ringL + '%,0.7)';
+    const ringGlow = 'hsla(' + ringH + ',' + ringS + '%,' + ringL + '%,0.16)';
     this.els.miniProgress.style.setProperty('--mini-progress-color', playedColor);
     this.els.miniPlayer.style.setProperty('--mini-progress-color', playedColor);
+    this.els.miniPlayer.style.setProperty('--mini-ring', ringColor);
+    this.els.miniPlayer.style.setProperty('--mini-ring-glow', ringGlow);
     this.els.miniPlayer.style.background = 'linear-gradient(135deg, hsl(' + h + ',' + Math.round(vibS * 0.4) + '%,' + Math.max(12, vibL * 0.18) + '%), hsl(' + h + ',' + Math.round(vibS * 0.2) + '%,' + Math.max(8, vibL * 0.1) + '%))';
     this.els.miniPlayer.style.setProperty('--mini-art-glow', playedColor);
   },
