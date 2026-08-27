@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-26 — Now-playing artist link
+
+- UI (player): the artist name on the Now Playing screen is now tappable and takes you straight to that artist's page (mini-player unchanged).
+
 ## 2026-08-26 — Library polish & Finder fixes
 
 - Fix (player): the album's colors no longer flash back to the default green accent when opening/closing the Now Playing view or navigating while a song plays — the color now belongs to the playing track and stays until playback stops.

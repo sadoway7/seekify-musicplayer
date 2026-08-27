@@ -332,6 +332,13 @@ const UI = {
       if (track) this._showTrackContextMenu(track.id, e.currentTarget);
     });
 
+    // Artist name in the main now-playing view navigates to the artist page.
+    // Mini-player keeps plain text.
+    this.els.npArtist.addEventListener('click', () => {
+      const track = Player.getCurrentTrack();
+      if (track && track.artist) this.navigateTo('artist', { artistName: track.artist });
+    });
+
     this.els.npPlay.addEventListener('click', () => {
       Player.togglePlay();
     });
