@@ -25,6 +25,9 @@
   gap: 12px;
   overflow-x: auto;
   padding: 0 var(--page-margin) 4px;
+  /* Snap targets align to the scrollport edge, NOT the padding — without
+     scroll-padding, snapped cards sit ~a page-margin left of the title. */
+  scroll-padding-inline: var(--page-margin);
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -383,7 +386,7 @@
 
 .mega-title {
   position: relative;
-  height: 36px;
+  height: 44px;
   overflow: hidden;
   padding: 20px var(--page-margin) 0;
   z-index: 0;
@@ -415,13 +418,17 @@
 .mega-title .section-header-link {
   position: absolute;
   right: var(--page-margin);
-  bottom: 2px;
+  bottom: 7px;
   z-index: 1;
   border: 0;
   padding: 6px 0;
   background: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
   cursor: pointer;
 }
 
@@ -1068,6 +1075,29 @@
   flex-shrink: 0;
   gap: 6px;
   margin-top: var(--sp-2);
+}
+
+/* Filter input inside a hero action row: compact, but wide enough to type in.
+   Mobile sizing lives in responsive.css. */
+.detail-actions .detail-filter-container {
+  flex: 0 1 180px;
+  min-width: 130px;
+  margin: 0;
+  height: 34px;
+}
+
+.detail-actions .detail-filter-container::after {
+  display: none;
+}
+
+.detail-actions .detail-filter-container .search-icon {
+  left: 12px;
+}
+
+.detail-actions .detail-filter-container .search-input {
+  padding: 0 var(--sp-3) 0 36px;
+  height: 34px;
+  font-size: 14px;
 }
 
 .detail-play-btn {

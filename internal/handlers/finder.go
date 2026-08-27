@@ -87,7 +87,12 @@ func FinderArtistReleasesHandler(w http.ResponseWriter, r *http.Request) {
 		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
 			limit = l
 		}
-		page := musicbrainz.FinderArtistTracks(mbid, artistName, offset, limit)
+		page, err := musicbrainz.FinderArtistTracks(mbid, artistName, offset, limit)
+		if err != nil {
+			log.Printf("[finder] Artist tracks error: %v", err)
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		if page.Tracks == nil {
 			page.Tracks = []musicbrainz.ArtistTrack{}
 		}

@@ -37,6 +37,7 @@ Object.assign(UI, {
         + '</div>';
     } else {
       const typeLabel = { artist: 'Artists', recording: 'Songs', release: 'Albums' }[this._finderType] || 'Artists';
+      const placeholderBy = { artist: 'Search by artist...', recording: 'Search by song...', release: 'Search by album...' }[this._finderType] || 'Search by artist...';
       const typeMenu = '<div class="finder-type-dropdown">'
         + '<button class="finder-type-toggle" data-finder-type-toggle aria-label="Search type" aria-haspopup="true" aria-expanded="false">'
         + '<span>' + typeLabel + '</span>' + Icons.chevronDown()
@@ -49,7 +50,7 @@ Object.assign(UI, {
         + '</div>';
       html += '<div class="search-container finder-search-container">'
         + '<span class="search-icon">' + Icons.search() + '</span>'
-        + '<input class="search-input finder-search-input" type="search" enterkeyhint="search" placeholder="Search ' + typeLabel.toLowerCase() + '..." value="' + this._esc(this._finderQuery) + '">'
+        + '<input class="search-input finder-search-input" type="search" enterkeyhint="search" placeholder="' + placeholderBy + '" value="' + this._esc(this._finderQuery) + '">'
         + typeMenu
         + '</div>'
         + '</div>';
@@ -1086,7 +1087,16 @@ Object.assign(UI, {
     if (!page || !page.tracks || page.tracks.length === 0) {
       if (this._artistView === 'tracklist' && this._artistTrackCache.length === 0) {
         container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
-          + '<div class="empty-state-text">' + (page === null ? 'Failed to load tracks' : 'No tracks found') + '</div></div>';
+          + '<div class="empty-state-text">' + (page === null ? 'Failed to load tracks' : 'No tracks found') + '</div>'
+          + (page === null
+            ? '<button class="settings-btn settings-btn-primary" id="artist-tracks-retry" style="margin-top:14px">Retry</button>'
+            : '')
+          + '</div>';
+        const retryBtn = container.querySelector('#artist-tracks-retry');
+        if (retryBtn) retryBtn.addEventListener('click', () => {
+          this._artistTrackCache = null;
+          this._renderArtistTracklist(container, releases, artistName);
+        });
       }
       return;
     }

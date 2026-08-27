@@ -561,13 +561,16 @@ type ArtistTrackPage struct {
 	Total  int           `json:"total"`
 }
 
-func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) ArtistTrackPage {
+// Returns an error when the first MusicBrainz page failed and nothing was
+// fetched — a throttled/failed fetch must not masquerade as "no tracks".
+func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) (ArtistTrackPage, error) {
 	seen := map[string]*ArtistTrack{}
 	libLookup := getLibraryLookup()
 
 	totalAvailable := 0
 	offset := pageOffset
 	pagesToFetch := (pageLimit + 99) / 100
+	var firstPageErr error
 
 	for p := 0; p < pagesToFetch; p++ {
 		reqURL := fmt.Sprintf("%s/recording?query=arid:%s&fmt=json&limit=100&offset=%d",
@@ -585,6 +588,9 @@ func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) Arti
 			}
 		}
 		if lastErr != nil {
+			if p == 0 {
+				firstPageErr = lastErr
+			}
 			break
 		}
 
@@ -690,10 +696,13 @@ func FinderArtistTracks(mbid, artistName string, pageOffset, pageLimit int) Arti
 		return result[i].Count > result[j].Count
 	})
 
+	if len(result) == 0 && firstPageErr != nil {
+		return ArtistTrackPage{Tracks: []ArtistTrack{}, Total: totalAvailable}, firstPageErr
+	}
 	return ArtistTrackPage{
 		Tracks: result,
 		Total:  totalAvailable,
-	}
+	}, nil
 }
 
 func CleanChannelName(name string) string {

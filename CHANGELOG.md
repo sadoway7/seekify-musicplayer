@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-26 — Library polish & Finder fixes
+
+- Fix (player): the album's colors no longer flash back to the default green accent when opening/closing the Now Playing view or navigating while a song plays — the color now belongs to the playing track and stays until playback stops.
+- UI (navigation): inactive tab icons in the bottom (mobile) and side (desktop) navbars are brighter and easier to see, and the faint green glow behind unselected mobile tabs is gone.
+- UI (library): Favorites, All Music, and Create Playlist rows no longer use green icon accents — neutral colors throughout.
+- UI (library): playlist, Favorites, All Music, album, and artist pages now have a filter box in the header row (next to Play/Shuffle) that narrows the track list as you type.
+- Fix (Finder): opening an artist from a search no longer shows "No tracks found" while the catalog is still loading — a failed/throttled fetch is now reported as a failure with a Retry button, and "No tracks found" only appears when the artist genuinely has none.
+- UI (Finder): search placeholders now read "Search by artist / by song / by album".
+- UI (home): New Songs shows 18 tracks on desktop (3× more) while mobile keeps 6; the Albums row no longer snaps out of alignment with its title; section links are now white text ("Browse by artist / album").
+
 ## 2026-08-26 — Now-playing title marquee fix
 
 - Fix (player): scrolling titles now actually show the rest of the words — the clip window previously travelled with the text, leaving the overflowed part permanently blank. The text now slides inside a fixed window so the whole title passes through.

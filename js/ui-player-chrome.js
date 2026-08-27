@@ -102,6 +102,11 @@ Object.assign(UI, {
         this._applyNowPlayingHiddenState();
         this._afterHideNowPlaying();
       }
+      // Playback stopped entirely: now the album color resets to defaults.
+      this._lastColorAlbumId = null;
+      this._albumColor = null;
+      document.documentElement.style.setProperty('--waveform-played', '#D4F040');
+      document.documentElement.style.setProperty('--waveform-hover', 'rgba(212, 240, 64, 0.8)');
       return;
     }
 
@@ -265,8 +270,11 @@ Object.assign(UI, {
   },
 
   // Final visibility reset (hidden class + clear all inline presentational
-  // styles + album-color vars). Called after the slide-down animation (button
-  // path) and after the swipe-off transition (gesture path).
+  // styles). Called after the slide-down animation (button path) and after
+  // the swipe-off transition (gesture path). Album color vars are NOT reset
+  // here: they belong to the still-playing track, and wiping them flashes
+  // the default lime in the mini-player and on reopen. Reset happens in
+  // updateNowPlaying when playback stops entirely.
   _applyNowPlayingHiddenState() {
     const np = this.els.nowPlaying;
     np.classList.add('hidden');
@@ -275,10 +283,6 @@ Object.assign(UI, {
     np.style.opacity = '';
     np.style.transition = '';
     np.style.background = '';
-    this._lastColorAlbumId = null;
-    this._albumColor = null;
-    document.documentElement.style.setProperty('--waveform-played', '#D4F040');
-    document.documentElement.style.setProperty('--waveform-hover', 'rgba(212, 240, 64, 0.8)');
   },
 
   // Synchronous restore when leaving now-playing: show mini-player, hide queue,

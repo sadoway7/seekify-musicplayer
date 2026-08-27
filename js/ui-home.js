@@ -243,7 +243,7 @@ Object.assign(UI, {
     }).slice(0, artistLimit);
     if (newArtists.length === 0) return '';
     let html = '<div class="mega-title"><span>Artists</span>'
-      + '<button class="section-header-link" data-library-filter="artists">See all</button></div>';
+      + '<button class="section-header-link" data-library-filter="artists">Browse by artist</button></div>';
     html += '<div class="scroll-row artist-row">';
     newArtists.forEach(a => {
       html += '<div class="quick-play-card-inline artist-pill" data-type="artist" data-id="' + this._esc(a.name) + '">'
@@ -261,7 +261,7 @@ Object.assign(UI, {
     });
     if (namedAlbums.length === 0) return '';
     let html = '<div class="mega-title"><span>Albums</span>'
-      + '<button class="section-header-link" data-library-filter="albums">See all</button></div>';
+      + '<button class="section-header-link" data-library-filter="albums">Browse by album</button></div>';
     const shuffledAlbums = namedAlbums.sort((a, b) => {
       return this._homeDiscoveryScore(a.id) - this._homeDiscoveryScore(b.id) || a.id.localeCompare(b.id);
     }).slice(0, 15);
@@ -280,7 +280,7 @@ Object.assign(UI, {
   _homeNewSongs() {
     const allTracks = Store.library.tracks.slice();
     const sortedNew = allTracks.filter(t => t.artist && t.artist !== '').sort((a, b) => (b.modTime || 0) - (a.modTime || 0));
-    const newLimit = this._newSongsLimit || 6;
+    const newLimit = this._newSongsLimit || (window.innerWidth >= 768 ? 18 : 6);
     const newTracks = sortedNew.slice(0, newLimit);
     if (newTracks.length === 0) return '';
     let html = '<div class="mega-title"><span>New Songs</span></div>';

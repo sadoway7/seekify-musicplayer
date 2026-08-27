@@ -5,8 +5,8 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('./ui-player-chrome.js', import.meta.url), 'utf8');
 
-function loadUI(range) {
-  const ctx = { UI: {}, Object, Math, document: { createRange: () => range } };
+function loadUI(range, docProps) {
+  const ctx = { UI: {}, Object, Math, document: { createRange: () => range, documentElement: { style: { setProperty: (k, v) => { (docProps ||= {})[k] = v; } } } } };
   vm.createContext(ctx);
   vm.runInContext(source, ctx);
   return ctx.UI;
@@ -45,4 +45,20 @@ test('short title does not scroll', () => {
   UI._checkTitleOverflow.call({ els: { npTitle: el } });
   assert.ok(!el.classList.contains('scrolling'));
   assert.equal(el.props['--marquee-dist'], undefined);
+});
+
+test('hiding now-playing keeps the album color while a track plays', () => {
+  const docProps = {};
+  const UI = loadUI({ selectNodeContents() {}, getBoundingClientRect: () => ({ width: 100 }) }, docProps);
+  const classes = new Set();
+  const state = {
+    els: { nowPlaying: { classList: { add: c => classes.add(c) }, style: {} } },
+    _albumColor: { r: 10, g: 20, b: 30, h: 200, s: 50, l: 55 },
+    _lastColorAlbumId: 'abc123'
+  };
+  UI._applyNowPlayingHiddenState.call(state);
+  assert.ok(classes.has('hidden'));
+  assert.deepEqual(docProps, {}, 'hide must not reset waveform color vars');
+  assert.equal(state._albumColor.r, 10, 'album color survives hide');
+  assert.equal(state._lastColorAlbumId, 'abc123');
 });

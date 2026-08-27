@@ -257,7 +257,7 @@ const UI = {
           Store.viewData = {};
         }
         this.searchGenre = '';
-        this._newSongsLimit = 6;
+        this._newSongsLimit = window.innerWidth >= 768 ? 18 : 6;
         this.renderPage();
         this.els.content.scrollTop = 0;
       });
@@ -1141,6 +1141,16 @@ const UI = {
         const el = e.target.closest(h.sel);
         if (el) { h.fn(el, e); return; }
       }
+    });
+
+    // Detail-page hero filter (delegated so it survives re-renders): typing
+    // hides .track-row rows whose data-track-search misses the query.
+    this.els.content.addEventListener('input', (e) => {
+      if (!e.target.matches('.detail-filter-input')) return;
+      const q = e.target.value.trim().toLowerCase();
+      this.els.content.querySelectorAll('.track-row').forEach(row => {
+        row.style.display = (!q || (row.dataset.trackSearch || '').includes(q)) ? '' : 'none';
+      });
     });
   },
 

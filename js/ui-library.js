@@ -106,13 +106,13 @@ Object.assign(UI, {
 
   _renderLibPlaylists() {
     let html = '<div class="list-item" data-action="favorites" style="cursor:pointer">'
-      + '<div class="list-item-art" style="background:rgba(212,240,64,.1);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
+      + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-primary)">'
       + Icons.heartFilled() + '</div>'
       + '<div class="list-item-info"><div class="list-item-title">Favorites</div>'
       + '<div class="list-item-subtitle">' + Store.favorites.length + ' songs</div></div></div>';
 
     html += '<div class="list-item" data-action="all-music" style="cursor:pointer">'
-      + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
+      + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-primary)">'
       + Icons.music() + '</div>'
       + '<div class="list-item-info"><div class="list-item-title">All Music</div>'
       + '<div class="list-item-subtitle">' + Store.library.tracks.length + ' songs</div></div></div>';
@@ -130,9 +130,9 @@ Object.assign(UI, {
 
     if (!Store.isGuest) {
       html += '<div class="list-item" data-action="create-playlist" style="cursor:pointer">'
-        + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--accent)">'
+        + '<div class="list-item-art" style="background:var(--l2);display:flex;align-items:center;justify-content:center;color:var(--text-primary)">'
         + Icons.plus() + '</div>'
-        + '<div class="list-item-info"><div class="list-item-title" style="color:var(--accent)">Create Playlist</div></div></div>';
+        + '<div class="list-item-info"><div class="list-item-title">Create Playlist</div></div></div>';
     }
 
     if (Store.playlists.length === 0) {
@@ -233,7 +233,6 @@ Object.assign(UI, {
 
     let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<button class="hero-action-btn" data-hero-action="more">' + Icons.more() + '</button>'
       + '<div class="mosaic-banner">' + this._buildMosaic() + '</div>'
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
@@ -244,6 +243,7 @@ Object.assign(UI, {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + this._detailFilterHtml()
       + '</div>'
       + '</div></div>';
 
@@ -315,6 +315,7 @@ Object.assign(UI, {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + this._detailFilterHtml()
       + '</div>'
       + '</div></div>'
       + this.renderTrackList(tracks, { showArt: false });
@@ -348,6 +349,7 @@ Object.assign(UI, {
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
       + '<button class="detail-action-btn" data-action="rip-more" data-artist="' + this._esc(name) + '">' + Icons.globe() + '<span>Rip More</span></button>'
+      + this._detailFilterHtml()
       + '</div>'
       + '</div></div>';
 
@@ -400,6 +402,7 @@ Object.assign(UI, {
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
       + '<button class="detail-action-btn detail-action-btn-danger" data-action="delete-playlist">' + Icons.trash() + '</button>'
+      + this._detailFilterHtml()
       + '</div>'
       + '</div></div>';
 
@@ -423,7 +426,6 @@ Object.assign(UI, {
 
     let html = '<div class="detail-hero">'
       + '<button class="back-btn">' + Icons.chevronLeft() + '</button>'
-      + '<button class="hero-action-btn" data-hero-action="more">' + Icons.more() + '</button>'
       + bgHtml
       + '<div class="detail-hero-overlay"></div>'
       + '<div class="detail-hero-info">'
@@ -434,6 +436,7 @@ Object.assign(UI, {
       + '<div class="detail-actions">'
       + '<button class="detail-play-btn">' + Icons.play() + '<span>Play</span></button>'
       + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
+      + this._detailFilterHtml()
       + '</div>'
       + '</div></div>';
 
@@ -971,6 +974,16 @@ Object.assign(UI, {
     }
   },
 
+  // Filter input for detail-page hero action rows (playlist / favorites /
+  // all-music / album / artist). Filtering is delegated (ui.js) and toggles
+  // .track-row rows via data-track-search.
+  _detailFilterHtml() {
+    return '<div class="search-container detail-filter-container">'
+      + '<span class="search-icon">' + Icons.search() + '</span>'
+      + '<input class="search-input detail-filter-input" type="search" enterkeyhint="search" placeholder="Filter tracks...">'
+      + '</div>';
+  },
+
   renderTrackList(tracks, options) {
     const opts = options || {};
     const showArt = !!opts.showArt;
@@ -990,9 +1003,10 @@ Object.assign(UI, {
         : this._esc(track.artist);
 
       const cls = 'track-row' + (filterable ? ' lib-item' : '');
-      const attrs = filterable
+      const attrs = (filterable
         ? ' data-title="' + this._esc(track.title) + '" data-subtitle="' + this._esc(track.artist + ' ' + (track.album || '')) + '"'
-        : '';
+        : '')
+        + ' data-track-search="' + this._esc((track.title + ' ' + track.artist + ' ' + (track.album || '')).toLowerCase()) + '"';
 
       return '<div class="' + cls + '" data-track-id="' + track.id + '"' + attrs + '>'
         + artHtml
