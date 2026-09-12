@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,5 +230,19 @@ func TestIsBrowserUnsupportedM4AProdSpatialAudioFile(t *testing.T) {
 	}
 	if !IsBrowserUnsupportedM4A(path) {
 		t.Fatal("real Spatial Audio (ec-3) file not detected")
+	}
+}
+
+func TestCachePathAtNaming(t *testing.T) {
+	// The legacy unsuffixed name must stay bound to 192k so every existing
+	// deployment's warm cache remains valid.
+	if got, want := CachePath("abc"), CachePathAt("abc", "192"); got != want {
+		t.Fatalf("CachePath(abc) = %q, want CachePathAt(abc,192) = %q", got, want)
+	}
+	if got := CachePathAt("abc", "192"); !strings.HasSuffix(got, "abc.m4a") {
+		t.Fatalf("CachePathAt(abc,192) = %q, want suffix abc.m4a (legacy name)", got)
+	}
+	if got := CachePathAt("abc", "128"); !strings.HasSuffix(got, "abc-128.m4a") {
+		t.Fatalf("CachePathAt(abc,128) = %q, want suffix abc-128.m4a", got)
 	}
 }

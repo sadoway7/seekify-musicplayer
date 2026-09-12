@@ -45,9 +45,18 @@ func cacheDir() string {
 	return filepath.Join(filepath.Dir(store.DBPath), "transcode")
 }
 
-// CachePath returns the cached .m4a path for a track ID.
-func CachePath(trackID string) string {
-	return filepath.Join(cacheDir(), trackID+".m4a")
+// CachePath returns the cached .m4a path for a track ID at the default
+// bitrate.
+func CachePath(trackID string) string { return CachePathAt(trackID, "192") }
+
+// CachePathAt returns the cached .m4a path for a track ID at a bitrate. The
+// default bitrate keeps the legacy unsuffixed filename so existing caches
+// stay valid; other bitrates get a -<bitrate> suffix.
+func CachePathAt(trackID, bitrate string) string {
+	if bitrate == "192" {
+		return filepath.Join(cacheDir(), trackID+".m4a")
+	}
+	return filepath.Join(cacheDir(), trackID+"-"+bitrate+".m4a")
 }
 
 // findFfmpeg locates the ffmpeg binary (PATH first, then common install dirs).
@@ -70,8 +79,10 @@ func findFfmpeg() string {
 // IsReady reports whether a fresh cached transcode exists for the source
 // file. Fresh = cache mtime >= source mtime, so re-downloaded/re-tagged
 // files invalidate their cache entry automatically.
-func IsReady(trackID, sourcePath string) bool {
-	ci, err := os.Stat(CachePath(trackID))
+func IsReady(trackID, sourcePath string) bool { return IsReadyAt(trackID, sourcePath, "192") }
+
+func IsReadyAt(trackID, sourcePath, bitrate string) bool {
+	ci, err := os.Stat(CachePathAt(trackID, bitrate))
 	if err != nil {
 		return false
 	}
@@ -88,66 +99,80 @@ func IsReady(trackID, sourcePath string) bool {
 // Returns ("", err) if ffmpeg is absent or the transcode fails — callers
 // fall back to serving the raw file. Runs at normal priority: callers on the
 // foreground playback path (StreamHandler blocks on it) need the CPU.
-func Ensure(trackID, sourcePath string) (string, error) {
-	return ensure(trackID, sourcePath, false)
+func Ensure(trackID, sourcePath string) (string, error) { return ensure(trackID, sourcePath, "", false) }
+
+// EnsureAt is Ensure for a client-requested bitrate (e.g. 128k data-saver
+// streams). Same foreground priority: the requesting play is blocked on it.
+func EnsureAt(trackID, sourcePath, bitrate string) (string, error) {
+	return ensure(trackID, sourcePath, bitrate, false)
 }
 
-// EnsureLow is Ensure at background CPU priority (nice -n 19). Used by the
-// next-track prewarm: a warm encode must never steal CPU from a foreground
-// play encode racing it — that race was the "sometimes songs don't play" on
-// Safari (foreground encode slowed past the client's load timeout).
-func EnsureLow(trackID, sourcePath string) (string, error) {
-	return ensure(trackID, sourcePath, true)
+// EnsureLowAt is EnsureAt at background CPU priority (nice -n 19) — prewarm
+// for a specific bitrate must never steal CPU from a foreground play encode.
+func EnsureLowAt(trackID, sourcePath, bitrate string) (string, error) {
+	return ensure(trackID, sourcePath, bitrate, true)
 }
 
-func ensure(trackID, sourcePath string, lowPriority bool) (string, error) {
-	if IsReady(trackID, sourcePath) {
-		return CachePath(trackID), nil
+// EnsureLow is Ensure at background CPU priority. Used by ingest warming and
+// the backfill: the copy it makes serves legacy fmt=aac clients at the
+// server default bitrate.
+func EnsureLow(trackID, sourcePath string) (string, error) { return ensure(trackID, sourcePath, "", true) }
+
+func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, error) {
+	// Empty bitrate = no client preference: the server-wide setting decides
+	// (existing behavior for legacy fmt=aac clients).
+	if bitrate == "" {
+		bitrate = store.GetSetting("transcode_bitrate", "192")
+		if _, err := strconv.Atoi(bitrate); err != nil {
+			bitrate = "192"
+		}
+	}
+	cp := CachePathAt(trackID, bitrate)
+
+	if IsReadyAt(trackID, sourcePath, bitrate) {
+		return cp, nil
 	}
 	ff := findFfmpeg()
 	if ff == "" {
 		return "", fmt.Errorf("ffmpeg not found")
 	}
 
-	// Singleflight: become the worker or wait for an existing one.
+	// Singleflight: become the worker or wait for an existing one. Keyed on
+	// track+bitrate so a 128k request never waits on a 192k encode.
+	key := trackID + "@" + bitrate
 	singleflightMu.Lock()
-	if done, ok := inFlight[trackID]; ok {
+	if done, ok := inFlight[key]; ok {
 		singleflightMu.Unlock()
 		<-done
-		if IsReady(trackID, sourcePath) {
-			return CachePath(trackID), nil
+		if IsReadyAt(trackID, sourcePath, bitrate) {
+			return cp, nil
 		}
 		return "", fmt.Errorf("transcode failed")
 	}
 	done := make(chan struct{})
-	inFlight[trackID] = done
+	inFlight[key] = done
 	singleflightMu.Unlock()
 
 	defer func() {
 		close(done)
 		singleflightMu.Lock()
-		delete(inFlight, trackID)
+		delete(inFlight, key)
 		singleflightMu.Unlock()
 	}()
 
 	// Double-check after acquiring leadership: a concurrent goroutine may
 	// have completed the work while we waited for the lock.
-	if IsReady(trackID, sourcePath) {
-		return CachePath(trackID), nil
+	if IsReadyAt(trackID, sourcePath, bitrate) {
+		return cp, nil
 	}
 
 	transSem <- struct{}{}
 	defer func() { <-transSem }()
 
-	bitrate := store.GetSetting("transcode_bitrate", "192")
-	if _, err := strconv.Atoi(bitrate); err != nil {
-		bitrate = "192"
-	}
-
 	if err := os.MkdirAll(cacheDir(), 0o755); err != nil {
 		return "", fmt.Errorf("mkdir cache: %w", err)
 	}
-	tmp := CachePath(trackID) + ".tmp"
+	tmp := cp + ".tmp"
 	os.Remove(tmp) // stale tmp from a crashed run
 
 	args := []string{
@@ -179,12 +204,12 @@ func ensure(trackID, sourcePath string, lowPriority bool) (string, error) {
 		log.Printf("[transcode] %s: %v: %s", trackID, err, string(out))
 		return "", fmt.Errorf("ffmpeg: %w", err)
 	}
-	if err := os.Rename(tmp, CachePath(trackID)); err != nil {
+	if err := os.Rename(tmp, cp); err != nil {
 		os.Remove(tmp)
 		return "", fmt.Errorf("rename: %w", err)
 	}
 	log.Printf("[transcode] %s: cached (%sk)", trackID, bitrate)
-	return CachePath(trackID), nil
+	return cp, nil
 }
 
 // PruneCache removes cache entries untouched for maxAge, then enforces a
