@@ -417,11 +417,14 @@ Object.assign(UI, {
         } else if (action === 'homepage-layout') {
           this._openHomepageLayoutModal();
         } else if (action === 'data-saver') {
-          const on = !Api.dataSaver();
-          try { localStorage.setItem('musicapp:data_saver', on ? '1' : '0'); } catch (e) {}
+          try { localStorage.setItem('musicapp:data_saver', Api.dataSaver() ? '0' : '1'); } catch (e) {}
+          // Drive icon and toast from the stored state, not the intent: if
+          // storage refused the write (privacy mode), the UI must not claim
+          // the toggle worked.
+          const actual = Api.dataSaver();
           const toggle = item.querySelector('.stoggle');
-          if (toggle) toggle.classList.toggle('active', on);
-          if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(on ? 'Data saver on — smaller files, lower quality' : 'Data saver off — best quality');
+          if (toggle) toggle.classList.toggle('active', actual);
+          if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(actual ? 'Data saver on — smaller files, lower quality' : 'Data saver off — best quality');
         } else if (action === 'login') {
           this.showLoginScreen();
         } else if (action === 'register') {
