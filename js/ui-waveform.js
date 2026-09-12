@@ -648,6 +648,10 @@ Object.assign(UI, {
 
   _loadWaveform(track) {
     if (!track) return;
+    // Already loaded AND rendered for this track: show it as-is. Re-running
+    // the reset below is what flattened a perfectly good waveform and made
+    // it spring back on every Now Playing open.
+    if (this._currentWaveformTrackId === track.id && this._realWaveform && this._waveformRawPeaks) return;
 
     const isFirstLoad = !this._waveformData || this._waveformData.length === 0;
     this._waveformProgress = 0;

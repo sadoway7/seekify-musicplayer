@@ -102,6 +102,12 @@ const Player = {
       // A stale load (src already swapped or cleared) must not report the
       // wrong track's duration.
       if (this._activeSrc !== null && this.audio.src !== this._activeSrc) return;
+      // A seek made before the track had a duration applies now.
+      if (this._pendingSeekFraction !== null && this._pendingSeekFraction !== undefined) {
+        const f = this._pendingSeekFraction;
+        this._pendingSeekFraction = null;
+        this.seek(f);
+      }
       if (this.onTimeUpdate) this.onTimeUpdate();
       this._syncPositionState();
       // Report duration to server if track doesn't have one yet
@@ -287,6 +293,7 @@ const Player = {
     this._errorHandledForCurrent = false;
     this._stallRetried = false;
     this._networkPaused = false;
+    this._pendingSeekFraction = null;
     // forceTranscode marks a slow-network retry: only allow one per load so a
     // genuinely unplayable track still skips instead of looping.
     this._triedTranscodeFallback = forceTranscode === true;
@@ -587,6 +594,11 @@ const Player = {
     if (this.audio.duration && isFinite(this.audio.duration)) {
       this.audio.currentTime = fraction * this.audio.duration;
       this._syncPositionState();
+      this._pendingSeekFraction = null;
+    } else {
+      // Cold load: metadata (and duration) hasn't arrived yet. Remember the
+      // target instead of silently dropping it.
+      this._pendingSeekFraction = fraction;
     }
   },
 
@@ -619,10 +631,15 @@ const Player = {
   },
 
   _persistVolume() {
-    try {
-      localStorage.setItem('player_volume', String(this._lastNonZeroVolume));
-      localStorage.setItem('player_muted', String(this.volume === 0));
-    } catch (e) { /* Storage can be unavailable in private browsing. */ }
+    // Slider drags and key auto-repeat call this per event; write once the
+    // input settles instead of per pixel.
+    clearTimeout(this._persistVolumeTimer);
+    this._persistVolumeTimer = setTimeout(() => {
+      try {
+        localStorage.setItem('player_volume', String(this._lastNonZeroVolume));
+        localStorage.setItem('player_muted', String(this.volume === 0));
+      } catch (e) { /* Storage can be unavailable in private browsing. */ }
+    }, 250);
   },
 
   toggleShuffle() {

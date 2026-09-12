@@ -227,15 +227,20 @@ Object.assign(UI, {
     if (this.seeking) return;
     const fraction = progress.fraction;
     this._waveformProgress = fraction;
-    if (!this._waveformRafPending) {
+    // The big canvas is invisible with Now Playing closed — skip its paint
+    // (the mini progress bar below still updates).
+    const npVisible = !this.els.nowPlaying.classList.contains('hidden');
+    if (npVisible && !this._waveformRafPending) {
       this._waveformRafPending = true;
       requestAnimationFrame(() => {
         this._waveformRafPending = false;
         this._paintWaveform(this._waveformProgress);
       });
     }
-    this.els.npTimeCurrent.textContent = this._formatTime(progress.current);
-    this.els.npTimeTotal.textContent = this._formatTime(progress.duration);
+    if (npVisible) {
+      this.els.npTimeCurrent.textContent = this._formatTime(progress.current);
+      this.els.npTimeTotal.textContent = this._formatTime(progress.duration);
+    }
     const pct = (fraction * 100) + '%';
     if (!this.miniSeeking) this.els.miniProgress.style.setProperty('--progress', pct);
   },
@@ -586,6 +591,11 @@ Object.assign(UI, {
   _applyMiniPlayerColor() {
     if (!this.els.miniPlayer || !this._albumColor) return;
     const { h, s, l } = this._albumColor;
+    // Called from the 4Hz tick — re-applying identical styles every tick is
+    // wasted style recalc; paint only when the color actually changes.
+    const colorKey = h + ',' + s + ',' + l;
+    if (this._lastMiniColorKey === colorKey) return;
+    this._lastMiniColorKey = colorKey;
     const vibS = Math.min(100, s + 35);
     const vibL = Math.min(65, Math.max(45, l + 10));
     const playedColor = 'hsl(' + h + ',' + vibS + '%,' + vibL + '%)';

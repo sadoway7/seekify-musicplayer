@@ -48,6 +48,11 @@ const Keyboard = {
   _seekBy(deltaSec) {
     const a = Player.audio;
     if (!a || !a.duration || !isFinite(a.duration)) return;
+    // Key auto-repeat fires ~30/s; each seek past the buffer is a range
+    // request. Pace repeats while keeping the first press instant.
+    const now = Date.now();
+    if (this._lastSeekAt && now - this._lastSeekAt < 150) return;
+    this._lastSeekAt = now;
     const t = Math.min(Math.max(a.currentTime + deltaSec, 0), a.duration);
     Player.seek(t / a.duration);  // seek(fraction) also syncs iOS position state
   },
