@@ -491,3 +491,50 @@ test('stale loadedmetadata does not report the wrong track duration', () => {
   createdAudio[0].listeners.get('loadedmetadata')();
   assert.deepEqual(durations, [{ id: 'a', d: 200 }], 'active load reports duration');
 });
+
+test('data saver ON streams 128k AAC even for natively-playable formats', () => {
+  const saverApi = {
+    streamUrl: (id, t) => '/api/stream/' + id + (saverApi.dataSaver() ? '?fmt=aac&b=128' : (t ? '?fmt=aac' : '')),
+    dataSaver: () => true,
+    prewarmTranscode: () => {}
+  };
+  const { Player, createdAudio, timeouts } = loadPlayer({}, [], { 'audio/flac': 'maybe' }, saverApi);
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac' });
+
+  assert.ok(createdAudio[0].src.includes('fmt=aac&b=128'), 'saver forces the 128k stream');
+  assert.ok(timeouts.some(t => t.ms === 30000), 'transcode load timeout armed');
+});
+
+test('prewarm fires for the next track when data saver is on even if the browser plays FLAC', () => {
+  const warmed = [];
+  const saverApi = {
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    dataSaver: () => true,
+    prewarmTranscode: (id) => warmed.push(id)
+  };
+  const { Player } = loadPlayer({}, [], { 'audio/flac': 'maybe' }, saverApi);
+  Player.init();
+  Player.play(
+    { id: 'a', filePath: 'Album/01.mp3' },
+    [{ id: 'a', filePath: 'Album/01.mp3' }, { id: 'b', filePath: 'Album/02.flac' }]
+  );
+
+  assert.deepEqual(warmed, ['b'], 'next track warmed at 128k despite native FLAC support');
+});
+
+test('Api stubs without dataSaver keep the legacy prewarm behavior', () => {
+  const warmed = [];
+  const legacyApi = {
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    prewarmTranscode: (id) => warmed.push(id)
+  };
+  const { Player } = loadPlayer({}, [], { 'audio/flac': 'maybe' }, legacyApi);
+  Player.init();
+  Player.play(
+    { id: 'a', filePath: 'Album/01.mp3' },
+    [{ id: 'a', filePath: 'Album/01.mp3' }, { id: 'b', filePath: 'Album/02.flac' }]
+  );
+
+  assert.deepEqual(warmed, [], 'no prewarm for natively-playable formats without a saver flag');
+});

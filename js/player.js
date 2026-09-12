@@ -49,9 +49,9 @@ const Player = {
   },
 
   prewarmTranscode(track) {
-    if (this._needsTranscode(track) && typeof Api !== 'undefined' && Api.prewarmTranscode) {
-      Api.prewarmTranscode(track.id);
-    }
+    if (typeof Api === 'undefined' || !Api.prewarmTranscode) return;
+    const saver = typeof Api.dataSaver === 'function' && Api.dataSaver();
+    if (this._needsTranscode(track) || saver) Api.prewarmTranscode(track.id);
   },
 
   init() {
@@ -265,7 +265,8 @@ const Player = {
     // forceTranscode marks a slow-network retry: only allow one per load so a
     // genuinely unplayable track still skips instead of looping.
     this._triedTranscodeFallback = forceTranscode === true;
-    const wantTranscode = forceTranscode === true || this._needsTranscode(track);
+    const saver = typeof Api !== 'undefined' && typeof Api.dataSaver === 'function' && Api.dataSaver();
+    const wantTranscode = forceTranscode === true || this._needsTranscode(track) || saver;
     this._clearPrepareNotice();
     if (wantTranscode) this._armPrepareNotice();
     this.audio.src = Api.streamUrl(track.id, wantTranscode);
