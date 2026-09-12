@@ -2,6 +2,7 @@ package review
 
 import (
 	"database/sql"
+	"fmt"
 	"musicapp/internal/models"
 	"musicapp/internal/store"
 	"path/filepath"
@@ -289,7 +290,7 @@ func TestDbGetReviewFlagCounts(t *testing.T) {
 	DbSetReviewStatus("a", "needs_review", `["missing_title","no_cover"]`, "worker")
 	DbSetReviewStatus("b", "needs_review", `["missing_title"]`, "worker")
 	DbSetReviewStatus("ghost", "needs_review", `["missing_title"]`, "worker") // track not in memory — must not count
-	DbSetReviewStatus("c", "reviewed_ok", `["missing_title"]`, "worker")     // must not count
+	DbSetReviewStatus("c", "reviewed_ok", `["missing_title"]`, "worker")      // must not count
 
 	counts := DbGetReviewFlagCounts()
 	if counts["missing_title"] != 2 {
@@ -347,4 +348,30 @@ func TestSaveGenreResultLeavesMemoryOnDatabaseError(t *testing.T) {
 	if track.GenreCanonical != "" || track.GenreCheckedAt != 0 {
 		t.Fatalf("memory changed after failed save: %#v", track)
 	}
+}
+
+func TestReviewLogRingBuffer(t *testing.T) {
+	ReviewLogData.Lock()
+	ReviewLogData.Entries = nil
+	ReviewLogData.Unlock()
+	for i := 0; i < reviewLogMax+5; i++ {
+		appendReviewLog(fmt.Sprintf("line %d", i))
+	}
+	ReviewLogData.RLock()
+	got := len(ReviewLogData.Entries)
+	first := ReviewLogData.Entries[0]
+	last := ReviewLogData.Entries[got-1]
+	ReviewLogData.RUnlock()
+	if got != reviewLogMax {
+		t.Fatalf("len(Entries) = %d, want %d (cap)", got, reviewLogMax)
+	}
+	if first != fmt.Sprintf("line %d", 5) {
+		t.Fatalf("Entries[0] = %q, want oldest dropped (line 5)", first)
+	}
+	if last != fmt.Sprintf("line %d", reviewLogMax+4) {
+		t.Fatalf("Entries[last] = %q, want newest line", last)
+	}
+	ReviewLogData.Lock()
+	ReviewLogData.Entries = nil
+	ReviewLogData.Unlock()
 }

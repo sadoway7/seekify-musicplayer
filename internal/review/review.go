@@ -57,6 +57,20 @@ type ReviewLogInfo struct {
 	Entries []string
 }
 
+// reviewLogMax caps the in-memory scan log. Without it a 5,000-track scan
+// appended a line per track and every client poll shipped the whole thing.
+const reviewLogMax = 500
+
+// appendReviewLog adds a line, dropping the oldest when the cap is hit.
+func appendReviewLog(line string) {
+	ReviewLogData.Lock()
+	ReviewLogData.Entries = append(ReviewLogData.Entries, line)
+	if len(ReviewLogData.Entries) > reviewLogMax {
+		ReviewLogData.Entries = ReviewLogData.Entries[len(ReviewLogData.Entries)-reviewLogMax:]
+	}
+	ReviewLogData.Unlock()
+}
+
 var (
 	ReviewProgressData ReviewProgressInfo
 	ReviewLogData      ReviewLogInfo
@@ -1267,29 +1281,22 @@ func RunReviewBatch() bool {
 		if len(allFlags) > 0 {
 			flagsJSON, _ := json.Marshal(allFlags)
 			DbSetReviewStatus(t.ID, "needs_review", string(flagsJSON), "worker")
-			ReviewLogData.Lock()
-			ReviewLogData.Entries = append(ReviewLogData.Entries, fmt.Sprintf("⚠ %s — %s [%s] → needs_review", t.Artist, t.Title, strings.Join(allFlags, ", ")))
-			ReviewLogData.Unlock()
+			DbSetReviewStatus(t.ID, "needs_review", string(flagsJSON), "worker")
+			appendReviewLog(fmt.Sprintf("⚠ %s — %s [%s] → needs_review", t.Artist, t.Title, strings.Join(allFlags, ", ")))
 		} else {
 			DbSetReviewStatus(t.ID, "reviewed_ok", "[]", "worker")
-			ReviewLogData.Lock()
-			ReviewLogData.Entries = append(ReviewLogData.Entries, fmt.Sprintf("✓ %s — %s → ok", t.Artist, t.Title))
-			ReviewLogData.Unlock()
+			appendReviewLog(fmt.Sprintf("✓ %s — %s → ok", t.Artist, t.Title))
 		}
 
 	}
 
 	if store.GetSettingBool("review_flag_duplicates", true) {
-		ReviewLogData.Lock()
-		ReviewLogData.Entries = append(ReviewLogData.Entries, "--- Checking duplicates ---")
-		ReviewLogData.Unlock()
+		appendReviewLog("--- Checking duplicates ---")
 		CheckAllDuplicates()
 	}
 
 	counts := DbGetReviewCounts()
-	ReviewLogData.Lock()
-	ReviewLogData.Entries = append(ReviewLogData.Entries, fmt.Sprintf("--- Scan complete: %d unchecked, %d needs_review, %d reviewed_ok ---", counts["unchecked"], counts["needs_review"], counts["reviewed_ok"]))
-	ReviewLogData.Unlock()
+	appendReviewLog(fmt.Sprintf("--- Scan complete: %d unchecked, %d needs_review, %d reviewed_ok ---", counts["unchecked"], counts["needs_review"], counts["reviewed_ok"]))
 
 	ReviewProgressData.Lock()
 	ReviewProgressData.CurrentTrack = ""

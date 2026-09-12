@@ -251,10 +251,23 @@ Object.assign(UI, {
       // 1000-row cap by the queued backlog. 'all' stays unfiltered (actionable
       // items sort first; completed history trimmed at the cap is acceptable).
       const statusFor = (f) => f === 'all' ? '' : f === 'done' ? 'completed' : f === 'needs' ? 'needs_selection' : f;
-      let jobs = await Api.getQueue(1000, statusFor(filter));
+      // Counts are cheap and polled every tick; the full job payload (each
+      // job embeds its candidates JSON) is only refetched while jobs are
+      // actively progressing. A settled queue rides its cached copy.
       const counts = await Api.getQueueCounts();
       this._updateDownloadBadge(counts);
       this._downloadPaused = counts.paused === 1;
+      const activeJobs = (counts.queued || 0) + (counts.searching || 0) + (counts.downloading || 0) + (counts.tagging || 0);
+      const countKey = JSON.stringify(counts);
+      let jobs;
+      if (!force && activeJobs === 0 && this._lastJobs && this._lastJobsFilter === filter && this._lastCountKey === countKey) {
+        jobs = this._lastJobs;
+      } else {
+        jobs = await Api.getQueue(1000, statusFor(filter));
+        this._lastJobs = jobs;
+        this._lastJobsFilter = filter;
+        this._lastCountKey = countKey;
+      }
 
       // If the active filter just emptied (Retry All, or its last item resolved),
       // fall back to 'all' so the queue doesn't go blank.
@@ -337,6 +350,18 @@ Object.assign(UI, {
       }
       const now = Date.now();
       let queuedIndex = 0;
+      // One lowercase map for job→library art matching, rebuilt only when the
+      // library actually refreshes — a linear scan per completed job was
+      // O(jobs × library) on every render.
+      const libKey = (a, t) => ((a || '') + '|' + (t || '')).toLowerCase();
+      if (this._libMapForAt !== Store._libAt || !this._libTrackMap) {
+        const m = new Map();
+        Store.library.tracks.forEach(t => {
+          if (t.artist && t.title) m.set(libKey(t.artist, t.title), t);
+        });
+        this._libTrackMap = m;
+        this._libMapForAt = Store._libAt;
+      }
       shown.forEach(j => {
         const active = j.status === 'searching' || j.status === 'downloading' || j.status === 'tagging';
         const isQueued = j.status === 'queued';
@@ -362,11 +387,7 @@ Object.assign(UI, {
         const clickable = completed && j.filePath;
         let leftHtml;
         if (completed && j.artist && j.title) {
-          const libTrack = Store.library.tracks.find(t =>
-            t.artist && t.title &&
-            t.artist.toLowerCase() === (j.artist || '').toLowerCase() &&
-            t.title.toLowerCase() === (j.title || '').toLowerCase()
-          );
+          const libTrack = this._libTrackMap.get(libKey(j.artist, j.title));
           if (libTrack && libTrack.albumID) {
             leftHtml = '<div class="queue-job-art">'
               + '<img src="' + Api.coverUrl(libTrack.albumID) + '" alt="" onerror="this.style.display=\'none\'">'
@@ -556,14 +577,14 @@ Object.assign(UI, {
   },
 
   _updateFinderBadges() {
+    // One pass over the library per tick, not one scan per result button.
+    const libKeys = new Set();
+    Store.library.tracks.forEach(t => {
+      if (t.artist && t.title) libKeys.add(t.artist.toLowerCase() + '|' + t.title.toLowerCase());
+    });
     this.els.content.querySelectorAll('.finder-download-btn').forEach(btn => {
-      const artist = btn.dataset.artist;
-      const title = btn.dataset.title;
-      const libTrack = Store.library.tracks.find(t =>
-        t.artist && t.title &&
-        t.artist.toLowerCase() === (artist || '').toLowerCase() &&
-        t.title.toLowerCase() === (title || '').toLowerCase()
-      );
+      const key = (btn.dataset.artist || '').toLowerCase() + '|' + (btn.dataset.title || '').toLowerCase();
+      const libTrack = libKeys.has(key);
       if (libTrack) {
         const badge = document.createElement('span');
         badge.className = 'finder-status-badge finder-in-library';

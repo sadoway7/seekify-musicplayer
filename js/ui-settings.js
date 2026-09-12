@@ -785,22 +785,30 @@ Object.assign(UI, {
       const [p, logText] = await Promise.all([Api.getReviewProgress(), Api.getReviewLog()]);
 
       if (logEl && logText) {
-        const lines = logText.trim().split('\n').filter(Boolean);
-        const recent = lines.slice(-30);
-        const active = p && p.active;
-        let logHtml = '';
-        if (active) {
-          logHtml += '<div class="review-log-spinner-row"><div class="queue-spinner" style="width:14px;height:14px;border-width:2px"></div><span class="review-log-active">Worker active</span></div>';
+        // Unchanged log: skip the rebuild entirely (a 2s full rewrite that
+        // also snapped the view back down fought anyone reading the log).
+        if (logText !== this._lastReviewLogText) {
+          this._lastReviewLogText = logText;
+          const lines = logText.trim().split('\n').filter(Boolean);
+          const recent = lines.slice(-30);
+          const active = p && p.active;
+          let logHtml = '';
+          if (active) {
+            logHtml += '<div class="review-log-spinner-row"><div class="queue-spinner" style="width:14px;height:14px;border-width:2px"></div><span class="review-log-active">Worker active</span></div>';
+          }
+          recent.forEach(line => {
+            const isFlagged = line.includes('⚠');
+            const isOk = line.includes('✓');
+            const isDivider = line.startsWith('---');
+            const cls = isFlagged ? ' log-flagged' : isOk ? ' log-ok' : isDivider ? ' log-divider' : '';
+            logHtml += '<div class="review-log-line' + cls + '">' + this._esc(line) + '</div>';
+          });
+          // Only follow the tail when the user is already there — scrolling
+          // up to read earlier entries must not be yanked back down.
+          const nearBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+          logEl.innerHTML = logHtml;
+          if (nearBottom) logEl.scrollTop = logEl.scrollHeight;
         }
-        recent.forEach(line => {
-          const isFlagged = line.includes('⚠');
-          const isOk = line.includes('✓');
-          const isDivider = line.startsWith('---');
-          const cls = isFlagged ? ' log-flagged' : isOk ? ' log-ok' : isDivider ? ' log-divider' : '';
-          logHtml += '<div class="review-log-line' + cls + '">' + this._esc(line) + '</div>';
-        });
-        logEl.innerHTML = logHtml;
-        logEl.scrollTop = logEl.scrollHeight;
       }
 
       if (!p) return;
@@ -1733,19 +1741,23 @@ Object.assign(UI, {
       html += '</div>';
       container.innerHTML = html;
 
-      // Search filter
+      // Search filter — debounced: renderList stringifies every matching
+      // track, so per-keystroke rebuilds lag on large libraries.
       const searchInput = document.getElementById('download-search');
       if (searchInput) {
         searchInput.addEventListener('input', () => {
-          const filter = searchInput.value.toLowerCase().trim();
-          const listContainer = container.querySelector('[style*="max-height"]');
-          if (listContainer) {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = renderList(filter);
-            const newList = tempDiv.querySelector('[style*="max-height"]');
-            listContainer.replaceWith(newList);
-            bindToggles(newList);
-          }
+          clearTimeout(this._dlFilterTimer);
+          this._dlFilterTimer = setTimeout(() => {
+            const filter = searchInput.value.toLowerCase().trim();
+            const listContainer = container.querySelector('[style*="max-height"]');
+            if (listContainer) {
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = renderList(filter);
+              const newList = tempDiv.querySelector('[style*="max-height"]');
+              listContainer.replaceWith(newList);
+              bindToggles(newList);
+            }
+          }, 150);
         });
       }
 
