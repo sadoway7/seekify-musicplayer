@@ -263,6 +263,24 @@ Object.assign(UI, {
     // and may still hold boot-time (empty) or stale content — the hidden-guard
     // skipped renders while it was hidden, so render now that it isn't.
     this.updateQueueIfVisible();
+    // Once the entrance animation finishes, drop it entirely: iOS WebKit
+    // sometimes refuses to run child animations (the spinning disc) inside
+    // an element still holding a finished animation. hideNowPlaying sets
+    // its own inline animation, so this doesn't affect the exit. Filtered to
+    // the entrance animation itself — child animationend events bubble.
+    const np = this.els.nowPlaying;
+    const dropEntrance = (e) => {
+      if (e.target !== np || e.animationName === 'nowPlayingSlideDown') return;
+      np.style.animation = 'none';
+      np.removeEventListener('animationend', dropEntrance);
+      clearTimeout(np._dropEntranceTimer);
+    };
+    np.addEventListener('animationend', dropEntrance);
+    clearTimeout(np._dropEntranceTimer);
+    np._dropEntranceTimer = setTimeout(() => {
+      np.removeEventListener('animationend', dropEntrance);
+      if (np.style.animation === '') np.style.animation = 'none';
+    }, 600);
     if (window.Visualizer) Visualizer._invalidateCenter();
     if (window.Visualizer) Visualizer.onShowNowPlaying();
   },
