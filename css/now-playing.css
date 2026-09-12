@@ -54,8 +54,14 @@
 }
 
 .np-header-text {
-  flex: 1;
-  min-width: 0;
+  /* Absolutely centered on the header's true midline: the side button
+   * groups are unequal (one left, two right), so flex-centering the middle
+   * cell optically off-centers the title. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: calc(100% - 120px);
   text-align: center;
   font-size: 13px;
   font-weight: 600;
