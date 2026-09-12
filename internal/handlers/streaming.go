@@ -91,6 +91,12 @@ func serveRangeable(w http.ResponseWriter, r *http.Request, path, contentType st
 	lastModified := stat.ModTime().UTC().Format(http.TimeFormat)
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Last-Modified", lastModified)
+	// Explicit bounded freshness so the next-track prefetch element's bytes
+	// are reusable by the player element (heuristic caching is ~zero for
+	// freshly added files). private: shared/proxy caches never store audio.
+	// Staleness window is 30 min for a replaced file — validators still
+	// protect everything past it.
+	w.Header().Set("Cache-Control", "private, max-age=1800")
 
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
