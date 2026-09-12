@@ -332,10 +332,6 @@
   transition: background 0.15s var(--ease-soft);
 }
 
-.home-menu-wrap .home-menu-item .hl-toggle {
-  margin-left: auto;
-}
-
 .home-menu-wrap .home-menu-item:hover {
   background: rgba(255, 255, 255, 0.04);
 }
