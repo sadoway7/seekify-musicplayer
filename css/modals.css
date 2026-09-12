@@ -109,6 +109,10 @@
   height: 1px;
 }
 
+.scroll-sentinel {
+  height: 1px;
+}
+
 .queue-item-drag {
   width: 28px;
   height: 28px;

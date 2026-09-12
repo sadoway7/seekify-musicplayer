@@ -20,7 +20,21 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="Seekify">
   <title>Seekify</title>
-  <link rel="stylesheet" href="css/styles.css?v=dev">
+  <!-- Loaded directly (not via styles.css @imports): import chains cost a
+       serial round trip before any CSS is discovered, and import URLs carry
+       no ?v= so they fall into no-cache revalidation on every open. -->
+  <link rel="stylesheet" href="css/base.css?v=dev">
+  <link rel="stylesheet" href="css/layout.css?v=dev">
+  <link rel="stylesheet" href="css/mini-player.css?v=dev">
+  <link rel="stylesheet" href="css/now-playing.css?v=dev">
+  <link rel="stylesheet" href="css/pages.css?v=dev">
+  <link rel="stylesheet" href="css/track-list.css?v=dev">
+  <link rel="stylesheet" href="css/modals.css?v=dev">
+  <link rel="stylesheet" href="css/components.css?v=dev">
+  <link rel="stylesheet" href="css/settings.css?v=dev">
+  <link rel="stylesheet" href="css/finder.css?v=dev">
+  <link rel="stylesheet" href="css/animations.css?v=dev">
+  <link rel="stylesheet" href="css/responsive.css?v=dev">
   <link rel="stylesheet" href="css/review.css?v=dev">
   <style>
     /* Paints dark before the external stylesheet loads — kills the white
