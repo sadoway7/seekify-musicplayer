@@ -41,14 +41,19 @@
 }
 
 /* Desktop entrance: the full mobile slide plus a fade from transparent,
- * sharpening from a soft blur as it lands. */
+ * sharpening from a soft blur. The fade and sharpen settle at ~70% while
+ * the slide keeps travelling — the reveal finishes before the motion does. */
 @keyframes nowPlayingSlideUpFade {
-  from {
+  0% {
     transform: translateY(100%);
     opacity: 0;
     filter: blur(6px);
   }
-  to {
+  70% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
     transform: none;
     opacity: 1;
     filter: blur(0);
