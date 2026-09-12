@@ -1321,9 +1321,10 @@ const UI = {
     if (!this.els.nowPlaying.classList.contains('hidden')) {
       this.hideNowPlaying();
     }
-    // Push current state to history before navigating
+    // Push current state to history before navigating — including scroll
+    // offset, so back returns you to where you were.
     if (Store.currentView && Store.currentView !== view) {
-      this._navHistory.push({ view: Store.currentView, data: Object.assign({}, Store.viewData), tab: Store.currentTab });
+      this._navHistory.push({ view: Store.currentView, data: Object.assign({}, Store.viewData), tab: Store.currentTab, scrollTop: this.els.content.scrollTop });
     }
     Store.currentView = view;
     Store.viewData = data || {};
@@ -1346,7 +1347,10 @@ const UI = {
       }
       this._clearPollTimers();
       this.renderPage();
-      this.els.content.scrollTop = 0;
+      // Restore where the user was scrolled (one frame out — the fresh DOM
+      // must lay out first; heights are stable thanks to fixed-aspect art).
+      const restoreScroll = prev.scrollTop || 0;
+      requestAnimationFrame(() => { this.els.content.scrollTop = restoreScroll; });
       return;
     }
     if (npVisible) return;
@@ -1454,7 +1458,10 @@ const UI = {
 
     // Load fresh library before rendering the genre grid so enrichment results
     // appear immediately and view-transition snapshots don't capture stale data.
-    await Store.refreshLibrary();
+    // Same 15s freshness guard as Home — the stats poll still catches bumps.
+    if (!Store.library || Date.now() - (Store._libAt || 0) > 15000) {
+      await Store.refreshLibrary();
+    }
     if (Store.currentView === 'search' && !this.searchQuery && !this.searchGenre) {
       const container = this.els.content.querySelector('#search-results');
       if (container) container.innerHTML = this._renderBrowseGrid();
@@ -1522,9 +1529,16 @@ const UI = {
             + '<button class="detail-action-btn" data-action="shuffle">' + Icons.shuffle() + '<span>Shuffle</span></button>'
             + '</div>';
           html += '<div class="search-results-header">' + results.length + ' track' + (results.length !== 1 ? 's' : '') + '</div>';
-          html += this.renderTrackList(results, { showArt: true });
+          // Render the first slice only — broad queries on a 5,000-track
+          // library would build thousands of rows (and cover imgs) at once.
+          // The rest appends as the sentinel scrolls into view.
+          const shown = results.slice(0, 100);
+          html += this.renderTrackList(shown, { showArt: true });
+          this._searchPending = results.slice(100);
+          if (this._searchPending.length) html += '<div class="scroll-sentinel" id="search-sentinel"></div>';
         }
         container.innerHTML = html;
+        this._observeSearchSentinel(container);
       }
     } else if (this.searchGenre) {
       const target = this.searchGenre.toLowerCase();
@@ -1537,15 +1551,47 @@ const UI = {
       if (results.length === 0) {
         container.innerHTML = this._emptyState('No tracks in this genre', 'Try a different category', Icons.music());
       } else {
-        container.innerHTML = '<div class="page-header">'
+        // Same incremental rendering as search results — genre matches can
+        // be hundreds of rows on a large library.
+        const shown = results.slice(0, 100);
+        let genreHtml = '<div class="page-header">'
           + '<button class="back-btn genre-back">' + Icons.chevronLeft() + '</button>'
           + '<span class="page-header-title">' + this._esc(this.searchGenre) + '</span>'
           + '</div>'
-          + this.renderTrackList(results, { showArt: true });
+          + this.renderTrackList(shown, { showArt: true });
+        this._searchPending = results.slice(100);
+        if (this._searchPending.length) genreHtml += '<div class="scroll-sentinel" id="search-sentinel"></div>';
+        container.innerHTML = genreHtml;
+        this._observeSearchSentinel(container);
       }
     } else {
+      this._searchPending = null;
       container.innerHTML = this._renderBrowseGrid();
     }
+  },
+
+  // Appends the next batch of search/genre results when the sentinel scrolls
+  // into view. All matches remain reachable — they just stop being built all
+  // at once.
+  _observeSearchSentinel(container) {
+    const sentinel = container.querySelector('#search-sentinel');
+    if (!sentinel) return;
+    if (!this._searchSentinelObs) {
+      this._searchSentinelObs = new IntersectionObserver((entries) => {
+        if (!entries.some(en => en.isIntersecting)) return;
+        const pending = this._searchPending || [];
+        if (!pending.length) { this._searchSentinelObs.disconnect(); return; }
+        const next = pending.slice(0, 100);
+        this._searchPending = pending.slice(100);
+        sentinel.insertAdjacentHTML('beforebegin', this.renderTrackList(next, { showArt: true }));
+        if (!this._searchPending.length) {
+          this._searchSentinelObs.disconnect();
+          sentinel.remove();
+        }
+      });
+    }
+    this._searchSentinelObs.disconnect();
+    this._searchSentinelObs.observe(sentinel);
   },
 
   _renderBrowseGrid() {

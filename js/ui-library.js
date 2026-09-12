@@ -31,21 +31,26 @@ Object.assign(UI, {
 
     this.els.content.innerHTML = html;
 
-    Store.refreshLibrary().then(() => {
-      if (Store.currentView === 'library') {
-        const results = this.els.content.querySelector('.lib-results');
-        if (results) {
-          switch (this.libFilter) {
-            case 'playlists': results.innerHTML = this._renderLibPlaylists(); break;
-            case 'albums': results.innerHTML = this._renderLibAlbums(); break;
-            case 'artists': results.innerHTML = this._renderLibArtists(); break;
+    // 15s freshness guard (same as Home): the sync render above already used
+    // current data, so skip the refetch flicker when it's seconds old. The
+    // stats-poll path (app.js) still refreshes on version bumps.
+    if (!Store.library || Date.now() - (Store._libAt || 0) > 15000) {
+      Store.refreshLibrary().then(() => {
+        if (Store.currentView === 'library') {
+          const results = this.els.content.querySelector('.lib-results');
+          if (results) {
+            switch (this.libFilter) {
+              case 'playlists': results.innerHTML = this._renderLibPlaylists(); break;
+              case 'albums': results.innerHTML = this._renderLibAlbums(); break;
+              case 'artists': results.innerHTML = this._renderLibArtists(); break;
+            }
+            const input = this.els.content.querySelector('.lib-search-input');
+            const query = input ? input.value.trim().toLowerCase() : '';
+            if (query) this._filterLibResults(query);
           }
-          const input = this.els.content.querySelector('.lib-search-input');
-          const query = input ? input.value.trim().toLowerCase() : '';
-          if (query) this._filterLibResults(query);
         }
-      }
-    });
+      });
+    }
     if (!Store.isGuest) Store.refreshPlaylists().then(() => {
       if (Store.currentView === 'library' && this.libFilter === 'playlists') {
         const results = this.els.content.querySelector('.lib-results');
