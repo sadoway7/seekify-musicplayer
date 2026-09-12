@@ -52,14 +52,29 @@ Object.assign(UI, {
     } else {
       scheduleHomeRender();
     }
+    // Same freshness rule for recents and review counts: Store.init fetched
+    // them moments ago, so re-fetching here just schedules extra full home
+    // re-renders that can close a menu or wipe a half-typed search.
     if (!Store.isGuest) {
-      Store.refreshRecent().then(scheduleHomeRender);
+      if (Store.recent && Date.now() - (Store._recentAt || 0) < 15000) {
+        scheduleHomeRender();
+      } else {
+        Store.refreshRecent().then(() => {
+          Store._recentAt = Date.now();
+          scheduleHomeRender();
+        });
+      }
     }
     if (Store.isAdmin) {
-      Api.getReviewCounts().then(counts => {
-        Store.reviewCounts = counts;
+      if (Store.reviewCounts && Date.now() - (Store._reviewAt || 0) < 15000) {
         scheduleHomeRender();
-      }).catch(() => {});
+      } else {
+        Api.getReviewCounts().then(counts => {
+          Store.reviewCounts = counts;
+          Store._reviewAt = Date.now();
+          scheduleHomeRender();
+        }).catch(() => {});
+      }
     }
   },
 

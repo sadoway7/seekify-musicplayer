@@ -90,6 +90,10 @@ const Store = {
           this.defaultNowPlayingView = ps.default_now_playing_view || 'album_art';
         }
         if (reviewCounts) this.reviewCounts = reviewCounts;
+        // Freshness stamps: renderHome re-fetches these only when 15s stale
+        // (boot already populated them — re-fetching just re-renders Home).
+        this._recentAt = Date.now();
+        this._reviewAt = Date.now();
       } else {
         this.playlists = [];
         this.favorites = [];
