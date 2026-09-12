@@ -40,11 +40,10 @@
   }
 }
 
-/* Desktop entrance: same slide plus a fade — the panel pops over content
- * rather than pushing up from a screen edge, so opacity sells the motion. */
+/* Desktop entrance: the full mobile slide plus a fade from transparent. */
 @keyframes nowPlayingSlideUpFade {
   from {
-    transform: translateY(24px);
+    transform: translateY(100%);
     opacity: 0;
   }
   to {
