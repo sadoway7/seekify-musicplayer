@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-12 — Hotfix: Downloads tab
+
+- Fix: the previous update briefly broke the Downloads tab — it showed "Failed to load downloads" instead of the queue. Update to this version; everything else from that release is unaffected.
+
 ## 2026-09-12 — Speed, smoother playback, smaller downloads
 
 - Playback: skipping tracks no longer stutters on big playlists — the queue now loads as you scroll and stays completely idle while hidden; fixed shuffling from a fresh load showing an empty queue until the next track.

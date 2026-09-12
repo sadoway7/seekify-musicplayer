@@ -16,6 +16,9 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-09-12 hotfix
+- The previous update briefly broke the Downloads tab. Update to this version to get the fix.
+
 2026-09-12
 - New "Save bandwidth" option: much smaller audio downloads on cellular, remembered per device
 - The next song preloads while the current one plays, so skipping is instant

@@ -234,7 +234,7 @@ Object.assign(UI, {
     } catch (e) {}
   },
 
-  async _loadDownloads() {
+  async _loadDownloads(force) {
     const container = document.getElementById('downloads-content');
     if (!container) return;
 
