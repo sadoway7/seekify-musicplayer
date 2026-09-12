@@ -251,7 +251,6 @@ Object.assign(UI, {
     const track = Player.getCurrentTrack();
     this._loadWaveform(track);
     this.updateSeekBar();
-    this.updateQueueIfVisible();
     this.els.nowPlaying.style.animation = '';
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
@@ -260,6 +259,10 @@ Object.assign(UI, {
     if (window.innerWidth >= 768) {
       this.els.queuePanel.classList.remove('hidden');
     }
+    // AFTER the unhides: on wide screens the queue panel just became visible
+    // and may still hold boot-time (empty) or stale content — the hidden-guard
+    // skipped renders while it was hidden, so render now that it isn't.
+    this.updateQueueIfVisible();
     if (window.Visualizer) Visualizer._invalidateCenter();
     if (window.Visualizer) Visualizer.onShowNowPlaying();
   },
