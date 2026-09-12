@@ -3,6 +3,7 @@
 ## 2026-09-12 — Hotfix: Downloads tab
 
 - Fix: the previous update briefly broke the Downloads tab — it showed "Failed to load downloads" instead of the queue. Update to this version; everything else from that release is unaffected.
+- Also new: guest share links now start in Data Saver mode, so people you share a song with don't wait on a large download (logged-in users keep their own choice).
 
 ## 2026-09-12 — Speed, smoother playback, smaller downloads
 
