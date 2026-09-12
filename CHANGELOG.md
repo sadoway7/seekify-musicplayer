@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-11 — Save bandwidth toggle
+
+- UI (home): new "Save bandwidth" option in the homepage menu — visible to everyone, remembered per device. ON plays everything as compact 128k AAC (roughly 10x less data, ideal on cellular). OFF is the previous behavior: best quality, transcoding only for browsers that need it.
+
 ## 2026-08-26 — Now-playing artist link
 
 - UI (player): the artist name on the Now Playing screen is now tappable and takes you straight to that artist's page (mini-player unchanged).
