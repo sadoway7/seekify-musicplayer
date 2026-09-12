@@ -81,6 +81,12 @@ media-key controls.
   waveform seekbar, shuffle and repeat
 - plays any format in any browser: if the browser can't handle it (FLAC on
   iPhone, ALAC in Chrome), the server converts it on the fly
+- a save-bandwidth toggle in the home menu: one tap streams everything as
+  compact 128k AAC — roughly a tenth of the data — remembered per device,
+  and guests can use it too; the next track is pre-fetched while the current
+  one plays, so skipping is instant
+- album art is delivered as small, visually identical WebP copies to keep
+  image downloads light on phones and slow connections
 - a full-screen audio-reactive visualizer, written in raw WebGL2 shaders and
   tinted to the current album cover
 - browse an artist's whole catalogue, see which tracks you already have, and
@@ -172,7 +178,7 @@ Python and shell. It's powered by:
 - [musicbrainzngs](https://github.com/alastair/python-musicbrainzngs): MusicBrainz lookups
 - [Cover Art Archive](https://coverartarchive.org): album art
 - [lrclib](https://lrclib.net): lyrics
-- [ffmpeg](https://ffmpeg.org): audio conversion and waveforms
+- [ffmpeg](https://ffmpeg.org): audio and image conversion, waveforms
 - [dhowden/tag](https://github.com/dhowden/tag): reading audio tags
 - [mutagen](https://github.com/quodlibet/mutagen): writing audio tags
 
