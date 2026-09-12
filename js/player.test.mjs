@@ -590,3 +590,17 @@ test('network pause clears the prefetch download', () => {
 
   assert.equal(createdAudio[1].src, '', 'offline pause stops the prefetch download');
 });
+
+test('prewarmTranscode(null) with data saver on does not throw', () => {
+  const warmed = [];
+  const saverApi = {
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    dataSaver: () => true,
+    prewarmTranscode: (id) => warmed.push(id)
+  };
+  const { Player } = loadPlayer({}, [], {}, saverApi);
+  Player.init();
+
+  assert.doesNotThrow(() => Player.prewarmTranscode(null), 'null track must be a no-op');
+  assert.deepEqual(warmed, [], 'nothing warmed for a null track');
+});

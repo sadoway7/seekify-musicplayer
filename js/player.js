@@ -49,6 +49,7 @@ const Player = {
   },
 
   prewarmTranscode(track) {
+    if (!track) return;
     if (typeof Api === 'undefined' || !Api.prewarmTranscode) return;
     if (this._needsTranscode(track) || this._saverOn()) Api.prewarmTranscode(track.id);
   },
@@ -450,7 +451,7 @@ const Player = {
       reason: reason,
       networkState: a ? a.networkState : -1,
       readyState: a ? a.readyState : -1,
-      transcode: this._needsTranscode(t)
+      transcode: this._needsTranscode(t) || this._saverOn()
     });
   },
 
