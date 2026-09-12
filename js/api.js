@@ -35,7 +35,15 @@ const Api = {
   },
 
   // ── URL builders ──
-  streamUrl(id, transcode) { return '/api/stream/' + id + (transcode ? '?fmt=aac' : ''); },
+  dataSaver() {
+    // Per-device save-bandwidth preference. Storage can throw in privacy
+    // modes — treat that as off.
+    try { return localStorage.getItem('musicapp:data_saver') === '1'; } catch (e) { return false; }
+  },
+  streamUrl(id, transcode) {
+    if (this.dataSaver()) return '/api/stream/' + id + '?fmt=aac&b=128';
+    return '/api/stream/' + id + (transcode ? '?fmt=aac' : '');
+  },
   downloadUrl(id) { return '/api/download/' + id; },
   coverUrl(albumId) {
     // Per-album busts only. Never key on the global library version — every
@@ -134,7 +142,7 @@ const Api = {
       body: JSON.stringify(info || {})
     }).catch(() => {});
   },
-  prewarmTranscode(id) { return fetch('/api/transcode-warm/' + id, { method: 'POST' }).catch(() => {}); },
+  prewarmTranscode(id) { return fetch('/api/transcode-warm/' + id + (this.dataSaver() ? '?b=128' : ''), { method: 'POST' }).catch(() => {}); },
   deleteJob(id) { return this._req('/api/queue/' + id + '/delete', { method: 'POST', errMsg: 'Failed to delete job' }); },
   clearCompletedJobs() { return this._req('/api/queue/clear-completed', { method: 'POST', errMsg: 'Failed to clear jobs' }); },
   toggleDownloadPause() { return this._req('/api/queue/toggle-pause', { method: 'POST', errMsg: 'Failed to toggle pause' }); },

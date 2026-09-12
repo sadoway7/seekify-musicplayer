@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./player.js', import.meta.url), 'utf8')
   .replace('const Player = {', 'globalThis.Player = {');
 
-function loadPlayer(navigator, order = [], canPlay = {}, api = null) {
+function loadPlayer(navigator, order = [], canPlay = {}, api = null, storage = null) {
   const createdAudio = [];
   const timeouts = [];
 
@@ -33,7 +33,7 @@ function loadPlayer(navigator, order = [], canPlay = {}, api = null) {
     console,
     isFinite,
     navigator,
-    localStorage: { getItem: () => null, setItem: () => {} },
+    localStorage: storage || { getItem: () => null, setItem: () => {} },
     setTimeout: (fn, ms) => { timeouts.push({ fn, ms }); return timeouts.length; },
     clearTimeout: () => {},
     Api: api || {
@@ -44,6 +44,48 @@ function loadPlayer(navigator, order = [], canPlay = {}, api = null) {
   vm.runInContext(source, context);
   return { Player: context.Player, createdAudio, timeouts };
 }
+
+const apiSource = readFileSync(new URL('./api.js', import.meta.url), 'utf8')
+  .replace('const Api = {', 'globalThis.Api = {');
+
+function loadApi(storage = { getItem: () => null, setItem: () => {} }, fetchCalls = []) {
+  const context = vm.createContext({
+    localStorage: storage,
+    fetch: (url, opts) => { fetchCalls.push({ url, opts }); return Promise.resolve({ ok: true }); }
+  });
+  vm.runInContext(apiSource, context);
+  return context.Api;
+}
+
+function saverStorage() {
+  return { getItem: (k) => (k === 'musicapp:data_saver' ? '1' : null), setItem: () => {} };
+}
+
+test('Api.streamUrl: native, unsupported-format, and data-saver combos', () => {
+  const off = loadApi();
+  assert.equal(off.dataSaver(), false);
+  assert.equal(off.streamUrl('x', false), '/api/stream/x');
+  assert.equal(off.streamUrl('x', true), '/api/stream/x?fmt=aac');
+
+  const on = loadApi(saverStorage());
+  assert.equal(on.dataSaver(), true);
+  assert.equal(on.streamUrl('x', false), '/api/stream/x?fmt=aac&b=128');
+  assert.equal(on.streamUrl('x', true), '/api/stream/x?fmt=aac&b=128');
+});
+
+test('Api.prewarmTranscode passes the 128k hint only when data saver is on', () => {
+  const calls = [];
+  loadApi(saverStorage(), calls).prewarmTranscode('t1');
+  loadApi(undefined, calls).prewarmTranscode('t2');
+  assert.deepEqual(calls.map(c => c.url), ['/api/transcode-warm/t1?b=128', '/api/transcode-warm/t2']);
+  assert.equal(calls[0].opts.method, 'POST');
+  assert.equal(calls[1].opts.method, 'POST');
+});
+
+test('localStorage failures read as data saver off', () => {
+  const throwing = { getItem: () => { throw new Error('blocked'); }, setItem: () => {} };
+  assert.equal(loadApi(throwing).dataSaver(), false);
+});
 
 test('player declares long-form playback before creating Safari audio', () => {
   const order = [];
