@@ -390,8 +390,10 @@
     align-items: stretch !important;
     padding: 0 !important;
     /* Same entrance as mobile — the old `animation: none` made it pop in
-     * with no transition at all, which read as jarring. */
-    animation: nowPlayingSlideUp 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+     * with no transition at all, which read as jarring. Fades from
+     * transparent with a shorter travel: the desktop panel overlays content
+     * instead of sliding from a screen edge. */
+    animation: nowPlayingSlideUpFade 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   }
 
   .np-bg-glow {

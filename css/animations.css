@@ -40,6 +40,19 @@
   }
 }
 
+/* Desktop entrance: same slide plus a fade — the panel pops over content
+ * rather than pushing up from a screen edge, so opacity sells the motion. */
+@keyframes nowPlayingSlideUpFade {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 @keyframes nowPlayingSlideDown {
   from {
     transform: translateY(0);
