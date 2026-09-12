@@ -389,7 +389,9 @@
     width: auto;
     align-items: stretch !important;
     padding: 0 !important;
-    animation: none;
+    /* Same entrance as mobile — the old `animation: none` made it pop in
+     * with no transition at all, which read as jarring. */
+    animation: nowPlayingSlideUp 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   }
 
   .np-bg-glow {
@@ -464,16 +466,16 @@
   }
 
   .np-artwork {
-    --disc-size: min(504px, 53vh, 84%);
+    --disc-size: min(560px, 57vh, 88%);
   }
 
   .np-art-wrapper {
-    --disc-size: min(504px, 53vh, 84%);
+    --disc-size: min(560px, 57vh, 88%);
     width: var(--disc-size) !important;
     height: auto !important;
     aspect-ratio: 1 / 1;
-    max-height: 53vh;
-    max-width: 84%;
+    max-height: 57vh;
+    max-width: 88%;
     opacity: 1 !important;
     border-radius: 50% !important;
     flex-shrink: 0;
@@ -755,8 +757,8 @@
   }
 
   .np-art-wrapper {
-    max-width: 504px;
-    max-height: 53vh;
+    max-width: 560px;
+    max-height: 57vh;
   }
 
   .np-play-main {
@@ -783,8 +785,8 @@
   }
 
   .np-art-wrapper {
-    max-width: 504px;
-    max-height: 53vh;
+    max-width: 560px;
+    max-height: 57vh;
   }
 
   .np-header {
@@ -816,8 +818,9 @@
 
 @media (max-width: 767px) {
   .np-art-wrapper {
-    width: 72vmin !important;
-    height: 72vmin !important;
+    width: 84vmin !important;
+    height: 84vmin !important;
+    margin-bottom: 2vh;
   }
 
   /* Hero filter input stays inline with Play/Shuffle on mobile and grows to
