@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"musicapp/internal/models"
 	"musicapp/internal/store"
@@ -459,5 +460,80 @@ func TestTranscodeWarmHandlerHonorsBitrate(t *testing.T) {
 	TranscodeWarmHandler(rec2, req2)
 	if body := strings.TrimSpace(rec2.Body.String()); body != `{"ready":false}` {
 		t.Fatalf("body = %q, want {\"ready\":false} (default copy not yet cached)", body)
+	}
+}
+
+// WebP derivative lifecycle on the cover path: first webp-accepting request
+// serves the original jpeg and kicks a background convert; once the
+// derivative lands, webp-accepting clients get image/webp with a c3- ETag;
+// clients without Accept keep byte-identical legacy behavior.
+func TestCoverHandlerWebPDerivative(t *testing.T) {
+	ff := findFF()
+	if ff == "" {
+		t.Skip("ffmpeg not available")
+	}
+	out, err := exec.Command(ff, "-hide_banner", "-encoders").CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "libwebp") {
+		t.Skip("ffmpeg lacks libwebp — runtime serves originals (graceful path)")
+	}
+	setupTranscodeTestDB(t)
+	setupRealFLAC(t) // reuses the library-swap helper; source name unused
+
+	// Real JPEG cover on disk for album "album".
+	imagesDir := filepath.Join(store.MusicDir, "images")
+	if err := os.MkdirAll(imagesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	coverPath := filepath.Join(imagesDir, "album.jpg")
+	gen := exec.Command(ff, "-y", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=size=1200x800", "-frames:v", "1", coverPath)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("generate cover: %v: %s", err, out)
+	}
+
+	// 1) webp-accepting client: first response is the original jpeg while
+	// the derivative converts in the background.
+	req := httptest.NewRequest(http.MethodGet, "/api/cover/album", nil)
+	req.Header.Set("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+	rec := httptest.NewRecorder()
+	CoverHandler(rec, req)
+	if ct := rec.Header().Get("Content-Type"); ct != "image/jpeg" {
+		t.Fatalf("first response Content-Type = %q, want image/jpeg (serve-through)", ct)
+	}
+
+	// 2) derivative lands in the background.
+	webpPath := filepath.Join(filepath.Dir(store.DBPath), "artcache", "covers", "album.jpg.webp")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(webpPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("webp derivative never appeared")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// 3) now webp clients get image/webp under a c3- ETag; jpeg clients
+	// keep the legacy c2 response untouched.
+	req2 := httptest.NewRequest(http.MethodGet, "/api/cover/album", nil)
+	req2.Header.Set("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+	rec2 := httptest.NewRecorder()
+	CoverHandler(rec2, req2)
+	if ct := rec2.Header().Get("Content-Type"); ct != "image/webp" {
+		t.Fatalf("second response Content-Type = %q, want image/webp", ct)
+	}
+	if etag := rec2.Header().Get("ETag"); !strings.HasPrefix(etag, `"c3-`) {
+		t.Fatalf("webp ETag = %q, want c3- scheme", etag)
+	}
+
+	req3 := httptest.NewRequest(http.MethodGet, "/api/cover/album", nil)
+	rec3 := httptest.NewRecorder()
+	CoverHandler(rec3, req3)
+	if ct := rec3.Header().Get("Content-Type"); ct != "image/jpeg" {
+		t.Fatalf("no-Accept Content-Type = %q, want legacy image/jpeg", ct)
+	}
+	if etag := rec3.Header().Get("ETag"); !strings.HasPrefix(etag, `"c2-`) {
+		t.Fatalf("legacy ETag = %q, want c2- scheme", etag)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"musicapp/internal/artcache"
 	"musicapp/internal/musicbrainz"
 	"musicapp/internal/scanner"
 	"musicapp/internal/store"
@@ -203,6 +204,42 @@ func serveCoverBytes(w http.ResponseWriter, r *http.Request, data []byte, conten
 	w.Write(data)
 }
 
+// serveWebPArt writes a WebP derivative with the same revalidation policy as
+// serveCoverBytes, under a distinct ETag scheme (different representation).
+func serveWebPArt(w http.ResponseWriter, r *http.Request, data []byte) {
+	h := fnv.New32a()
+	h.Write(data)
+	etag := fmt.Sprintf(`"c3-%x"`, h.Sum32())
+	w.Header().Set("Content-Type", "image/webp")
+	w.Header().Set("Cache-Control", "no-cache, stale-while-revalidate=604800")
+	w.Header().Set("ETag", etag)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Write(data)
+}
+
+// tryServeWebPArt serves a fresh WebP derivative when the client accepts
+// WebP; otherwise it kicks a background conversion and reports false so the
+// caller serves the original bytes with zero added latency. Never fails a
+// request: every miss falls back to the original.
+func tryServeWebPArt(w http.ResponseWriter, r *http.Request, webpPath, srcPath string) bool {
+	if !artcache.AcceptsWebp(r) {
+		return false
+	}
+	if !artcache.Fresh(webpPath, srcPath) {
+		artcache.ConvertAsync(webpPath, srcPath)
+		return false
+	}
+	data, err := os.ReadFile(webpPath)
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	serveWebPArt(w, r, data)
+	return true
+}
+
 func CoverHandler(w http.ResponseWriter, r *http.Request) {
 	albumID := strings.TrimPrefix(r.URL.Path, "/api/cover/")
 	if strings.ContainsAny(albumID, `/\`) || strings.Contains(albumID, "..") {
@@ -210,11 +247,16 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	coverPath := filepath.Join(store.MusicDir, "images", albumID+".jpg")
+
 	store.CoverMu.RLock()
 	data, exists := store.CoverCache[albumID]
 	store.CoverMu.RUnlock()
 
 	if exists {
+		if tryServeWebPArt(w, r, artcache.Path("covers", albumID+".jpg"), coverPath) {
+			return
+		}
 		contentType := http.DetectContentType(data)
 		if strings.HasPrefix(contentType, "application/") || strings.HasPrefix(contentType, "text/") {
 			contentType = "image/jpeg"
@@ -223,8 +265,10 @@ func CoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	coverPath := filepath.Join(store.MusicDir, "images", albumID+".jpg")
 	if diskData, err := os.ReadFile(coverPath); err == nil {
+		if tryServeWebPArt(w, r, artcache.Path("covers", albumID+".jpg"), coverPath) {
+			return
+		}
 		store.CacheCover(albumID, diskData)
 		serveCoverBytes(w, r, diskData, "image/jpeg")
 		return
@@ -245,12 +289,21 @@ func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := strings.ToLower(strings.TrimSpace(artistName))
+	artDir := filepath.Join(store.MusicDir, "images", "artists")
+	artFile := filepath.Join(artDir, key+".jpg")
 
 	musicbrainz.ArtistArtMu.RLock()
 	data, exists := musicbrainz.ArtistArtCache[key]
 	musicbrainz.ArtistArtMu.RUnlock()
 
 	if exists {
+		// WebP applies only when the art also exists on disk (the derivative
+		// is converted from that file); RAM-only entries serve original bytes.
+		if _, err := os.Stat(artFile); err == nil {
+			if tryServeWebPArt(w, r, artcache.Path("artists", key+".jpg"), artFile) {
+				return
+			}
+		}
 		contentType := http.DetectContentType(data)
 		if strings.HasPrefix(contentType, "application/") || strings.HasPrefix(contentType, "text/") {
 			contentType = "image/jpeg"
@@ -261,9 +314,10 @@ func ArtistArtHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	artDir := filepath.Join(store.MusicDir, "images", "artists")
-	artFile := filepath.Join(artDir, key+".jpg")
 	if diskData, err := os.ReadFile(artFile); err == nil && len(diskData) > 0 {
+		if tryServeWebPArt(w, r, artcache.Path("artists", key+".jpg"), artFile) {
+			return
+		}
 		musicbrainz.ArtistArtMu.Lock()
 		musicbrainz.ArtistArtCache[key] = diskData
 		musicbrainz.ArtistArtMu.Unlock()

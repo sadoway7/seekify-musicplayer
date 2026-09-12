@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"musicapp/internal/auth"
+	"musicapp/internal/artcache"
 	"musicapp/internal/downloads"
 	"musicapp/internal/handlers"
 	"musicapp/internal/models"
@@ -276,6 +277,11 @@ func main() {
 	go watched.StartWatchScheduler()
 	go downloads.DownloadWatchdog()
 	go review.StartReviewScheduler()
+
+	// Confess in the logs whether art WebP derivatives will be produced on
+	// this deployment (needs an ffmpeg with libwebp; otherwise originals are
+	// served and this feature is a silent no-op).
+	log.Printf("[artcache] WebP derivatives: %v", artcache.Available())
 
 	// Daily art refresh: the startup fetch is one-shot, and a transient
 	// failure at boot (or art enabled later) previously left placeholders

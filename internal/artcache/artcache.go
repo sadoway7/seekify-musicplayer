@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"musicapp/internal/downloads"
@@ -49,11 +51,54 @@ func Fresh(webpPath, srcPath string) bool {
 	return !ci.ModTime().Before(si.ModTime())
 }
 
+// available caches the libwebp probe so startup can confess — in the logs —
+// whether derivatives will actually be produced on this deployment.
+var available struct {
+	sync.Once
+	val bool
+}
+
+// Available reports whether this ffmpeg can encode WebP.
+func Available() bool {
+	available.Do(func() {
+		ff := findFfmpeg()
+		if ff == "" {
+			return
+		}
+		out, err := exec.Command(ff, "-hide_banner", "-encoders").CombinedOutput()
+		available.val = err == nil && strings.Contains(string(out), "libwebp")
+	})
+	return available.val
+}
+
+// findFfmpeg locates the ffmpeg binary (PATH first, then common install dirs).
+func findFfmpeg() string {
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p
+	}
+	for _, p := range []string{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
 // ConvertAsync rewrites the derivative in the background at low priority.
 // Callers must have already served the original — conversion is best-effort
-// and never blocks a request or surfaces an error to the client.
+// and never blocks a request or surfaces an error to the client. Concurrent
+// requests for the same derivative dedupe (a page of cold covers must not
+// stampede identical encodes).
+var inFlight sync.Map
+
 func ConvertAsync(webpPath, srcPath string) {
-	store.SafeGo("artcache-convert", func() { _ = EnsureSync(webpPath, srcPath) })
+	if _, loaded := inFlight.LoadOrStore(webpPath, struct{}{}); loaded {
+		return
+	}
+	store.SafeGo("artcache-convert", func() {
+		defer inFlight.Delete(webpPath)
+		_ = EnsureSync(webpPath, srcPath)
+	})
 }
 
 // EnsureSync converts src to a ≤1000px WebP at the derivative path, only
