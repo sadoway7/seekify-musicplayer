@@ -187,7 +187,8 @@ Object.assign(UI, {
     this._checkTitleOverflow();
 
     if (artChanged) {
-      this._currentWaveformTrackId = track.id;
+      // _loadWaveform owns _currentWaveformTrackId — assigning it here first
+      // made the loaded-guard think the new song's waveform was already in.
       this._loadWaveform(track);
     }
 
@@ -343,7 +344,11 @@ Object.assign(UI, {
       return;
     }
 
-    if (this._queueWinReset !== false) this._resetQueueWindow();
+    // Re-center when explicitly asked OR when the queue itself changed
+    // length (shuffle/new playlist): a window left deep in a longer queue
+    // would otherwise clamp past the new queue's end and render zero rows.
+    if (this._queueWinReset !== false || this._queueWinLen !== Player.queue.length) this._resetQueueWindow();
+    this._queueWinLen = Player.queue.length;
     this._queueWinReset = false;
     const winStart = this._queueWinStart;
     const winEnd = Math.min(this._queueWinEnd, Player.queue.length);
