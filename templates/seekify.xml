@@ -16,6 +16,13 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-09-12
+- New "Save bandwidth" option: much smaller audio downloads on cellular, remembered per device
+- The next song preloads while the current one plays, so skipping is instant
+- Faster page opens and smoother scrolling on large libraries
+- Album art is delivered in a smaller format that looks identical
+- Plenty of playback polish: waveform, queue, drag-and-drop and touch fixes
+
 2026-08-23
 - Playback stays solid when the connection drops: pauses instead of skipping the queue, and picks back up when you are back online
 - A stalled stream now recovers itself instead of freezing the progress bar

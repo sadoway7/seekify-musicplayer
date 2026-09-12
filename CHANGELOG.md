@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-12 — Speed, smoother playback, smaller downloads
+
+- Playback: skipping tracks no longer stutters on big playlists — the queue now loads as you scroll and stays completely idle while hidden; fixed shuffling from a fresh load showing an empty queue until the next track.
+- Playback: dragging to reorder on touch screens keeps the row under your finger; opening Now Playing shows the loaded waveform instantly instead of collapsing and re-animating; scrubbing is smoother and seeking works even while a song is still loading.
+- Playback: the next song is fetched ahead while the current one plays, so pressing next starts instantly (with Data Saver on, that pre-fetch is itself a compact 128k stream).
+- UI: on wide screens Now Playing now slides in with a fade instead of popping in, its header title sits truly centered, and the aborted-transition console error is gone.
+- Browsing: the back button returns you to where you were scrolled; Library and Search tabs stop refetching and flashing when data is seconds old; large search results load progressively instead of all at once.
+- Downloads & Tasks: the Downloads tab polls far less aggressively when idle, artwork matching after rips is much cheaper, the admin downloads filter is debounced, and the review/scan log keeps its most recent 500 lines without yanking your scroll position while a scan runs.
+- Startup & art: stylesheets load directly for a faster first open, and — where the server's ffmpeg supports WebP — album covers and artist images are served as visually identical WebP copies, cutting image sizes substantially (originals are never modified).
+
 ## 2026-09-11 — Instant next track
 
 - Player: the next song in the queue now downloads ahead in the background while the current one plays, so pressing next starts instantly (especially mid-playlist). It fetches one track ahead even with Data Saver on — with Data Saver on, that prefetch is itself a compact 128k stream.
