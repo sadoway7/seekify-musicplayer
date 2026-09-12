@@ -44,11 +44,18 @@ func StreamHandler(w http.ResponseWriter, r *http.Request) {
 	// ALAC exception: browsers claim .m4a support (canPlayType) but can't
 	// decode Apple Lossless, so the server forces the transcode path for
 	// ALAC files regardless of the fmt param.
+	// b: client-requested bitrate (data-saver streams use 128). Anything
+	// other than 128/192 falls back to the server default setting — exactly
+	// what a request without b gets today.
+	bitrate := r.URL.Query().Get("b")
+	if bitrate != "128" && bitrate != "192" {
+		bitrate = ""
+	}
 	forced := ext == ".m4a" && transcode.IsBrowserUnsupportedM4A(fullPath)
 	if (r.URL.Query().Get("fmt") == "aac" || forced) &&
 		store.GetSettingBool("transcode_enabled", true) &&
 		(needsTranscode(ext) || forced) {
-		if cp, err := transcode.Ensure(id, fullPath); err == nil {
+		if cp, err := transcode.EnsureAt(id, fullPath, bitrate); err == nil {
 			servePath = cp
 			serveType = "audio/mp4"
 		}

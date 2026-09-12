@@ -12,6 +12,7 @@ import (
 
 	"musicapp/internal/models"
 	"musicapp/internal/store"
+	"musicapp/internal/transcode"
 )
 
 // findFF locates ffmpeg for integration tests (mirrors transcode.findFfmpeg).
@@ -369,5 +370,94 @@ func TestTranscodeWarmHandler(t *testing.T) {
 	}
 	if got := strings.TrimSpace(rec.Body.String()); got != `{"ready":true}` {
 		t.Fatalf("mp3 body = %q, want ready:true", got)
+	}
+}
+
+// setupRealFLAC swaps in a temp library containing one real 2s sine FLAC
+// (skips the caller's test when ffmpeg is absent) and restores globals.
+func setupRealFLAC(t *testing.T) string {
+	t.Helper()
+	ff := findFF()
+	if ff == "" {
+		t.Skip("ffmpeg not available")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "track.flac")
+	gen := exec.Command(ff, "-y", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+		"-c:a", "flac", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("generate flac: %v: %s", err, out)
+	}
+	var prevTracks map[string]*models.Track
+	store.View(func(l *store.Library) { prevTracks = l.Tracks })
+	prevMusicDir := store.MusicDir
+	store.MusicDir = dir
+	store.ReplaceLibrary(map[string]*models.Track{
+		"track": {ID: "track", FilePath: "track.flac"},
+	}, nil)
+	t.Cleanup(func() {
+		store.ReplaceLibrary(prevTracks, nil)
+		store.MusicDir = prevMusicDir
+	})
+	return src
+}
+
+// b=128 gets its own cache file (<id>-128.m4a). A garbage b rides the
+// legacy default path (<id>.m4a) — same as sending no b at all.
+func TestStreamHandlerBitrateCacheNaming(t *testing.T) {
+	setupTranscodeTestDB(t)
+	setupRealFLAC(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stream/track?fmt=aac&b=128", nil)
+	rec := httptest.NewRecorder()
+	StreamHandler(rec, req)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 200/206, body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "audio/mp4" {
+		t.Fatalf("Content-Type = %q, want audio/mp4", ct)
+	}
+	cacheDir := filepath.Join(filepath.Dir(store.DBPath), "transcode")
+	if _, err := os.Stat(filepath.Join(cacheDir, "track-128.m4a")); err != nil {
+		t.Fatalf("128k cache file missing: %v", err)
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/api/stream/track?fmt=aac&b=banana", nil)
+	rec2 := httptest.NewRecorder()
+	StreamHandler(rec2, req2)
+	if ct := rec2.Header().Get("Content-Type"); ct != "audio/mp4" {
+		t.Fatalf("Content-Type = %q, want audio/mp4 (garbage b must still transcode)", ct)
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "track.m4a")); err != nil {
+		t.Fatalf("default-bitrate cache file missing: %v", err)
+	}
+}
+
+// The warm endpoint must honor ?b=128: a fresh 128k copy reports ready
+// without re-encoding, while the default copy is reported as warming.
+func TestTranscodeWarmHandlerHonorsBitrate(t *testing.T) {
+	setupTranscodeTestDB(t)
+	src := setupRealFLAC(t)
+
+	if _, err := transcode.EnsureAt("track", src, "128"); err != nil {
+		t.Fatalf("pre-encode 128k copy: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/transcode-warm/track?b=128", nil)
+	rec := httptest.NewRecorder()
+	TranscodeWarmHandler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != `{"ready":true}` {
+		t.Fatalf("body = %q, want {\"ready\":true} (128k copy already fresh)", body)
+	}
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/transcode-warm/track", nil)
+	rec2 := httptest.NewRecorder()
+	TranscodeWarmHandler(rec2, req2)
+	if body := strings.TrimSpace(rec2.Body.String()); body != `{"ready":false}` {
+		t.Fatalf("body = %q, want {\"ready\":false} (default copy not yet cached)", body)
 	}
 }

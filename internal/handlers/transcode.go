@@ -27,7 +27,8 @@ func needsTranscode(ext string) bool {
 // first play on a Safari client is instant. Idempotent: no-op when the
 // cache is already fresh or the format doesn't need transcoding. Returns
 // {ready: bool} — ready=false means transcode was kicked off in the
-// background.
+// background. Honors ?b=<bitrate> so a data-saver client warms the exact
+// copy it will request.
 //
 // POST /api/transcode-warm/<trackID>
 func TranscodeWarmHandler(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +40,11 @@ func TranscodeWarmHandler(w http.ResponseWriter, r *http.Request) {
 	if trackID == "" {
 		writeJSONError(w, http.StatusBadRequest, "track id required")
 		return
+	}
+
+	bitrate := r.URL.Query().Get("b")
+	if bitrate != "128" && bitrate != "192" {
+		bitrate = ""
 	}
 
 	track := store.GetTrack(trackID)
@@ -53,7 +59,7 @@ func TranscodeWarmHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ready": true})
 		return
 	}
-	if transcode.IsReady(trackID, fullPath) {
+	if transcode.IsReadyAt(trackID, fullPath, bitrate) {
 		writeJSON(w, map[string]bool{"ready": true})
 		return
 	}
@@ -61,7 +67,7 @@ func TranscodeWarmHandler(w http.ResponseWriter, r *http.Request) {
 	store.SafeGo("transcode-warm", func() {
 		// Background priority: a warm encode must yield CPU to any foreground
 		// play encode (playback-first policy, same as waveform/bands/normalize).
-		transcode.EnsureLow(trackID, fullPath)
+		transcode.EnsureLowAt(trackID, fullPath, bitrate)
 	})
 	writeJSON(w, map[string]bool{"ready": false})
 }
