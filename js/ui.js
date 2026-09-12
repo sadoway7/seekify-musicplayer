@@ -472,12 +472,28 @@ const UI = {
       this._paintWaveform(f);
     };
 
+    // Drag and hover repaint the full canvas; coalesce to one paint per
+    // frame (the timeupdate path already latches this way).
+    const scheduleWaveformPaint = () => {
+      if (this._waveformPaintPending) return;
+      this._waveformPaintPending = true;
+      requestAnimationFrame(() => {
+        this._waveformPaintPending = false;
+        this._paintWaveform(this._waveformProgress || 0);
+      });
+    };
+
     const onMove = (e) => {
       if (!this.seeking) return;
       if (e.cancelable) e.preventDefault();
       const f = getFraction(e);
       this._waveformProgress = f;
-      this._paintWaveform(f);
+      // Live elapsed readout while dragging (duration may not exist yet).
+      const dur = Player.audio && Player.audio.duration;
+      if (dur && isFinite(dur) && this.els.npTimeCurrent) {
+        this.els.npTimeCurrent.textContent = this._formatTime(f * dur);
+      }
+      scheduleWaveformPaint();
     };
 
     const onEnd = (e) => {
@@ -527,7 +543,7 @@ const UI = {
       if (this.seeking) return;
       const rect = canvas.getBoundingClientRect();
       this._waveformHoverX = e.clientX - rect.left;
-      this._paintWaveform(this._waveformProgress || 0);
+      scheduleWaveformPaint();
     });
 
     canvas.addEventListener('mouseleave', () => {
@@ -919,10 +935,23 @@ const UI = {
       item.style.top = (clientY - d.offsetY) + 'px';
       item.style.width = itemW + 'px';
       item.style.zIndex = '200';
+
+      // If any ancestor is a transformed element (mobile bottom-sheet panel),
+      // `position: fixed` coordinates are relative to THAT ancestor, not the
+      // viewport — the dragged row then renders offset (low) by the panel's
+      // own position. Measure the discrepancy once and compensate everywhere.
+      const after = item.getBoundingClientRect();
+      d.fixLeft = after.left - d.pinLeft;
+      d.fixTop = after.top - (clientY - d.offsetY);
+      if (d.fixLeft || d.fixTop) {
+        item.style.left = (d.pinLeft - d.fixLeft) + 'px';
+        item.style.top = (clientY - d.offsetY - d.fixTop) + 'px';
+      }
     };
 
     const moveDrag = (clientY) => {
-      d.item.style.top = (clientY - d.offsetY) + 'px';
+      d.item.style.left = (d.pinLeft - (d.fixLeft || 0)) + 'px';
+      d.item.style.top = (clientY - d.offsetY - (d.fixTop || 0)) + 'px';
       const items = list.querySelectorAll('.queue-item-upnext:not(.queue-item-dragging), .queue-item.active:not(.queue-item-dragging)');
       let inserted = false;
       for (const item of items) {
