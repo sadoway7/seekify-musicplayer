@@ -72,7 +72,8 @@ Object.assign(UI, {
       + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
       + '<div class="home-menu-label">Options</div>'
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
-      + '<div class="home-menu-item" data-action="data-saver">' + (Api.dataSaver() ? Icons.checkCircle() : Icons.circle()) + '<span>Save bandwidth</span></div>'
+      + '<div class="home-menu-item" data-action="data-saver"><span>Save bandwidth</span>'
+      + '<div class="hl-toggle' + (Api.dataSaver() ? ' active' : '') + '"><div class="hl-toggle-track"><div class="hl-toggle-knob"></div></div></div></div>'
       + (Store.isGuest ? '' : '<div class="home-menu-divider"></div>'
         + '<div class="home-menu-item" data-action="my-account">' + Icons.person() + '<span>My Account</span></div>'
         + (Store.isAdmin ? '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Admin Settings</span></div>' : ''))
@@ -396,8 +397,10 @@ Object.assign(UI, {
         e.stopPropagation();
         const item = e.target.closest('.home-menu-item');
         if (!item) return;
-        menuDropdown.classList.remove('open');
         const action = item.dataset.action;
+        // A toggle stays open so the user sees the switch flip; the outside
+        // click handler still closes it.
+        if (action !== 'data-saver') menuDropdown.classList.remove('open');
         if (action === 'rescan') {
           this._rescanLibrary();
         } else if (action === 'my-account') {
@@ -416,8 +419,8 @@ Object.assign(UI, {
         } else if (action === 'data-saver') {
           const on = !Api.dataSaver();
           try { localStorage.setItem('musicapp:data_saver', on ? '1' : '0'); } catch (e) {}
-          const icon = item.querySelector('svg');
-          if (icon) icon.outerHTML = on ? Icons.checkCircle() : Icons.circle();
+          const toggle = item.querySelector('.hl-toggle');
+          if (toggle) toggle.classList.toggle('active', on);
           if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(on ? 'Data saver on — smaller files, lower quality' : 'Data saver off — best quality');
         } else if (action === 'login') {
           this.showLoginScreen();
