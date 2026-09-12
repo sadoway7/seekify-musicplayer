@@ -779,10 +779,14 @@ const UI = {
 
   _bindResize() {
     window.addEventListener('resize', () => {
-      // Re-render queue if visible
-      if (!this.els.queuePanel.classList.contains('hidden')) {
-        this._renderQueue();
-      }
+      // Re-render queue if visible — a full windowed rebuild, so debounce it
+      // like the home re-render below instead of running per resize event.
+      clearTimeout(this._queueResizeTimer);
+      this._queueResizeTimer = setTimeout(() => {
+        if (!this.els.queuePanel.classList.contains('hidden')) {
+          this._renderQueue();
+        }
+      }, 200);
       // Re-render home if visible (breakpoint-dependent card count)
       clearTimeout(this._homeResizeTimer);
       this._homeResizeTimer = setTimeout(() => {
@@ -1379,8 +1383,11 @@ const UI = {
     if (document.startViewTransition) {
       self._useViewTransitions = true;
       var vt = document.startViewTransition(doRender);
+      // Aborted/superseded transitions reject `ready` (hidden tab, rapid
+      // navigation, re-render mid-capture) — expected, not an error.
+      if (vt && vt.ready) vt.ready.catch(function() {});
       if (vt && vt.finished) {
-        vt.finished.finally(function() { self._useViewTransitions = false; });
+        vt.finished.catch(function() {}).finally(function() { self._useViewTransitions = false; });
       }
     } else {
       self._useViewTransitions = false;

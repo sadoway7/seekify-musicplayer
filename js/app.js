@@ -16,7 +16,7 @@ const App = {
       if (typeof Visualizer !== 'undefined') Visualizer.onTrackChange(track);
       UI.updateMiniPlayer();
       UI.updateNowPlaying();
-      UI._renderQueue();
+      UI.updateQueueIfVisible();
       UI.updateTrackHighlights();
       if (track && !Store.isGuest) {
         try {

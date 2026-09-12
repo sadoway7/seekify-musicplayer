@@ -245,7 +245,7 @@ Object.assign(UI, {
     const track = Player.getCurrentTrack();
     this._loadWaveform(track);
     this.updateSeekBar();
-    this._renderQueue();
+    this.updateQueueIfVisible();
     this.els.nowPlaying.style.animation = '';
     this.els.nowPlaying.classList.remove('hidden');
     this.els.miniPlayer.classList.add('hidden');
@@ -315,7 +315,21 @@ Object.assign(UI, {
   },
 
   updateQueueIfVisible() {
+    // The name is the contract: a hidden queue renders nothing. A full
+    // rebuild is O(rows × cover imgs) — the single biggest jank source when
+    // whole-view queueing hands us a 5,000-track queue.
+    const bothHidden = this.els.nowPlaying.classList.contains('hidden')
+      && this.els.queuePanel.classList.contains('hidden');
+    if (bothHidden) return;
+    // Visible renders re-center the window on the current track.
+    this._queueWinReset = true;
     this._renderQueue();
+  },
+
+  _resetQueueWindow() {
+    const c = Math.max(0, Player.currentIndex);
+    this._queueWinStart = Math.max(0, c - 25);
+    this._queueWinEnd = Math.min(Player.queue.length, c + 75);
   },
 
   _renderQueue() {
@@ -324,23 +338,39 @@ Object.assign(UI, {
       return;
     }
 
+    if (this._queueWinReset !== false) this._resetQueueWindow();
+    this._queueWinReset = false;
+    const winStart = this._queueWinStart;
+    const winEnd = Math.min(this._queueWinEnd, Player.queue.length);
+
     const sourceName = Player.getSourceName();
     const headerTitle = this.els.queuePanel.querySelector('.queue-header h2');
     if (headerTitle) headerTitle.textContent = sourceName || 'Playlist';
 
-    this.els.queueList.innerHTML = Player.queue.map((track, i) => {
+    const rows = [];
+    if (winStart > 0) {
+      rows.push('<div class="queue-window-note">… ' + winStart + ' earlier</div>');
+    }
+    for (let i = winStart; i < winEnd; i++) {
+      const track = Player.queue[i];
       const isCurrent = i === Player.currentIndex;
       const section = i < Player.currentIndex ? 'history' : 'upnext';
-      return '<div class="queue-item queue-item-' + section + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
+      rows.push('<div class="queue-item queue-item-' + section + (isCurrent ? ' active' : '') + '" data-queue-index="' + i + '">'
         + (section !== 'history' ? '<div class="queue-item-drag" aria-label="Drag to reorder">' + Icons.grip() + '</div>' : '')
-        + '<div class="queue-item-art"><img src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
+        + '<div class="queue-item-art"><img loading="lazy" src="' + Api.coverUrl(track.albumID) + '" alt=""></div>'
         + '<div class="queue-item-info">'
         + '<div class="queue-item-title">' + this._esc(track.title) + '</div>'
         + '<div class="queue-item-artist">' + this._esc(track.artist) + '</div>'
         + '</div>'
         + '<button class="queue-item-more" aria-label="More">' + Icons.more() + '</button>'
-        + '</div>';
-    }).join('');
+        + '</div>');
+    }
+    if (winEnd < Player.queue.length) {
+      rows.push('<div class="queue-window-note">… ' + (Player.queue.length - winEnd) + ' more</div>');
+      rows.push('<div class="queue-window-sentinel"></div>');
+    }
+    this.els.queueList.innerHTML = rows.join('');
+    this._observeQueueSentinel();
 
     const historyItems = this.els.queueList.querySelectorAll('.queue-item-history');
     if (historyItems.length > 0) {
@@ -360,6 +390,21 @@ Object.assign(UI, {
         wrapper.classList.toggle('open');
       });
     }
+  },
+
+  // Renders more of the up-next window as the sentinel scrolls into view.
+  _observeQueueSentinel() {
+    const sentinel = this.els.queueList.querySelector('.queue-window-sentinel');
+    if (!sentinel) return;
+    if (!this._queueSentinelObs) {
+      this._queueSentinelObs = new IntersectionObserver((entries) => {
+        if (!entries.some(e => e.isIntersecting)) return;
+        this._queueWinEnd = Math.min(Player.queue.length, this._queueWinEnd + 50);
+        this._renderQueue();
+      });
+    }
+    this._queueSentinelObs.disconnect();
+    this._queueSentinelObs.observe(sentinel);
   },
 
   showPlaylistModal(trackId) {
