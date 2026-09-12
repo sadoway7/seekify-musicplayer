@@ -72,6 +72,7 @@ Object.assign(UI, {
       + '<div class="home-menu-dropdown" id="home-menu-dropdown">'
       + '<div class="home-menu-label">Options</div>'
       + '<div class="home-menu-item" data-action="homepage-layout">' + Icons.grid() + '<span>Home Layout</span></div>'
+      + '<div class="home-menu-item" data-action="data-saver">' + (Api.dataSaver() ? Icons.checkCircle() : Icons.circle()) + '<span>Save bandwidth</span></div>'
       + (Store.isGuest ? '' : '<div class="home-menu-divider"></div>'
         + '<div class="home-menu-item" data-action="my-account">' + Icons.person() + '<span>My Account</span></div>'
         + (Store.isAdmin ? '<div class="home-menu-item" data-action="settings">' + Icons.settings() + '<span>Admin Settings</span></div>' : ''))
@@ -412,6 +413,12 @@ Object.assign(UI, {
           this.renderSettings();
         } else if (action === 'homepage-layout') {
           this._openHomepageLayoutModal();
+        } else if (action === 'data-saver') {
+          const on = !Api.dataSaver();
+          try { localStorage.setItem('musicapp:data_saver', on ? '1' : '0'); } catch (e) {}
+          const icon = item.querySelector('svg');
+          if (icon) icon.outerHTML = on ? Icons.checkCircle() : Icons.circle();
+          if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(on ? 'Data saver on — smaller files, lower quality' : 'Data saver off — best quality');
         } else if (action === 'login') {
           this.showLoginScreen();
         } else if (action === 'register') {
