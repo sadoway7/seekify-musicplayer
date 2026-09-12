@@ -40,15 +40,18 @@
   }
 }
 
-/* Desktop entrance: the full mobile slide plus a fade from transparent. */
+/* Desktop entrance: the full mobile slide plus a fade from transparent,
+ * sharpening from a soft blur as it lands. */
 @keyframes nowPlayingSlideUpFade {
   from {
     transform: translateY(100%);
     opacity: 0;
+    filter: blur(6px);
   }
   to {
     transform: none;
     opacity: 1;
+    filter: blur(0);
   }
 }
 
