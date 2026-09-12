@@ -50,8 +50,32 @@ const Player = {
 
   prewarmTranscode(track) {
     if (typeof Api === 'undefined' || !Api.prewarmTranscode) return;
-    const saver = typeof Api.dataSaver === 'function' && Api.dataSaver();
-    if (this._needsTranscode(track) || saver) Api.prewarmTranscode(track.id);
+    if (this._needsTranscode(track) || this._saverOn()) Api.prewarmTranscode(track.id);
+  },
+
+  _saverOn() {
+    return typeof Api !== 'undefined' && typeof Api.dataSaver === 'function' && Api.dataSaver();
+  },
+
+  // Download the next queue track into a hidden audio element while the
+  // current song plays, so pressing next loads an already-fetched URL instead
+  // of starting cold. Deliberately unconditional (whole-song, even with data
+  // saver on — Sadoway's call): the whole point is zero wait on next.
+  _prefetchNext() {
+    const next = this.queue[this.currentIndex + 1];
+    if (!next || typeof Api === 'undefined' || !Api.streamUrl) { this._clearPrefetch(); return; }
+    if (!this._prefetch) {
+      try { this._prefetch = new Audio(); } catch (e) { return; }
+      this._prefetch.preload = 'auto';
+    }
+    if (this._prefetchTrackId === next.id) return;
+    this._prefetchTrackId = next.id;
+    this._prefetch.src = Api.streamUrl(next.id, this._needsTranscode(next) || this._saverOn());
+  },
+
+  _clearPrefetch() {
+    if (this._prefetch) this._prefetch.src = '';
+    this._prefetchTrackId = null;
   },
 
   init() {
@@ -265,7 +289,7 @@ const Player = {
     // forceTranscode marks a slow-network retry: only allow one per load so a
     // genuinely unplayable track still skips instead of looping.
     this._triedTranscodeFallback = forceTranscode === true;
-    const saver = typeof Api !== 'undefined' && typeof Api.dataSaver === 'function' && Api.dataSaver();
+    const saver = this._saverOn();
     const wantTranscode = forceTranscode === true || this._needsTranscode(track) || saver;
     this._clearPrepareNotice();
     if (wantTranscode) this._armPrepareNotice();
@@ -316,7 +340,10 @@ const Player = {
     // Prime the next track's transcode cache so auto-advance is instant on
     // Safari clients (transcode runs in the background while this song plays).
     const nextTrack = this.queue[this.currentIndex + 1];
-    if (nextTrack) this.prewarmTranscode(nextTrack);
+    if (nextTrack) {
+      this.prewarmTranscode(nextTrack);
+      this._prefetchNext();
+    }
   },
 
   _clearLoadTimeout() {
@@ -392,6 +419,7 @@ const Player = {
   _pauseForNetwork(toastMsg) {
     this._clearLoadTimeout();
     this._clearStallTimeout();
+    this._clearPrefetch();
     this._networkPaused = true;
     this.playing = false;
     this.audio.pause();

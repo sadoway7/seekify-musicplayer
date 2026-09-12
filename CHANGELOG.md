@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-11 — Instant next track
+
+- Player: the next song in the queue now downloads ahead in the background while the current one plays, so pressing next starts instantly (especially mid-playlist). It fetches one track ahead even with Data Saver on — with Data Saver on, that prefetch is itself a compact 128k stream.
+
 ## 2026-09-11 — Save bandwidth toggle
 
 - UI (home): new "Save bandwidth" option in the homepage menu — visible to everyone, remembered per device. ON plays everything as compact 128k AAC (roughly 10x less data, ideal on cellular). OFF is the previous behavior: best quality, transcoding only for browsers that need it.

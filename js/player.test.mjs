@@ -538,3 +538,55 @@ test('Api stubs without dataSaver keep the legacy prewarm behavior', () => {
 
   assert.deepEqual(warmed, [], 'no prewarm for natively-playable formats without a saver flag');
 });
+
+test('next track is prefetched into a hidden audio element', () => {
+  const { Player, createdAudio } = loadPlayer({}, [], { 'audio/flac': 'maybe' });
+  Player.init();
+  Player.play(
+    { id: 'a', filePath: 'Album/01.mp3' },
+    [{ id: 'a', filePath: 'Album/01.mp3' }, { id: 'b', filePath: 'Album/02.flac' }]
+  );
+
+  assert.equal(createdAudio.length, 2, 'hidden prefetch element created');
+  assert.equal(createdAudio[1].src, '/api/stream/b', 'prefetch targets the next track');
+  assert.equal(createdAudio[1].preload, 'auto', 'prefetch downloads ahead');
+});
+
+test('prefetch uses the 128k URL when data saver is on', () => {
+  const saverApi = {
+    streamUrl: (id, t) => '/api/stream/' + id + (saverApi.dataSaver() ? '?fmt=aac&b=128' : (t ? '?fmt=aac' : '')),
+    dataSaver: () => true,
+    prewarmTranscode: () => {}
+  };
+  const { Player, createdAudio } = loadPlayer({}, [], {}, saverApi);
+  Player.init();
+  Player.play(
+    { id: 'a', filePath: 'Album/01.mp3' },
+    [{ id: 'a', filePath: 'Album/01.mp3' }, { id: 'b', filePath: 'Album/02.flac' }]
+  );
+
+  assert.equal(createdAudio.length, 2);
+  assert.ok(createdAudio[1].src.includes('fmt=aac&b=128'), 'prefetch matches the URL playback will request');
+});
+
+test('no prefetch without a next track', () => {
+  const { Player, createdAudio } = loadPlayer({}, [], { 'audio/flac': 'maybe' });
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01.mp3' }, [{ id: 'a', filePath: 'Album/01.mp3' }]);
+
+  assert.equal(createdAudio.length, 1, 'no hidden element for a single-track queue');
+});
+
+test('network pause clears the prefetch download', () => {
+  const { Player, createdAudio } = loadPlayer({}, [], { 'audio/flac': 'maybe' });
+  Player.init();
+  Player.play(
+    { id: 'a', filePath: 'Album/01.mp3' },
+    [{ id: 'a', filePath: 'Album/01.mp3' }, { id: 'b', filePath: 'Album/02.flac' }]
+  );
+  assert.equal(createdAudio.length, 2);
+
+  Player._pauseForNetwork();
+
+  assert.equal(createdAudio[1].src, '', 'offline pause stops the prefetch download');
+});
