@@ -604,3 +604,29 @@ test('prewarmTranscode(null) with data saver on does not throw', () => {
   assert.doesNotThrow(() => Player.prewarmTranscode(null), 'null track must be a no-op');
   assert.deepEqual(warmed, [], 'nothing warmed for a null track');
 });
+
+test('guests default to data saver; logged-in users default off', () => {
+  const apiSource = readFileSync(new URL('./api.js', import.meta.url), 'utf8')
+    .replace('const Api = {', 'globalThis.Api = {');
+
+  const makeApi = (contextExtras) => {
+    const context = vm.createContext(Object.assign({
+      localStorage: { getItem: () => null, setItem: () => {} },
+      fetch: () => Promise.resolve({ ok: true })
+    }, contextExtras));
+    vm.runInContext(apiSource, context);
+    return context.Api;
+  };
+
+  const guest = makeApi({ Store: { isGuest: true } });
+  assert.equal(guest.dataSaver(), true, 'guest with no stored preference defaults to saver on');
+
+  const user = makeApi({ Store: { isGuest: false } });
+  assert.equal(user.dataSaver(), false, 'logged-in user with no stored preference defaults off');
+
+  const guestOff = makeApi({
+    Store: { isGuest: true },
+    localStorage: { getItem: (k) => (k === 'musicapp:data_saver' ? '0' : null), setItem: () => {} }
+  });
+  assert.equal(guestOff.dataSaver(), false, 'a guest who explicitly toggled off keeps it off');
+});

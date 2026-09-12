@@ -37,8 +37,16 @@ const Api = {
   // ── URL builders ──
   dataSaver() {
     // Per-device save-bandwidth preference. Storage can throw in privacy
-    // modes — treat that as off.
-    try { return localStorage.getItem('musicapp:data_saver') === '1'; } catch (e) { return false; }
+    // modes — treat that as off. Guests (share links) default to the compact
+    // stream: a huge download on someone else's connection is the worst
+    // first impression. A guest who toggles it off stores "0" explicitly and
+    // that choice sticks.
+    try {
+      const stored = localStorage.getItem('musicapp:data_saver');
+      if (stored !== null) return stored === '1';
+    } catch (e) {}
+    if (typeof Store !== 'undefined' && Store.isGuest) return true;
+    return false;
   },
   streamUrl(id, transcode) {
     if (this.dataSaver()) return '/api/stream/' + id + '?fmt=aac&b=128';
