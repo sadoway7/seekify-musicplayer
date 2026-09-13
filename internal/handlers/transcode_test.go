@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -564,5 +565,63 @@ func TestBackfill128Cache(t *testing.T) {
 	info2, err2 := os.Stat(cachePath)
 	if err != nil || err2 != nil || !info2.ModTime().Equal(info.ModTime()) {
 		t.Fatal("second backfill must reuse the existing 128k copy")
+	}
+}
+
+// The status endpoint reports readiness and live percent. b sanitization
+// matches stream/warm: garbage b rides the server default bitrate key.
+func TestTranscodeStatusHandler(t *testing.T) {
+	setupTranscodeTestDB(t)
+	src := setupRealFLAC(t)
+
+	track := &models.Track{ID: "track", FilePath: "track.flac", Duration: 2}
+	store.ReplaceLibrary(map[string]*models.Track{"track": track}, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/transcode-status/track?b=128", nil)
+	TranscodeStatusHandler(rr, req)
+	var body struct {
+		Ready   bool    `json:"ready"`
+		Percent float64 `json:"percent"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v (%q)", err, rr.Body.String())
+	}
+	if body.Ready {
+		t.Fatal("expected ready=false before any encode")
+	}
+
+	// Force an encode to completion, then expect ready=true.
+	if _, err := transcode.EnsureAt("track", src, "128"); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/api/transcode-status/track?b=128", nil)
+	TranscodeStatusHandler(rr, req)
+	body = struct {
+		Ready   bool    `json:"ready"`
+		Percent float64 `json:"percent"`
+	}{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v (%q)", err, rr.Body.String())
+	}
+	if !body.Ready {
+		t.Fatalf("expected ready=true, got %v (%q)", body, rr.Body.String())
+	}
+
+	// Garbage b → server default key; still a clean 200.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/api/transcode-status/track?b=banana", nil)
+	TranscodeStatusHandler(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("garbage b: got %d", rr.Code)
+	}
+
+	// Unknown track → 404.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/api/transcode-status/nope", nil)
+	TranscodeStatusHandler(rr, req)
+	if rr.Code != 404 {
+		t.Fatalf("unknown track: got %d, want 404", rr.Code)
 	}
 }

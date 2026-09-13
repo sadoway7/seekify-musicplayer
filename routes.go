@@ -41,6 +41,7 @@ var routeTable = []route{
 	{"/api/stats", handlers.StatsHandler, gateOpen, nil},
 	{"/api/stream/", handlers.StreamHandler, gateOpen, nil},
 	{"/api/transcode-warm/", handlers.TranscodeWarmHandler, gateOpen, nil},
+	{"/api/transcode-status/", handlers.TranscodeStatusHandler, gateOpen, nil},
 	{"/api/cover/", handlers.CoverHandler, gateOpen, nil},
 	{"/api/artist-art/", handlers.ArtistArtHandler, gateOpen, nil},
 	{"/api/artist-art-fetch/", handlers.ArtistArtFetchHandler, gateOpen, nil},

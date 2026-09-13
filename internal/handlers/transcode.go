@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"musicapp/internal/scanner"
@@ -168,4 +169,39 @@ func BackfillTranscodeCache() {
 	}
 	store.SetSetting("transcode_backfill_done", "1")
 	log.Printf("[transcode] Backfill complete: warmed %d/%d track(s)", warmed, len(candidates))
+}
+
+// TranscodeStatusHandler reports live transcode state for a track so the
+// player can show a real progress bar while a cold encode prepares.
+//   GET /api/transcode-status/<trackID>?b=<bitrate>
+//   → {"ready": bool, "percent": number}   (percent -1 = unknown)
+// b sanitization matches the stream/warm handlers: anything but 128/192
+// resolves to the server default bitrate — the same key ensure() uses.
+func TranscodeStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/transcode-status/")
+	if trackID == "" {
+		writeJSONError(w, http.StatusBadRequest, "track id required")
+		return
+	}
+	bitrate := r.URL.Query().Get("b")
+	if bitrate != "128" && bitrate != "192" {
+		bitrate = store.GetSetting("transcode_bitrate", "192")
+		if _, err := strconv.Atoi(bitrate); err != nil {
+			bitrate = "192"
+		}
+	}
+	track := store.GetTrack(trackID)
+	if track == nil {
+		http.NotFound(w, r)
+		return
+	}
+	fullPath := scanner.ResolveFilePath(track.FilePath)
+	writeJSON(w, map[string]interface{}{
+		"ready":   transcode.IsReadyAt(trackID, fullPath, bitrate),
+		"percent": transcode.Progress(trackID, bitrate),
+	})
 }
