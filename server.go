@@ -222,11 +222,13 @@ func main() {
 
 		// Last: warm the AAC cache for pre-existing tracks. Must run after the
 		// scan/DB load above — a concurrent fire sees an empty library and
-		// burns the once-per-library marker on nothing.
+		// burns the once-per-library marker on nothing. The 128k Data Saver
+		// backfill chains after it so the two never compete for CPU.
 		store.SafeGo("transcode-backfill", func() {
 			store.WorkerStart("transcode-backfill")
 			defer store.WorkerDone("transcode-backfill", nil)
 			handlers.BackfillTranscodeCache()
+			handlers.Backfill128Cache()
 		})
 	}()
 
@@ -262,6 +264,9 @@ func main() {
 	})
 	store.RegisterWorker("transcode-backfill", "Warms AAC streaming cache for pre-existing tracks (runs once)", "Startup (once per library)", func() {
 		handlers.BackfillTranscodeCache()
+	})
+	store.RegisterWorker("transcode-128-backfill", "Warms 128k Data Saver copies for pre-existing tracks (runs once)", "Startup (once per library)", func() {
+		handlers.Backfill128Cache()
 	})
 
 	runWorker := func(name string, body func()) {

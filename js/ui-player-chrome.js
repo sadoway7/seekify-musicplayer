@@ -341,6 +341,19 @@ Object.assign(UI, {
     }, 250);
   },
 
+  // Cold-transcode loading state: a quiet chip inside Now Playing (spinner +
+  // text) instead of the old toast blob. Player arms it after a 1.5s grace
+  // period and clears it the moment playback starts.
+  showPrepareNotice() {
+    const el = document.getElementById('np-prepare-chip');
+    if (el) el.classList.remove('hidden');
+  },
+
+  hidePrepareNotice() {
+    const el = document.getElementById('np-prepare-chip');
+    if (el) el.classList.add('hidden');
+  },
+
   updateQueueIfVisible() {
     // The name is the contract: a hidden queue renders nothing. A full
     // rebuild is O(rows × cover imgs) — the single biggest jank source when

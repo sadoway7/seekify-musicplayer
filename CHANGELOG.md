@@ -4,6 +4,8 @@
 
 - Fix: the previous update briefly broke the Downloads tab — it showed "Failed to load downloads" instead of the queue. Update to this version; everything else from that release is unaffected.
 - Also new: guest share links now start in Data Saver mode, so people you share a song with don't wait on a large download (logged-in users keep their own choice).
+- Also new: Data Saver copies of your library are now built in the background at low priority (once per library, never competing with playback), so first plays are instant instead of "preparing." New downloads get both copies warmed automatically.
+- The "Preparing" notice is now a quiet in-player chip (spinner + text on the Now Playing screen) instead of a toast.
 
 ## 2026-09-12 — Speed, smoother playback, smaller downloads
 

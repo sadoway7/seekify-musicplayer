@@ -90,7 +90,46 @@ func WarmTranscodeCache(trackID, path string) {
 	}
 	store.SafeGo("warm-ingest-transcode", func() {
 		transcode.EnsureLow(trackID, path)
+		// Data Saver plays request a separate smaller copy — warm it too so
+		// the first data-saver play of a fresh download never waits.
+		transcode.EnsureLowAt(trackID, path, "128")
 	})
+}
+
+// Backfill128Cache warms the 128k Data Saver copy for every library track
+// that can transcode. Marker-guarded like BackfillTranscodeCache (runs once
+// per library), background priority, and bounded by the shared encode
+// semaphore — it never competes with foreground playback for CPU.
+func Backfill128Cache() {
+	if !store.GetSettingBool("transcode_enabled", true) {
+		return
+	}
+	if store.GetSettingBool("transcode_128_backfill_done", false) {
+		return
+	}
+
+	type candidate struct{ id, path string }
+	var candidates []candidate
+	store.View(func(l *store.Library) {
+		for _, t := range l.Tracks {
+			candidates = append(candidates, candidate{t.ID, t.FilePath})
+		}
+	})
+
+	warmed := 0
+	for _, c := range candidates {
+		fullPath := scanner.ResolveFilePath(c.path)
+		ext := strings.ToLower(filepath.Ext(fullPath))
+		forced := ext == ".m4a" && transcode.IsBrowserUnsupportedM4A(fullPath)
+		if !needsTranscode(ext) && !forced {
+			continue
+		}
+		if _, err := transcode.EnsureLowAt(c.id, fullPath, "128"); err == nil {
+			warmed++
+		}
+	}
+	store.SetSetting("transcode_128_backfill_done", "1")
+	log.Printf("[transcode] 128k backfill complete: warmed %d/%d track(s)", warmed, len(candidates))
 }
 
 // BackfillTranscodeCache warms the AAC cache for every library track that

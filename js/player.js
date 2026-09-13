@@ -371,7 +371,9 @@ const Player = {
       if (this._prepareNoticeTimer !== timerId) return;
       this._prepareNoticeTimer = null;
       this._prepareShown = true;
-      if (typeof UI !== 'undefined' && UI.showToast) {
+      if (typeof UI !== 'undefined' && UI.showPrepareNotice) {
+        UI.showPrepareNotice();
+      } else if (typeof UI !== 'undefined' && UI.showToast) {
         UI.showToast('Preparing this track for streaming…', { sticky: true });
       }
     }, 1500);
@@ -383,10 +385,14 @@ const Player = {
       clearTimeout(this._prepareNoticeTimer);
       this._prepareNoticeTimer = null;
     }
-    // Only remove the toast we showed — never an unrelated pending toast.
+    // Only remove the notice we showed — never an unrelated pending toast.
     if (this._prepareShown) {
       this._prepareShown = false;
-      if (typeof UI !== 'undefined' && UI.hideToast) UI.hideToast();
+      if (typeof UI !== 'undefined' && UI.hidePrepareNotice) {
+        UI.hidePrepareNotice();
+      } else if (typeof UI !== 'undefined' && UI.hideToast) {
+        UI.hideToast();
+      }
     }
   },
 

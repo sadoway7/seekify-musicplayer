@@ -537,3 +537,32 @@ func TestCoverHandlerWebPDerivative(t *testing.T) {
 		t.Fatalf("legacy ETag = %q, want c2- scheme", etag)
 	}
 }
+
+// The 128k Data Saver backfill builds a -128 copy for transcodable tracks
+// and stamps its once-per-library marker.
+func TestBackfill128Cache(t *testing.T) {
+	ff := findFF()
+	if ff == "" {
+		t.Skip("ffmpeg not available")
+	}
+	setupTranscodeTestDB(t)
+	setupRealFLAC(t)
+
+	Backfill128Cache()
+
+	cachePath := filepath.Join(filepath.Dir(store.DBPath), "transcode", "track-128.m4a")
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("128k copy missing after backfill: %v", err)
+	}
+	if v := store.GetSetting("transcode_128_backfill_done", ""); v != "1" {
+		t.Fatalf("backfill marker = %q, want 1", v)
+	}
+
+	// Second run is a no-op (marker) — the copy is reused, not rebuilt.
+	info, err := os.Stat(cachePath)
+	Backfill128Cache()
+	info2, err2 := os.Stat(cachePath)
+	if err != nil || err2 != nil || !info2.ModTime().Equal(info.ModTime()) {
+		t.Fatal("second backfill must reuse the existing 128k copy")
+	}
+}
