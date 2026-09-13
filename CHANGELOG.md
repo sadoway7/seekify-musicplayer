@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-12 — Prepare progress + polish
+
+- Playback: preparing a track for streaming now shows a real progress bar on the player artwork, so you can see exactly when first playback is ready.
+- Polish: the action buttons on the Now Playing screen sit slightly closer to the song title on all screen sizes.
+
 ## 2026-09-12 — Hotfix: Downloads tab
 
 - Fix: the previous update briefly broke the Downloads tab — it showed "Failed to load downloads" instead of the queue. Update to this version; everything else from that release is unaffected.

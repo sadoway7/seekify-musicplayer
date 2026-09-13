@@ -16,6 +16,9 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-09-12
+- Smoother first-play experience with a visible progress indicator while a track prepares.
+
 2026-09-12 hotfix
 - The previous update briefly broke the Downloads tab. Update to this version to get the fix.
 
