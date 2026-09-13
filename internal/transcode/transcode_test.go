@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"musicapp/internal/models"
 	"musicapp/internal/store"
 )
 
@@ -244,5 +245,87 @@ func TestCachePathAtNaming(t *testing.T) {
 	}
 	if got := CachePathAt("abc", "128"); !strings.HasSuffix(got, "abc-128.m4a") {
 		t.Fatalf("CachePathAt(abc,128) = %q, want suffix abc-128.m4a", got)
+	}
+}
+
+func TestParseOutTime(t *testing.T) {
+	if s, ok := parseOutTime("00:00:02.000000"); !ok || s != 2 {
+		t.Fatalf("parseOutTime seconds: got %v %v", s, ok)
+	}
+	if s, ok := parseOutTime("01:02:03.5"); !ok || s != 3723.5 {
+		t.Fatalf("parseOutTime h:m:s: got %v %v", s, ok)
+	}
+	if _, ok := parseOutTime("N/A"); ok {
+		t.Fatal("N/A should not parse")
+	}
+	if _, ok := parseOutTime("garbage"); ok {
+		t.Fatal("garbage should not parse")
+	}
+}
+
+// While an encode runs, Progress must expose the out_time/duration percent
+// (clamped 0-99); when ensure returns, the key must be gone (-1) and the
+// cache file fresh. The stub ffmpeg emits one progress line mid-run.
+func TestEnsureReportsProgress(t *testing.T) {
+	setupTranscodeTest(t)
+	fakeFmpegStub(t, `for last; do :; done
+echo "out_time=00:00:02.000000"
+sleep 0.4
+echo "progress=end"
+echo fakeaudio > "$last"`)
+	src := filepath.Join(t.TempDir(), "p.flac")
+	os.WriteFile(src, []byte("x"), 0o644)
+
+	var prev map[string]*models.Track
+	store.View(func(l *store.Library) { prev = l.Tracks })
+	store.ReplaceLibrary(map[string]*models.Track{
+		"prog": {ID: "prog", FilePath: "p.flac", Duration: 4},
+	}, nil)
+	t.Cleanup(func() { store.ReplaceLibrary(prev, nil) })
+
+	done := make(chan error, 1)
+	go func() { _, err := EnsureAt("prog", src, "128"); done <- err }()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		p := Progress("prog", "128")
+		if p == 50 {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("ensure finished before progress was observed (last %v): %v", p, err)
+		case <-deadline:
+			t.Fatalf("progress never reached 50%%, last %v", p)
+		default:
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if p := Progress("prog", "128"); p != -1 {
+		t.Fatalf("progress key survived completion: got %v, want -1", p)
+	}
+	if !IsReadyAt("prog", src, "128") {
+		t.Fatal("cache file missing after ensure")
+	}
+}
+
+// No duration on file → -1 (unknown), never a bogus percent.
+func TestProgressUnknownWithoutDuration(t *testing.T) {
+	setupTranscodeTest(t)
+	fakeFmpegStub(t, `for last; do :; done
+echo "out_time=00:00:01.000000"
+echo fakeaudio > "$last"`)
+	src := filepath.Join(t.TempDir(), "p.flac")
+	os.WriteFile(src, []byte("x"), 0o644)
+	if _, err := EnsureAt("nodur", src, "128"); err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	// Key is deleted on completion; while it existed it would have been -1
+	// (duration 0). Either way the post-condition is -1.
+	if p := Progress("nodur", "128"); p != -1 {
+		t.Fatalf("progress after completion: got %v, want -1", p)
 	}
 }

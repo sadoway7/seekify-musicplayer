@@ -9,6 +9,8 @@
 package transcode
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -19,6 +21,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +32,12 @@ import (
 var (
 	singleflightMu sync.Mutex
 	inFlight       = map[string]chan struct{}{}
+
+	// Live encode progress for the status endpoint, keyed like singleflight
+	// (trackID@bitrate): -1 unknown/no duration, else 0-99 while ffmpeg
+	// reports out_time. Deleted when ensure returns.
+	progressMu sync.Mutex
+	progress   = map[string]float64{}
 
 	// transSem bounds concurrent ffmpeg passes (mirrors normSem/waveSem).
 	transSem = make(chan struct{}, 2)
@@ -91,6 +100,47 @@ func IsReadyAt(trackID, sourcePath, bitrate string) bool {
 		return false
 	}
 	return !ci.ModTime().Before(si.ModTime())
+}
+
+// Progress reports encode progress for an in-flight ensure keyed
+// trackID@bitrate: -1 unknown, else 0-99. Missing key → -1.
+func Progress(trackID, bitrate string) float64 {
+	progressMu.Lock()
+	defer progressMu.Unlock()
+	p, ok := progress[trackID+"@"+bitrate]
+	if !ok {
+		return -1
+	}
+	return p
+}
+
+// trackDurationSecs reads the library duration for a track (seconds).
+func trackDurationSecs(trackID string) float64 {
+	if t := store.GetTrack(trackID); t != nil && t.Duration > 0 {
+		return float64(t.Duration)
+	}
+	return 0
+}
+
+// parseOutTime parses ffmpeg -progress "out_time=HH:MM:SS.microseconds".
+func parseOutTime(v string) (float64, bool) {
+	parts := strings.Split(v, ":")
+	if len(parts) != 3 {
+		return 0, false
+	}
+	h, err := strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return 0, false
+	}
+	m, err := strconv.ParseFloat(parts[1], 64)
+	if err != nil {
+		return 0, false
+	}
+	s, err := strconv.ParseFloat(parts[2], 64)
+	if err != nil {
+		return 0, false
+	}
+	return h*3600 + m*60 + s, true
 }
 
 // Ensure returns the path to a fresh cached .m4a for the track, transcoding
@@ -158,6 +208,9 @@ func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, erro
 		singleflightMu.Lock()
 		delete(inFlight, key)
 		singleflightMu.Unlock()
+		progressMu.Lock()
+		delete(progress, key)
+		progressMu.Unlock()
 	}()
 
 	// Double-check after acquiring leadership: a concurrent goroutine may
@@ -178,6 +231,9 @@ func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, erro
 	args := []string{
 		"-y",
 		"-hide_banner", "-loglevel", "error",
+		// -progress streams key=value stats (out_time=…) to stdout for the
+		// live percent; -nostats keeps stderr quiet.
+		"-progress", "pipe:1", "-nostats",
 		"-i", sourcePath,
 		"-vn",
 		"-c:a", "aac",
@@ -199,9 +255,51 @@ func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, erro
 	} else {
 		cmd = exec.CommandContext(ctx, ff, args...)
 	}
-	if out, err := cmd.CombinedOutput(); err != nil {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
 		os.Remove(tmp)
-		log.Printf("[transcode] %s: %v: %s", trackID, err, string(out))
+		return "", fmt.Errorf("progress pipe: %w", err)
+	}
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+	if err := cmd.Start(); err != nil {
+		os.Remove(tmp)
+		log.Printf("[transcode] %s: start: %v: %s", trackID, err, errBuf.String())
+		return "", fmt.Errorf("ffmpeg: %w", err)
+	}
+	// Stream -progress lines: out_time vs the track duration gives a real
+	// 0-99 percent while the encode runs. No duration on file → -1 (the
+	// client shows a waiting state instead of a percent).
+	go func() {
+		dur := trackDurationSecs(trackID)
+		sc := bufio.NewScanner(stdout)
+		for sc.Scan() {
+			line := sc.Text()
+			if !strings.HasPrefix(line, "out_time=") {
+				continue
+			}
+			secs, ok := parseOutTime(strings.TrimPrefix(line, "out_time="))
+			if !ok {
+				continue
+			}
+			pct := -1.0
+			if dur > 0 {
+				pct = secs / dur * 100
+				if pct > 99 {
+					pct = 99
+				}
+				if pct < 0 {
+					pct = 0
+				}
+			}
+			progressMu.Lock()
+			progress[key] = pct
+			progressMu.Unlock()
+		}
+	}()
+	if err := cmd.Wait(); err != nil {
+		os.Remove(tmp)
+		log.Printf("[transcode] %s: %v: %s", trackID, err, errBuf.String())
 		return "", fmt.Errorf("ffmpeg: %w", err)
 	}
 	if err := os.Rename(tmp, cp); err != nil {
