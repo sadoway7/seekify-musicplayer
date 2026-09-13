@@ -105,13 +105,14 @@
 }
 
 /* Real encode progress for cold transcodes (approved prototype variant D):
- * a frosted pill groove over the art with a sunken white fill. Shown only
- * while now-playing is open — the header chip above covers the closed case. */
+ * a frosted pill groove over the art with a sunken white fill. Lives inside
+ * .np-art-wrapper so it always matches the disc's width — shown only while
+ * now-playing is open; the header chip covers the closed case. */
 .np-prepare-bar {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 14px;
+  left: 22px;
+  right: 22px;
+  bottom: 30%;
   z-index: 4;
   pointer-events: none;
   opacity: 1;
@@ -122,7 +123,7 @@
 .np-prepare-track {
   height: 14px;
   border-radius: 999px;
-  background: rgba(34, 36, 34, 0.55);
+  background: rgba(18, 20, 18, 0.6);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   overflow: hidden;
@@ -137,11 +138,16 @@
   transition: width .4s linear;
 }
 .np-prepare-lbl {
-  margin-top: 6px;
-  text-align: center;
-  font-size: 11px;
+  width: fit-content;
+  margin: 8px auto 0;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: rgba(12, 14, 12, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 12px;
   color: #fff;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
 }
 .np-prepare-lbl b { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
 
