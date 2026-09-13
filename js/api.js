@@ -151,6 +151,11 @@ const Api = {
     }).catch(() => {});
   },
   prewarmTranscode(id) { return fetch('/api/transcode-warm/' + id + (this.dataSaver() ? '?b=128' : ''), { method: 'POST' }).catch(() => {}); },
+  transcodeStatus(id) {
+    return fetch('/api/transcode-status/' + id + (this.dataSaver() ? '?b=128' : ''))
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null);
+  },
   deleteJob(id) { return this._req('/api/queue/' + id + '/delete', { method: 'POST', errMsg: 'Failed to delete job' }); },
   clearCompletedJobs() { return this._req('/api/queue/clear-completed', { method: 'POST', errMsg: 'Failed to clear jobs' }); },
   toggleDownloadPause() { return this._req('/api/queue/toggle-pause', { method: 'POST', errMsg: 'Failed to toggle pause' }); },

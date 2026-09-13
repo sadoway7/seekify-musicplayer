@@ -87,6 +87,21 @@ test('localStorage failures read as data saver off', () => {
   assert.equal(loadApi(throwing).dataSaver(), false);
 });
 
+test('Api.transcodeStatus polls the status endpoint, 128k hint only when saver on, null on failure', async () => {
+  const calls = [];
+  const api = loadApi(saverStorage(), calls);
+  // The harness fake body has no .json() — the pinned contract is: odd
+  // bodies never throw, they resolve to null (the player treats null as
+  // "keep waiting").
+  const res = await api.transcodeStatus('t1');
+  assert.equal(res, null);
+  assert.deepEqual(calls[0], { url: '/api/transcode-status/t1?b=128', opts: undefined });
+
+  const off = loadApi(undefined, calls);
+  await off.transcodeStatus('t2');
+  assert.equal(calls[1].url, '/api/transcode-status/t2');
+});
+
 test('player declares long-form playback before creating Safari audio', () => {
   const order = [];
   const audioSession = {
