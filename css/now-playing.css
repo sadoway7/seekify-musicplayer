@@ -326,7 +326,7 @@
 
 .np-float-tray {
   position: absolute;
-  bottom: 0;
+  bottom: -12px;
   left: 50%;
   transform: translateX(-50%) scale(0.9);
   transform-origin: center bottom;
