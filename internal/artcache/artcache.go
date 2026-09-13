@@ -84,6 +84,12 @@ func findFfmpeg() string {
 	return ""
 }
 
+// artSem bounds concurrent WebP conversions. Without it, the first gallery
+// view after a deploy spawns one ffmpeg per cold cover — a hundred-process
+// stampede against the array that drags the whole server through the floor.
+// Two at a time: covers appear progressively, nothing else starves.
+var artSem = make(chan struct{}, 2)
+
 // ConvertAsync rewrites the derivative in the background at low priority.
 // Callers must have already served the original — conversion is best-effort
 // and never blocks a request or surfaces an error to the client. Concurrent
@@ -97,6 +103,8 @@ func ConvertAsync(webpPath, srcPath string) {
 	}
 	store.SafeGo("artcache-convert", func() {
 		defer inFlight.Delete(webpPath)
+		artSem <- struct{}{}
+		defer func() { <-artSem }()
 		_ = EnsureSync(webpPath, srcPath)
 	})
 }
