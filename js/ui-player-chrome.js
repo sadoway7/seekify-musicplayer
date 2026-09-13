@@ -354,6 +354,54 @@ Object.assign(UI, {
     if (el) el.classList.add('hidden');
   },
 
+  // Real encode progress (approved prototype variant D). Returns false when
+  // now-playing is hidden or the bar is missing so the player falls back to
+  // the header chip.
+  showPrepareBar() {
+    const np = this.els.nowPlaying;
+    if (!np || np.classList.contains('hidden')) return false;
+    const bar = document.getElementById('np-prepare-bar');
+    if (!bar) return false;
+    bar.classList.remove('hidden', 'done');
+    const fill = bar.querySelector('.np-prepare-fill');
+    if (fill) fill.style.width = '0%';
+    const lbl = bar.querySelector('.np-prepare-lbl');
+    if (lbl) lbl.innerHTML = 'Preparing first playback · <b>0%</b>';
+    return true;
+  },
+
+  updatePrepareBar(pct) {
+    const bar = document.getElementById('np-prepare-bar');
+    if (!bar) return;
+    const fill = bar.querySelector('.np-prepare-fill');
+    if (fill) fill.style.width = (pct == null ? 0 : pct) + '%';
+    const lbl = bar.querySelector('.np-prepare-lbl');
+    if (lbl) {
+      lbl.innerHTML = pct == null
+        ? 'Waiting for a free encoder · <b>0%</b>'
+        : 'Preparing first playback · <b>' + Math.round(pct) + '%</b>';
+    }
+  },
+
+  finishPrepareBar() {
+    const bar = document.getElementById('np-prepare-bar');
+    if (!bar) return;
+    const fill = bar.querySelector('.np-prepare-fill');
+    if (fill) fill.style.width = '100%';
+    bar.classList.add('done');
+    setTimeout(() => {
+      bar.classList.add('hidden');
+      bar.classList.remove('done');
+    }, 600);
+  },
+
+  hidePrepareBar() {
+    const bar = document.getElementById('np-prepare-bar');
+    if (!bar) return;
+    bar.classList.add('hidden');
+    bar.classList.remove('done');
+  },
+
   updateQueueIfVisible() {
     // The name is the contract: a hidden queue renders nothing. A full
     // rebuild is O(rows × cover imgs) — the single biggest jank source when

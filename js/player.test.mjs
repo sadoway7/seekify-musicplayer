@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('./player.js', import.meta.url), 'utf8')
   .replace('const Player = {', 'globalThis.Player = {');
 
-function loadPlayer(navigator, order = [], canPlay = {}, api = null, storage = null) {
+function loadPlayer(navigator, order = [], canPlay = {}, api = null, storage = null, extras = {}) {
   const createdAudio = [];
   const timeouts = [];
 
@@ -27,6 +27,7 @@ function loadPlayer(navigator, order = [], canPlay = {}, api = null, storage = n
   }
 
   const context = vm.createContext({
+    ...extras,
     Audio: FakeAudio,
     Math,
     Number,
@@ -644,4 +645,76 @@ test('guests default to data saver; logged-in users default off', () => {
     localStorage: { getItem: (k) => (k === 'musicapp:data_saver' ? '0' : null), setItem: () => {} }
   });
   assert.equal(guestOff.dataSaver(), false, 'a guest who explicitly toggled off keeps it off');
+});
+
+function makePrepareUI(npHidden) {
+  const uiCalls = [];
+  const npClasses = new Set(npHidden ? ['hidden'] : []);
+  const UI = {
+    els: { nowPlaying: { classList: { contains: (c) => npClasses.has(c) } } },
+    showPrepareBar() { if (npHidden) return false; uiCalls.push('show'); return true; },
+    updatePrepareBar(pct) { uiCalls.push('update:' + pct); },
+    finishPrepareBar() { uiCalls.push('finish'); },
+    hidePrepareBar() { uiCalls.push('hidebar'); },
+    showPrepareNotice() { uiCalls.push('chip'); },
+    hidePrepareNotice() { uiCalls.push('hidechip'); },
+    showToast() { uiCalls.push('toast'); },
+    hideToast() { uiCalls.push('hidetoast'); },
+  };
+  return { UI, uiCalls };
+}
+
+test('transcode prepare with now-playing open shows the bar and polls real percent', async () => {
+  const { UI, uiCalls } = makePrepareUI(false);
+  const statuses = [
+    { ready: false, percent: -1 },
+    { ready: false, percent: 42 },
+  ];
+  const api = {
+    reportPlaybackError: () => {},
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    transcodeStatus: () => Promise.resolve(statuses.length ? statuses.shift() : { ready: true, percent: 100 }),
+  };
+  const { Player, timeouts } = loadPlayer({}, [], {}, api, null, { UI });
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac', title: 'A' });
+
+  const arm = timeouts.find(t => t.ms === 1500);
+  assert.ok(arm, 'prepare notice timer armed');
+  arm.fn();
+  // Every load first clears the previous notice/bar, then shows the new one.
+  assert.deepEqual(uiCalls, ['hidebar', 'show']);
+
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(uiCalls, ['hidebar', 'show', 'update:null']);
+
+  // Drain the 800ms poll re-arms until ready fires.
+  for (let i = 0; i < 5; i++) {
+    const poll = timeouts.filter(t => t.ms === 800).pop();
+    if (!poll) break;
+    poll.fn();
+    await new Promise(r => setImmediate(r));
+  }
+  assert.ok(uiCalls.includes('update:42'));
+  assert.ok(uiCalls.includes('finish'));
+  assert.ok(!uiCalls.includes('chip'), 'chip must not show when the bar is up');
+});
+
+test('transcode prepare with now-playing closed falls back to the chip', async () => {
+  const { UI, uiCalls } = makePrepareUI(true);
+  const api = {
+    reportPlaybackError: () => {},
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    transcodeStatus: () => Promise.resolve({ ready: false, percent: 10 }),
+  };
+  const { Player, timeouts } = loadPlayer({}, [], {}, api, null, { UI });
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac', title: 'A' });
+
+  const arm = timeouts.find(t => t.ms === 1500);
+  arm.fn();
+  assert.deepEqual(uiCalls, ['hidebar', 'chip']);
+
+  await new Promise(r => setImmediate(r));
+  assert.ok(!uiCalls.some(c => c.startsWith('update')), 'no bar polling when the bar is not shown');
 });

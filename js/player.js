@@ -371,13 +371,40 @@ const Player = {
       if (this._prepareNoticeTimer !== timerId) return;
       this._prepareNoticeTimer = null;
       this._prepareShown = true;
-      if (typeof UI !== 'undefined' && UI.showPrepareNotice) {
+      // On-art real progress bar when now-playing is visible; the header
+      // chip (or legacy toast) covers the mini-player-only case.
+      if (typeof UI !== 'undefined' && UI.showPrepareBar && UI.showPrepareBar()) {
+        this._startPreparePoll();
+      } else if (typeof UI !== 'undefined' && UI.showPrepareNotice) {
         UI.showPrepareNotice();
       } else if (typeof UI !== 'undefined' && UI.showToast) {
         UI.showToast('Preparing this track for streaming…', { sticky: true });
       }
     }, 1500);
     timerId = this._prepareNoticeTimer;
+  },
+
+  // Polls the server for live encode percent while the bar is up. A
+  // generation guard makes stale ticks (track changed, notice cleared,
+  // bar finished) no-ops without needing clearTimeout bookkeeping.
+  _startPreparePoll() {
+    const track = this.getCurrentTrack();
+    if (!track || typeof Api.transcodeStatus !== 'function') return;
+    const gen = (this._preparePollGen = (this._preparePollGen || 0) + 1);
+    const tick = async () => {
+      if (gen !== this._preparePollGen) return;
+      const st = await Api.transcodeStatus(track.id);
+      if (gen !== this._preparePollGen) return;
+      if (st && st.ready) {
+        this._preparePollGen++;
+        if (typeof UI !== 'undefined' && UI.finishPrepareBar) UI.finishPrepareBar();
+        return;
+      }
+      const pct = st && typeof st.percent === 'number' && st.percent >= 0 ? st.percent : null;
+      if (typeof UI !== 'undefined' && UI.updatePrepareBar) UI.updatePrepareBar(pct);
+      this._preparePollTimer = setTimeout(tick, 800);
+    };
+    tick();
   },
 
   _clearPrepareNotice() {
@@ -394,6 +421,10 @@ const Player = {
         UI.hideToast();
       }
     }
+    // Stop any live progress poll and hide the on-art bar (instant — a new
+    // track must never see the previous track's bar mid-fade).
+    this._preparePollGen = (this._preparePollGen || 0) + 1;
+    if (typeof UI !== 'undefined' && UI.hidePrepareBar) UI.hidePrepareBar();
   },
 
   _clearStallTimeout() {
