@@ -185,6 +185,10 @@ const Player = {
       this._clearStallTimeout();
       this._clearPrepareNotice();
       if (!('mediaSession' in navigator)) return;
+      // iOS drops metadata written before playback engages (the _loadAndPlay
+      // write races play()), leaving the lock screen blank until the next
+      // track change. Re-assert it now that audio is actually sounding.
+      this._updateMediaSession(this.getCurrentTrack());
       navigator.mediaSession.setActionHandler('play', () => { this.audio.play().catch(() => {}); });
       navigator.mediaSession.setActionHandler('pause', () => { this.audio.pause(); });
       navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
@@ -418,10 +422,11 @@ const Player = {
       if (typeof document !== 'undefined' && document.addEventListener) {
         document.addEventListener('visibilitychange', onVisible);
       }
-      this.audio.addEventListener('canplay', () => {
-        if (typeof document !== 'undefined' && document.hidden) return;
-        attempt();
-      });
+      // Retry the moment data lands, even while hidden: backgrounded iOS
+      // allows media-continuation play(), and a second rejection is
+      // swallowed inside attempt(). Refusing while hidden left background
+      // auto-advance dead until the user foregrounded the app.
+      this.audio.addEventListener('canplay', () => attempt());
     } catch (e) { /* non-browser contexts */ }
   },
 

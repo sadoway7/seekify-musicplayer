@@ -771,3 +771,61 @@ test('background autoplay rejection retries when the app becomes visible', async
   await new Promise(r => setImmediate(r));
   assert.equal(playCalls.length, 2, 'start retried automatically on return');
 });
+
+test('playing re-asserts mediaSession metadata for the iOS lock screen', () => {
+  const mediaSession = {
+    metadata: null,
+    playbackState: '',
+    setActionHandler: () => {},
+    setPositionState: () => {},
+  };
+  class MediaMetadata {
+    constructor(init) { Object.assign(this, init); }
+  }
+  const { Player, createdAudio } = loadPlayer(
+    { mediaSession }, [], {}, null, null, { MediaMetadata }
+  );
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01.mp3', title: 'Song A', artist: 'Art', album: 'Al' });
+
+  createdAudio[0].listeners.get('play')();
+  assert.equal(mediaSession.playbackState, 'playing');
+  createdAudio[0].listeners.get('playing')();
+
+  assert.ok(mediaSession.metadata, 'metadata present once audio is flowing');
+  assert.equal(mediaSession.metadata.title, 'Song A');
+  assert.equal(mediaSession.metadata.artist, 'Art');
+});
+
+test('background autoplay rejection retries on canplay while still hidden', async () => {
+  let hidden = true;
+  const docStub = {
+    get hidden() { return hidden; },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+  const { Player, createdAudio } = loadPlayer({}, [], {}, {
+    reportPlaybackError: () => {},
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+  }, null, { document: docStub });
+  Player.init();
+
+  const playCalls = [];
+  let rejectNext = true;
+  Player.audio.play = () => {
+    playCalls.push(1);
+    if (rejectNext) return Promise.reject(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+    return Promise.resolve();
+  };
+
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac', title: 'A' });
+  await new Promise(r => setImmediate(r));
+  assert.equal(playCalls.length, 1, 'initial start rejected in background');
+  assert.equal(Player._pendingAutoplay, true, 'retry armed');
+
+  rejectNext = false;
+  createdAudio[0].listeners.get('canplay')();
+  await new Promise(r => setImmediate(r));
+  assert.equal(playCalls.length, 2, 'data landing retries playback while hidden');
+  assert.equal(Player._pendingAutoplay, false, 'pending flag cleared on success');
+});
