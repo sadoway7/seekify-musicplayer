@@ -1697,7 +1697,12 @@ const UI = {
       // If the row count changed or container is empty, do a full rebuild.
       // Otherwise update existing rows in place to avoid layout shift.
       const existingRows = container.querySelectorAll('.worker-row');
-      const needsFullRebuild = existingRows.length !== workers.length;
+      // Rebuild when the roster changed, not just the count — an upgrade can
+      // rename/swap workers (same count) and the rows must not go stale.
+      const workerSig = workers.map(w => w.name).join(',');
+      const needsFullRebuild = existingRows.length !== workers.length
+        || container.dataset.workersSig !== workerSig;
+      container.dataset.workersSig = workerSig;
 
       if (needsFullRebuild) {
         // Map worker names to their setting toggle IDs and interval IDs
@@ -1706,6 +1711,8 @@ const UI = {
           'cover-fetch':       { toggle: 'setting-cover-fetch-enabled' },
           'artist-art-fetch':  { toggle: 'setting-artist-art-fetch-enabled' },
           'review':            { toggle: 'setting-review-enabled', interval: 'setting-review-recheck-hours', intervalLabel: 'hrs' },
+          'data-saver':        { toggle: 'setting-data-saver-enabled', interval: 'setting-data-saver-interval', intervalLabel: 'hrs' },
+          'watched-playlists': { toggle: 'setting-watched-enabled' },
         };
 
         const s = this._savedWorkerSettings || {};
@@ -1714,6 +1721,8 @@ const UI = {
           'cover-fetch': s.cover_fetch_enabled !== false,
           'artist-art-fetch': s.artist_art_fetch_enabled !== false,
           'review': s.review_enabled !== false,
+          'data-saver': s.data_saver_enabled !== false,
+          'watched-playlists': s.watched_enabled === true,
         };
 
         container.innerHTML = workers.map(w => {
@@ -1723,7 +1732,9 @@ const UI = {
           let controls = '';
 
           if (ws && ws.interval) {
-            const intervalVal = ws.interval === 'setting-watcher-interval' ? (s.watcher_interval || '30') : (s.review_recheck_hours || '24');
+            const intervalVal = ws.interval === 'setting-watcher-interval' ? (s.watcher_interval || '30')
+              : ws.interval === 'setting-data-saver-interval' ? (s.data_saver_interval_hours || '6')
+              : (s.review_recheck_hours || '24');
             controls += '<div class="worker-controls">'
               + '<input type="text" class="settings-input worker-interval-input" id="' + ws.interval + '" value="' + this._esc(intervalVal) + '" style="width:50px;padding:4px 8px;font-size:13px;text-align:center">'
               + '<span class="worker-interval-label">' + ws.intervalLabel + '</span>'
@@ -1734,7 +1745,7 @@ const UI = {
             + '<div class="worker-status-dot"></div>'
             + (hasToggle ? '<div class="stoggle worker-toggle' + (toggleActive ? ' active' : '') + '"><div class="stoggle-track"><div class="stoggle-knob"></div></div></div>' : '<div class="worker-toggle-spacer"></div>')
             + '<div class="worker-info">'
-            + '<div class="worker-name">' + this._esc(w.name) + '</div>'
+            + '<div class="worker-name">' + this._esc(w.display_name || w.name) + '</div>'
             + '<div class="worker-desc">' + this._esc(w.description) + '</div>'
             + '</div>'
             + '<div class="worker-freq">' + this._esc(w.frequency) + '</div>'

@@ -10,6 +10,7 @@ import (
 // WorkerStatus tracks the runtime state of a background worker.
 type WorkerStatus struct {
 	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"` // friendly label; falls back to Name in the UI
 	Description string `json:"description"`
 	Frequency   string `json:"frequency"`    // human-readable, "" for on-demand
 	LastRun     string `json:"lastRun"`      // RFC3339, "" if never
@@ -45,6 +46,16 @@ func RegisterWorker(name, description, frequency string, run func()) {
 			Frequency:   frequency,
 		},
 		run: run,
+	}
+}
+
+// SetWorkerDisplayName gives a registered worker a friendly label for the
+// Tasks list. The registry key stays the key for start/stop bookkeeping.
+func SetWorkerDisplayName(name, display string) {
+	workersMu.Lock()
+	defer workersMu.Unlock()
+	if w, ok := workers[name]; ok {
+		w.status.DisplayName = display
 	}
 }
 
@@ -87,7 +98,11 @@ func WorkerDoneTick(name string, didWork bool, err error) {
 	} else {
 		w.status.Error = ""
 	}
+	lastRun := w.status.LastRun
 	w.mu.Unlock()
+	// Persist so a restart doesn't report "never" — the registry is
+	// in-memory, but last-run history survives via the settings table.
+	SetSetting("worker_lastrun_"+name, lastRun)
 }
 
 // GetWorkers returns all registered workers sorted by name.
@@ -98,6 +113,12 @@ func GetWorkers() []WorkerStatus {
 	for _, w := range workers {
 		w.mu.Lock()
 		w.status.CanTrigger = w.run != nil
+		if w.status.LastRun == "" {
+			// Seed from the persisted last run after a restart.
+			if prev := GetSetting("worker_lastrun_"+w.status.Name, ""); prev != "" {
+				w.status.LastRun = prev
+			}
+		}
 		list = append(list, w.status)
 		w.mu.Unlock()
 	}

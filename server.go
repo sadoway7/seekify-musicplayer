@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"musicapp/internal/auth"
 	"musicapp/internal/artcache"
+	"musicapp/internal/auth"
 	"musicapp/internal/downloads"
 	"musicapp/internal/handlers"
 	"musicapp/internal/models"
@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -177,7 +178,7 @@ func main() {
 				log.Printf("Media scan [%s] complete: %d files found, %d tracks loaded", prefix, mediaStats.Scanned, store.TrackCount())
 			}
 
-		store.LibraryVersion.Add(1)
+			store.LibraryVersion.Add(1)
 		} else {
 			log.Printf("File counts match DB, skipping full scan")
 		}
@@ -237,6 +238,7 @@ func main() {
 	store.RegisterWorker("scanner", "Scans music directories for new/changed files", "Every 30s (configurable)", func() {
 		scanner.ForceRescan()
 	})
+	store.SetWorkerDisplayName("scanner", "New/Change Scanner")
 	store.RegisterWorker("cleanup", "Prunes missing/shared/truncated tracks + dedup", "Every 5 min", func() {
 		scanner.PruneMissingTracks()
 		scanner.PruneSharedDirTracks()
@@ -247,6 +249,7 @@ func main() {
 	store.RegisterWorker("review", "Flags tracks with missing metadata, duplicates, anomalies", "Every 24h (configurable)", func() {
 		review.WakeReviewWorker()
 	})
+	store.SetWorkerDisplayName("review", "Meta Reviewer")
 	store.RegisterWorker("watched-playlists", "Syncs YouTube watched playlists to library", "Every 1 hour (off unless watched_enabled=true)", func() {
 		if !store.GetSettingBool("watched_enabled", false) {
 			return
@@ -330,13 +333,19 @@ func main() {
 		}
 	}()
 
-	// Data Saver preparation: one slow background pass every 6h keeps every
-	// track's compact audio copy and every image's WebP derivative fresh and
-	// removes copies whose track was deleted. Never runs in the boot chain
-	// above (the library must be loaded before orphan removal is safe).
+	// Data Saver preparation: one slow background pass on a configurable
+	// interval keeps every track's compact audio copy and every image's WebP
+	// derivative ready and removes copies whose track was deleted. Never runs
+	// in the boot chain above (the library must be loaded before orphan
+	// removal is safe). The interval setting is re-read each cycle, so a new
+	// value applies after the current sleep.
 	go func() {
-		t := time.NewTicker(6 * time.Hour)
-		for range t.C {
+		for {
+			hours := 6
+			if n, err := strconv.Atoi(store.GetSetting("data_saver_interval_hours", "6")); err == nil && n >= 1 {
+				hours = n
+			}
+			time.Sleep(time.Duration(hours) * time.Hour)
 			store.SafeGo("data-saver-tick", func() {
 				handlers.SyncDataSaverAssets()
 				transcode.RemoveOrphanCopies()
@@ -352,7 +361,6 @@ func main() {
 	mux.HandleFunc("/waveform-test", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "waveform-test.html")
 	})
-
 
 	var handler http.Handler = mux
 	handler = auth.SessionLoad(handler)

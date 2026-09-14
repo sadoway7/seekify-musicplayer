@@ -21,8 +21,11 @@ import (
 
 // SyncDataSaverAssets runs one full preparation pass. Safe to run any time
 // after the library is loaded; every item is stat-gated so repeated passes
-// only do the work that is actually missing.
+// only do the work that is actually missing. Gated by data_saver_enabled.
 func SyncDataSaverAssets() {
+	if !store.GetSettingBool("data_saver_enabled", true) {
+		return
+	}
 	syncDataSaverAudio()
 	syncDataSaverArt()
 }

@@ -601,7 +601,6 @@
 .worker-name {
   font-weight: 600;
   font-size: var(--fs-sm, 14px);
-  text-transform: capitalize;
 }
 .worker-desc {
   font-size: 12px;

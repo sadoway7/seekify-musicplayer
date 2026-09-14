@@ -678,6 +678,9 @@ Object.assign(UI, {
         artist_art_fetch_enabled: settings.artist_art_fetch_enabled !== 'false',
         review_enabled: settings.review_enabled !== 'false',
         review_recheck_hours: settings.review_recheck_hours || '24',
+        data_saver_enabled: settings.data_saver_enabled !== 'false',
+        data_saver_interval_hours: settings.data_saver_interval_hours || '6',
+        watched_enabled: settings.watched_enabled === 'true',
       };
 
       const flagKeys = ['missing-title','missing-artist','missing-album','missing-genre','no-cover','filename-derived','suspicious','duration','duplicates'];
@@ -1178,7 +1181,10 @@ Object.assign(UI, {
         cover_fetch_enabled: String(getToggle('cover-fetch')),
         artist_art_fetch_enabled: String(getToggle('artist-art-fetch')),
         review_enabled: String(getToggle('review')),
-        review_recheck_hours: getInterval('setting-review-recheck-hours')
+        review_recheck_hours: getInterval('setting-review-recheck-hours'),
+        data_saver_enabled: String(getToggle('data-saver')),
+        data_saver_interval_hours: getInterval('setting-data-saver-interval'),
+        watched_enabled: String(getToggle('watched-playlists'))
       });
       this._showToast('Saved');
     } catch (e) {
