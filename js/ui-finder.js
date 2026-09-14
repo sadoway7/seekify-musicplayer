@@ -59,6 +59,7 @@ Object.assign(UI, {
         html += '<div class="empty-state" id="finder-empty-state" style="padding:48px 22px">'
           + '<div class="empty-state-title">Find music to rip</div>'
           + '<div class="empty-state-text">Search for an artist, song, or album. Pick a result to download it from Soulseek or YouTube.</div>'
+          + (!Store.isGuest ? '<button data-action="open-bulk-import" style="margin-top:18px;padding:10px 24px;border:none;border-radius:999px;background:var(--text1,#EEEEE8);color:#0a0b0a;font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Bulk Search/Rip</button>' : '')
           + '</div>';
       }
 
@@ -93,6 +94,14 @@ Object.assign(UI, {
           clearTimeout(this._finderTimer);
           this._renderFinderResults();
         }
+      });
+    }
+
+    const bulkBtn = this.els.content.querySelector('[data-action="open-bulk-import"]');
+    if (bulkBtn) {
+      bulkBtn.addEventListener('click', () => {
+        this._finderTab = 'bulk';
+        this.renderFinder();
       });
     }
 
