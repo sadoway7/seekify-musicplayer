@@ -59,7 +59,7 @@ Object.assign(UI, {
         html += '<div class="empty-state" id="finder-empty-state" style="padding:48px 22px">'
           + '<div class="empty-state-title">Find music to rip</div>'
           + '<div class="empty-state-text">Search for an artist, song, or album. Pick a result to download it from Soulseek or YouTube.</div>'
-          + (!Store.isGuest ? '<button data-action="open-bulk-import" style="margin-top:18px;padding:10px 24px;border:none;border-radius:999px;background:var(--text1,#EEEEE8);color:#0a0b0a;font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Bulk Search/Rip</button>' : '')
+          + (!Store.isGuest ? '<button data-action="open-bulk-import" style="margin-top:18px;padding:10px 24px;border:1px solid rgba(255,255,255,0.8);border-radius:999px;background:transparent;color:#fff;font-family:var(--ff);font-size:14px;font-weight:700;cursor:pointer">Bulk Search/Rip</button>' : '')
           + '</div>';
       }
 
@@ -755,8 +755,9 @@ Object.assign(UI, {
     this._finderSearchAbort = abortCtl;
 
     if (!query) {
-      container.innerHTML = '<div class="empty-state" style="padding:40px 22px">'
-        + '<div class="empty-state-text">Search for songs, artists, or albums on MusicBrainz</div></div>';
+      // Back to the real empty state (with the Bulk Search/Rip button) —
+      // not a lookalike placeholder inside the results area.
+      this.renderFinder();
       return;
     }
 
