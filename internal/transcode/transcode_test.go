@@ -329,3 +329,35 @@ echo fakeaudio > "$last"`)
 		t.Fatalf("progress after completion: got %v, want -1", p)
 	}
 }
+
+// Foreground encodes must not queue behind background work: with both
+// transSem slots held by slow background encodes, a foreground encode still
+// completes in its own encode time (it owns the reserved fgSem lane).
+func TestForegroundEncodeDoesntQueueBehindBackground(t *testing.T) {
+	setupTranscodeTest(t)
+	fakeFmpegStub(t, `sleep 3
+for last; do :; done
+echo fakeaudio > "$last"`)
+	src := filepath.Join(t.TempDir(), "a.flac")
+	os.WriteFile(src, []byte("x"), 0o644)
+
+	for _, id := range []string{"bg1", "bg2"} {
+		go EnsureLow(id, src)
+	}
+	time.Sleep(150 * time.Millisecond) // let both background encodes take the pool
+
+	fgDone := make(chan error, 1)
+	start := time.Now()
+	go func() { _, err := Ensure("fg", src); fgDone <- err }()
+	select {
+	case err := <-fgDone:
+		if err != nil {
+			t.Fatalf("foreground ensure: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("foreground encode queued behind background work")
+	}
+	if elapsed := time.Since(start); elapsed > 4500*time.Millisecond {
+		t.Fatalf("foreground encode took %s — it waited behind the background pool", elapsed)
+	}
+}

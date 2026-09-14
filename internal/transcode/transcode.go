@@ -39,8 +39,14 @@ var (
 	progressMu sync.Mutex
 	progress   = map[string]float64{}
 
-	// transSem bounds concurrent ffmpeg passes (mirrors normSem/waveSem).
+	// transSem bounds background ffmpeg passes (mirrors normSem/waveSem).
 	transSem = make(chan struct{}, 2)
+
+	// fgSem reserves a dedicated lane for foreground (playback-path) encodes
+	// so a rush job never queues behind ingest warming/backfill. Background
+	// work fills transSem; foreground never touches it. Total concurrent
+	// ffmpeg from this package ≤ 3.
+	fgSem = make(chan struct{}, 1)
 
 	// Ceiling on a single encode. Without it a wedged ffmpeg (stalled NFS
 	// mount, pathological input) holds a sem slot forever; two wedges kill
@@ -219,8 +225,17 @@ func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, erro
 		return cp, nil
 	}
 
-	transSem <- struct{}{}
-	defer func() { <-transSem }()
+	if lowPriority {
+		// Background (warming/backfill) fills the shared 2-slot pool.
+		transSem <- struct{}{}
+		defer func() { <-transSem }()
+	} else {
+		// Foreground (a play is blocked on this encode) takes the reserved
+		// lane: it never waits behind background work, and background work
+		// never waits behind it.
+		fgSem <- struct{}{}
+		defer func() { <-fgSem }()
+	}
 
 	if err := os.MkdirAll(cacheDir(), 0o755); err != nil {
 		return "", fmt.Errorf("mkdir cache: %w", err)
