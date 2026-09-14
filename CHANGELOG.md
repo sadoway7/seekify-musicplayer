@@ -2,8 +2,8 @@
 
 ## 2026-09-14 — Data Saver preparation worker
 
-- New: a background worker slowly prepares compact Data Saver copies of your whole library — 128k audio for every track and small WebP versions of every image — then keeps them fresh, so tracks and artwork load instantly everywhere.
-- New: prepared copies are now permanent and tied to their source files — edited songs get their copies rebuilt, deleted songs take their copies with them. No more cache expiry or size limits.
+- New: a background worker gives every track and every image in your library a compact Data Saver copy — made once, kept forever. Songs and artwork load instantly everywhere, and new additions are prepared automatically.
+- New: prepared copies are permanent and tied to their source files — if a source file is ever replaced, its copy is remade; deleted sources take their copies with them. No cache expiry, no size limits.
 - Fix: on slow connections (cellular), a healthy stream could be killed after exactly 30 seconds even while still loading. Loading now stays alive as long as data keeps arriving.
 
 ## 2026-09-12 — Background playback resilience
