@@ -17,6 +17,7 @@
   <Changes>Changelog
 
 2026-09-14
+- Playback keeps going when the app is in the background: upcoming tracks are prepared ahead of time, so playlists advance on their own.
 - New background preparation keeps compact copies of your whole library ready, so tracks and artwork load instantly — and slow connections no longer cut off healthy streams.
 - Home and Rip Search polish: new-user quick-play row, a Bulk Search/Rip shortcut, and clearer loading notices.
 - Admin: improved background task management — clearer worker names, more on/off controls, and reliable last-run times.
