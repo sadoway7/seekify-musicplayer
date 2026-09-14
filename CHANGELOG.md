@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-12 — Background playback resilience
+
+- Playback: playlists no longer stall when the app is backgrounded while a track is being prepared — the start is retried automatically the moment you come back to the app (no tap), and the next tracks are pre-prepared while the current one plays so the gap rarely happens at all.
+- Performance: play-time encoding now gets its own reserved lane on the server, so a track you're about to hear never waits behind background library work.
+
 ## 2026-09-12 — Prepare progress + polish
 
 - Playback: preparing a track for streaming now shows a real progress bar on the player artwork, so you can see exactly when first playback is ready.

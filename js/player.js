@@ -294,6 +294,7 @@ const Player = {
     this._stallRetried = false;
     this._networkPaused = false;
     this._pendingSeekFraction = null;
+    this._pendingAutoplay = false;
     // forceTranscode marks a slow-network retry: only allow one per load so a
     // genuinely unplayable track still skips instead of looping.
     this._triedTranscodeFallback = forceTranscode === true;
@@ -314,7 +315,19 @@ const Player = {
         this._clearLoadTimeout();
         this.playing = false;
         if (this.onStateChange) this.onStateChange();
-        if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('Tap play to start listening');
+        console.warn('[player] play() blocked by autoplay policy', {
+          hidden: typeof document !== 'undefined' && document.hidden,
+          src: this.audio.src,
+        });
+        // Backgrounded iOS refuses to start media while hidden — the load
+        // keeps running, so retry the moment the page is visible again
+        // instead of dead-ending on a "tap play" toast.
+        if (typeof document !== 'undefined' && document.hidden) {
+          this._pendingAutoplay = true;
+          this._armAutoplayRetry();
+        } else if (typeof UI !== 'undefined' && UI.showToast) {
+          UI.showToast('Tap play to start listening');
+        }
         return;
       }
       console.warn('[player] play() promise rejected', { name: e && e.name, message: e && e.message, src: this.audio.src });
@@ -345,13 +358,18 @@ const Player = {
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
 
-    // Prime the next track's transcode cache so auto-advance is instant on
-    // Safari clients (transcode runs in the background while this song plays).
+    // Prime the next two tracks' transcode caches so auto-advance is instant
+    // even in a backgrounded tab: iOS revokes background playback during the
+    // silent gap of a cold prepare, so the encode must finish while this song
+    // is still making noise. One track ahead is cutting it close; two gives
+    // the encoder a whole song of runway.
     const nextTrack = this.queue[this.currentIndex + 1];
     if (nextTrack) {
       this.prewarmTranscode(nextTrack);
       this._prefetchNext();
     }
+    const nextNext = this.queue[this.currentIndex + 2];
+    if (nextNext) this.prewarmTranscode(nextNext);
   },
 
   _clearLoadTimeout() {
@@ -359,6 +377,37 @@ const Player = {
       clearTimeout(this._loadTimeout);
       this._loadTimeout = null;
     }
+  },
+
+  // A play() rejection while the app is backgrounded is not a dead end: the
+  // media keeps loading, so retry when the page becomes visible again — and
+  // opportunistically whenever fresh data lands (canplay) in case the platform
+  // allows a background start after all. Both attempts clear themselves once
+  // a play() actually resolves ('playing' takes it from there).
+  _armAutoplayRetry() {
+    if (this._autoplayRetryArmed) return;
+    this._autoplayRetryArmed = true;
+    const attempt = () => {
+      if (!this._pendingAutoplay) return;
+      this.audio.play().then(() => {
+        this._pendingAutoplay = false;
+      }).catch(() => {});
+    };
+    const onVisible = () => {
+      if (typeof document === 'undefined' || document.hidden) return;
+      document.removeEventListener('visibilitychange', onVisible);
+      this._autoplayRetryArmed = false;
+      attempt();
+    };
+    try {
+      if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('visibilitychange', onVisible);
+      }
+      this.audio.addEventListener('canplay', () => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        attempt();
+      });
+    } catch (e) { /* non-browser contexts */ }
   },
 
   // Cold-cache transcodes (?fmt=aac on Safari) block the stream response for

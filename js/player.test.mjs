@@ -718,3 +718,56 @@ test('transcode prepare with now-playing closed falls back to the chip', async (
   await new Promise(r => setImmediate(r));
   assert.ok(!uiCalls.some(c => c.startsWith('update')), 'no bar polling when the bar is not shown');
 });
+
+test('transcode warm covers the next two tracks on every track start', () => {
+  const warmed = [];
+  const queue = [
+    { id: 'q0', filePath: 'Album/01 - Song.flac' },
+    { id: 'q1', filePath: 'Album/02 - Song.flac' },
+    { id: 'q2', filePath: 'Album/03 - Song.flac' },
+    { id: 'q3', filePath: 'Album/04 - Song.flac' },
+  ];
+  const api = {
+    reportPlaybackError: () => {},
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+    prewarmTranscode: (id) => warmed.push(id),
+  };
+  const { Player } = loadPlayer({}, [], {}, api);
+  Player.init();
+  Player.play(queue[0], queue);
+  assert.deepEqual(warmed, ['q1', 'q2']);
+});
+
+test('background autoplay rejection retries when the app becomes visible', async () => {
+  let hidden = true;
+  const visListeners = [];
+  const docStub = {
+    get hidden() { return hidden; },
+    addEventListener: (t, fn) => { if (t === 'visibilitychange') visListeners.push(fn); },
+    removeEventListener: (t, fn) => { const i = visListeners.indexOf(fn); if (i >= 0) visListeners.splice(i, 1); },
+  };
+  let rejectNext = true;
+  const { Player } = loadPlayer({}, [], {}, {
+    reportPlaybackError: () => {},
+    streamUrl: (id, t) => '/api/stream/' + id + (t ? '?fmt=aac' : ''),
+  }, null, { document: docStub });
+  Player.init();
+
+  const playCalls = [];
+  Player.audio.play = () => {
+    playCalls.push(1);
+    if (rejectNext) return Promise.reject(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+    return Promise.resolve();
+  };
+
+  Player.play({ id: 'a', filePath: 'Album/01 - Song.flac', title: 'A' });
+  await new Promise(r => setImmediate(r));
+  assert.equal(playCalls.length, 1, 'first start attempt rejected');
+  assert.equal(Player.playing, false, 'no state lie while blocked');
+  assert.equal(visListeners.length, 1, 'visibility retry armed');
+
+  hidden = false;
+  visListeners[0]();
+  await new Promise(r => setImmediate(r));
+  assert.equal(playCalls.length, 2, 'start retried automatically on return');
+});
