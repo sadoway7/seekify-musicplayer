@@ -539,32 +539,38 @@ func TestCoverHandlerWebPDerivative(t *testing.T) {
 	}
 }
 
-// The 128k Data Saver backfill builds a -128 copy for transcodable tracks
-// and stamps its once-per-library marker.
-func TestBackfill128Cache(t *testing.T) {
+// The Data Saver worker builds a -128 copy for transcodable tracks and
+// rebuilds it when the source changes; fresh copies are left alone.
+func TestSyncDataSaverAssets(t *testing.T) {
 	ff := findFF()
 	if ff == "" {
 		t.Skip("ffmpeg not available")
 	}
 	setupTranscodeTestDB(t)
-	setupRealFLAC(t)
+	src := setupRealFLAC(t)
 
-	Backfill128Cache()
+	SyncDataSaverAssets()
 
 	cachePath := filepath.Join(filepath.Dir(store.DBPath), "transcode", "track-128.m4a")
-	if _, err := os.Stat(cachePath); err != nil {
-		t.Fatalf("128k copy missing after backfill: %v", err)
-	}
-	if v := store.GetSetting("transcode_128_backfill_done", ""); v != "1" {
-		t.Fatalf("backfill marker = %q, want 1", v)
+	info, err := os.Stat(cachePath)
+	if err != nil {
+		t.Fatalf("128k copy missing after sync: %v", err)
 	}
 
-	// Second run is a no-op (marker) — the copy is reused, not rebuilt.
-	info, err := os.Stat(cachePath)
-	Backfill128Cache()
+	// Fresh copy: a second pass must not rebuild it.
+	SyncDataSaverAssets()
 	info2, err2 := os.Stat(cachePath)
-	if err != nil || err2 != nil || !info2.ModTime().Equal(info.ModTime()) {
-		t.Fatal("second backfill must reuse the existing 128k copy")
+	if err2 != nil || !info2.ModTime().Equal(info.ModTime()) {
+		t.Fatal("second sync must reuse the fresh 128k copy")
+	}
+
+	// Edited source (mtime bump): the next pass rebuilds the copy.
+	future := time.Now().Add(2 * time.Minute)
+	os.Chtimes(src, future, future)
+	SyncDataSaverAssets()
+	info3, err3 := os.Stat(cachePath)
+	if err3 != nil || !info3.ModTime().After(info.ModTime()) {
+		t.Fatal("stale 128k copy must be rebuilt after the source changes")
 	}
 }
 

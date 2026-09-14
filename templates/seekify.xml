@@ -16,6 +16,9 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-09-14
+- New background preparation keeps compact copies of your whole library ready, so tracks and artwork load instantly — and slow connections no longer cut off healthy streams.
+
 2026-09-12
 - Smoother first-play experience with a visible progress indicator while a track prepares.
 

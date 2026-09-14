@@ -109,6 +109,18 @@ func ConvertAsync(webpPath, srcPath string) {
 	})
 }
 
+// ConvertSync converts inline for background sweeps (the caller paces
+// itself — sequential, niced). Shares the inFlight dedupe with ConvertAsync
+// so a sweep and a live request never double-write the same derivative.
+// Returns whether a fresh derivative exists after the call.
+func ConvertSync(webpPath, srcPath string) bool {
+	if _, loaded := inFlight.LoadOrStore(webpPath, struct{}{}); loaded {
+		return Fresh(webpPath, srcPath)
+	}
+	defer inFlight.Delete(webpPath)
+	return EnsureSync(webpPath, srcPath) == nil
+}
+
 // EnsureSync converts src to a ≤1000px WebP at the derivative path, only
 // ever downscaling. A missing ffmpeg (or one without libwebp) is an error —
 // callers serve the original in that case.

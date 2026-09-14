@@ -135,8 +135,38 @@ func TestPruneCacheSpareFreshTmp(t *testing.T) {
 	if _, err := os.Stat(oldTmp); err == nil {
 		t.Error("stale .tmp survived prune")
 	}
-	if _, err := os.Stat(oldM4a); err == nil {
-		t.Error("31-day-old .m4a survived age purge")
+	// Copies are tied to their sources — never aged or size-capped out. The
+	// data-saver worker rebuilds stale ones and RemoveOrphanCopies handles
+	// deletions.
+	if _, err := os.Stat(oldM4a); err != nil {
+		t.Error("31-day-old .m4a was pruned — copies must not be aged out")
+	}
+}
+
+// Copies are tied to their sources: when a track is deleted from the
+// library, its transcode copies (default and -128) go with it.
+func TestRemoveOrphanCopies(t *testing.T) {
+	setupTranscodeTest(t)
+	store.ReplaceLibrary(map[string]*models.Track{
+		"alive": {ID: "alive", FilePath: "x.flac"},
+	}, nil)
+	dir := cacheDir()
+	os.MkdirAll(dir, 0o755)
+	for _, name := range []string{"alive.m4a", "alive-128.m4a", "gone.m4a", "gone-128.m4a", "alive-128.m4a.tmp"} {
+		os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644)
+	}
+
+	RemoveOrphanCopies()
+
+	for _, kept := range []string{"alive.m4a", "alive-128.m4a", "alive-128.m4a.tmp"} {
+		if _, err := os.Stat(filepath.Join(dir, kept)); err != nil {
+			t.Errorf("%s should survive", kept)
+		}
+	}
+	for _, gone := range []string{"gone.m4a", "gone-128.m4a"} {
+		if _, err := os.Stat(filepath.Join(dir, gone)); err == nil {
+			t.Errorf("%s should be removed with its track", gone)
+		}
 	}
 }
 

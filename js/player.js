@@ -335,13 +335,14 @@ const Player = {
     });
     // Cold-cache transcodes (?fmt=aac on Safari) legitimately take longer than
     // raw streams — a whole-file AAC encode of a long FLAC can run 10-30s.
-    // The timeout only guards "server never delivers"; 30s for transcoded
-    // loads, 10s for everything else.
+    // The timer guards "server never delivers", not "network is slow": any
+    // delivered bytes push the deadline back (prod evidence: healthy cellular
+    // streams killed at 30s with the AAC copy already cached), with a hard
+    // 10-minute ceiling so a truly wedged load still fails eventually.
     const timeoutMs = wantTranscode ? 30000 : 10000;
+    const loadStartedAt = Date.now();
     let timerId;
-    this._loadTimeout = setTimeout(() => {
-      // Stale-closure guard: pause, an error handler, or a new track load
-      // may have cleared/re-armed the timer after this closure was queued.
+    const onExpire = () => {
       if (this._loadTimeout !== timerId) return;
       this._loadTimeout = null;
       console.warn('[player] load timeout', {
@@ -353,8 +354,22 @@ const Player = {
         paused: this.audio.paused,
       });
       this._onMediaError('load-timeout');
-    }, timeoutMs);
-    timerId = this._loadTimeout;
+    };
+    const armLoadTimeout = () => {
+      if (this._loadTimeout) clearTimeout(this._loadTimeout);
+      this._loadTimeout = setTimeout(onExpire, timeoutMs);
+      timerId = this._loadTimeout;
+    };
+    armLoadTimeout();
+    if (this._loadProgressListener && this.audio.removeEventListener) {
+      this.audio.removeEventListener('progress', this._loadProgressListener);
+    }
+    this._loadProgressListener = () => {
+      if (!this._loadTimeout) return;
+      if (Date.now() - loadStartedAt > 10 * 60 * 1000) return;
+      armLoadTimeout();
+    };
+    this.audio.addEventListener('progress', this._loadProgressListener);
     if (this.onTrackChange) this.onTrackChange(track);
     this._updateMediaSession(track);
 

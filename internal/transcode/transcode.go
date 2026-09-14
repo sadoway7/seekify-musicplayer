@@ -19,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -325,74 +324,61 @@ func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, erro
 	return cp, nil
 }
 
-// PruneCache removes cache entries untouched for maxAge, then enforces a
-// total size cap (oldest first). Runs on a timer in server.go.
+// PruneCache removes leftover .tmp files from crashed encodes. Copies
+// themselves are tied to their sources and are never aged or size-capped:
+// the Data Saver model keeps a compact copy for every track, rebuilds stale
+// ones when a source changes (the data-saver worker), and removes copies
+// whose track was deleted (RemoveOrphanCopies).
 func PruneCache() {
 	dir := cacheDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	const (
-		maxAge  = 30 * 24 * time.Hour
-		sizeCap = int64(2 * 1024 * 1024 * 1024) // 2 GB
-	)
-	cutoff := time.Now().Add(-maxAge)
-
-	type fileInfo struct {
-		path string
-		size int64
-		at   time.Time
-	}
-	var files []fileInfo
-	var total int64
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".tmp" {
 			continue
 		}
-		if filepath.Ext(e.Name()) == ".tmp" {
-			// Leftover from a crashed transcode — but the prune ticker can
-			// fire while an encode is mid-write (encode writes CachePath+".tmp"
-			// for its whole duration), so only remove tmps that predate any
-			// legitimate in-flight encode. ensureTimeout bounds legit runs.
-			if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > time.Hour {
-				os.Remove(filepath.Join(dir, e.Name()))
-			}
-			continue
+		// Leftover from a crashed transcode — but the prune ticker can
+		// fire while an encode is mid-write (encode writes CachePath+".tmp"
+		// for its whole duration), so only remove tmps that predate any
+		// legitimate in-flight encode. ensureTimeout bounds legit runs.
+		if info, err := e.Info(); err == nil && time.Since(info.ModTime()) > time.Hour {
+			os.Remove(filepath.Join(dir, e.Name()))
 		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		p := filepath.Join(dir, e.Name())
-		total += info.Size()
-		// ponytail: mtime as the recency proxy; atime is unreliable across
-		// filesystems and enabling it server-wide is not worth it here.
-		files = append(files, fileInfo{p, info.Size(), info.ModTime()})
 	}
+}
 
-	// 1) age-based purge
-	kept := files[:0]
-	for _, f := range files {
-		if f.at.Before(cutoff) {
-			if err := os.Remove(f.path); err == nil {
-				total -= f.size
-			}
-		} else {
-			kept = append(kept, f)
+// RemoveOrphanCopies deletes transcode copies whose track is no longer in
+// the library — copies are tied to their sources: when the main file goes,
+// the compact copies go with it. In-flight .tmp files are PruneCache's job.
+func RemoveOrphanCopies() {
+	entries, err := os.ReadDir(cacheDir())
+	if err != nil {
+		return
+	}
+	removed := 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".m4a") {
+			continue
+		}
+		id := strings.TrimSuffix(name, ".m4a")
+		// Client-requested bitrates suffix the ID (<id>-128); the default
+		// bitrate keeps the legacy unsuffixed name. Track IDs are hex —
+		// no dashes of their own.
+		if i := strings.IndexByte(id, '-'); i > 0 {
+			id = id[:i]
+		}
+		if id == "" || store.GetTrack(id) != nil {
+			continue
+		}
+		if os.Remove(filepath.Join(cacheDir(), name)) == nil {
+			removed++
 		}
 	}
-	// 2) size cap, oldest first
-	if total > sizeCap {
-		sort.Slice(kept, func(i, j int) bool { return kept[i].at.Before(kept[j].at) })
-		for _, f := range kept {
-			if total <= sizeCap {
-				break
-			}
-			if err := os.Remove(f.path); err == nil {
-				total -= f.size
-			}
-		}
+	if removed > 0 {
+		log.Printf("[transcode] removed %d orphaned cop(s) for deleted tracks", removed)
 	}
 }
 

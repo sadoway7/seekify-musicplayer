@@ -228,7 +228,7 @@ func main() {
 			store.WorkerStart("transcode-backfill")
 			defer store.WorkerDone("transcode-backfill", nil)
 			handlers.BackfillTranscodeCache()
-			handlers.Backfill128Cache()
+			handlers.SyncDataSaverAssets()
 		})
 	}()
 
@@ -265,8 +265,8 @@ func main() {
 	store.RegisterWorker("transcode-backfill", "Warms AAC streaming cache for pre-existing tracks (runs once)", "Startup (once per library)", func() {
 		handlers.BackfillTranscodeCache()
 	})
-	store.RegisterWorker("transcode-128-backfill", "Warms 128k Data Saver copies for pre-existing tracks (runs once)", "Startup (once per library)", func() {
-		handlers.Backfill128Cache()
+	store.RegisterWorker("data-saver", "Prepares Data Saver copies — compact 128k audio for every track, compact WebP for every image; rebuilds stale copies, removes orphans", "Startup + every 6h", func() {
+		handlers.SyncDataSaverAssets()
 	})
 
 	runWorker := func(name string, body func()) {
@@ -327,6 +327,20 @@ func main() {
 		t := time.NewTicker(30 * time.Minute)
 		for range t.C {
 			store.SafeGo("transcode-prune", func() { transcode.PruneCache() })
+		}
+	}()
+
+	// Data Saver preparation: one slow background pass every 6h keeps every
+	// track's compact audio copy and every image's WebP derivative fresh and
+	// removes copies whose track was deleted. Never runs in the boot chain
+	// above (the library must be loaded before orphan removal is safe).
+	go func() {
+		t := time.NewTicker(6 * time.Hour)
+		for range t.C {
+			store.SafeGo("data-saver-tick", func() {
+				handlers.SyncDataSaverAssets()
+				transcode.RemoveOrphanCopies()
+			})
 		}
 	}()
 
