@@ -162,6 +162,13 @@ func EnsureAt(trackID, sourcePath, bitrate string) (string, error) {
 	return ensure(trackID, sourcePath, bitrate, false)
 }
 
+// EnsureAtContext is EnsureAt tied to a request context: when the listener
+// disappears (skip, tab close) the abandoned encode is killed immediately,
+// freeing the reserved foreground lane for the track actually being played.
+func EnsureAtContext(ctx context.Context, trackID, sourcePath, bitrate string) (string, error) {
+	return ensureContext(ctx, trackID, sourcePath, bitrate, false)
+}
+
 // EnsureLowAt is EnsureAt at background CPU priority (nice -n 19) — prewarm
 // for a specific bitrate must never steal CPU from a foreground play encode.
 func EnsureLowAt(trackID, sourcePath, bitrate string) (string, error) {
@@ -174,6 +181,10 @@ func EnsureLowAt(trackID, sourcePath, bitrate string) (string, error) {
 func EnsureLow(trackID, sourcePath string) (string, error) { return ensure(trackID, sourcePath, "", true) }
 
 func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, error) {
+	return ensureContext(context.Background(), trackID, sourcePath, bitrate, lowPriority)
+}
+
+func ensureContext(ctx context.Context, trackID, sourcePath, bitrate string, lowPriority bool) (string, error) {
 	// Empty bitrate = no client preference: the server-wide setting decides
 	// (existing behavior for legacy fmt=aac clients).
 	if bitrate == "" {
@@ -258,7 +269,9 @@ func ensure(trackID, sourcePath, bitrate string, lowPriority bool) (string, erro
 		"-f", "ipod",
 		tmp,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), ensureTimeout)
+	// Encode under both the caller's context (request cancellation on skip)
+	// and the overall ensureTimeout ceiling.
+	ctx, cancel := context.WithTimeout(ctx, ensureTimeout)
 	defer cancel()
 	var cmd *exec.Cmd
 	if lowPriority {

@@ -56,7 +56,7 @@ func StreamHandler(w http.ResponseWriter, r *http.Request) {
 	if (r.URL.Query().Get("fmt") == "aac" || forced) &&
 		store.GetSettingBool("transcode_enabled", true) &&
 		(needsTranscode(ext) || forced) {
-		if cp, err := transcode.EnsureAt(id, fullPath, bitrate); err == nil {
+		if cp, err := transcode.EnsureAtContext(r.Context(), id, fullPath, bitrate); err == nil {
 			servePath = cp
 			serveType = "audio/mp4"
 		}

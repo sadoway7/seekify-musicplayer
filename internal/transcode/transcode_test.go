@@ -1,6 +1,7 @@
 package transcode
 
 import (
+	"context"
 	"encoding/binary"
 	"os"
 	"os/exec"
@@ -389,5 +390,43 @@ echo fakeaudio > "$last"`)
 	}
 	if elapsed := time.Since(start); elapsed > 4500*time.Millisecond {
 		t.Fatalf("foreground encode took %s — it waited behind the background pool", elapsed)
+	}
+}
+// When the playback request goes away (skip/tab close), the context cancel
+// must kill the abandoned encode promptly AND release the reserved
+// foreground lane so the next play's encode starts immediately.
+func TestEnsureAtContextCancelReleasesLane(t *testing.T) {
+	setupTranscodeTest(t)
+	fakeFmpegStub(t, `sleep 30
+for last; do :; done
+echo fakeaudio > "$last"`)
+	src := filepath.Join(t.TempDir(), "c.flac")
+	os.WriteFile(src, []byte("x"), 0o644)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := EnsureAtContext(ctx, "c1", src, "128"); done <- err }()
+	time.Sleep(300 * time.Millisecond) // let it claim the lane and start ffmpeg
+
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("cancelled encode: expected error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancelled encode did not return promptly")
+	}
+
+	// Swap in a fast stub; the follow-up encode must complete right away —
+	// if the cancelled encode leaked the lane, this blocks until timeout.
+	fakeFmpegStub(t, `for last; do :; done
+echo fakeaudio > "$last"`)
+	start := time.Now()
+	if _, err := EnsureAtContext(context.Background(), "c2", src, "128"); err != nil {
+		t.Fatalf("follow-up ensure: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("foreground lane leaked: follow-up took %s", elapsed)
 	}
 }
