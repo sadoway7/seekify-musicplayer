@@ -1696,36 +1696,42 @@ const UI = {
 
       // If the row count changed or container is empty, do a full rebuild.
       // Otherwise update existing rows in place to avoid layout shift.
+      // Map worker names to their setting toggle IDs and interval IDs
+      const workerSettings = {
+        'scanner':           { toggle: 'setting-watcher-enabled', interval: 'setting-watcher-interval', intervalLabel: 'sec' },
+        'cover-fetch':       { toggle: 'setting-cover-fetch-enabled' },
+        'artist-art-fetch':  { toggle: 'setting-artist-art-fetch-enabled' },
+        'review':            { toggle: 'setting-review-enabled', interval: 'setting-review-recheck-hours', intervalLabel: 'hrs' },
+        'data-saver':        { toggle: 'setting-data-saver-enabled', interval: 'setting-data-saver-interval', intervalLabel: 'hrs' },
+        'watched-playlists': { toggle: 'setting-watched-enabled' },
+      };
+
+      const s = this._savedWorkerSettings || {};
+      const workerEnabled = {
+        'scanner': s.watcher_enabled !== false,
+        'cover-fetch': s.cover_fetch_enabled !== false,
+        'artist-art-fetch': s.artist_art_fetch_enabled !== false,
+        'review': s.review_enabled !== false,
+        'data-saver': s.data_saver_enabled !== false,
+        'watched-playlists': s.watched_enabled === true,
+      };
+
+      // Toggle-controlled workers first, alphabetical within each group.
+      const orderedWorkers = workers.slice().sort((a, b) => {
+        const at = workerSettings[a.name] ? 0 : 1;
+        const bt = workerSettings[b.name] ? 0 : 1;
+        return at - bt || a.name.localeCompare(b.name);
+      });
+
       const existingRows = container.querySelectorAll('.worker-row');
-      // Rebuild when the roster changed, not just the count — an upgrade can
-      // rename/swap workers (same count) and the rows must not go stale.
-      const workerSig = workers.map(w => w.name).join(',');
+      const workerSig = orderedWorkers.map(w => w.name).join(',');
       const needsFullRebuild = existingRows.length !== workers.length
         || container.dataset.workersSig !== workerSig;
       container.dataset.workersSig = workerSig;
 
       if (needsFullRebuild) {
-        // Map worker names to their setting toggle IDs and interval IDs
-        const workerSettings = {
-          'scanner':           { toggle: 'setting-watcher-enabled', interval: 'setting-watcher-interval', intervalLabel: 'sec' },
-          'cover-fetch':       { toggle: 'setting-cover-fetch-enabled' },
-          'artist-art-fetch':  { toggle: 'setting-artist-art-fetch-enabled' },
-          'review':            { toggle: 'setting-review-enabled', interval: 'setting-review-recheck-hours', intervalLabel: 'hrs' },
-          'data-saver':        { toggle: 'setting-data-saver-enabled', interval: 'setting-data-saver-interval', intervalLabel: 'hrs' },
-          'watched-playlists': { toggle: 'setting-watched-enabled' },
-        };
 
-        const s = this._savedWorkerSettings || {};
-        const workerEnabled = {
-          'scanner': s.watcher_enabled !== false,
-          'cover-fetch': s.cover_fetch_enabled !== false,
-          'artist-art-fetch': s.artist_art_fetch_enabled !== false,
-          'review': s.review_enabled !== false,
-          'data-saver': s.data_saver_enabled !== false,
-          'watched-playlists': s.watched_enabled === true,
-        };
-
-        container.innerHTML = workers.map(w => {
+        container.innerHTML = orderedWorkers.map(w => {
           const ws = workerSettings[w.name];
           const hasToggle = !!ws;
           const toggleActive = hasToggle ? workerEnabled[w.name] : false;
