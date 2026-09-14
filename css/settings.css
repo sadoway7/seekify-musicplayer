@@ -644,6 +644,7 @@
 }
 @media (max-width: 640px) {
   .worker-freq { display: none; }
+  .worker-desc { display: none; }
   .worker-last { min-width: 70px; font-size: 12px; }
 }
 

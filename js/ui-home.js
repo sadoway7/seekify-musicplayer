@@ -202,7 +202,17 @@ Object.assign(UI, {
       }
     });
 
-    if (recentCards.length === 0 && !currentTrack) return '';
+    if (recentCards.length === 0) {
+      // No listening history yet (fresh user): still render the row so the
+      // shuffle die and the recently-added entry points are visible —
+      // populated with the newest tracks in the library.
+      Store.library.tracks
+        .filter(t => t.artist && t.artist !== '' && t.albumID)
+        .sort((a, b) => (b.modTime || 0) - (a.modTime || 0))
+        .slice(0, 24)
+        .forEach(t => recentCards.push({ type: 'track', name: this._trackTitle(t), id: t.id, albumID: t.albumID }));
+      if (recentCards.length === 0) return '';
+    }
 
     let html = '';
     html += '<div class="mega-title"><span>Listen Again</span></div>';

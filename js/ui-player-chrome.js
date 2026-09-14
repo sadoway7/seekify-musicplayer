@@ -370,7 +370,7 @@ Object.assign(UI, {
     return true;
   },
 
-  updatePrepareBar(pct) {
+  updatePrepareBar(pct, waiting) {
     const bar = document.getElementById('np-prepare-bar');
     if (!bar) return;
     const fill = bar.querySelector('.np-prepare-fill');
@@ -378,7 +378,7 @@ Object.assign(UI, {
     const lbl = bar.querySelector('.np-prepare-lbl');
     if (lbl) {
       lbl.innerHTML = pct == null
-        ? 'Waiting for a free encoder · <b>0%</b>'
+        ? (waiting ? 'Waiting for a free encoder · <b>0%</b>' : 'Preparing first playback · <b>0%</b>')
         : 'Preparing first playback · <b>' + Math.round(pct) + '%</b>';
     }
   },

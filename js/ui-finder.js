@@ -16,7 +16,6 @@ Object.assign(UI, {
     let html = '<div class="lib-sticky-header">'
       + '<div class="lib-tabs">'
       + '<button class="lib-tab' + (this._finderTab === 'search' ? ' active' : '') + '" data-finder-tab="search">Rip Search</button>'
-      + (Store.isGuest ? '' : '<button class="lib-tab' + (this._finderTab === 'bulk' ? ' active' : '') + '" data-finder-tab="bulk">Bulk Import</button>')
       + (Store.isGuest ? '' : '<button class="lib-tab' + (this._finderTab === 'downloads' ? ' active' : '') + '" data-finder-tab="downloads">Downloads</button>')
       + '</div>'
       + (this._finderTab === 'downloads' ? '' : '');
@@ -46,6 +45,7 @@ Object.assign(UI, {
         + '<button class="finder-type-option' + (this._finderType === 'artist' ? ' active' : '') + '" data-finder-type="artist" role="menuitem">Artists</button>'
         + '<button class="finder-type-option' + (this._finderType === 'recording' ? ' active' : '') + '" data-finder-type="recording" role="menuitem">Songs</button>'
         + '<button class="finder-type-option' + (this._finderType === 'release' ? ' active' : '') + '" data-finder-type="release" role="menuitem">Albums</button>'
+        + (!Store.isGuest ? '<button class="finder-type-option" data-finder-type="bulk" role="menuitem">Bulk upload</button>' : '')
         + '</div>'
         + '</div>';
       html += '<div class="search-container finder-search-container">'
@@ -119,6 +119,13 @@ Object.assign(UI, {
         opt.addEventListener('click', () => {
           const newType = opt.dataset.finderType;
           closeTypeMenu();
+          // "Bulk upload" is navigation, not a search scope: jump to the
+          // bulk import form and leave the current search type alone.
+          if (newType === 'bulk') {
+            this._finderTab = 'bulk';
+            this.renderFinder();
+            return;
+          }
           if (newType === this._finderType) return;
           this._finderType = newType;
           this.renderFinder();

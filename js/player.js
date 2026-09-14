@@ -455,6 +455,7 @@ const Player = {
     const track = this.getCurrentTrack();
     if (!track || typeof Api.transcodeStatus !== 'function') return;
     const gen = (this._preparePollGen = (this._preparePollGen || 0) + 1);
+    let quietPolls = 0;
     const tick = async () => {
       if (gen !== this._preparePollGen) return;
       const st = await Api.transcodeStatus(track.id);
@@ -465,7 +466,12 @@ const Player = {
         return;
       }
       const pct = st && typeof st.percent === 'number' && st.percent >= 0 ? st.percent : null;
-      if (typeof UI !== 'undefined' && UI.updatePrepareBar) UI.updatePrepareBar(pct);
+      // "Waiting for a free encoder" is only believable after a couple of
+      // percent-less polls — ffmpeg needs a moment to report its first
+      // out_time, and flashing "waiting" on every normal next-click is noise.
+      let waiting = false;
+      if (pct == null) waiting = ++quietPolls >= 3;
+      if (typeof UI !== 'undefined' && UI.updatePrepareBar) UI.updatePrepareBar(pct, waiting);
       this._preparePollTimer = setTimeout(tick, 800);
     };
     tick();
