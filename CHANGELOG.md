@@ -10,6 +10,7 @@
 - Home: new users now see the shuffle + recently-added row before they've listened to anything.
 - Rip search: a "Bulk Search/Rip" button on the empty search state; Bulk Import moved into the search type menu (Artists / Songs / Albums / Bulk upload); clearing a search returns to the proper empty state.
 - Polish: bigger white X on all search inputs; worker descriptions hidden on small screens; the "waiting for encoder" notice only appears when actually queued.
+- Admin: the Tasks tab got an overhaul — friendly worker names (Meta Reviewer, New/Change Scanner), on/off toggles for the Data Saver preparation worker and Watched Playlists, a configurable interval for Data Saver preparation, toggle-controlled workers sorted to the top, and last-run times that survive restarts.
 
 ## 2026-09-12 — Background playback resilience
 
