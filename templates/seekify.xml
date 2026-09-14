@@ -18,6 +18,7 @@
 
 2026-09-14
 - New background preparation keeps compact copies of your whole library ready, so tracks and artwork load instantly — and slow connections no longer cut off healthy streams.
+- Home and Rip Search polish: new-user quick-play row, a Bulk Search/Rip shortcut, and clearer loading notices.
 
 2026-09-12
 - Smoother first-play experience with a visible progress indicator while a track prepares.

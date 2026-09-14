@@ -6,6 +6,10 @@
 - Polish: Bulk Import moved from a tab into the Rip Search type menu (Artists / Songs / Albums / Bulk upload).
 - New: prepared copies are permanent and tied to their source files — if a source file is ever replaced, its copy is remade; deleted sources take their copies with them. No cache expiry, no size limits.
 - Fix: on slow connections (cellular), a healthy stream could be killed after exactly 30 seconds even while still loading. Loading now stays alive as long as data keeps arriving.
+- Playback: a track start refused while the app was backgrounded is now retried automatically the moment the app is visible again.
+- Home: new users now see the shuffle + recently-added row before they've listened to anything.
+- Rip search: a "Bulk Search/Rip" button on the empty search state; Bulk Import moved into the search type menu (Artists / Songs / Albums / Bulk upload); clearing a search returns to the proper empty state.
+- Polish: bigger white X on all search inputs; worker descriptions hidden on small screens; the "waiting for encoder" notice only appears when actually queued.
 
 ## 2026-09-12 — Background playback resilience
 
