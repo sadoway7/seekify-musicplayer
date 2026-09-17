@@ -429,7 +429,11 @@
 }
 
 .library-search-bar {
-  position: relative;
+  /* Sticky: the bar pins below the app header while results scroll under it
+     (the ::before backdrop hides them in the gaps around the rounded pill). */
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   border-radius: 24px;
@@ -437,6 +441,18 @@
   background: var(--l3);
   margin: 25px var(--page-margin) 16px;
   max-width: 480px;
+}
+
+.library-search-bar::before {
+  content: '';
+  position: absolute;
+  /* Bleed over the bar's own margins so the backdrop spans the full strip. */
+  top: -25px;
+  left: calc(-1 * var(--page-margin));
+  right: calc(-1 * var(--page-margin));
+  bottom: -16px;
+  background: var(--bg);
+  z-index: -1;
 }
 
 @media (min-width: 480px) {
