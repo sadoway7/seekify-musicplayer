@@ -32,7 +32,7 @@
      env(safe-area-inset-bottom), which double-counts now that
      viewport-fit=cover is ON (see index.html): the tab bar already sits flush
      and absorbs the home-indicator zone with its own fixed padding. */
-  padding-bottom: var(--tab-bar-height);
+  padding-bottom: calc(var(--tab-bar-height) + var(--kb-overlap, 0px));
   overscroll-behavior: contain;
   animation: pageFadeIn 0.22s var(--ease-out) both;
   min-height: 0;

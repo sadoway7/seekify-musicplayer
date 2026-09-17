@@ -2,6 +2,7 @@
 
 ## 2026-09-16 — iOS playback polish
 
+- Mobile keyboards no longer hide the tail of search results — the list now stays scrollable above the keyboard on iPhone and Android while typing.
 - iOS: the now-playing view's album color now extends up behind the status bar and Dynamic Island instead of stopping at a black bar, on the installed app and the website, with the tab bar staying flush at the bottom; bottom sheets clear the home indicator properly.
 - Waveform scrubber: a track whose waveform was still being generated now fills in automatically once it's ready, instead of staying flat until the next track (same for the visualizer timeline).
 

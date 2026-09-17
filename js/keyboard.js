@@ -3,6 +3,29 @@
 const Keyboard = {
   init() {
     document.addEventListener('keydown', (e) => this._onKey(e));
+    this._initVirtualKeyboardInset();
+  },
+
+  // On iOS standalone the keyboard overlays the page without shrinking the
+  // layout viewport, so the tail of scrollable content (search results) can
+  // never scroll above it. Expose the overlap as --kb-overlap while an input
+  // is focused; #app-content adds it as bottom padding. Desktop and Android
+  // (which resizes the viewport, see interactive-widget in index.html)
+  // compute 0 — no-op there.
+  _initVirtualKeyboardInset() {
+    const vv = window.visualViewport;
+    if (!vv || !document.documentElement.style.setProperty) return;
+    const isEditing = () => {
+      const a = document.activeElement;
+      return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable);
+    };
+    const update = () => {
+      const overlap = isEditing() ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
+      document.documentElement.style.setProperty('--kb-overlap', overlap + 'px');
+    };
+    vv.addEventListener('resize', update);
+    window.addEventListener('focusin', update);
+    window.addEventListener('focusout', update);
   },
 
   _isTyping(t) {
