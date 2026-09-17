@@ -29,8 +29,9 @@
   scroll-behavior: smooth;
   padding-top: 0;
   /* Use --tab-bar-height (NOT --tab-bar-height-safe). The -safe variant adds
-     env(safe-area-inset-bottom), which only behaves correctly under
-     viewport-fit=cover — and cover breaks the PWA navbar. See #tab-bar. */
+     env(safe-area-inset-bottom), which double-counts now that
+     viewport-fit=cover is ON (see index.html): the tab bar already sits flush
+     and absorbs the home-indicator zone with its own fixed padding. */
   padding-bottom: var(--tab-bar-height);
   overscroll-behavior: contain;
   animation: pageFadeIn 0.22s var(--ease-out) both;
@@ -85,11 +86,12 @@ body.mini-player-visible #app-content {
   flex-direction: row;
   align-items: stretch;
   min-height: 50px;
-  /* DO NOT add env(safe-area-inset-bottom) to this padding. It over-corrects
-     in PWA standalone (where the inset is the full home-indicator height) and
-     balloons the navbar, pushing it up. The fixed 20px is correct for the
-     installed web app. Safe-area handling requires viewport-fit=cover, which
-     breaks the PWA navbar — see the viewport meta warning in index.html. */
+  /* Fixed padding, never env(safe-area-inset-bottom): under viewport-fit=cover
+     (now ON — see the viewport meta in index.html) the tab bar sits flush at
+     the physical bottom and the home indicator overlays this padding zone.
+     Stacking the inset here would balloon the navbar and lift it off the
+     bottom — the historical breakage. Surfaces positioned ABOVE this bar use
+     plain --tab-bar-height with no inset. */
   padding: 8px 12px 20px;
   background: #0a0b0a;
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);

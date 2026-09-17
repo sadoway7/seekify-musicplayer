@@ -10,7 +10,7 @@
   flex-direction: column;
   align-items: center;
   padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--sp-6));
+  padding-bottom: calc(var(--tab-bar-height) + var(--sp-6));
   animation: nowPlayingSlideUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   overflow: hidden;
 }
@@ -730,6 +730,6 @@
    16px is fine there. */
 @media (max-width: 767px) {
   .now-playing {
-    padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px) + var(--sp-8));
+    padding-bottom: calc(var(--tab-bar-height) + var(--sp-8));
   }
 }

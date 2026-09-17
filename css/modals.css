@@ -1,6 +1,6 @@
 .queue-panel {
   position: fixed;
-  bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  bottom: var(--tab-bar-height);
   left: 0;
   right: 0;
   max-height: 70vh;
@@ -10,7 +10,7 @@
   display: flex;
   flex-direction: column;
   animation: panelSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--sp-4));
+  padding-bottom: var(--sp-4);
 }
 
 .queue-header {

@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!-- DO NOT add viewport-fit=cover here. It extends the viewport into the
-       home-indicator safe area in PWA standalone, which pushes this fixed
-       navbar UP off the bottom on installed iOS web apps. The installed web
-       app navbar must sit flush at the bottom — verified correct WITHOUT cover. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <!-- viewport-fit=cover lets the page paint under the status bar (kills the
+       black bar above now-playing) and under the home indicator. Contract:
+       top insets come from env(safe-area-inset-top) on #app-header and
+       .now-playing; at the bottom, NEVER stack env(safe-area-inset-bottom)
+       on top of --tab-bar-height offsets — the tab bar keeps fixed padding
+       and sits flush, so anything positioned above it uses the plain var. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#0a0b0a">
   <meta name="mobile-web-app-capable" content="yes">
