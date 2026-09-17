@@ -233,7 +233,12 @@ const Api = {
     return data;
   },
 
-  async getWaveform(trackId, retries = 3) {
+  // Pending polls: server generates waveforms/bands on demand (niced ffmpeg,
+  // can queue behind other encodes), so a cold first request can take tens of
+  // seconds. Poll well past that — each tick is a tiny GET, and it stops the
+  // moment the data lands. Callers drop resolutions for tracks they no longer
+  // show, so abandoned polls are harmless.
+  async getWaveform(trackId, retries = 40) {
     try {
       const res = await fetch('/api/waveform/' + trackId);
       if (!res.ok) return null;
@@ -249,7 +254,7 @@ const Api = {
   // Precomputed per-track frequency-band timeline (bass/midLow/midHigh/treble
   // over time). Drives the visualizer on browsers without a live audio tap
   // (iOS Safari) so AirPlay stays intact. Mirrors getWaveform's pending/poll.
-  async getBands(trackId, retries = 3) {
+  async getBands(trackId, retries = 40) {
     try {
       const res = await fetch('/api/bands/' + trackId);
       if (!res.ok) return null;

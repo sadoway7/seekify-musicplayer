@@ -310,6 +310,10 @@ const Player = {
     this._activeSrc = this.audio.src;
     this.audio.play().then(() => {
       this.playing = true;
+      // iOS: WebKit drops metadata written during the same gesture that
+      // claims the session — the lock screen stays blank until a seek or
+      // skip. Rewriting it once play() is granted is the canonical fix.
+      this._updateMediaSession(track);
       if (this.onStateChange) this.onStateChange();
     }).catch((e) => {
       if (e && e.name === 'AbortError') return;

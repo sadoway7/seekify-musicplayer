@@ -3,6 +3,7 @@
 ## 2026-09-14 — Data Saver preparation worker
 
 - iOS playback: improved lock-screen track info and background auto-advance — the player now re-announces the current track once audio starts, and a track start blocked while the app is backgrounded is retried as soon as its audio data arrives.
+- Waveform scrubber: a track whose waveform was still being generated now fills in automatically once it's ready, instead of staying flat until the next track (same for the visualizer timeline).
 - New: a background worker gives every track and every image in your library a compact Data Saver copy — made once, kept forever. Songs and artwork load instantly everywhere, and new additions are prepared automatically.
 - Polish: Bulk Import moved from a tab into the Rip Search type menu (Artists / Songs / Albums / Bulk upload).
 - New: prepared copies are permanent and tied to their source files — if a source file is ever replaced, its copy is remade; deleted sources take their copies with them. No cache expiry, no size limits.

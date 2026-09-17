@@ -797,6 +797,26 @@ test('playing re-asserts mediaSession metadata for the iOS lock screen', () => {
   assert.equal(mediaSession.metadata.artist, 'Art');
 });
 
+test('metadata is rewritten once play() is granted (iOS gesture race)', async () => {
+  const mediaSession = {
+    metadata: null,
+    playbackState: '',
+    setActionHandler: () => {},
+    setPositionState: () => {},
+  };
+  let constructed = 0;
+  class MediaMetadata {
+    constructor(init) { Object.assign(this, init); constructed++; }
+  }
+  const { Player } = loadPlayer({ mediaSession }, [], {}, null, null, { MediaMetadata });
+  Player.init();
+  Player.play({ id: 'a', filePath: 'Album/01.mp3', title: 'Song A', artist: 'Art', album: 'Al' });
+  await new Promise(r => setImmediate(r));
+
+  assert.ok(constructed >= 2, 'metadata written during load AND again after play() resolves');
+  assert.equal(mediaSession.metadata.title, 'Song A');
+});
+
 test('background autoplay rejection retries on canplay while still hidden', async () => {
   let hidden = true;
   const docStub = {
@@ -828,4 +848,26 @@ test('background autoplay rejection retries on canplay while still hidden', asyn
   await new Promise(r => setImmediate(r));
   assert.equal(playCalls.length, 2, 'data landing retries playback while hidden');
   assert.equal(Player._pendingAutoplay, false, 'pending flag cleared on success');
+});
+
+test('getWaveform keeps polling pending until peaks arrive', async () => {
+  const calls = [];
+  let pending = true;
+  const context = vm.createContext({
+    fetch: (url) => {
+      calls.push(url);
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(pending ? { pending: true } : { peaks: [1, 2, 3] })
+      });
+    },
+    // Immediate fake timer: first tick flips the server answer to ready.
+    setTimeout: (fn) => { pending = false; fn(); return 1; },
+    clearTimeout: () => {}
+  });
+  vm.runInContext(apiSource, context);
+  const data = await context.Api.getWaveform('w1');
+
+  assert.deepEqual(data.peaks, [1, 2, 3]);
+  assert.equal(calls.length, 2, 'polled past the pending response instead of giving up');
 });
