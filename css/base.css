@@ -115,7 +115,11 @@ html {
   text-rendering: optimizeLegibility;
   font-feature-settings: 'kern' 1;
   background: var(--bg);
-  height: 100%;
+  /* 100vh, not 100%: under PWA standalone with black-translucent +
+     viewport-fit=cover, a percentage-height root doesn't grow into the
+     offset viewport, leaving a chin-shaped dead band at the bottom and
+     lifting position:fixed bottom:0 elements (tab bar) off the screen. */
+  height: 100vh;
 }
 
 body {
@@ -126,7 +130,8 @@ body {
   line-height: 1.5;
   letter-spacing: -0.01em;
   overflow: hidden;
-  height: 100%;
+  /* See the html rule: root must be 100vh under cover + black-translucent. */
+  height: 100vh;
   touch-action: manipulation;
   text-rendering: optimizeLegibility;
   cursor: default;
