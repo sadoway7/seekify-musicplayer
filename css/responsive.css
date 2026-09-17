@@ -825,19 +825,5 @@
     margin-bottom: 2vh;
   }
 
-  /* Hero filter input stays inline with Play/Shuffle on mobile and grows to
-     fill whatever width the buttons leave behind; icon pulls in to match. */
-  .detail-actions .detail-filter-container {
-    flex: 1 1 130px;
-    min-width: 120px;
-    height: 34px;
-  }
-  .detail-actions .detail-filter-container .search-icon {
-    left: 10px;
-  }
-  .detail-actions .detail-filter-container .search-input {
-    padding: 0 10px 0 32px;
-    height: 34px;
-    font-size: 14px;
-  }
+  /* Hero filter sizing is unified in pages.css (flex-grow pill, all widths). */
 }

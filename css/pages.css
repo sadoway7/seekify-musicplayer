@@ -1077,13 +1077,21 @@
   margin-top: var(--sp-2);
 }
 
-/* Filter input inside a hero action row: compact, but wide enough to type in.
-   Mobile sizing lives in responsive.css. */
+/* Filter input inside a hero action row: styled as a third sibling pill —
+   same height, full radius, and translucent fill as the Shuffle button — and
+   it expands to fill whatever width the buttons leave behind (caps on very
+   wide heroes, min keeps it usable on phones). */
 .detail-actions .detail-filter-container {
-  flex: 0 1 180px;
-  min-width: 130px;
+  flex: 1 1 150px;
+  min-width: 110px;
+  max-width: 260px;
   margin: 0;
-  height: 34px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
 }
 
 .detail-actions .detail-filter-container::after {
@@ -1091,13 +1099,21 @@
 }
 
 .detail-actions .detail-filter-container .search-icon {
-  left: 12px;
+  left: 10px;
+}
+
+.detail-actions .detail-filter-container .search-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .detail-actions .detail-filter-container .search-input {
-  padding: 0 var(--sp-3) 0 36px;
-  height: 34px;
-  font-size: 14px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 12px 0 30px;
+  height: 30px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .detail-play-btn {
