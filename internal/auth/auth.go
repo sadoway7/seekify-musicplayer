@@ -60,6 +60,16 @@ func VerifyPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
+// dummyHash is a throwaway bcrypt hash. Login compares against it when the
+// username doesn't exist so the reply costs the same ~bcrypt time as a wrong
+// password — otherwise reply speed reveals which usernames exist.
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("seekify-timing-pad"), bcrypt.DefaultCost)
+
+// DummyPasswordCompare burns one bcrypt comparison whose result is discarded.
+func DummyPasswordCompare(pw string) {
+	bcrypt.CompareHashAndPassword(dummyHash, []byte(pw))
+}
+
 func newToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
