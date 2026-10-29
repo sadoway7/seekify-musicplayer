@@ -60,6 +60,7 @@ const Keyboard = {
       case 'k': Player.prev(); break;
       case 'm': this._toggleMute(); break;
       case 'f': this._toggleFavorite(); break;
+      case 'b': this._toggleBlocked(); break;
       case '/': e.preventDefault(); this._focusSearch(); break;
       case 'ArrowLeft':  e.preventDefault(); this._seekBy(e.shiftKey ? -30 : -5); break;
       case 'ArrowRight': e.preventDefault(); this._seekBy(e.shiftKey ? 30 : 5); break;
@@ -91,6 +92,12 @@ const Keyboard = {
   _toggleFavorite() {
     if (!Player.getCurrentTrack()) return;
     const btn = document.getElementById('np-like-btn');
+    if (btn) btn.click();
+  },
+
+  _toggleBlocked() {
+    if (!Player.getCurrentTrack()) return;
+    const btn = document.getElementById('np-block-btn');
     if (btn) btn.click();
   },
 

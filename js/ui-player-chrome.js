@@ -77,6 +77,17 @@ Object.assign(UI, {
       this.els.miniLikeBtn.classList.toggle('active', !!isFav);
     }
 
+    if (this.els.miniBlockBtn) {
+      const track = Player.getCurrentTrack();
+      const isBlocked = track && Store.isBlocked(track.id);
+      const blockedChanged = this._miniWasBlocked !== undefined && this._miniWasBlocked !== isBlocked;
+      this._miniWasBlocked = isBlocked;
+      if (blockedChanged || !this.els.miniBlockBtn.innerHTML) {
+        this.els.miniBlockBtn.innerHTML = isBlocked ? Icons.thumbsDownFilled() : Icons.thumbsDown();
+      }
+      this.els.miniBlockBtn.classList.toggle('active', !!isBlocked);
+    }
+
     const progress = Player.getProgress();
     if (!this.miniSeeking) this.els.miniProgress.style.setProperty('--progress', (progress.fraction * 100) + '%');
     this._applyMiniPlayerColor();
@@ -157,6 +168,13 @@ Object.assign(UI, {
     this.els.npLikeBtn.innerHTML = isFav ? Icons.heartFilled() : Icons.heart();
     this.els.npLikeBtn.classList.toggle('active', isFav);
     if (favChanged) this._popIcon(this.els.npLikeBtn);
+
+    const isBlocked = Store.isBlocked(track.id);
+    const blockedChanged = this._npWasBlocked !== undefined && this._npWasBlocked !== isBlocked;
+    this._npWasBlocked = isBlocked;
+    this.els.npBlockBtn.innerHTML = isBlocked ? Icons.thumbsDownFilled() : Icons.thumbsDown();
+    this.els.npBlockBtn.classList.toggle('active', isBlocked);
+    if (blockedChanged) this._popIcon(this.els.npBlockBtn);
 
     const canDownload = Store.downloadsEnabled;
     if (this.els.npDownloadBtn) this.els.npDownloadBtn.style.display = canDownload ? '' : 'none';

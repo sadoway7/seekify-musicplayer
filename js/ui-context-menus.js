@@ -86,7 +86,7 @@ Object.assign(UI, {
       }},
       { label: 'Shuffle', icon: Icons.shuffle(), action: () => {
         this.hideContextMenu();
-        const tracks = Store.getArtistTracks(artistName).slice().sort(() => Math.random() - 0.5);
+        const tracks = Store.shuffleSource(Store.getArtistTracks(artistName)).slice().sort(() => Math.random() - 0.5);
         if (tracks.length > 0) {
           Player.play(tracks[0], tracks, { type: 'artist', name: artistName });
           this.showNowPlaying();
@@ -135,7 +135,7 @@ Object.assign(UI, {
       }},
       { label: 'Shuffle', icon: Icons.shuffle(), action: () => {
         this.hideContextMenu();
-        const shuffled = tracks.slice().sort(() => Math.random() - 0.5);
+        const shuffled = Store.shuffleSource(tracks).slice().sort(() => Math.random() - 0.5);
         if (shuffled.length > 0) {
           Player.play(shuffled[0], shuffled, { type: 'album', name: album.name, id: albumId });
           this.showNowPlaying();
@@ -168,7 +168,7 @@ Object.assign(UI, {
       }},
       { label: 'Shuffle', icon: Icons.shuffle(), action: () => {
         this.hideContextMenu();
-        const shuffled = tracks.slice().sort(() => Math.random() - 0.5);
+        const shuffled = Store.shuffleSource(tracks).slice().sort(() => Math.random() - 0.5);
         if (shuffled.length > 0) {
           Player.play(shuffled[0], shuffled, { type: 'playlist', name: playlist.name, id: playlistId });
           this.showNowPlaying();
@@ -219,6 +219,7 @@ Object.assign(UI, {
     if (!track) return;
     this.contextTrackId = trackId;
     const isFav = Store.isFavorite(trackId);
+    const isBlocked = Store.isBlocked(trackId);
     const menuItems = [
       { label: 'Add to Queue', icon: Icons.queue(), action: () => {
         this.hideContextMenu();
@@ -273,6 +274,21 @@ Object.assign(UI, {
           this.renderPage();
           this.updateNowPlaying();
           this.showToast('Failed to update favorites');
+        });
+      }},
+      { label: isBlocked ? 'Allow in Shuffle' : 'Never in Shuffle', icon: isBlocked ? Icons.thumbsDownFilled() : Icons.thumbsDown(), action: () => {
+        if (Store.isGuest) { this.hideContextMenu(); this.showToast('Log in to block tracks'); return; }
+        this.hideContextMenu();
+        const settled = Store.toggleBlocked(trackId);
+        this.updateNowPlaying();
+        settled.then((r) => {
+          this.renderPage();
+          this.updateNowPlaying();
+          this.showToast(r.added ? 'Blocked from Shuffle' : 'Unblocked from Shuffle');
+        }).catch(() => {
+          this.renderPage();
+          this.updateNowPlaying();
+          this.showToast('Failed to update blocked tracks');
         });
       }}
     ];
@@ -538,6 +554,7 @@ Object.assign(UI, {
       let list = (this._viewTrackList && this._viewTrackList.length > 0)
         ? this._viewTrackList.slice()
         : Store.library.tracks.slice();
+      list = Store.shuffleSource(list);
       if (list.length > 0) {
         // Fisher-Yates (a comparator-based sort shuffle is biased).
         for (let i = list.length - 1; i > 0; i--) {
@@ -558,7 +575,7 @@ Object.assign(UI, {
     }
     if (action === 'shuffle-recent') {
       const sorted = Store.library.tracks.slice().sort((a, b) => (b.modTime || 0) - (a.modTime || 0));
-      const recent = sorted.slice(0, 100);
+      const recent = Store.shuffleSource(sorted).slice(0, 100);
       if (recent.length > 0) {
         for (let i = recent.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
