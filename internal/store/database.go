@@ -567,41 +567,6 @@ func MigrateFromJSON() {
 	}
 }
 
-// dbQueryTrackIDs runs a single-column track_id query and returns the ids,
-// logging (not swallowing) scan/iteration errors.
-func dbQueryTrackIDs(query string) []string {
-	rows, err := DB.Query(query)
-	if err != nil {
-		log.Printf("dbQueryTrackIDs: %v", err)
-		return []string{}
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			log.Printf("dbQueryTrackIDs scan: %v", err)
-			continue
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("dbQueryTrackIDs rows: %v", err)
-	}
-	if ids == nil {
-		ids = []string{}
-	}
-	return ids
-}
-
-func DbGetFavorites() []string {
-	return dbQueryTrackIDs("SELECT track_id FROM favorites ORDER BY added_at DESC")
-}
-
-func DbGetRecent() []string {
-	return dbQueryTrackIDs("SELECT track_id FROM recent ORDER BY position ASC")
-}
-
 // withImmediateTx runs fn inside a BEGIN IMMEDIATE transaction pinned to a single
 // pooled connection. Taking the write lock up front (rather than a deferred BEGIN)
 // forces concurrent callers to serialize, eliminating the lost-update where two
@@ -774,17 +739,21 @@ func DbCreatePlaylist(userID, name string) models.Playlist {
 	return models.Playlist{ID: id, Name: name, CreatedAt: now, TrackIDs: []string{}}
 }
 
-// DbUpdatePlaylist renames and/or rewrites a playlist's tracks. The ownership
-// check, rename, delete and reinserts run in one BEGIN IMMEDIATE transaction —
-// an error mid-reinsert previously rolled back nothing, leaving the playlist
-// emptied (delete had already committed).
-func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) {
-	_ = withImmediateTx(func(conn *sql.Conn) error {
-		var owned int
-		if err := conn.QueryRowContext(context.Background(), "SELECT 1 FROM playlists WHERE id = ? AND user_id = ?", id, userID).Scan(&owned); err != nil && err != sql.ErrNoRows {
+// DbUpdatePlaylist renames and/or rewrites a playlist's tracks, returning
+// whether userID owns the playlist. Shared/system playlists (user_id='') are
+// owned by no one: owned=false and nothing is written, so callers can reject
+// the edit instead of silently discarding it. The ownership check, rename,
+// delete and reinserts run in one BEGIN IMMEDIATE transaction — an error
+// mid-reinsert previously rolled back nothing, leaving the playlist emptied
+// (delete had already committed).
+func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) (owned bool, err error) {
+	err = withImmediateTx(func(conn *sql.Conn) error {
+		var own int
+		if err := conn.QueryRowContext(context.Background(), "SELECT 1 FROM playlists WHERE id = ? AND user_id = ?", id, userID).Scan(&own); err != nil && err != sql.ErrNoRows {
 			return err
 		}
-		if owned != 1 {
+		owned = own == 1
+		if !owned {
 			return nil
 		}
 		if name != "" {
@@ -804,6 +773,7 @@ func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) {
 		}
 		return nil
 	})
+	return owned, err
 }
 
 // DbAddTrackToPlaylist appends a track at the next position. The MAX(position)
