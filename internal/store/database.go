@@ -567,41 +567,6 @@ func MigrateFromJSON() {
 	}
 }
 
-// dbQueryTrackIDs runs a single-column track_id query and returns the ids,
-// logging (not swallowing) scan/iteration errors.
-func dbQueryTrackIDs(query string) []string {
-	rows, err := DB.Query(query)
-	if err != nil {
-		log.Printf("dbQueryTrackIDs: %v", err)
-		return []string{}
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			log.Printf("dbQueryTrackIDs scan: %v", err)
-			continue
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		log.Printf("dbQueryTrackIDs rows: %v", err)
-	}
-	if ids == nil {
-		ids = []string{}
-	}
-	return ids
-}
-
-func DbGetFavorites() []string {
-	return dbQueryTrackIDs("SELECT track_id FROM favorites ORDER BY added_at DESC")
-}
-
-func DbGetRecent() []string {
-	return dbQueryTrackIDs("SELECT track_id FROM recent ORDER BY position ASC")
-}
-
 // withImmediateTx runs fn inside a BEGIN IMMEDIATE transaction pinned to a single
 // pooled connection. Taking the write lock up front (rather than a deferred BEGIN)
 // forces concurrent callers to serialize, eliminating the lost-update where two
