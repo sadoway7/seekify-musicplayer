@@ -2,6 +2,9 @@ package auth
 
 import (
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -163,4 +166,45 @@ func TestDeleteLastAdminRefused(t *testing.T) {
 	if err := DeleteUser(a.ID); err != nil {
 		t.Fatalf("delete should succeed with another admin present: %v", err)
 	}
+}
+
+// TestSessionCookieSecureFlag: Secure is OFF by default (plain-HTTP LAN
+// installs must keep working) and ON only when SESSION_COOKIE_SECURE is
+// 1 or true. HttpOnly and SameSite=Lax must hold in every mode.
+func TestSessionCookieSecureFlag(t *testing.T) {
+	readCookie := func(w *httptest.ResponseRecorder) *http.Cookie {
+		t.Helper()
+		cookies := w.Result().Cookies()
+		if len(cookies) != 1 {
+			t.Fatalf("expected 1 session cookie, got %d", len(cookies))
+		}
+		return cookies[0]
+	}
+	assertCookie := func(secureWant bool) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		SetSessionCookie(w, "token")
+		c := readCookie(w)
+		if c.Secure != secureWant {
+			t.Errorf("SetSessionCookie Secure = %v, want %v (SESSION_COOKIE_SECURE=%q)", c.Secure, secureWant, os.Getenv("SESSION_COOKIE_SECURE"))
+		}
+		if !c.HttpOnly || c.SameSite != http.SameSiteLaxMode {
+			t.Errorf("cookie lost HttpOnly/SameSite: HttpOnly=%v SameSite=%v", c.HttpOnly, c.SameSite)
+		}
+		w = httptest.NewRecorder()
+		ClearSessionCookie(w)
+		if c := readCookie(w); c.Secure != secureWant {
+			t.Errorf("ClearSessionCookie Secure = %v, want %v", c.Secure, secureWant)
+		}
+	}
+
+	assertCookie(false) // default OFF
+	t.Setenv("SESSION_COOKIE_SECURE", "1")
+	assertCookie(true)
+	t.Setenv("SESSION_COOKIE_SECURE", "true")
+	assertCookie(true)
+	t.Setenv("SESSION_COOKIE_SECURE", "0")
+	assertCookie(false)
+	t.Setenv("SESSION_COOKIE_SECURE", "yes-garbage")
+	assertCookie(false)
 }

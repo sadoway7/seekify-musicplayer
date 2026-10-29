@@ -156,6 +156,7 @@ ADMIN_PASSCODE=          # locks the settings screen only (with ADMIN_AUTH_ENABL
 ADMIN_AUTH_ENABLED=false
 MUSIC_DIR=./music        # primary music library
 # MEDIA_MUSIC_DIR=       # optional secondary read-only library
+# SESSION_COOKIE_SECURE= # set to 1 behind HTTPS to mark the login cookie Secure
 PORT=8081
 ```
 

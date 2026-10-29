@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -154,10 +155,23 @@ func SessionLoad(next http.Handler) http.Handler {
 	})
 }
 
+// sessionCookieSecure reports whether the session cookie should carry the
+// Secure attribute. Off by default — plain-HTTP LAN installs must keep
+// working. Opt in with SESSION_COOKIE_SECURE=1|true behind HTTPS; the env
+// (incl. .env via config.go, real env vars winning) is read per emission.
+func sessionCookieSecure() bool {
+	switch os.Getenv("SESSION_COOKIE_SECURE") {
+	case "1", "true":
+		return true
+	}
+	return false
+}
+
 func SetSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name: SessionCookieName, Value: token,
 		Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: sessionCookieSecure(),
 		MaxAge: int(sessionTTL.Seconds()),
 	})
 }
@@ -165,6 +179,7 @@ func SetSessionCookie(w http.ResponseWriter, token string) {
 func ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name: SessionCookieName, Value: "", Path: "/",
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: sessionCookieSecure(), MaxAge: -1,
 	})
 }
