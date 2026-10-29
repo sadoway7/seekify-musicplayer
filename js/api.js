@@ -75,7 +75,6 @@ const Api = {
   getPlaylists() { return this._req('/api/playlists', { errMsg: 'Failed to load playlists' }); },
   getFavorites() { return this._req('/api/favorites', { errMsg: 'Failed to load favorites' }); },
   getRecent() { return this._req('/api/recent', { errMsg: 'Failed to load recent' }); },
-  getFiles(path) { return this._req('/api/admin/files' + (path ? '?path=' + encodeURIComponent(path) : ''), { errMsg: 'Failed to get files' }); },
   metadataUndo(id) { return this._req('/api/metadata/undo/' + id, { method: 'POST', errMsg: 'Undo failed' }); },
   finderSearch(q, type, signal) { return this._req('/api/finder/search?q=' + encodeURIComponent(q) + '&type=' + (type || 'recording'), { errMsg: 'Finder search failed', signal }); },
   finderYouTubeSearch(q, signal) { return this._req('/api/finder/youtube?q=' + encodeURIComponent(q), { errMsg: 'YouTube search failed', signal }); },
@@ -128,8 +127,6 @@ const Api = {
   deletePlaylist(id) { return this._req('/api/playlists/' + id, { method: 'DELETE', errMsg: 'Failed to delete playlist' }); },
   toggleFavorite(id) { return this._req('/api/favorites/' + id, { method: 'POST', errMsg: 'Failed to toggle favorite' }); },
   addRecent(id) { return this._req('/api/recent/' + id, { method: 'POST', errMsg: 'Failed to add recent' }); },
-  deleteFile(path) { return this._req('/api/admin/files', { method: 'DELETE', body: { path }, errMsg: 'Failed to delete file' }); },
-  createFolder(path, name) { return this._req('/api/admin/folders', { method: 'POST', body: { path, name }, errMsg: 'Failed to create folder' }); },
   metadataScan() { return this._req('/api/metadata/scan', { method: 'POST', errMsg: 'Scan request failed' }); },
   queueAddBatch(tracks, overrideDir) { return this._req('/api/queue/add-batch', { method: 'POST', body: { tracks, overrideDir }, errMsg: 'Failed to add batch to queue' }); },
   selectVideo(jobId, videoId) { return this._req('/api/queue/' + jobId + '/select', { method: 'POST', body: { videoId }, errMsg: 'Failed to select video' }); },
@@ -203,11 +200,6 @@ const Api = {
   },
   toggleDownload(id) { return this._req('/api/admin/download-toggle/' + id, { method: 'POST', fallback: null }); },
   reportDuration(id, duration) { return this._req('/api/track-duration/' + id, { method: 'POST', body: { duration }, fallback: null }); },
-  uploadFiles(files, path) {
-    const form = new FormData();
-    for (let i = 0; i < files.length; i++) form.append('files', files[i]);
-    return this._req('/api/admin/upload' + (path ? '?path=' + encodeURIComponent(path) : ''), { method: 'POST', body: form, errMsg: 'Failed to upload files' });
-  },
   uploadCustomCover(trackId, file) {
     const form = new FormData();
     form.append('trackId', trackId); form.append('cover', file);

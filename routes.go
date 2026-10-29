@@ -117,7 +117,6 @@ var routeTable = []route{
 	// ── Admin: library management ──
 	{"/api/scan", handlers.ScanHandler, gateAdmin, nil},
 	{"/api/library-upload", handlers.LibraryUploadHandler, gateAdmin, nil},
-	{"/admin", handlers.AdminHandler, gateAdmin, nil},
 	{"/api/files", handlers.FileListHandler, gateAdmin, nil},
 	{"/api/upload", handlers.UploadHandler, gateAdmin, nil},
 	{"/api/delete", handlers.DeleteFileHandler, gateAdmin, nil},
