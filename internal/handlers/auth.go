@@ -73,7 +73,12 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := auth.GetUserByUsername(body.Username)
-	if err != nil || u.Disabled || !auth.VerifyPassword(u.PasswordHash, body.Password) {
+	if err != nil {
+		auth.DummyPasswordCompare(body.Password) // equalize timing with the wrong-password path
+		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	if u.Disabled || !auth.VerifyPassword(u.PasswordHash, body.Password) {
 		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}

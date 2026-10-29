@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -60,6 +61,16 @@ func VerifyPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
+// dummyHash is a throwaway bcrypt hash. Login compares against it when the
+// username doesn't exist so the reply costs the same ~bcrypt time as a wrong
+// password — otherwise reply speed reveals which usernames exist.
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("seekify-timing-pad"), bcrypt.DefaultCost)
+
+// DummyPasswordCompare burns one bcrypt comparison whose result is discarded.
+func DummyPasswordCompare(pw string) {
+	bcrypt.CompareHashAndPassword(dummyHash, []byte(pw))
+}
+
 func newToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -71,6 +82,7 @@ func newToken() (string, error) {
 var (
 	ErrUsernameInvalid  = errors.New("username must be 3-32 chars, using [a-zA-Z0-9_.-]")
 	ErrPasswordTooShort = errors.New("password must be at least 8 chars")
+	ErrUsernameTaken    = errors.New("username is already taken")
 )
 
 // ValidateCredentials enforces the trust-boundary rules for signup/admin-create.
@@ -143,10 +155,23 @@ func SessionLoad(next http.Handler) http.Handler {
 	})
 }
 
+// sessionCookieSecure reports whether the session cookie should carry the
+// Secure attribute. Off by default — plain-HTTP LAN installs must keep
+// working. Opt in with SESSION_COOKIE_SECURE=1|true behind HTTPS; the env
+// (incl. .env via config.go, real env vars winning) is read per emission.
+func sessionCookieSecure() bool {
+	switch os.Getenv("SESSION_COOKIE_SECURE") {
+	case "1", "true":
+		return true
+	}
+	return false
+}
+
 func SetSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name: SessionCookieName, Value: token,
 		Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: sessionCookieSecure(),
 		MaxAge: int(sessionTTL.Seconds()),
 	})
 }
@@ -154,6 +179,7 @@ func SetSessionCookie(w http.ResponseWriter, token string) {
 func ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name: SessionCookieName, Value: "", Path: "/",
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: sessionCookieSecure(), MaxAge: -1,
 	})
 }

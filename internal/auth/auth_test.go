@@ -2,6 +2,9 @@ package auth
 
 import (
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -26,6 +29,11 @@ func setupTestDB(t *testing.T) {
 	for _, q := range []string{
 		`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL, email TEXT, disabled INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, ip_address TEXT, user_agent TEXT)`,
+		`CREATE TABLE IF NOT EXISTS user_favorites (user_id TEXT NOT NULL, track_id TEXT NOT NULL, added_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, track_id))`,
+		`CREATE TABLE IF NOT EXISTS user_recent (user_id TEXT NOT NULL, track_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (user_id, track_id))`,
+		`CREATE TABLE IF NOT EXISTS playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL, user_id TEXT NOT NULL DEFAULT '')`,
+		`CREATE TABLE IF NOT EXISTS playlist_tracks (playlist_id TEXT NOT NULL, track_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (playlist_id, track_id))`,
+		`CREATE TABLE IF NOT EXISTS download_jobs (id TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'queued', user_id TEXT NOT NULL DEFAULT '')`,
 	} {
 		if _, err := db.Exec(q); err != nil {
 			t.Fatalf("create table: %v", err)
@@ -163,4 +171,45 @@ func TestDeleteLastAdminRefused(t *testing.T) {
 	if err := DeleteUser(a.ID); err != nil {
 		t.Fatalf("delete should succeed with another admin present: %v", err)
 	}
+}
+
+// TestSessionCookieSecureFlag: Secure is OFF by default (plain-HTTP LAN
+// installs must keep working) and ON only when SESSION_COOKIE_SECURE is
+// 1 or true. HttpOnly and SameSite=Lax must hold in every mode.
+func TestSessionCookieSecureFlag(t *testing.T) {
+	readCookie := func(w *httptest.ResponseRecorder) *http.Cookie {
+		t.Helper()
+		cookies := w.Result().Cookies()
+		if len(cookies) != 1 {
+			t.Fatalf("expected 1 session cookie, got %d", len(cookies))
+		}
+		return cookies[0]
+	}
+	assertCookie := func(secureWant bool) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		SetSessionCookie(w, "token")
+		c := readCookie(w)
+		if c.Secure != secureWant {
+			t.Errorf("SetSessionCookie Secure = %v, want %v (SESSION_COOKIE_SECURE=%q)", c.Secure, secureWant, os.Getenv("SESSION_COOKIE_SECURE"))
+		}
+		if !c.HttpOnly || c.SameSite != http.SameSiteLaxMode {
+			t.Errorf("cookie lost HttpOnly/SameSite: HttpOnly=%v SameSite=%v", c.HttpOnly, c.SameSite)
+		}
+		w = httptest.NewRecorder()
+		ClearSessionCookie(w)
+		if c := readCookie(w); c.Secure != secureWant {
+			t.Errorf("ClearSessionCookie Secure = %v, want %v", c.Secure, secureWant)
+		}
+	}
+
+	assertCookie(false) // default OFF
+	t.Setenv("SESSION_COOKIE_SECURE", "1")
+	assertCookie(true)
+	t.Setenv("SESSION_COOKIE_SECURE", "true")
+	assertCookie(true)
+	t.Setenv("SESSION_COOKIE_SECURE", "0")
+	assertCookie(false)
+	t.Setenv("SESSION_COOKIE_SECURE", "yes-garbage")
+	assertCookie(false)
 }
