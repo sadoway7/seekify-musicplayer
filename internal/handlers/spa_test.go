@@ -23,7 +23,7 @@ func TestSpaHandlerWhitelist(t *testing.T) {
 		{"/css/styles.css", http.StatusOK},
 		{"/js/app.js", http.StatusOK},
 		{"/index.html", http.StatusOK}, // served through the v=-busting path (was ServeFile's 301 to /)
-		{"/admin.html", http.StatusOK},
+		{"/admin.html", http.StatusNotFound}, // retired with the legacy /admin page
 		{"/favicon.ico", http.StatusOK},
 		{"/icon.png", http.StatusOK},
 		{"/icon-192.png", http.StatusOK},

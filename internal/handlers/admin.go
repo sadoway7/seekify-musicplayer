@@ -14,13 +14,6 @@ import (
 	"time"
 )
 
-func AdminHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
-	http.ServeFile(w, r, "admin.html")
-}
-
 // pathWithinRoot resolves path elements beneath root and reports whether the
 // result is root itself or one of its descendants. filepath.Rel avoids the
 // false positives of string-prefix checks (for example, /music-old vs /music).

@@ -71,6 +71,34 @@ func TestGzipMiddleware_SkipsStreamAndNoAccept(t *testing.T) {
 	resp2.Body.Close()
 }
 
+func TestAdminPageRetiredFileApiRoutesIntact(t *testing.T) {
+	mux := http.NewServeMux()
+	registerRoutes(mux)
+	// Match the production mux's catch-all so unregistered paths 404 here too.
+	mux.HandleFunc("/", http.NotFound)
+
+	// The admin file-management API survives the admin.html retirement:
+	// each route stays registered behind the admin gate (anonymous → 403,
+	// not the catch-all's 404).
+	for _, path := range []string{"/api/upload", "/api/scan", "/api/delete", "/api/files", "/api/folders"} {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s = %d, want %d (route must remain registered)", path, rec.Code, http.StatusForbidden)
+		}
+	}
+
+	// The legacy /admin page is retired: no route, so it must fall through
+	// to the catch-all (404), not hit an admin-gated handler (403).
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /admin = %d, want %d (route must be gone)", rec.Code, http.StatusNotFound)
+	}
+}
+
 func TestMetadataRoutesRequireAdminAndEnforceMethods(t *testing.T) {
 	routes := []struct {
 		method string
