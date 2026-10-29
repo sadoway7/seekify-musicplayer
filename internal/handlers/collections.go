@@ -53,11 +53,20 @@ func PlaylistHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		store.DbUpdatePlaylist(u.ID, id, body.Name, body.TrackIDs)
+		owned, err := store.DbUpdatePlaylist(u.ID, id, body.Name, body.TrackIDs)
+		if err != nil {
+			http.Error(w, "update playlist: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 
 		playlists := store.DbGetPlaylists(u.ID)
 		for _, p := range playlists {
 			if p.ID == id {
+				if !owned {
+					// Listed for the user but not owned by them ⇒ shared/system playlist.
+					http.Error(w, "shared playlists are read-only", http.StatusForbidden)
+					return
+				}
 				writeJSON(w, p)
 				return
 			}

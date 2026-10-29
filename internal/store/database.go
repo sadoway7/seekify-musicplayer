@@ -774,17 +774,21 @@ func DbCreatePlaylist(userID, name string) models.Playlist {
 	return models.Playlist{ID: id, Name: name, CreatedAt: now, TrackIDs: []string{}}
 }
 
-// DbUpdatePlaylist renames and/or rewrites a playlist's tracks. The ownership
-// check, rename, delete and reinserts run in one BEGIN IMMEDIATE transaction —
-// an error mid-reinsert previously rolled back nothing, leaving the playlist
-// emptied (delete had already committed).
-func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) {
-	_ = withImmediateTx(func(conn *sql.Conn) error {
-		var owned int
-		if err := conn.QueryRowContext(context.Background(), "SELECT 1 FROM playlists WHERE id = ? AND user_id = ?", id, userID).Scan(&owned); err != nil && err != sql.ErrNoRows {
+// DbUpdatePlaylist renames and/or rewrites a playlist's tracks, returning
+// whether userID owns the playlist. Shared/system playlists (user_id='') are
+// owned by no one: owned=false and nothing is written, so callers can reject
+// the edit instead of silently discarding it. The ownership check, rename,
+// delete and reinserts run in one BEGIN IMMEDIATE transaction — an error
+// mid-reinsert previously rolled back nothing, leaving the playlist emptied
+// (delete had already committed).
+func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) (owned bool, err error) {
+	err = withImmediateTx(func(conn *sql.Conn) error {
+		var own int
+		if err := conn.QueryRowContext(context.Background(), "SELECT 1 FROM playlists WHERE id = ? AND user_id = ?", id, userID).Scan(&own); err != nil && err != sql.ErrNoRows {
 			return err
 		}
-		if owned != 1 {
+		owned = own == 1
+		if !owned {
 			return nil
 		}
 		if name != "" {
@@ -804,6 +808,7 @@ func DbUpdatePlaylist(userID, id string, name string, trackIDs []string) {
 		}
 		return nil
 	})
+	return owned, err
 }
 
 // DbAddTrackToPlaylist appends a track at the next position. The MAX(position)
