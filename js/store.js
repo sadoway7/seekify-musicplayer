@@ -4,6 +4,7 @@ const Store = {
   _albumMap: new Map(),
   playlists: [],
   favorites: [],
+  blocked: [],
   recent: [],
   currentTab: 'home',
   currentView: 'home',
@@ -72,15 +73,17 @@ const Store = {
       this._libAt = Date.now();
       // Personal collections only when logged in; guests 401 on these.
       if (this.user && !this.user.guest) {
-        const [playlists, favorites, recent, ps, reviewCounts] = await Promise.all([
+        const [playlists, favorites, blocked, recent, ps, reviewCounts] = await Promise.all([
           Api.getPlaylists().catch(() => []),
           Api.getFavorites().catch(() => []),
+          Api.getBlocked().catch(() => []),
           Api.getRecent().catch(() => []),
           Api.getPublicSettings().catch(() => null),
           Api.getReviewCounts().catch(() => null)
         ]);
         this.playlists = playlists || [];
         this.favorites = favorites || [];
+        this.blocked = blocked || [];
         this.recent = recent || [];
         // Global display settings (admin-configured) must reach every client,
         // so fetch the public subset for all users — no auth, no 401/403 noise.
@@ -97,6 +100,7 @@ const Store = {
       } else {
         this.playlists = [];
         this.favorites = [];
+        this.blocked = [];
         this.recent = [];
         try {
           const ps = await Api.getPublicSettings();
@@ -142,6 +146,36 @@ const Store = {
       this.favorites = await Api.getFavorites();
     } catch (err) {
       UI.showToast('Failed to refresh favorites');
+    }
+  },
+
+  async refreshBlocked() {
+    try {
+      this.blocked = await Api.getBlocked();
+    } catch (err) {
+      UI.showToast('Failed to refresh blocked tracks');
+    }
+  },
+
+  // Optimistic blocked toggle, mirroring toggleFavorite: local state flips
+  // immediately, the server call follows, failures revert and re-throw.
+  async toggleBlocked(trackId) {
+    const idx = this.blocked.indexOf(trackId);
+    const adding = idx === -1;
+    if (adding) this.blocked.push(trackId);
+    else this.blocked.splice(idx, 1);
+    try {
+      await Api.toggleBlocked(trackId);
+      await this.refreshBlocked();
+      return { added: this.isBlocked(trackId) };
+    } catch (err) {
+      try {
+        this.blocked = await Api.getBlocked();
+      } catch (e2) {
+        if (adding) this.blocked = this.blocked.filter(id => id !== trackId);
+        else if (this.blocked.indexOf(trackId) === -1) this.blocked.push(trackId);
+      }
+      throw err;
     }
   },
 
@@ -217,6 +251,20 @@ const Store = {
 
   isFavorite(trackId) {
     return this.favorites.includes(trackId);
+  },
+
+  isBlocked(trackId) {
+    return this.blocked.includes(trackId);
+  },
+
+  // Shuffle is the only surface that filters blocked tracks ("never for
+  // me"). Returns the list minus blocked tracks; an all-blocked source falls
+  // back to unfiltered rather than playing nothing. Callers still copy
+  // (.slice()) before sorting in place.
+  shuffleSource(tracks) {
+    if (!this.blocked.length) return tracks;
+    const filtered = tracks.filter(t => !this.blocked.includes(t.id));
+    return filtered.length ? filtered : tracks;
   },
 
   getPlaylist(id) {

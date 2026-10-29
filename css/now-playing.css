@@ -478,7 +478,8 @@
   text-align: center;
 }
 
-.np-like-btn {
+.np-like-btn,
+.np-block-btn {
   flex-shrink: 0;
   width: 36px;
   height: 36px;
@@ -489,16 +490,19 @@
   transition: color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft);
 }
 
-.np-like-btn.active {
+.np-like-btn.active,
+.np-block-btn.active {
   color: var(--waveform-played, var(--accent));
   background: var(--accent-soft);
 }
 
-.np-like-btn.active svg {
+.np-like-btn.active svg,
+.np-block-btn.active svg {
   fill: currentColor;
 }
 
-.np-like-btn svg {
+.np-like-btn svg,
+.np-block-btn svg {
   width: 20px;
   height: 20px;
 }

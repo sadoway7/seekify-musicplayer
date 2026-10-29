@@ -205,6 +205,7 @@ const UI = {
       npTitle: document.getElementById('np-title'),
       npArtist: document.getElementById('np-artist'),
       npLikeBtn: document.getElementById('np-like-btn'),
+      npBlockBtn: document.getElementById('np-block-btn'),
       npDownloadBtn: document.getElementById('np-download-btn'),
       npPlay: document.getElementById('np-play'),
       npPrev: document.getElementById('np-prev'),
@@ -292,6 +293,20 @@ const UI = {
             this.showToast('Failed to update favorites');
           });
         }
+      } else if (e.target.closest('.mini-block-btn')) {
+        const track = Player.getCurrentTrack();
+        if (track) {
+          if (Store.isGuest) { this.showToast('Log in to block tracks'); return; }
+          const settled = Store.toggleBlocked(track.id);
+          this.updateMiniPlayer();
+          settled.then((r) => {
+            this.updateMiniPlayer();
+            this.showToast(r.added ? 'Blocked from Shuffle' : 'Unblocked from Shuffle');
+          }).catch(() => {
+            this.updateMiniPlayer();
+            this.showToast('Failed to update blocked tracks');
+          });
+        }
       } else if (e.target.closest('.mini-share-btn')) {
         const track = Player.getCurrentTrack();
         if (track) {
@@ -373,6 +388,21 @@ const UI = {
       }).catch(() => {
         this.updateNowPlaying();
         this.showToast('Failed to update favorites');
+      });
+    });
+
+    this.els.npBlockBtn.addEventListener('click', () => {
+      const track = Player.getCurrentTrack();
+      if (!track) return;
+      if (Store.isGuest) { this.showToast('Log in to block tracks'); return; }
+      const settled = Store.toggleBlocked(track.id);
+      this.updateNowPlaying();
+      settled.then((r) => {
+        this.updateNowPlaying();
+        this.showToast(r.added ? 'Blocked from Shuffle' : 'Unblocked from Shuffle');
+      }).catch(() => {
+        this.updateNowPlaying();
+        this.showToast('Failed to update blocked tracks');
       });
     });
 
@@ -688,6 +718,7 @@ const UI = {
       + '</div>'
       + '<div class="mini-actions">'
       + '<button class="mini-btn mini-action-btn mini-like-btn" aria-label="Like"></button>'
+      + '<button class="mini-btn mini-action-btn mini-block-btn" aria-label="Never in Shuffle"></button>'
       + '<button class="mini-btn mini-action-btn mini-share-btn" aria-label="Share">' + Icons.share() + '</button>'
       + '<button class="mini-btn mini-action-btn mini-download-btn" aria-label="Download">' + Icons.download() + '</button>'
       + '<button class="mini-btn mini-action-btn mini-more-btn" aria-label="More">' + Icons.more() + '</button>'
@@ -698,6 +729,7 @@ const UI = {
     this.els.miniVolumeBar = wrap.querySelector('.mini-volume-bar');
     this.els.miniVolumeFill = wrap.querySelector('.mini-volume-fill');
     this.els.miniLikeBtn = miniRight.querySelector('.mini-like-btn');
+    this.els.miniBlockBtn = miniRight.querySelector('.mini-block-btn');
     this.els.miniShareBtn = miniRight.querySelector('.mini-share-btn');
     this.els.miniDownloadBtn = miniRight.querySelector('.mini-download-btn');
     this.els.miniMoreBtn = miniRight.querySelector('.mini-more-btn');

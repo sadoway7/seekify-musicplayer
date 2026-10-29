@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-29 — Thumbs down: never hear it again
+
+- New thumbs-down button beside the heart on the player and in the track menu — mark a song as "never for me" and shuffle will skip it (for your account only; everyone else is unaffected). Tap it again to take it back.
+- Blocking a song never removes it from your library: browsing, search and playlists look the same, and if a shuffle list has everything blocked it simply plays unblocked-style instead of going silent.
+
 ## 2026-10-29 — Reliability and account cleanup
 
 - Editing a shared playlist (for example one synced from a watched playlist) now shows a clear "shared playlists are read-only" error instead of pretending to save while silently discarding the edit.

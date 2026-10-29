@@ -99,6 +99,23 @@ func TestAdminPageRetiredFileApiRoutesIntact(t *testing.T) {
 	}
 }
 
+// The per-user blocked (thumbs-down) endpoints sit behind the user gate:
+// anonymous requests get 401, not the catch-all's 404.
+func TestBlockedRoutesRequireUser(t *testing.T) {
+	mux := http.NewServeMux()
+	registerRoutes(mux)
+	mux.HandleFunc("/", http.NotFound)
+
+	for _, path := range []string{"/api/blocked", "/api/blocked/some-track"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET %s anonymous = %d, want %d", path, rec.Code, http.StatusUnauthorized)
+		}
+	}
+}
+
 func TestMetadataRoutesRequireAdminAndEnforceMethods(t *testing.T) {
 	routes := []struct {
 		method string
