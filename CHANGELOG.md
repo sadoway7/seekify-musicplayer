@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-29 — Reliability and account cleanup
+
+- Editing a shared playlist (for example one synced from a watched playlist) now shows a clear "shared playlists are read-only" error instead of pretending to save while silently discarding the edit.
+- Deleting a user now removes that user's favorites, recents, playlists and download jobs too — nothing is left orphaned in the database.
+- Signing up with an already-taken username now says "username is already taken" instead of a raw database message.
+- New optional setting `SESSION_COOKIE_SECURE=1` marks session cookies Secure for HTTPS deployments — off by default, so plain-HTTP LAN setups keep working (documented in the README).
+- Login rejects an unknown username in the same time as a wrong password, so responses no longer reveal which usernames exist.
+- Removed the legacy /admin page — it never worked in Docker installs.
+- The server no longer tries to open a browser window when running in a container.
+
 ## 2026-09-16 — iOS playback polish
 
 - Mobile keyboards no longer hide the tail of search results — the list now stays scrollable above the keyboard on iPhone and Android while typing.
