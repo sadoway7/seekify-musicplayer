@@ -397,7 +397,7 @@ echo fakeaudio > "$last"`)
 // foreground lane so the next play's encode starts immediately.
 func TestEnsureAtContextCancelReleasesLane(t *testing.T) {
 	setupTranscodeTest(t)
-	fakeFmpegStub(t, `sleep 30
+	fakeFmpegStub(t, `exec sleep 30
 for last; do :; done
 echo fakeaudio > "$last"`)
 	src := filepath.Join(t.TempDir(), "c.flac")
