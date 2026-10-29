@@ -83,6 +83,8 @@ var routeTable = []route{
 	{"/api/playlists/", handlers.PlaylistHandler, gateUser, nil},
 	{"/api/favorites", handlers.FavoritesHandler, gateUser, nil},
 	{"/api/favorites/", handlers.FavoriteToggleHandler, gateUser, nil},
+	{"/api/blocked", handlers.BlockedHandler, gateUser, nil},
+	{"/api/blocked/", handlers.BlockedToggleHandler, gateUser, nil},
 	{"/api/recent", handlers.RecentHandler, gateUser, nil},
 	{"/api/recent/", handlers.RecentAddHandler, gateUser, nil},
 	{"/api/normalize/", handlers.NormalizeHandler, gateUser, nil},

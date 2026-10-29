@@ -174,6 +174,12 @@ func InitDB(path string) {
 		added_at INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (user_id, track_id)
 	)`)
+	DB.Exec(`CREATE TABLE IF NOT EXISTS user_blocked (
+		user_id  TEXT NOT NULL,
+		track_id TEXT NOT NULL,
+		added_at INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (user_id, track_id)
+	)`)
 	DB.Exec(`CREATE TABLE IF NOT EXISTS user_recent (
 		user_id  TEXT NOT NULL,
 		track_id TEXT NOT NULL,
@@ -298,6 +304,7 @@ func dedupTracksByFilePath() bool {
 					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_blocked SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -356,6 +363,7 @@ func dedupTracksByFilePath() bool {
 					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_blocked SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -445,6 +453,7 @@ func dedupTracksByFilePath() bool {
 					tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+					tx.Exec(`UPDATE OR IGNORE user_blocked SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 					tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -518,6 +527,7 @@ func dedupByFilePath(path string) bool {
 		tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, keepID, dupID)
+		tx.Exec(`UPDATE OR IGNORE user_blocked SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, keepID, dupID)
 		tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, keepID, dupID)
@@ -642,6 +652,54 @@ func DbToggleUserFavorite(userID, trackID string) bool {
 			return nil
 		}
 		if _, e := conn.ExecContext(context.Background(), "INSERT OR IGNORE INTO user_favorites (user_id, track_id, added_at) VALUES (?, ?, ?)", userID, trackID, now); e != nil {
+			return e
+		}
+		on = true
+		return nil
+	})
+	return on
+}
+
+func DbGetBlocked(userID string) []string {
+	rows, err := DB.Query("SELECT track_id FROM user_blocked WHERE user_id = ? ORDER BY added_at DESC", userID)
+	if err != nil {
+		return []string{}
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return []string{}
+		}
+		out = append(out, id)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out
+}
+
+// DbToggleBlocked returns true if the track is now blocked ("never for me").
+// Same BEGIN IMMEDIATE pattern as DbToggleUserFavorite so concurrent toggles
+// can't lose an update.
+func DbToggleBlocked(userID, trackID string) bool {
+	now := time.Now().Unix()
+	on := false
+	_ = withImmediateTx(func(conn *sql.Conn) error {
+		var exists int
+		err := conn.QueryRowContext(context.Background(), "SELECT 1 FROM user_blocked WHERE user_id = ? AND track_id = ?", userID, trackID).Scan(&exists)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if exists == 1 {
+			if _, e := conn.ExecContext(context.Background(), "DELETE FROM user_blocked WHERE user_id = ? AND track_id = ?", userID, trackID); e != nil {
+				return e
+			}
+			on = false
+			return nil
+		}
+		if _, e := conn.ExecContext(context.Background(), "INSERT OR IGNORE INTO user_blocked (user_id, track_id, added_at) VALUES (?, ?, ?)", userID, trackID, now); e != nil {
 			return e
 		}
 		on = true
@@ -1203,6 +1261,7 @@ func DbDeleteTrack(trackID string) {
 	tx.Exec(`DELETE FROM favorites WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM recent WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM user_favorites WHERE track_id=?`, trackID)
+	tx.Exec(`DELETE FROM user_blocked WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM user_recent WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM playlist_tracks WHERE track_id=?`, trackID)
 	tx.Exec(`DELETE FROM downloads WHERE track_id=?`, trackID)
@@ -1218,6 +1277,7 @@ func DbDeleteAlbum(albumID string) {
 func DbCleanupFavorites() {
 	DB.Exec(`DELETE FROM favorites WHERE track_id NOT IN (SELECT id FROM tracks)`)
 	DB.Exec(`DELETE FROM user_favorites WHERE track_id NOT IN (SELECT id FROM tracks)`)
+	DB.Exec(`DELETE FROM user_blocked WHERE track_id NOT IN (SELECT id FROM tracks)`)
 }
 
 func DbCleanupRecent() {
@@ -1287,6 +1347,7 @@ func DbMigrateTrackID(oldID, newID, newPath string) error {
 		tx.Exec(`UPDATE OR IGNORE favorites SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE recent SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE user_favorites SET track_id = ? WHERE track_id = ?`, newID, oldID)
+		tx.Exec(`UPDATE OR IGNORE user_blocked SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE user_recent SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE playlist_tracks SET track_id = ? WHERE track_id = ?`, newID, oldID)
 		tx.Exec(`UPDATE OR IGNORE downloads SET track_id = ? WHERE track_id = ?`, newID, oldID)
@@ -1298,6 +1359,7 @@ func DbMigrateTrackID(oldID, newID, newPath string) error {
 		tx.Exec(`UPDATE favorites SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE recent SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE user_favorites SET track_id=? WHERE track_id=?`, newID, oldID)
+		tx.Exec(`UPDATE user_blocked SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE user_recent SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE playlist_tracks SET track_id=? WHERE track_id=?`, newID, oldID)
 		tx.Exec(`UPDATE downloads SET track_id=? WHERE track_id=?`, newID, oldID)

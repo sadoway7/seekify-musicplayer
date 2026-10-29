@@ -107,6 +107,29 @@ func FavoriteToggleHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"added": added})
 }
 
+// Blocked is the per-user thumbs-down ("never for me"): same shapes as the
+// favorites endpoints above — GET lists track ids, POST /<id> toggles.
+func BlockedHandler(w http.ResponseWriter, r *http.Request) {
+	u := auth.CurrentUser(r)
+	blocked := store.DbGetBlocked(u.ID)
+	writeJSON(w, blocked)
+}
+
+func BlockedToggleHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u := auth.CurrentUser(r)
+	trackID := strings.TrimPrefix(r.URL.Path, "/api/blocked/")
+	if trackID == "" {
+		http.Error(w, "missing track id", http.StatusBadRequest)
+		return
+	}
+	added := store.DbToggleBlocked(u.ID, trackID)
+	writeJSON(w, map[string]bool{"added": added})
+}
+
 func RecentHandler(w http.ResponseWriter, r *http.Request) {
 	u := auth.CurrentUser(r)
 	recent := store.DbGetUserRecent(u.ID)
