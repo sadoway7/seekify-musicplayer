@@ -391,10 +391,14 @@ func main() {
 	log.Printf("Starting server on %s", addr)
 	log.Printf("Open %s in your browser", url)
 
-	store.SafeGo("open-browser", func() {
-		time.Sleep(500 * time.Millisecond)
-		handlers.OpenBrowser(url)
-	})
+	// Containers and headless hosts have no DISPLAY; skip the doomed
+	// xdg-open instead of spawning it and ignoring the error.
+	if os.Getenv("DISPLAY") != "" {
+		store.SafeGo("open-browser", func() {
+			time.Sleep(500 * time.Millisecond)
+			handlers.OpenBrowser(url)
+		})
+	}
 
 	// Header-read and idle timeouts shed dead/hung clients. Deliberately no
 	// WriteTimeout: synchronous transcodes can legitimately run for minutes
