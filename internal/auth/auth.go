@@ -71,6 +71,7 @@ func newToken() (string, error) {
 var (
 	ErrUsernameInvalid  = errors.New("username must be 3-32 chars, using [a-zA-Z0-9_.-]")
 	ErrPasswordTooShort = errors.New("password must be at least 8 chars")
+	ErrUsernameTaken    = errors.New("username is already taken")
 )
 
 // ValidateCredentials enforces the trust-boundary rules for signup/admin-create.

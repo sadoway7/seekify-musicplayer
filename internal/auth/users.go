@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"musicapp/internal/store"
@@ -78,9 +79,19 @@ func CreateUserWithStatus(username, password, role, email, status string) (*User
 		u.ID, u.Username, u.PasswordHash, u.Role, nullIfEmpty(u.Email), 0, u.Status, u.CreatedAt,
 	)
 	if err != nil {
+		if isUniqueUsernameErr(err) {
+			return nil, ErrUsernameTaken
+		}
 		return nil, err
 	}
 	return u, nil
+}
+
+// isUniqueUsernameErr narrowly matches sqlite's UNIQUE failure on
+// users.username — the only DB error surfaced as a friendly message.
+// Anything else (other tables, other constraints) stays generic.
+func isUniqueUsernameErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: users.username")
 }
 
 func GetUserByID(id string) (*User, error) {
