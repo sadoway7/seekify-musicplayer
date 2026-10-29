@@ -175,7 +175,10 @@ func SetUserPassword(id, password string) error {
 	return err
 }
 
-// DeleteUser refuses to delete the last enabled admin account.
+// DeleteUser refuses to delete the last enabled admin account. Deletion is
+// one transaction covering every row the user owns — favorites, recents,
+// playlists (with their tracks), download jobs, sessions, and the user row
+// itself — so no half-deleted state can remain behind.
 func DeleteUser(id string) error {
 	target, err := GetUserByID(id)
 	if err != nil {
@@ -188,8 +191,25 @@ func DeleteUser(id string) error {
 			return errors.New("cannot delete the last admin account")
 		}
 	}
-	_, err = store.DB.Exec(`DELETE FROM users WHERE id=?`, id)
-	return err
+	tx, err := store.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`DELETE FROM user_favorites WHERE user_id=?`,
+		`DELETE FROM user_recent WHERE user_id=?`,
+		`DELETE FROM playlist_tracks WHERE playlist_id IN (SELECT id FROM playlists WHERE user_id=?)`,
+		`DELETE FROM playlists WHERE user_id=?`,
+		`DELETE FROM download_jobs WHERE user_id=?`,
+		`DELETE FROM sessions WHERE user_id=?`,
+		`DELETE FROM users WHERE id=?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func ListUsers() ([]*User, error) {
