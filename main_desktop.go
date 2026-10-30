@@ -25,6 +25,8 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
+	"github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
 //go:embed icon-rounded.png
@@ -74,6 +76,23 @@ func main() {
 		Services: []application.Service{application.NewService(d)},
 	})
 	d.app = app
+
+	// Auto-update from GitHub Releases: SHA256SUMS digest verification,
+	// 24h background checks. Release asset picked by the default matcher:
+	// seekify-windows-amd64.exe (installers are ignored).
+	gh, err := github.New(github.Config{
+		Repository:    UpdateRepository,
+		ChecksumAsset: "SHA256SUMS",
+	})
+	if err != nil {
+		log.Printf("[desktop] updater provider: %v", err)
+	} else if err := app.Updater.Init(updater.Config{
+		CurrentVersion: Version,
+		Providers:      []updater.Provider{gh},
+		CheckInterval:  24 * time.Hour,
+	}); err != nil {
+		log.Printf("[desktop] updater init: %v", err)
+	}
 
 	d.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:   "main",
@@ -224,7 +243,15 @@ func (d *desktopApp) setupTray(startHidden bool) {
 	})
 
 	updateItem := menu.Add("Check for Updates…")
-	updateItem.SetEnabled(false) // wired when the updater lands
+	updateItem.OnClick(func(*application.Context) {
+		if d.app.Updater != nil {
+			go func() {
+				if err := d.app.Updater.CheckAndInstall(context.Background()); err != nil {
+					log.Printf("[desktop] update check: %v", err)
+				}
+			}()
+		}
+	})
 	menu.AddSeparator()
 
 	menu.Add("Restart Server").OnClick(func(*application.Context) { d.restartServer() })
