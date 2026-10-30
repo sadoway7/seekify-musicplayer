@@ -3,6 +3,7 @@ name: Publish to GHCR
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,3 +38,64 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/seekify:latest
             ghcr.io/${{ github.repository_owner }}/seekify:${{ github.sha }}
+  windows-installer:
+    needs: [validate-ca-templates, build-and-push]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      # Pin the bundled rip tools. ffmpeg: BtbN GPL build (essentials);
+      # yt-dlp: official standalone exe.
+      FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
+      YTDLP_VERSION: "2026.10.22"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install wails3 CLI + NSIS
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+          choco install nsis --no-progress --version=3.10.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          echo "C:/Program Files (x86)/NSIS" >> "$GITHUB_PATH"
+
+      - name: Download bundled rip tools
+        shell: bash
+        run: |
+          mkdir -p build/windows/tools
+          curl -fsSL "$FFMPEG_URL" -o /tmp/ffmpeg.zip
+          unzip -j /tmp/ffmpeg.zip "*/bin/ffmpeg.exe" -d build/windows/tools
+          curl -fsSL -o build/windows/tools/yt-dlp.exe \
+            "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp.exe"
+          ls -la build/windows/tools
+
+      - name: Build installer
+        shell: bash
+        run: |
+          VERSION="0.$(date +%Y%m%d).${{ github.run_number }}"
+          echo "SEEKIFY_VERSION=$VERSION" >> "$GITHUB_ENV"
+          wails3 task windows:package GOOS=windows INSTALL_SCOPE=user VERSION="$VERSION"
+          cp "bin/seekify.exe" "seekify-windows-amd64.exe"
+          mv bin/Seekify-Setup.exe .
+          sha256sum Seekify-Setup.exe seekify-windows-amd64.exe > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish rolling release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Replace the previous rolling release; its tag must move because
+          # the updater reads the version from the release tag.
+          OLD_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          if [ -n "$OLD_TAG" ]; then
+            gh release delete "$OLD_TAG" --cleanup-tag --yes
+          fi
+          gh release create "v$SEEKIFY_VERSION" \
+            --title "Seekify for Windows" \
+            --notes "Windows desktop build ($SEEKIFY_VERSION). Download Seekify-Setup.exe, run it, and Seekify lives in your tray. The app updates itself from this release." \
+            Seekify-Setup.exe seekify-windows-amd64.exe SHA256SUMS
