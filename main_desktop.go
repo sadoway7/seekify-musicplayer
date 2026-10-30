@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -143,6 +144,20 @@ func (d *desktopApp) ServiceStartup(_ context.Context, _ application.ServiceOpti
 	}
 
 	srv, errCh, err := runServer(false)
+	if err != nil {
+		// Port already taken is almost always a zombie Seekify from an
+		// earlier version still serving (possibly 404s). Kill the other
+		// instances (never ourselves) and try once more before giving up.
+		if strings.Contains(err.Error(), "bind: address already in use") && runtime.GOOS == "windows" {
+			pid := os.Getpid()
+			script := fmt.Sprintf(`Get-Process seekify -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne %d } | Stop-Process -Force`, pid)
+			kill := exec.Command("powershell", "-NoProfile", "-Command", script)
+			kill.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000008} // DETACHED_PROCESS
+			_ = kill.Run()
+			time.Sleep(time.Second)
+			srv, errCh, err = runServer(false)
+		}
+	}
 	if err != nil {
 		d.app.Dialog.Error().SetTitle("Seekify could not start").SetMessage(err.Error()).Show()
 		d.app.Quit()
@@ -302,15 +317,21 @@ func (d *desktopApp) waitServerThenShow() {
 		for time.Now().Before(deadline) {
 			resp, err := http.Get(url) //nolint:gosec // fixed localhost URL
 			if err == nil {
+				// Require OUR app (200), not a zombie's 404 page: the window
+				// must never render someone else's error.
+				ok := resp.StatusCode == http.StatusOK
 				resp.Body.Close()
-				if !d.startHidden {
-					d.showWindow()
+				if ok {
+					if !d.startHidden {
+						d.showWindow()
+					}
+					return
 				}
-				return
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
-		log.Printf("[desktop] server did not answer %s within 30s", url)
+		d.app.Dialog.Error().SetTitle("Seekify").
+			SetMessage("The Seekify server did not start correctly.\nIf another Seekify is running, close it (tray → Shutdown Server, or Task Manager) and try again.").Show()
 	}()
 }
 
