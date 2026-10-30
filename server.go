@@ -109,11 +109,12 @@ func gzipMiddleware(next http.Handler) http.Handler {
 }
 
 // runServer starts the whole Seekify server (env, library, workers, HTTP).
-// It returns the listening http.Server (so callers can shut it down) and a
-// channel carrying the ListenAndServe error. The CLI main blocks on that
-// channel and dies like it always did; the desktop entry uses the server
-// handle for tray-driven shutdown/restart.
-func runServer(openBrowserOnStart bool) (*http.Server, <-chan error) {
+// It returns the listening http.Server (so callers can shut it down), a
+// channel carrying the ListenAndServe error, and a synchronous startup
+// error for pre-listen failures (bad MUSIC_DIR etc.) — the CLI Fatalf's on
+// it like it always did; the desktop shows it in a dialog instead of dying
+// silently.
+func runServer(openBrowserOnStart bool) (*http.Server, <-chan error, error) {
 	// Load .env first so every env-based knob (MUSIC_DIR, PORT, ...) sees it.
 	// Real env vars still win; missing file is a silent no-op.
 	loadDotEnv(".env")
@@ -141,13 +142,13 @@ func runServer(openBrowserOnStart bool) (*http.Server, <-chan error) {
 
 	absDir, err := filepath.Abs(store.MusicDir)
 	if err != nil {
-		log.Fatalf("Could not resolve music directory path: %v", err)
+		return nil, nil, fmt.Errorf("could not resolve music directory path: %v", err)
 	}
 	store.MusicDir = absDir
 
 	info, err := os.Stat(store.MusicDir)
 	if err != nil || !info.IsDir() {
-		log.Fatalf("Music directory does not exist: %s", store.MusicDir)
+		return nil, nil, fmt.Errorf("music directory does not exist: %s", store.MusicDir)
 	}
 
 	// Initialize musicDirs with the primary directory
@@ -158,11 +159,11 @@ func runServer(openBrowserOnStart bool) (*http.Server, <-chan error) {
 	if mediaDir != "" {
 		absMedia, err := filepath.Abs(mediaDir)
 		if err != nil {
-			log.Fatalf("Could not resolve media music directory path: %v", err)
+			return nil, nil, fmt.Errorf("could not resolve media music directory path: %v", err)
 		}
 		mediaInfo, err := os.Stat(absMedia)
 		if err != nil || !mediaInfo.IsDir() {
-			log.Fatalf("Media music directory does not exist: %s", absMedia)
+			return nil, nil, fmt.Errorf("media music directory does not exist: %s", absMedia)
 		}
 		store.MusicDirs["media"] = absMedia
 		log.Printf("Media music directory: %s", absMedia)
@@ -499,5 +500,5 @@ func runServer(openBrowserOnStart bool) (*http.Server, <-chan error) {
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
-	return srv, errCh
+	return srv, errCh, nil
 }

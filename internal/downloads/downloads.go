@@ -311,14 +311,14 @@ func FindFfmpeg() string {
 }
 
 // toolFallbackPaths returns the Windows desktop tool locations in lookup
-// order: the installer's tools dir beside the exe, then the writable copy
-// in %APPDATA%\Seekify\bin (kept there so yt-dlp -U self-updates work).
-// Pure path math (OS gating lives in windowsToolFallbacks) so tests run
-// on any host.
+// order: the writable copy in %APPDATA%\Seekify\bin FIRST (so yt-dlp -U
+// self-updates take effect — spec), then the installer's read-only tools
+// dir beside the exe as seed/fallback. Pure path math (OS gating lives in
+// windowsToolFallbacks) so tests run on any host.
 func toolFallbackPaths(name, exeDir, appData string) []string {
 	return []string{
-		filepath.Join(exeDir, "tools", name),
 		filepath.Join(appData, "Seekify", "bin", name),
+		filepath.Join(exeDir, "tools", name),
 	}
 }
 

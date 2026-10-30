@@ -100,3 +100,20 @@ func SyncTools(srcDir, dstDir string) (int, error) {
 	}
 	return copied, nil
 }
+
+// ParseHidden reports whether the desktop-only --hidden flag is present and
+// returns args with every --hidden removed. The desktop entrypoint must
+// strip it before anything calls flag.Parse(): the shared flag set doesn't
+// define -hidden, and flag.CommandLine is ExitOnError, so leaving it in
+// kills the app at startup (invisible in a windowsgui binary).
+func ParseHidden(args []string) (hidden bool, filtered []string) {
+	filtered = args[:1:1]
+	for _, a := range args[1:] {
+		if a == "--hidden" {
+			hidden = true
+			continue
+		}
+		filtered = append(filtered, a)
+	}
+	return hidden, filtered
+}

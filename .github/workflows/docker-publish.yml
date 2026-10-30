@@ -34,7 +34,8 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          # Branch/dispatch runs must never touch the image real users pull.
+          push: ${{ github.ref == 'refs/heads/main' }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/seekify:latest
             ghcr.io/${{ github.repository_owner }}/seekify:${{ github.sha }}
@@ -84,14 +85,27 @@ jobs:
           sha256sum Seekify-Setup.exe seekify-windows-amd64.exe > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Upload installer artifact (branch test runs)
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Seekify-Setup
+          path: |
+            Seekify-Setup.exe
+            seekify-windows-amd64.exe
+            SHA256SUMS
+
       - name: Publish rolling release
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Replace the previous rolling release; its tag must move because
-          # the updater reads the version from the release tag.
-          OLD_TAG=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          # the updater reads the version from the release tag. Only touch
+          # releases this pipeline created (matched by title).
+          OLD_TAG=$(gh release list --json tagName,name --limit 100 \
+            -q '.[] | select(.name=="Seekify for Windows") | .tagName' | head -1)
           if [ -n "$OLD_TAG" ]; then
             gh release delete "$OLD_TAG" --cleanup-tag --yes
           fi

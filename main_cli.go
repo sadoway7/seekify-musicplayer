@@ -7,7 +7,10 @@ package main
 import "log"
 
 func main() {
-	_, errCh := runServer(true)
+	_, errCh, err := runServer(true)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if err := <-errCh; err != nil {
 		log.Fatalf("Server error: %v", err)
 	}

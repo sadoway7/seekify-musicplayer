@@ -33,11 +33,12 @@ import (
 var trayIcon []byte
 
 type desktopApp struct {
-	app    *application.App
-	window *application.WebviewWindow
-	srv    *http.Server
-	errCh  <-chan error
-	port   string
+	app         *application.App
+	window      *application.WebviewWindow
+	srv         *http.Server
+	errCh       <-chan error
+	port        string
+	startHidden bool // autostart: stay in tray until the user opens us
 }
 
 func main() {
@@ -56,12 +57,11 @@ func main() {
 
 	loadDotEnv(".env")
 
-	hidden := false
-	for _, a := range os.Args[1:] {
-		if a == "--hidden" {
-			hidden = true
-		}
-	}
+	// Consume --hidden BEFORE anything calls flag.Parse (runServer does):
+	// the shared flag set doesn't define it and ExitOnError would kill the
+	// app at every autostart.
+	hidden, filteredArgs := desktopconfig.ParseHidden(os.Args)
+	os.Args = filteredArgs
 
 	d := &desktopApp{}
 
@@ -101,7 +101,8 @@ func main() {
 	})
 	d.setupURLAndPort()
 	d.setupCloseToTray()
-	d.setupTray(hidden)
+	d.startHidden = hidden
+	d.setupTray()
 
 	if err := app.Run(); err != nil {
 		panic(err)
@@ -127,7 +128,12 @@ func (d *desktopApp) ServiceStartup(_ context.Context, _ application.ServiceOpti
 		}
 	}
 
-	srv, errCh := runServer(false)
+	srv, errCh, err := runServer(false)
+	if err != nil {
+		d.app.Dialog.Error().SetTitle("Seekify could not start").SetMessage(err.Error()).Show()
+		d.app.Quit()
+		return nil
+	}
 	d.srv, d.errCh = srv, errCh
 
 	// Surface fatal server errors (e.g. port in use) as a dialog, not a
@@ -211,7 +217,7 @@ func (d *desktopApp) setupCloseToTray() {
 	})
 }
 
-func (d *desktopApp) setupTray(startHidden bool) {
+func (d *desktopApp) setupTray() {
 	tray := d.app.SystemTray.New()
 	tray.SetIcon(trayIcon)
 	tray.SetLabel("Seekify " + Version)
@@ -260,10 +266,6 @@ func (d *desktopApp) setupTray(startHidden bool) {
 	tray.SetMenu(menu)
 
 	tray.OnClick(func() { d.showWindow() })
-
-	if startHidden {
-		d.hideWindow()
-	}
 }
 
 func (d *desktopApp) showWindow() {
@@ -273,12 +275,6 @@ func (d *desktopApp) showWindow() {
 	d.window.Restore()
 	d.window.Show()
 	d.window.Focus()
-}
-
-func (d *desktopApp) hideWindow() {
-	if d.window != nil {
-		d.window.Hide()
-	}
 }
 
 // waitServerThenShow polls the server root until it answers (or 30s pass)
@@ -291,7 +287,9 @@ func (d *desktopApp) waitServerThenShow() {
 			resp, err := http.Get(url) //nolint:gosec // fixed localhost URL
 			if err == nil {
 				resp.Body.Close()
-				d.showWindow()
+				if !d.startHidden {
+					d.showWindow()
+				}
 				return
 			}
 			time.Sleep(200 * time.Millisecond)

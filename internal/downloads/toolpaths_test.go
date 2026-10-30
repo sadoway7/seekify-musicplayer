@@ -13,8 +13,10 @@ func TestToolFallbackPathsWindowsLayout(t *testing.T) {
 	got := toolFallbackPaths("ffmpeg.exe", exeDir, appData)
 
 	want := []string{
-		filepath.Join(exeDir, "tools", "ffmpeg.exe"),
+		// bin first: the writable copy is the one the app runs, so yt-dlp -U
+		// self-updates actually take effect (spec); tools\ is the read-only seed.
 		filepath.Join(appData, "Seekify", "bin", "ffmpeg.exe"),
+		filepath.Join(exeDir, "tools", "ffmpeg.exe"),
 	}
 	if len(got) != len(want) {
 		t.Fatalf("toolFallbackPaths returned %d paths, want %d: %v", len(got), len(want), got)
