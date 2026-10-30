@@ -60,6 +60,8 @@ ManifestDPIAware true
 !insertmacro MUI_PAGE_WELCOME # Welcome to the installer page.
 !insertmacro MUI_PAGE_LICENSE "THIRD-PARTY.txt" # Third-party components (ffmpeg GPL, yt-dlp Unlicense)
 !insertmacro MUI_PAGE_DIRECTORY # In which folder install page.
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
+!define MUI_FINISHPAGE_RUN_TEXT "Run Seekify now"
 !insertmacro MUI_PAGE_INSTFILES # Installing page.
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 

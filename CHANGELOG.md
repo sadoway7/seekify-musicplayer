@@ -3,7 +3,9 @@
 ## 2026-10-30 — Seekify for Windows
 
 - New Windows desktop app: download `Seekify-Setup.exe` from GitHub Releases, install (per-user, no admin), and Seekify runs in the background with a tray icon — open the player window, start with Windows, restart or shut down from the tray. First launch asks where your music lives.
+- The player window uses its own slim title bar (drag to move, minimize/maximize/close; close keeps the music playing from the tray) and the window frame can be resized from every edge.
 - The installer bundles ffmpeg and yt-dlp, so YouTube ripping works out of the box; the app also updates itself from GitHub.
+- The app interface is now built into the program itself, so the window works no matter where the app runs from.
 - The Docker/server build is unchanged: same binary, same data, one codebase.
 
 ## 2026-10-29 — Thumbs down: never hear it again

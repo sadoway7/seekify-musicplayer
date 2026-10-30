@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"musicapp/internal/desktopconfig"
+	"musicapp/internal/handlers"
 	"net/http"
 	"os"
 	"os/exec"
@@ -95,14 +96,27 @@ func main() {
 	}
 
 	d.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:   "main",
-		Title:  "Seekify",
-		Hidden: true, // shown once the server answers
+		Name:      "main",
+		Title:     "Seekify",
+		Hidden:    true, // shown once the server answers
+		Frameless: true, // custom in-app title bar (js/desktop-frame.js)
+		Windows: application.WindowsWindow{
+			// WebView2-native app-region: drag support for the title bar.
+			NonClientRegionSupport: true,
+		},
 	})
 	d.setupURLAndPort()
 	d.setupCloseToTray()
 	d.startHidden = hidden
 	d.setupTray()
+
+	// Window-control seams for the custom title bar buttons (SPA calls
+	// /api/window/*; these routes 404 in server/Docker builds where the
+	// funcs stay nil). Wired here rather than wireCrossPackageHooks because
+	// the hooks function is shared with the CLI build, which has no window.
+	handlers.WindowMinimizeFunc = func() { d.window.Minimise() }
+	handlers.WindowMaximizeFunc = d.window.ToggleMaximise
+	handlers.WindowCloseFunc = func() { d.window.Hide() }
 
 	if err := app.Run(); err != nil {
 		panic(err)
@@ -206,7 +220,9 @@ func (d *desktopApp) setupURLAndPort() {
 	if d.port == "" {
 		d.port = "8081"
 	}
-	d.window.SetURL("http://localhost:" + d.port)
+	// ?desktop=1 makes the SPA render the custom title bar (browsers/phones
+	// never send it).
+	d.window.SetURL("http://localhost:" + d.port + "/?desktop=1")
 }
 
 func (d *desktopApp) setupCloseToTray() {

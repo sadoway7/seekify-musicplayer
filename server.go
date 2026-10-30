@@ -41,6 +41,9 @@ func wireCrossPackageHooks() {
 	scanner.DeleteReview = review.DbDeleteReview
 	scanner.SetReviewStatus = review.DbSetReviewStatus
 	scanner.SeedReviewUnchecked = review.DbSeedReviewUnchecked
+
+	// Embedded SPA fallback (disk copies still win where they exist).
+	handlers.SpaFS = spaFS
 }
 
 func recoveryMiddleware(next http.Handler) http.Handler {

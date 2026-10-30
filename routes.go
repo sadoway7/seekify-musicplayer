@@ -69,6 +69,11 @@ var routeTable = []route{
 	{"/api/shared-queue/", handlers.SharedQueueGetHandler, gateOpen, nil},
 	{"/api/settings/public", handlers.PublicSettingsHandler, gateOpen, nil},
 
+	// ── Desktop app window controls (404 in server/Docker builds) ──
+	{"/api/window/minimize", handlers.WindowMinimize, gateUser, nil},
+	{"/api/window/maximize", handlers.WindowMaximize, gateUser, nil},
+	{"/api/window/close", handlers.WindowClose, gateUser, nil},
+
 	// ── Finder (search open; ripping actions need a user) ──
 	{"/api/finder/search", handlers.FinderSearchHandler, gateOpen, nil},
 	{"/api/finder/artist/", handlers.FinderArtistReleasesHandler, gateOpen, nil},

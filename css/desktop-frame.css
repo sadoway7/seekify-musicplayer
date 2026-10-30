@@ -1,0 +1,70 @@
+/* Desktop-app custom title bar (only when body.desktop-frame is set —
+   the Windows app's window loads the SPA with ?desktop=1). The bar is the
+   WebView2 drag region (app-region: drag); buttons opt out with no-drag.
+   Edge resizing stays native — Wails frameless windows keep resize
+   borders on every side. */
+body.desktop-frame {
+  padding-top: 36px;
+}
+
+#desktop-titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  background: #101014;
+  border-bottom: 1px solid #26262e;
+  z-index: 2147483000; /* above modals; the bar must stay grabbable */
+  app-region: drag;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+body.desktop-frame #desktop-titlebar {
+  display: flex;
+}
+
+#desktop-titlebar .dt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  font-size: 12px;
+  color: #9a9aa6;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#desktop-titlebar .dt-actions {
+  display: flex;
+  height: 100%;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+#desktop-titlebar .dt-btn {
+  width: 46px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: #b8b8c2;
+  font-size: 11px;
+  cursor: default;
+}
+
+#desktop-titlebar .dt-btn:hover {
+  background: #26262e;
+  color: #fff;
+}
+
+#desktop-titlebar .dt-btn.dt-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}

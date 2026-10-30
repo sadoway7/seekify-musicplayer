@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	htmlpkg "html"
+	"io/fs"
 	"log"
 	"mime"
 	"musicapp/internal/musicbrainz"
@@ -91,6 +93,55 @@ func OpenBrowser(url string) {
 	cmd.Start()
 }
 
+// SpaFS is the embedded SPA fallback (set by the server entrypoint; nil in
+// unit tests that only exercise disk behavior). Disk files always win;
+// this serves the UI when the working directory has no SPA on disk — the
+// Windows desktop build, which chdirs to %APPDATA%\Seekify.
+var SpaFS fs.FS
+
+// readIndexHTML returns index.html bytes: disk first, embedded fallback.
+func readIndexHTML() ([]byte, error) {
+	if html, err := os.ReadFile(filepath.Join(".", "index.html")); err == nil {
+		return html, nil
+	}
+	if SpaFS != nil {
+		return fs.ReadFile(SpaFS, "index.html")
+	}
+	return nil, os.ErrNotExist
+}
+
+// serveEmbedded serves path (like "/js/app.js") from SpaFS with the same
+// content-type/cache logic as the disk path. Returns false when not embedded.
+func serveEmbedded(w http.ResponseWriter, r *http.Request, path string) bool {
+	if SpaFS == nil {
+		return false
+	}
+	name := strings.TrimPrefix(path, "/")
+	data, err := fs.ReadFile(SpaFS, name)
+	if err != nil {
+		return false
+	}
+	ext := filepath.Ext(name)
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	if ext == ".html" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Write(bustAssetVersions(data))
+		return true
+	}
+	if ext == ".js" || ext == ".css" {
+		if r.URL.Query().Get("v") != "" && r.URL.Query().Get("v") == assetVersion {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+	}
+	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(data))
+	return true
+}
+
 func SpaHandler(w http.ResponseWriter, r *http.Request) {
 	path := filepath.Clean(r.URL.Path)
 	if path == "/" {
@@ -104,8 +155,7 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 	artistName := q.Get("artist")
 
 	if playlistID != "" || trackID != "" || albumID != "" || artistName != "" {
-		indexPath := filepath.Join(".", "index.html")
-		html, err := os.ReadFile(indexPath)
+		html, err := readIndexHTML()
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -199,46 +249,51 @@ func SpaHandler(w http.ResponseWriter, r *http.Request) {
 
 	fullPath := filepath.Join(".", path)
 	info, err := os.Stat(fullPath)
-	if err == nil && !info.IsDir() {
-		ext := filepath.Ext(fullPath)
-		if ct := mime.TypeByExtension(ext); ct != "" {
-			w.Header().Set("Content-Type", ct)
+	if err != nil || info.IsDir() {
+		// No disk copy: embedded SPA first (desktop build), then the SPA
+		// route fallback — serve index.html so client-side routing renders
+		// for whitelisted paths whose file simply isn't on disk.
+		if serveEmbedded(w, r, path) {
+			return
 		}
-		// HTML entry points get their ?v= params rewritten to this deploy's
-		// assetVersion so browsers pick up fresh JS/CSS after every deploy
-		// (and so those busted URLs can be cached immutably). Root "/" serves
-		// through here as /index.html — previously it went out with the
-		// hardcoded v= values from the file on disk.
-		if ext == ".html" {
-			if b, err := os.ReadFile(fullPath); err == nil {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-				w.Write(bustAssetVersions(b))
-				return
-			}
+		html, err := readIndexHTML()
+		if err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Write(bustAssetVersions(html))
+			return
 		}
-		// ponytail: Safari caches JS/CSS aggressively; force revalidation.
-		// Exception: a ?v= matching this process's assetVersion is a
-		// per-deploy-busted URL — cache it immutably (saves 21 revalidation
-		// round trips per app open). Hardcoded v= values in admin
-		// never match and stay no-cache, so they can't go stale.
-		if ext == ".js" || ext == ".css" {
-			if r.URL.Query().Get("v") != "" && r.URL.Query().Get("v") == assetVersion {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			} else {
-				w.Header().Set("Cache-Control", "no-cache")
-			}
-		}
-		http.ServeFile(w, r, fullPath)
+		http.NotFound(w, r)
 		return
 	}
-
-	indexPath := filepath.Join(".", "index.html")
-	if html, err := os.ReadFile(indexPath); err == nil {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		w.Write(bustAssetVersions(html))
-		return
+	ext := filepath.Ext(fullPath)
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		w.Header().Set("Content-Type", ct)
 	}
-	http.NotFound(w, r)
+	// HTML entry points get their ?v= params rewritten to this deploy's
+	// assetVersion so browsers pick up fresh JS/CSS after every deploy
+	// (and so those busted URLs can be cached immutably). Root "/" serves
+	// through here as /index.html — previously it went out with the
+	// hardcoded v= values from the file on disk.
+	if ext == ".html" {
+		if b, err := os.ReadFile(fullPath); err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Write(bustAssetVersions(b))
+			return
+		}
+	}
+	// ponytail: Safari caches JS/CSS aggressively; force revalidation.
+	// Exception: a ?v= matching this process's assetVersion is a
+	// per-deploy-busted URL — cache it immutably (saves 21 revalidation
+	// round trips per app open). Hardcoded v= values in admin
+	// never match and stay no-cache, so they can't go stale.
+	if ext == ".js" || ext == ".css" {
+		if r.URL.Query().Get("v") != "" && r.URL.Query().Get("v") == assetVersion {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+	}
+	http.ServeFile(w, r, fullPath)
 }
