@@ -397,7 +397,7 @@ func runServer(openBrowserOnStart bool) (*http.Server, <-chan error) {
 	addr := ":" + port
 	url := fmt.Sprintf("http://localhost%s", addr)
 
-	log.Printf("Starting server on %s", addr)
+	log.Printf("Starting server on %s (version %s)", addr, Version)
 	log.Printf("Open %s in your browser", url)
 
 	// Containers and headless Linux hosts have no DISPLAY; skip the doomed
