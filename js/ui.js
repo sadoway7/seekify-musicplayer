@@ -301,7 +301,9 @@ const UI = {
           this.updateMiniPlayer();
           settled.then((r) => {
             this.updateMiniPlayer();
-            this.showToast(r.added ? 'Blocked from Shuffle' : 'Unblocked from Shuffle');
+            this.showToast(r.added ? 'Not for me' : 'Unblocked from Shuffle');
+            // Blocking the song that's playing = skip it, like pressing next
+            if (r.added) Player.next();
           }).catch(() => {
             this.updateMiniPlayer();
             this.showToast('Failed to update blocked tracks');
@@ -399,7 +401,9 @@ const UI = {
       this.updateNowPlaying();
       settled.then((r) => {
         this.updateNowPlaying();
-        this.showToast(r.added ? 'Blocked from Shuffle' : 'Unblocked from Shuffle');
+        this.showToast(r.added ? 'Not for me' : 'Unblocked from Shuffle');
+        // Blocking the song that's playing = skip it, like pressing next
+        if (r.added) Player.next();
       }).catch(() => {
         this.updateNowPlaying();
         this.showToast('Failed to update blocked tracks');

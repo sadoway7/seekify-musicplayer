@@ -4,6 +4,7 @@
 
 - New thumbs-down button beside the heart on the player and in the track menu — mark a song as "never for me" and shuffle will skip it (for your account only; everyone else is unaffected). Tap it again to take it back.
 - Blocking a song never removes it from your library: browsing, search and playlists look the same, and if a shuffle list has everything blocked it simply plays unblocked-style instead of going silent.
+- Thumbs-downing the song that's currently playing skips straight to the next one — like pressing next. The confirmation says "Not for me".
 
 ## 2026-10-29 — Reliability and account cleanup
 

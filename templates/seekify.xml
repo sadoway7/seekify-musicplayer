@@ -17,7 +17,7 @@
   <Changes>Changelog
 
 2026-10-29
-- New: thumbs-down button beside the heart — mark a song "never for me" and shuffle skips it for your account only. Press again to undo; nothing is ever removed from your library.
+- New: thumbs-down button beside the heart — mark a song "not for me" and shuffle skips it for your account only. Press again to undo; nothing is ever removed from your library. If the song is playing, it skips to the next one.
 - Editing a shared playlist now shows a clear read-only error instead of pretending to save.
 - Deleting a user now also cleans up their playlists, favorites, recent plays and download history.
 - Friendlier sign-up messages when a username is already taken.
