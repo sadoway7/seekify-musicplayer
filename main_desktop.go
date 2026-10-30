@@ -65,6 +65,14 @@ func main() {
 	hidden, filteredArgs := desktopconfig.ParseHidden(os.Args)
 	os.Args = filteredArgs
 
+	// Resolve the port BEFORE the window is created: the window must be
+	// born with its URL (SetURL after creation does not navigate — the
+	// window would sit on Wails' empty built-in asset server showing 404).
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8081"
+	}
+
 	d := &desktopApp{}
 
 	app := application.New(application.Options{
@@ -80,8 +88,11 @@ func main() {
 	d.app = app
 
 	// Auto-update from GitHub Releases: SHA256SUMS digest verification,
-	// 24h background checks. Release asset picked by the default matcher:
-	// seekify-windows-amd64.exe (installers are ignored).
+	// 24h background checks. Silent by design — WindowNone means offline
+	// machines never get "Update Failed" popups; when an update is fully
+	// staged the EventUpdateReady handler below asks to restart. Release
+	// asset picked by the default matcher: seekify-windows-amd64.exe
+	// (installers are ignored).
 	gh, err := github.New(github.Config{
 		Repository:    UpdateRepository,
 		ChecksumAsset: "SHA256SUMS",
@@ -92,8 +103,23 @@ func main() {
 		CurrentVersion: Version,
 		Providers:      []updater.Provider{gh},
 		CheckInterval:  24 * time.Hour,
+		Window:         updater.WindowNone,
 	}); err != nil {
 		log.Printf("[desktop] updater init: %v", err)
+	} else {
+		// Update staged in the background → ask before restarting.
+		app.Event.On(updater.EventUpdateReady, func(*application.CustomEvent) {
+			q := app.Dialog.Question().
+				SetTitle("Seekify update ready").
+				SetMessage("An update has been downloaded. Restart Seekify now to apply it?")
+			yes := q.AddButton("Restart now")
+			yes.OnClick(func() { _ = app.Updater.Restart(context.Background()) })
+			cancel := q.AddButton("Later")
+			cancel.OnClick(func() {})
+			q.SetCancelButton(cancel)
+			q.SetDefaultButton(yes)
+			q.Show()
+		})
 	}
 
 	d.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -101,13 +127,14 @@ func main() {
 		Title:     "Seekify",
 		Hidden:    true, // shown once the server answers
 		Frameless: true, // custom in-app title bar (js/desktop-frame.js)
+		URL:       "http://localhost:" + port + "/?desktop=1",
 		Windows: application.WindowsWindow{
 			// WebView2-native app-region: drag support for the title bar.
 			NonClientRegionSupport: true,
 		},
 	})
-	d.setupURLAndPort()
 	d.setupCloseToTray()
+	d.setupURLAndPort()
 	d.startHidden = hidden
 	d.setupTray()
 
@@ -231,13 +258,14 @@ func mustCwd() string {
 }
 
 func (d *desktopApp) setupURLAndPort() {
-	d.port = os.Getenv("PORT")
-	if d.port == "" {
-		d.port = "8081"
+	// Port resolution happens in main() before window creation (the URL
+	// must be set at creation — see main). Keep d.port in sync for the
+	// readiness poll and error dialogs.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8081"
 	}
-	// ?desktop=1 makes the SPA render the custom title bar (browsers/phones
-	// never send it).
-	d.window.SetURL("http://localhost:" + d.port + "/?desktop=1")
+	d.port = port
 }
 
 func (d *desktopApp) setupCloseToTray() {
@@ -283,8 +311,10 @@ func (d *desktopApp) setupTray() {
 	updateItem.OnClick(func(*application.Context) {
 		if d.app.Updater != nil {
 			go func() {
+				// Manual check gives explicit feedback; background checks
+				// stay silent (WindowNone) and only prompt when staged.
 				if err := d.app.Updater.CheckAndInstall(context.Background()); err != nil {
-					log.Printf("[desktop] update check: %v", err)
+					d.app.Dialog.Error().SetTitle("Update check failed").SetMessage(err.Error()).Show()
 				}
 			}()
 		}
