@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Explicit version (e.g. 1.2.0) — overrides auto-increment. Use for minor/major bumps."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -74,12 +79,30 @@ jobs:
             "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp.exe"
           ls -la build/windows/tools
 
+      - name: Compute version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Versioning: 1.1.x — patch auto-increments from the latest
+          # release; minor/major bumps happen only when a dispatch run
+          # passes an explicit version. History is kept (no deletions).
+          V="${{ inputs.version }}"
+          if [ -z "$V" ]; then
+            LAST=$(gh release list --limit 1 --json tagName -q '.[0].tagName // ""' 2>/dev/null || echo "")
+            if [[ "$LAST" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              V="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3]+1))"
+            else
+              V="1.1.0"
+            fi
+          fi
+          echo "SEEKIFY_VERSION=$V" >> "$GITHUB_ENV"
+          echo "version: $V"
+
       - name: Build installer
         shell: bash
         run: |
-          VERSION="0.$(date +%Y%m%d).${{ github.run_number }}"
-          echo "SEEKIFY_VERSION=$VERSION" >> "$GITHUB_ENV"
-          wails3 task windows:package GOOS=windows INSTALL_SCOPE=user VERSION="$VERSION"
+          wails3 task windows:package GOOS=windows INSTALL_SCOPE=user VERSION="$SEEKIFY_VERSION"
           cp "bin/seekify.exe" "seekify-windows-amd64.exe"
           mv bin/Seekify-Setup.exe .
           sha256sum Seekify-Setup.exe seekify-windows-amd64.exe > SHA256SUMS
@@ -101,17 +124,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Replace the previous rolling release; its tag must move because
-          # the updater reads the version from the release tag. Only touch
-          # releases this pipeline created (matched by title).
-          OLD_TAG=$(gh release list --json tagName,name --limit 100 \
-            -q '.[] | select(.name=="Seekify for Windows") | .tagName' | head -1)
-          if [ -n "$OLD_TAG" ]; then
-            gh release delete "$OLD_TAG" --cleanup-tag --yes
-          fi
+          # Every push to main becomes its own kept release (1.1.x history).
+          # The newest published release is what the in-app updater polls.
           gh release create "v$SEEKIFY_VERSION" \
-            --title "Seekify for Windows" \
-            --notes "Windows desktop build ($SEEKIFY_VERSION). Download Seekify-Setup.exe, run it, and Seekify lives in your tray. The app updates itself from this release." \
+            --title "Seekify $SEEKIFY_VERSION" \
+            --notes "Windows build $SEEKIFY_VERSION from ${GITHUB_SHA:0:7} $(date -u +%Y-%m-%d). Download Seekify-Setup.exe, run it, and Seekify lives in your tray. The app updates itself from the newest release." \
             Seekify-Setup.exe seekify-windows-amd64.exe SHA256SUMS
           # Guard: if the create lands as a draft (seen once), publish it.
           gh release edit "v$SEEKIFY_VERSION" --draft=false

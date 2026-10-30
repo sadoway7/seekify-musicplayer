@@ -130,7 +130,16 @@ go build -mod=vendor -o server .   # build (vendor mode, no network)
   `GOOS=windows GOARCH=amd64 go build -tags desktop -mod=vendor .`
   (CI builds the installer via `wails3 task windows:package` — see
   `Taskfile.yml` + `build/windows/`; the `windows-installer` GitHub job
-  publishes `Seekify-Setup.exe` + updater assets to a rolling release).
+  publishes `Seekify-Setup.exe` + updater assets to GitHub Releases).
+- **Versioning** (`1.1.x`): every push to `main` publishes the next patch
+  version automatically (the workflow reads the latest release tag and
+  increments; releases accumulate — never delete them, the updater polls
+  the newest). Minor/major bumps happen ONLY when Sadoway asks: dispatch
+  the workflow with an explicit `version` input (e.g. `1.2.0`) or edit
+  nothing else — agents must not invent version schemes. New agents: you
+  do nothing version-related; merge to main and CI numbers it. The SPA is
+  embedded in the binary (`spa_assets.go` go:embed) — new UI files must be
+  added to the embed list AND the Dockerfile build-stage COPY.
 - Stop what you started, by the PID or handle you tracked. Don't kill by
   pattern.
 

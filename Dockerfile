@@ -5,6 +5,12 @@ COPY vendor/ vendor/
 COPY *.go ./
 COPY internal/ internal/
 COPY extension/ extension/
+# Embedded-SPA inputs for go:embed (spa_assets.go) — must be present at
+# compile time or the build fails.
+COPY index.html manifest.webmanifest apple-touch-icon.png icon.png icon-192.png favicon-32.png favicon-16.png icon-rounded.png record.png ./
+COPY assets/ assets/
+COPY css/ css/
+COPY js/ js/
 RUN go build -mod=vendor -o server .
 
 FROM alpine:latest
