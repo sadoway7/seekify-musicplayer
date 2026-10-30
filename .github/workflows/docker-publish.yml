@@ -113,3 +113,5 @@ jobs:
             --title "Seekify for Windows" \
             --notes "Windows desktop build ($SEEKIFY_VERSION). Download Seekify-Setup.exe, run it, and Seekify lives in your tray. The app updates itself from this release." \
             Seekify-Setup.exe seekify-windows-amd64.exe SHA256SUMS
+          # Guard: if the create lands as a draft (seen once), publish it.
+          gh release edit "v$SEEKIFY_VERSION" --draft=false
