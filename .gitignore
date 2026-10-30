@@ -36,3 +36,6 @@ bin/
 *.syso
 build/windows/tools/
 build/windows/nsis/webview2bootstrapper.exe
+
+# Local test builds (served to Sadoway via the OpenCode file panel)
+release/
