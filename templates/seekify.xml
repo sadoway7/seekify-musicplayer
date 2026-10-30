@@ -16,6 +16,14 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-10-29
+- New: thumbs-down button beside the heart — mark a song "never for me" and shuffle skips it for your account only. Press again to undo; nothing is ever removed from your library.
+- Editing a shared playlist now shows a clear read-only error instead of pretending to save.
+- Deleting a user now also cleans up their playlists, favorites, recent plays and download history.
+- Friendlier sign-up messages when a username is already taken.
+- Removed the legacy /admin page (it never worked in Docker installs); the server no longer tries to open a browser window in containers.
+- General stability and performance improvements.
+
 2026-09-14
 - Playback keeps going when the app is in the background: upcoming tracks are prepared ahead of time, so playlists advance on their own.
 - New background preparation keeps compact copies of your whole library ready, so tracks and artwork load instantly — and slow connections no longer cut off healthy streams.
