@@ -53,8 +53,9 @@ func TestCreateUserDuplicateUsernameFriendly(t *testing.T) {
 }
 
 // TestDeleteUserCascadesAllUserData: deleting a user must remove every row
-// they own — favorites, recents, playlists (+ their tracks), download jobs,
-// and sessions — in one shot. Previously only the users row went away and
+// they own — favorites, blocked tracks, recents, playlists (+ their
+// tracks), download jobs, and sessions — in one shot. Previously only the
+// users row went away and
 // the other tables kept rows forever.
 func TestDeleteUserCascadesAllUserData(t *testing.T) {
 	setupTestDB(t)
@@ -78,6 +79,7 @@ func TestDeleteUserCascadesAllUserData(t *testing.T) {
 		}
 	}
 	mustExec(`INSERT INTO user_favorites(user_id, track_id, added_at) VALUES(?,?,0)`, u.ID, "t1")
+	mustExec(`INSERT INTO user_blocked(user_id, track_id, added_at) VALUES(?,?,0)`, u.ID, "t1")
 	mustExec(`INSERT INTO user_recent(user_id, track_id, position) VALUES(?,?,0)`, u.ID, "t1")
 	mustExec(`INSERT INTO playlists(id, name, created_at, user_id) VALUES('pl-victim','Mine','2026',?)`, u.ID)
 	mustExec(`INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES('pl-victim','t1',0)`)
@@ -107,6 +109,7 @@ func TestDeleteUserCascadesAllUserData(t *testing.T) {
 	}{
 		{"users", count(`SELECT COUNT(*) FROM users WHERE id=?`, u.ID)},
 		{"user_favorites", count(`SELECT COUNT(*) FROM user_favorites WHERE user_id=?`, u.ID)},
+		{"user_blocked", count(`SELECT COUNT(*) FROM user_blocked WHERE user_id=?`, u.ID)},
 		{"user_recent", count(`SELECT COUNT(*) FROM user_recent WHERE user_id=?`, u.ID)},
 		{"playlists", count(`SELECT COUNT(*) FROM playlists WHERE user_id=?`, u.ID)},
 		{"playlist_tracks", count(`SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id='pl-victim'`)},

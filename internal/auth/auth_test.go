@@ -30,6 +30,7 @@ func setupTestDB(t *testing.T) {
 		`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL, email TEXT, disabled INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, ip_address TEXT, user_agent TEXT)`,
 		`CREATE TABLE IF NOT EXISTS user_favorites (user_id TEXT NOT NULL, track_id TEXT NOT NULL, added_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, track_id))`,
+		`CREATE TABLE IF NOT EXISTS user_blocked (user_id TEXT NOT NULL, track_id TEXT NOT NULL, added_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, track_id))`,
 		`CREATE TABLE IF NOT EXISTS user_recent (user_id TEXT NOT NULL, track_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (user_id, track_id))`,
 		`CREATE TABLE IF NOT EXISTS playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL, user_id TEXT NOT NULL DEFAULT '')`,
 		`CREATE TABLE IF NOT EXISTS playlist_tracks (playlist_id TEXT NOT NULL, track_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (playlist_id, track_id))`,
