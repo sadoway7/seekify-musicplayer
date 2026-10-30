@@ -30,7 +30,12 @@ import (
 	"time"
 )
 
-func main() {
+// runServer starts the whole Seekify server (env, library, workers, HTTP).
+// It returns the listening http.Server (so callers can shut it down) and a
+// channel carrying the ListenAndServe error. The CLI main blocks on that
+// channel and dies like it always did; the desktop entry uses the server
+// handle for tray-driven shutdown/restart.
+func runServer(openBrowserOnStart bool) (*http.Server, <-chan error) {
 	// Load .env first so every env-based knob (MUSIC_DIR, PORT, ...) sees it.
 	// Real env vars still win; missing file is a silent no-op.
 	loadDotEnv(".env")
@@ -398,7 +403,7 @@ func main() {
 	// Containers and headless Linux hosts have no DISPLAY; skip the doomed
 	// xdg-open. The darwin (`open`) and windows (`rundll32`) openers don't
 	// need DISPLAY, so desktop dev keeps auto-open.
-	if runtime.GOOS != "linux" || os.Getenv("DISPLAY") != "" {
+	if openBrowserOnStart && (runtime.GOOS != "linux" || os.Getenv("DISPLAY") != "") {
 		store.SafeGo("open-browser", func() {
 			time.Sleep(500 * time.Millisecond)
 			handlers.OpenBrowser(url)
@@ -414,7 +419,14 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-	if err := srv.ListenAndServe(); err != nil {
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
+	return srv, errCh
+}
+
+func main() {
+	_, errCh := runServer(true)
+	if err := <-errCh; err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }
