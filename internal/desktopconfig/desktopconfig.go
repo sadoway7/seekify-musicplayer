@@ -58,3 +58,45 @@ func DefaultMusicDir() string {
 	}
 	return filepath.Join(home, "Music")
 }
+
+// SyncTools copies every *.exe from srcDir into dstDir when the destination
+// copy is missing or older than the source. Used by the desktop build to
+// seed %APPDATA%\Seekify\bin from the installer's read-only tools\ dir —
+// the writable copy keeps `yt-dlp -U` self-updates working, and a newer
+// dst (a self-updated yt-dlp) is never clobbered. Missing srcDir is a
+// no-op (playback-only installs).
+func SyncTools(srcDir, dstDir string) (int, error) {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		return 0, err
+	}
+	copied := 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || filepath.Ext(name) != ".exe" {
+			continue
+		}
+		src := filepath.Join(srcDir, name)
+		dst := filepath.Join(dstDir, name)
+		if s, err := os.Stat(src); err == nil {
+			if d, err := os.Stat(dst); err == nil && !d.ModTime().Before(s.ModTime()) {
+				continue // dst current (possibly self-updated) — keep it
+			}
+		}
+		b, err := os.ReadFile(src)
+		if err != nil {
+			return copied, err
+		}
+		if err := os.WriteFile(dst, b, 0o755); err != nil {
+			return copied, err
+		}
+		copied++
+	}
+	return copied, nil
+}
