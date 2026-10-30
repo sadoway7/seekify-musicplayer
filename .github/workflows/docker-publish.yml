@@ -48,7 +48,7 @@ jobs:
       # Pin the bundled rip tools. ffmpeg: BtbN GPL build (essentials);
       # yt-dlp: official standalone exe.
       FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
-      YTDLP_VERSION: "2026.10.22"
+      YTDLP_VERSION: "2026.10.26"
     steps:
       - uses: actions/checkout@v4
 
