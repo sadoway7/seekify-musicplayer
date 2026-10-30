@@ -1,0 +1,24 @@
+version: '3'
+
+# Seekify desktop build — trimmed from wails3 scaffolding. There is no wails
+# frontend (the window loads the app's own HTTP server), no npm step, and no
+# `go mod tidy` (this repo builds -mod=vendor with a committed vendor/ tree).
+vars:
+  APP_NAME: "seekify"
+  BIN_DIR: "bin"
+  VERSION: '{{.VERSION | default "0.1.0"}}'
+  GOOS: '{{.GOOS | default OS}}'
+
+includes:
+  windows: ./build/windows/Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the desktop application (defaults to host OS)
+    cmds:
+      - task: "{{.GOOS}}:build"
+
+  package:
+    summary: Packages a production build of the application
+    cmds:
+      - task: "{{.GOOS}}:package"

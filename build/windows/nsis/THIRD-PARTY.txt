@@ -1,0 +1,18 @@
+Seekify ships with the following third-party components:
+
+ffmpeg
+  Licensed under the GNU General Public License (GPL), version 2 or later.
+  This installer distributes the official ffmpeg executable produced by
+  BtbN's FFmpeg-Builds (https://github.com/BtbN/FFmpeg-Builds), unmodified.
+  Source code: https://ffmpeg.org/download.html and
+  https://github.com/BtbN/FFmpeg-Builds
+  ffmpeg is Copyright (c) the FFmpeg developers.
+
+yt-dlp
+  Licensed under the Unlicense (public domain dedication).
+  This installer distributes the official yt-dlp.exe from
+  https://github.com/yt-dlp/yt-dlp, unmodified.
+  Source code: https://github.com/yt-dlp/yt-dlp
+
+Both are standalone command-line programs executed by Seekify; they are not
+linked into the Seekify application binary.

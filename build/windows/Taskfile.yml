@@ -1,0 +1,72 @@
+version: '3'
+
+# Seekify: windows packaging only (trimmed from wails3 scaffolding — no
+# frontend tasks, no go:mod:tidy; this repo is vendor-mode).
+tasks:
+  build:
+    summary: Builds the application for Windows
+    cmds:
+      - task: build:native
+        vars:
+          ARCH: '{{.ARCH}}'
+          DEV: '{{.DEV}}'
+
+  build:native:
+    summary: Builds the application using native Go cross-compilation
+    internal: true
+    deps:
+      - task: generate:syso
+        vars:
+          ARCH: '{{.ARCH}}'
+    cmds:
+      - 'go build -mod=vendor -tags production,desktop -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.Version={{.VERSION}}" -o "{{.BIN_DIR}}/{{.APP_NAME}}.exe" .'
+      - cmd: powershell Remove-item *.syso
+        platforms: [windows]
+      - cmd: rm -f *.syso
+        platforms: [linux, darwin]
+    env:
+      GOOS: windows
+      CGO_ENABLED: '0'
+      GOARCH: '{{.ARCH | default ARCH}}'
+
+  package:
+    summary: Packages the application (NSIS installer)
+    cmds:
+      - task: create:nsis:installer
+        vars:
+          INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
+
+  generate:syso:
+    summary: Generates Windows `.syso` file
+    dir: build
+    cmds:
+      - wails3 generate syso -arch {{.ARCH | default ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_{{.ARCH | default ARCH}}.syso
+
+  create:nsis:installer:
+    summary: Creates an NSIS installer
+    dir: build/windows/nsis
+    deps:
+      - task: build
+    preconditions:
+      - sh: '[ "{{.INSTALL_SCOPE}}" = "user" ] || [ "{{.INSTALL_SCOPE}}" = "machine" ]'
+        msg: "INSTALL_SCOPE must be 'user' or 'machine', got '{{.INSTALL_SCOPE}}'"
+    cmds:
+      # Create the Microsoft WebView2 bootstrapper if it doesn't exist
+      - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
+      - |
+        {{if eq OS "windows"}}
+        makensis -DINFO_PROJECTNAME=seekify -DINFO_PRODUCTNAME=Seekify -DINFO_PRODUCTVERSION={{.VERSION | default "0.1.0"}} {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
+        {{else}}
+        makensis -DINFO_PROJECTNAME=seekify -DINFO_PRODUCTNAME=Seekify -DINFO_PRODUCTVERSION={{.VERSION | default "0.1.0"}} {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
+        {{end}}
+    vars:
+      ARCH: '{{.ARCH | default ARCH}}'
+      ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
+      INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "user"}}'
+
+  sign:
+    summary: Signs the Windows executable (unused until a certificate exists)
+    deps:
+      - task: build
+    cmds:
+      - wails3 tool sign --input "{{.BIN_DIR}}/{{.APP_NAME}}.exe" {{if .SIGN_CERTIFICATE}}--certificate "{{.SIGN_CERTIFICATE}}"{{end}} {{if .SIGN_THUMBPRINT}}--thumbprint "{{.SIGN_THUMBPRINT}}"{{end}} {{if .TIMESTAMP_SERVER}}--timestamp "{{.TIMESTAMP_SERVER}}"{{end}}

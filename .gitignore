@@ -30,3 +30,9 @@ internal/store/dedup_verify_test.go
 
 # Local runtime artifacts
 server-local.log
+
+# Desktop (wails3) build outputs
+bin/
+*.syso
+build/windows/tools/
+build/windows/nsis/webview2bootstrapper.exe

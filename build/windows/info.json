@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "Seekify",
+			"FileDescription": "Self-hosted music player and ripper",
+			"LegalCopyright": "© 2026 Seekify",
+			"ProductName": "Seekify",
+			"Comments": "Seekify desktop"
+		}
+	}
+}
