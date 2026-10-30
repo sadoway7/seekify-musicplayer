@@ -91,14 +91,14 @@ and is missing everywhere else. Before calling frontend or cross-cutting work
 done, walk this list and say which entries applied:
 
 - **Entry points.** The SPA (desktop and mobile/PWA layouts — they differ);
-  `admin.html` (legacy standalone page, still live, calls `/api/scan`,
-  `/api/upload`, `/api/delete`); guest share-links (gate-open
-  `/api/shared-queue` — visitors play with no session); the browser
-  extension (hits the CORS-any `/api/cookies/*` bridge).
-- **Contracts.** API JSON shapes are consumed directly by the SPA,
-  `admin.html`, and the extension. Field names, casing, nesting and types
-  change only when both sides are updated in the same step and the affected
-  UI is verified.
+  the retired `/admin` page (removed 2026-10-29, never shipped in the
+  Docker image — its former `/api/scan`, `/api/upload`, `/api/delete`
+  routes remain live and are called by the SPA/tools); guest share-links
+  (gate-open `/api/shared-queue` — visitors play with no session); the
+  browser extension (hits the CORS-any `/api/cookies/*` bridge).
+- **Contracts.** API JSON shapes are consumed directly by the SPA and the
+  extension. Field names, casing, nesting and types change only when both
+  sides are updated in the same step and the affected UI is verified.
 - **Gates.** Three auth tiers (open / user / admin) declared in `routes.go`
   — the single source of truth for routes. Seekify is deployed on trusted
   networks, so open routes really are reachable by anyone; adding or moving
