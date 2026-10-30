@@ -137,11 +137,11 @@ var (
 )
 
 var (
-	DownloadMu      sync.Mutex
-	DownloadActive  int
-	ActiveJobs      = make(map[string]*exec.Cmd)
-	ActiveJobTime   = make(map[string]time.Time)
-	createJobMu     sync.Mutex
+	DownloadMu     sync.Mutex
+	DownloadActive int
+	ActiveJobs     = make(map[string]*exec.Cmd)
+	ActiveJobTime  = make(map[string]time.Time)
+	createJobMu    sync.Mutex
 	// orphanFirstSeen records when the watchdog first observed each job in an
 	// active status (searching/downloading/tagging) WITHOUT a running command.
 	// Guarded by DownloadMu. Used to give in-progress search-phase jobs a grace
@@ -295,19 +295,48 @@ func FindBinary(name string, fallbackPaths ...string) string {
 }
 
 func FindYtDlp() string {
-	return FindBinary("yt-dlp",
+	return FindBinary("yt-dlp", append([]string{
 		"/opt/homebrew/bin/yt-dlp",
 		"/usr/local/bin/yt-dlp",
 		"/usr/bin/yt-dlp",
-	)
+	}, windowsToolFallbacks("yt-dlp")...)...)
 }
 
 func FindFfmpeg() string {
-	return FindBinary("ffmpeg",
+	return FindBinary("ffmpeg", append([]string{
 		"/opt/homebrew/bin/ffmpeg",
 		"/usr/local/bin/ffmpeg",
 		"/usr/bin/ffmpeg",
-	)
+	}, windowsToolFallbacks("ffmpeg")...)...)
+}
+
+// toolFallbackPaths returns the Windows desktop tool locations in lookup
+// order: the installer's tools dir beside the exe, then the writable copy
+// in %APPDATA%\Seekify\bin (kept there so yt-dlp -U self-updates work).
+// Pure path math (OS gating lives in windowsToolFallbacks) so tests run
+// on any host.
+func toolFallbackPaths(name, exeDir, appData string) []string {
+	return []string{
+		filepath.Join(exeDir, "tools", name),
+		filepath.Join(appData, "Seekify", "bin", name),
+	}
+}
+
+// windowsToolFallbacks resolves the runtime locations for toolFallbackPaths.
+// Empty on non-Windows; on failure of either resolver that half is skipped.
+func windowsToolFallbacks(name string) []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	name += ".exe" // bundled tools ship as .exe; bare name works via PATH only
+	var exeDir, appData string
+	if exe, err := os.Executable(); err == nil {
+		exeDir = filepath.Dir(exe)
+	}
+	if v, ok := os.LookupEnv("APPDATA"); ok {
+		appData = v
+	}
+	return toolFallbackPaths(name, exeDir, appData)
 }
 
 // NicedFfmpegCommandContext builds an ffmpeg command that runs at the lowest OS
@@ -784,22 +813,22 @@ func CreateDownloadJob(userID, query, artist, title, album, albumMBID string, tr
 	}
 
 	job := &DownloadJob{
-		ID:            id,
-		Query:         query,
-		Artist:        artist,
-		Title:         title,
-		Album:         album,
-		AlbumMBID:     albumMBID,
-		TrackNumber:   trackNum,
-		TrackTotal:    trackTotal,
-		Status:        "queued",
-		OverrideDir:   overrideDir,
-		SearchQuery:    searchQuery,
-		ConvertToFlac:  true,
-		VideoID:        videoID,
+		ID:               id,
+		Query:            query,
+		Artist:           artist,
+		Title:            title,
+		Album:            album,
+		AlbumMBID:        albumMBID,
+		TrackNumber:      trackNum,
+		TrackTotal:       trackTotal,
+		Status:           "queued",
+		OverrideDir:      overrideDir,
+		SearchQuery:      searchQuery,
+		ConvertToFlac:    true,
+		VideoID:          videoID,
 		ExpectedDuration: expectedDurationSec,
-		CreatedAt:      time.Now().Format(time.RFC3339),
-		UserID:         userID,
+		CreatedAt:        time.Now().Format(time.RFC3339),
+		UserID:           userID,
 	}
 
 	if err := DbCreateJob(job); err != nil {
@@ -1661,14 +1690,14 @@ func SearchYouTubeScored(ctx context.Context, query, expectedArtist, expectedTit
 	).Output()
 
 	type rawResult struct {
-		ID          string  `json:"id"`
-		Title       string  `json:"title"`
-		Channel     string  `json:"channel"`
-		Uploader    string  `json:"uploader"`
-		Duration    float64 `json:"duration"`
-		ViewCount   int     `json:"view_count"`
-		Extractor   string  `json:"extractor"`
-		WebpageURL  string  `json:"webpage_url"`
+		ID         string  `json:"id"`
+		Title      string  `json:"title"`
+		Channel    string  `json:"channel"`
+		Uploader   string  `json:"uploader"`
+		Duration   float64 `json:"duration"`
+		ViewCount  int     `json:"view_count"`
+		Extractor  string  `json:"extractor"`
+		WebpageURL string  `json:"webpage_url"`
 	}
 
 	var raw []rawResult
