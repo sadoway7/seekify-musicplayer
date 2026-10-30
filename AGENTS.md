@@ -123,6 +123,14 @@ go build -mod=vendor -o server .   # build (vendor mode, no network)
 - `ADMIN_PASSCODE` / `ADMIN_AUTH_ENABLED` lock the settings screen only —
   never the player or the music.
 - `air` gives live reload (`.air.toml`, dev-only, builds `./tmp/server`).
+- **Windows desktop build** (Wails v3): second entrypoint behind the
+  `desktop` build tag (`main_desktop.go`; CLI lives in `main_cli.go`,
+  shared startup in `server.go` `runServer()`). Nothing desktop-related is
+  visible to the normal build. Local sanity check for desktop changes:
+  `GOOS=windows GOARCH=amd64 go build -tags desktop -mod=vendor .`
+  (CI builds the installer via `wails3 task windows:package` — see
+  `Taskfile.yml` + `build/windows/`; the `windows-installer` GitHub job
+  publishes `Seekify-Setup.exe` + updater assets to a rolling release).
 - Stop what you started, by the PID or handle you tracked. Don't kill by
   pattern.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-30 — Seekify for Windows
+
+- New Windows desktop app: download `Seekify-Setup.exe` from GitHub Releases, install (per-user, no admin), and Seekify runs in the background with a tray icon — open the player window, start with Windows, restart or shut down from the tray. First launch asks where your music lives.
+- The installer bundles ffmpeg and yt-dlp, so YouTube ripping works out of the box; the app also updates itself from GitHub.
+- The Docker/server build is unchanged: same binary, same data, one codebase.
+
 ## 2026-10-29 — Thumbs down: never hear it again
 
 - New thumbs-down button beside the heart on the player and in the track menu — mark a song as "never for me" and shuffle will skip it (for your account only; everyone else is unaffected). Tap it again to take it back.

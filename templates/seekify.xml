@@ -16,6 +16,9 @@
   <Category>MediaApp:Music</Category>
   <Changes>Changelog
 
+2026-10-30
+- New: Windows desktop app — install Seekify on a PC from the GitHub releases page and it runs in the background with a tray icon (start with Windows, restart or shut down from the tray). Server/Docker users are unaffected.
+
 2026-10-29
 - New: thumbs-down button beside the heart — mark a song "not for me" and shuffle skips it for your account only. Press again to undo; nothing is ever removed from your library. If the song is playing, it skips to the next one.
 - Editing a shared playlist now shows a clear read-only error instead of pretending to save.

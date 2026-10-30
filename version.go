@@ -8,7 +8,6 @@ package main
 var Version = "dev"
 
 // UpdateRepository is the GitHub owner/repo the desktop updater polls for
-// releases. Overridable via -X main.UpdateRepository=... if the public
-// GitHub mirror's name ever differs from the default.
-// shortcut: default assumes the GitHub mirror keeps the musicapp repo name; confirm before first ship.
-var UpdateRepository = "sadoway/musicapp"
+// releases (the public mirror; slug confirmed from the CA template ReadMe
+// URL). Overridable via -X main.UpdateRepository=... if it ever moves.
+var UpdateRepository = "sadoway7/seekify-musicplayer"

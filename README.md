@@ -145,6 +145,28 @@ starting it on boot are yours to set up.
 > Soulseek download source. Seekify can register one for you in Settings, or
 > you can log in with an account you already have.
 
+### Windows app (install and go)
+
+No server, no Docker: grab **`Seekify-Setup.exe`** from the latest release on
+the [GitHub releases page](https://github.com/sadoway7/seekify-musicplayer/releases),
+run it, and that's it. If Windows SmartScreen warns about an unknown
+publisher, click **More info → Run anyway** — the installer is unsigned for
+now.
+
+- On first launch it asks where your music lives and remembers it.
+- Seekify runs in the background with a **tray icon**: open the player,
+  start with Windows, check for updates, restart or shut down — all from
+  the tray. The player opens in its own window; phones and browsers on your
+  network can still use `http://your-pc:8081`.
+- The installer bundles **ffmpeg and yt-dlp**, so ripping from YouTube
+  works out of the box. Soulseek needs Python and stays an optional extra
+  (see the Soulseek note above).
+- The app **updates itself** — it checks GitHub once a day and offers the
+  update in-app.
+- It installs per-user (no admin prompt) and keeps its data (database,
+  settings) in `%APPDATA%\Seekify`. Your music folder is only read and
+  written by the rip pipeline, exactly like the server version.
+
 <details>
 <summary>The .env file</summary>
 
