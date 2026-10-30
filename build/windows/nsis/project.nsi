@@ -92,7 +92,14 @@ Section
     !insertmacro wails.webview2runtime
 
     SetOutPath $INSTDIR
-    
+
+    # Close-to-tray means Seekify may still be running (hidden in the tray)
+    # and Windows locks the exe. Stop it before writing files; /F required
+    # because a plain close just hides the window instead of exiting.
+    nsExec::ExecToLog 'taskkill /IM seekify.exe /F'
+    Pop $0
+    Sleep 500
+
     !insertmacro wails.files
 
     # Bundled rip tools (downloaded by CI into build/windows/tools/; /nonfatal
