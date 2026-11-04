@@ -69,7 +69,7 @@ media-key controls.
     <td width="25%" align="center"><img src="docs/screenshots/mobile-09.png" width="180" alt="mobile UI"></td>
     <td width="25%" align="center"><img src="docs/screenshots/mobile-10.png" width="180" alt="mobile UI"></td>
     <td width="25%" align="center"><img src="docs/screenshots/mobile-11.png" width="180" alt="mobile UI"></td>
-    <td width="25%" align="center"></td>
+    <td width="25%" align="center"><img src="docs/screenshots/visualizer.gif" width="180" alt="audio-reactive visualizer"></td>
   </tr>
 </table>
 
